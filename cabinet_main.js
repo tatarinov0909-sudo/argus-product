@@ -2355,8 +2355,13 @@
     const found = step.found === null || step.found === undefined
       ? ''
       : ` <span class="msg-routing-found">— нашёл ${step.found} ${pluralRu(step.found, 'позицию', 'позиции', 'позиций')}</span>`;
-    const body = 'Передаю задачу — <b>' + escapeHTML(step.agent) + '</b>: найти «'
-      + escapeHTML(String(step.query)) + '»' + found;
+    // Что именно делал агент, формулирует сервер (step.task): «найти «X»»,
+    // «проверить состояние склада», «посмотреть накладную «Y»». Старые записи
+    // в истории поля task не имеют — для них остаётся прежняя фраза с query.
+    const task = step.task
+      ? escapeHTML(String(step.task))
+      : 'найти «' + escapeHTML(String(step.query)) + '»';
+    const body = 'Передаю задачу — <b>' + escapeHTML(step.agent) + '</b>: ' + task + found;
     const msg = document.createElement('div');
     msg.className = 'msg';
     msg.innerHTML = agentMessageHtml('Оркестратор', 'orchestrator', 'ОР',
