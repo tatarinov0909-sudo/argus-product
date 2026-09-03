@@ -1,0 +1,1289 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Аргус — рабочее место</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+  :root{
+    --bg:#111315;
+    --panel:#1D2023;
+    --panel-2:#25282C;
+    --line:#32363B;
+    --line-soft:#2A2E32;
+    --accent:#5FAFA6;
+    --accent-2:#7FC9BE;
+    --accent-soft:#243634;
+    --terracotta:#D98E6E;
+    --terracotta-soft:#332822;
+    --yellow:#C9A66B;
+    --yellow-soft:#332C21;
+    --green:#7FB77E;
+    --green-soft:#263429;
+    --text:#EDEBE6;
+    --muted:#8D9096;
+    --mono:'IBM Plex Mono', monospace;
+    --sans:'Inter', sans-serif;
+    --ease:cubic-bezier(0.16, 1, 0.3, 1);
+    --shadow-sm:0 2px 10px rgba(0,0,0,0.24);
+    --shadow-md:0 12px 32px rgba(0,0,0,0.34);
+  }
+  *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent;}
+  html{scrollbar-color:var(--line) transparent;}
+  ::-webkit-scrollbar{width:8px; height:8px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:var(--line); border-radius:8px;}
+  ::selection{background:rgba(95,175,166,0.32); color:var(--text);}
+  body{
+    position:relative; overflow-x:hidden;
+    background:
+      radial-gradient(circle at top right, rgba(95,175,166,0.11), transparent 55%),
+      radial-gradient(circle at bottom left, rgba(95,175,166,0.09), transparent 50%),
+      var(--bg);
+    color:var(--text); font-family:var(--sans); -webkit-font-smoothing:antialiased;
+    min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  body::before{
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size:38px 38px;
+    mask-image:radial-gradient(ellipse 70% 55% at 50% 30%, black 25%, transparent 72%);
+  }
+  @keyframes fadeInUp{from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:translateY(0);}}
+  .phone{
+    position:relative; z-index:1;
+    width:100%; max-width:420px; display:flex; flex-direction:column;
+    background:linear-gradient(165deg, var(--panel) 0%, #1A1C1F 100%);
+    border:1px solid var(--line-soft);
+    border-radius:22px; overflow:hidden; box-shadow:var(--shadow-md), 0 30px 70px rgba(0,0,0,0.45);
+    animation:fadeInUp 0.4s var(--ease) both;
+  }
+
+  /* ---------- Шапка задачи ---------- */
+  .task-head{padding:18px 20px 14px; border-bottom:1px solid var(--line); background:var(--panel); position:relative;}
+  .worker-chip{
+    flex-shrink:0; display:flex; align-items:center; gap:7px;
+    cursor:pointer; padding:5px 8px 5px 5px; border-radius:9px; position:relative;
+  }
+  .worker-chip:hover{background:var(--panel-2);}
+  .worker-avatar{
+    width:24px; height:24px; border-radius:7px; background:var(--accent-soft); color:var(--accent);
+    display:flex; align-items:center; justify-content:center; font-size:10.5px; font-weight:700; flex-shrink:0;
+  }
+  .worker-name{font-size:12px; color:var(--muted); font-weight:600; white-space:nowrap;}
+  .worker-menu{
+    display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:70; width:140px;
+    background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:6px;
+    box-shadow:0 14px 34px rgba(0,0,0,0.5);
+  }
+  .worker-menu.show{display:block;}
+  .worker-menu-item{padding:9px 10px; border-radius:6px; font-size:12.5px; color:var(--terracotta); cursor:pointer;}
+  .worker-menu-item:hover{background:var(--panel);}
+  .task-logout{font-size:11.5px; color:var(--muted); cursor:pointer; text-decoration:underline;}
+  .task-head-row{display:flex; align-items:center; gap:8px;}
+  .task-head-spacer{width:70px; flex-shrink:0;}
+  .invoice-switch-wrap{flex:1; min-width:0; display:flex; justify-content:center; position:relative;}
+  .task-head-top{margin-bottom:12px;}
+  .invoice-switch{
+    display:flex; align-items:center; gap:8px; padding:11px 18px; border-radius:12px;
+    background:var(--panel-2); border:1px solid var(--line); cursor:pointer; max-width:100%; min-width:0;
+  }
+  .invoice-switch:active{border-color:var(--accent);}
+  .invoice-switch-text{font-size:15px; font-weight:700; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .invoice-switch-text b{color:var(--accent); font-family:var(--mono);}
+  .invoice-switch-chevron{color:var(--muted); flex-shrink:0; transition:transform 0.15s;}
+  .invoice-switch.open .invoice-switch-chevron{transform:rotate(180deg);}
+  .task-progress-text{font-size:12.5px; color:var(--muted); font-family:var(--mono); margin-bottom:8px;}
+
+  .invoice-popover{
+    display:none; position:absolute; top:calc(100% + 6px); left:50%; transform:translateX(-50%); z-index:60;
+    width:280px; max-width:88vw; background:var(--panel-2); border:1px solid var(--line); border-radius:14px;
+    padding:8px; box-shadow:0 14px 34px rgba(0,0,0,0.5);
+  }
+  .invoice-popover.show{display:block;}
+  .invoice-popover-item{
+    display:flex; justify-content:space-between; align-items:center; padding:13px 14px; border-radius:10px; cursor:pointer;
+  }
+  .invoice-popover-item:active{background:var(--panel);}
+  .invoice-popover-item.active{background:var(--accent-soft);}
+  .invoice-popover-item-name{font-size:14px; font-weight:600;}
+  .invoice-popover-item-sub{font-size:12px; color:var(--muted); margin-top:2px;}
+  .invoice-popover-item-count{font-size:12px; color:var(--muted); font-family:var(--mono); flex-shrink:0; margin-left:10px;}
+  .invoice-popover-item.active .invoice-popover-item-count{color:var(--accent);}
+  .task-pause-row{display:flex; justify-content:center; margin-top:8px;}
+  .task-pause-btn{
+    font-size:12px; color:var(--muted); cursor:pointer; display:flex; align-items:center; gap:5px;
+    padding:5px 10px; border-radius:7px;
+  }
+  .task-pause-btn:hover{background:var(--panel-2); color:var(--text);}
+
+  .pause-banner{
+    display:none; align-items:center; justify-content:space-between; gap:10px; background:var(--yellow-soft);
+    border:1px solid var(--yellow); border-radius:12px; padding:12px 16px; margin:0 20px 16px;
+  }
+  .pause-banner.show{display:flex;}
+  .pause-banner-text{font-size:12.5px; color:var(--yellow); line-height:1.4;}
+  .pause-banner-text b{color:var(--text);}
+  .pause-resume-btn{
+    padding:8px 14px; border-radius:8px; border:none; background:var(--yellow); color:#241f14;
+    font-size:12.5px; font-weight:700; cursor:pointer; font-family:var(--sans); flex-shrink:0;
+  }
+
+  .task-progress-bar{height:4px; border-radius:2px; background:var(--panel-2); overflow:hidden;}
+  .task-progress-fill{height:100%; background:var(--accent); border-radius:2px; transition:width 0.25s ease;}
+
+  /* ---------- Основная область ---------- */
+  .task-body{flex:1; padding:22px 20px; display:flex; flex-direction:column; gap:20px; background:var(--bg);}
+
+  .item-card{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:22px;}
+  .item-name{font-size:18px; font-weight:700; margin-bottom:4px; line-height:1.3;}
+  .item-sku{font-size:13px; color:var(--muted); font-family:var(--mono); margin-bottom:18px;}
+  .item-declared{
+    display:flex; justify-content:space-between; align-items:center; padding:12px 16px;
+    background:var(--panel-2); border-radius:10px; font-size:14px;
+  }
+  .item-declared b{font-family:var(--mono); font-size:18px; color:var(--accent);}
+
+  /* ---------- Степпер количества (крупный, под палец) ---------- */
+  .qty-block{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:22px; text-align:center;}
+  .qty-label{font-size:13px; color:var(--muted); margin-bottom:14px;}
+  .qty-stepper{display:flex; align-items:center; justify-content:center; gap:18px;}
+  .qty-btn{
+    width:56px; height:56px; border-radius:16px; border:1px solid var(--line); background:var(--panel-2);
+    color:var(--text); font-size:26px; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; user-select:none; flex-shrink:0;
+  }
+  .qty-btn:active{background:var(--accent-soft); border-color:var(--accent); color:var(--accent);}
+  .qty-value{font-size:40px; font-weight:700; font-family:var(--mono); min-width:90px;}
+  .qty-value.warn{color:var(--terracotta);}
+  .qty-diff{margin-top:12px; font-size:13px; color:var(--terracotta); display:none;}
+  .qty-diff.show{display:block;}
+
+  /* ---------- Рекомендация ячейки ---------- */
+  .cell-block{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:20px;}
+  .cell-label{font-size:13px; color:var(--muted); margin-bottom:12px;}
+  .cell-options{display:flex; flex-direction:column; gap:10px;}
+  .cell-option{
+    display:flex; justify-content:space-between; align-items:center; padding:14px 16px;
+    background:var(--panel-2); border:1.5px solid var(--line); border-radius:12px; cursor:pointer;
+  }
+  .cell-option.selected{border-color:var(--accent); background:var(--accent-soft);}
+  .cell-option-id{font-family:var(--mono); font-size:16px; font-weight:700;}
+  .cell-option.selected .cell-option-id{color:var(--accent);}
+  .cell-option-note{font-size:12px; color:var(--muted);}
+  .cell-option-check{
+    width:22px; height:22px; border-radius:50%; border:1.5px solid var(--line); flex-shrink:0;
+  }
+  .cell-option.selected .cell-option-check{background:var(--accent); border-color:var(--accent); position:relative;}
+  .cell-option.selected .cell-option-check::after{
+    content:''; position:absolute; left:7px; top:3px; width:5px; height:9px;
+    border:solid #182422; border-width:0 2px 2px 0; transform:rotate(45deg);
+  }
+  .cell-manual{
+    text-align:center; padding:12px; font-size:13px; color:var(--muted); cursor:pointer;
+    border:1px dashed var(--line); border-radius:12px;
+  }
+  .cell-manual:active{border-color:var(--accent); color:var(--accent);}
+  .custom-cell-display{
+    display:none; justify-content:space-between; align-items:center; padding:14px 16px; margin-top:10px;
+    background:var(--accent-soft); border:1.5px solid var(--accent); border-radius:12px;
+  }
+  .custom-cell-display.show{display:flex;}
+  .custom-cell-label{font-size:11.5px; color:var(--muted); margin-bottom:2px;}
+  .custom-cell-id{font-family:var(--mono); font-size:16px; font-weight:700; color:var(--accent);}
+
+  /* ---------- Модалка "своё место" ---------- */
+  .sheet-overlay{
+    display:none; position:fixed; inset:0; background:rgba(21,23,26,0.75); z-index:100;
+    align-items:center; justify-content:center; padding:20px;
+  }
+  .sheet-overlay.show{display:flex;}
+  .sheet{
+    width:100%; max-width:420px; background:var(--panel); border-radius:20px;
+    padding:20px 20px 26px; max-height:82vh; overflow-y:auto;
+  }
+  .sheet-title{font-size:16px; font-weight:700; margin-bottom:4px;}
+  .sheet-sub{font-size:12.5px; color:var(--muted); margin-bottom:18px;}
+  .sheet-step{display:none;}
+  .sheet-step.show{display:block;}
+  .sheet-option{
+    display:flex; align-items:center; gap:12px; padding:15px 16px; border-radius:12px;
+    background:var(--panel-2); border:1px solid var(--line); margin-bottom:10px; cursor:pointer; font-size:14px; font-weight:600;
+  }
+  .sheet-option:active{border-color:var(--accent);}
+  .sheet-option-icon{
+    width:36px; height:36px; border-radius:9px; background:var(--accent-soft); color:var(--accent);
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .sheet-back{font-size:13px; color:var(--muted); margin-bottom:14px; cursor:pointer; display:inline-block;}
+  .sheet-input{
+    width:100%; background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:14px;
+    color:var(--text); font-family:var(--mono); font-size:16px; text-align:center; letter-spacing:1px; margin-bottom:14px;
+  }
+  .sheet-input:focus{outline:none; border-color:var(--accent);}
+  .sheet-input::placeholder{font-family:var(--sans); letter-spacing:normal; font-size:13px;}
+  .sheet-confirm{
+    width:100%; padding:14px; border-radius:12px; border:none; background:var(--accent); color:#182422;
+    font-size:14px; font-weight:700; cursor:pointer; font-family:var(--sans);
+  }
+  .sheet-confirm:disabled{background:var(--panel-2); color:var(--muted);}
+
+  .map-rows-picker{display:flex; gap:10px; justify-content:center; margin-bottom:4px;}
+  .map-row-bar{
+    width:44px; height:120px; border-radius:10px; background:var(--panel-2); border:1.5px solid var(--line);
+    display:flex; flex-direction:column; align-items:center; justify-content:flex-end; padding-bottom:10px;
+    cursor:pointer; position:relative;
+  }
+  .map-row-bar:active{border-color:var(--accent); background:var(--accent-soft);}
+  .map-row-bar-num{
+    position:absolute; top:10px; font-family:var(--mono); font-size:13px; font-weight:700; color:var(--text);
+  }
+  .map-row-bar-tag{font-size:10px; color:var(--muted);}
+
+  .map-back{font-size:13px; color:var(--muted); margin-bottom:14px; cursor:pointer; display:inline-block;}
+  .map-rack-row{display:flex; gap:14px; overflow-x:auto; padding-bottom:6px;}
+  .map-rack{display:flex; flex-direction:column; align-items:center; gap:6px; flex-shrink:0;}
+  .map-rack-tiers{display:flex; flex-direction:column; gap:3px; padding:5px; background:var(--panel-2); border-radius:8px; border:1px solid var(--line);}
+  .map-rack-label{font-size:10.5px; color:var(--muted); font-family:var(--mono);}
+  .map-cell{
+    width:44px; height:20px; border-radius:4px; cursor:pointer; position:relative;
+  }
+  .map-cell.free{background:var(--bg); border:1.5px dashed var(--line);}
+  /* Тот же вид, что и на карте склада у владельца: занятая ячейка — мягкая
+     зелёная заливка с переходом слева направо. Одно и то же место не должно
+     выглядеть по-разному у работника и у владельца. Значения совпадают с
+     cellPaint() в cabinet_main.js при спокойном тоне «занята». */
+  .map-cell.occupied{
+    background:linear-gradient(to right, rgba(126,192,140,0.10) 0%, rgba(87,202,111,0.37) 100%), var(--panel);
+    border:1px solid rgba(87,202,111,0.58); cursor:default;
+  }
+  .map-cell.free:active{background:var(--accent-soft); border-color:var(--accent); border-style:solid;}
+
+  /* ---------- Нижняя кнопка ---------- */
+  .task-footer{padding:16px 20px 24px; border-top:1px solid var(--line); background:var(--panel);}
+  .confirm-btn{
+    width:100%; padding:17px; border-radius:14px; border:none; background:var(--accent); color:#182422;
+    font-size:16px; font-weight:700; cursor:pointer; font-family:var(--sans);
+  }
+  .confirm-btn:active{opacity:0.85;}
+  .confirm-btn:disabled{background:var(--panel-2); color:var(--muted); cursor:default;}
+
+  /* ---------- Финальный экран ---------- */
+  .done-screen{display:none; flex:1; flex-direction:column; align-items:center; justify-content:center; padding:32px; text-align:center; background:var(--bg);}
+  .done-screen.show{display:flex;}
+  .done-icon{
+    width:64px; height:64px; border-radius:50%; background:var(--green-soft); display:flex; align-items:center;
+    justify-content:center; margin-bottom:20px;
+  }
+  .done-title{font-size:19px; font-weight:700; margin-bottom:8px;}
+  .done-sub{font-size:13.5px; color:var(--muted); margin-bottom:28px; line-height:1.5;}
+  .done-time{width:100%; background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:14px 18px; margin-bottom:16px; text-align:left; font-size:12.5px;}
+  .done-time-row{display:flex; justify-content:space-between; padding:5px 0;}
+  .done-time-row span:first-child{color:var(--muted);}
+  .done-time-row span:last-child{font-family:var(--mono); font-weight:600;}
+  .done-time-row.pause span:last-child{color:var(--yellow);}
+  .done-summary{width:100%; background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:6px 20px; margin-bottom:16px; text-align:left;}
+  .done-row{padding:14px 0; border-bottom:1px solid var(--line);}
+  .done-row:last-child{border-bottom:none;}
+  .done-row-name{font-size:14.5px; font-weight:700; margin-bottom:2px;}
+  .done-row-sku{font-size:12px; color:var(--muted); font-family:var(--mono); margin-bottom:8px;}
+  .done-row-meta{display:flex; justify-content:space-between; align-items:center; font-size:13px; color:var(--muted); font-family:var(--mono);}
+  .done-row-qty{font-weight:600; color:var(--text);}
+  .done-row-warn .done-row-qty{color:var(--terracotta);}
+  .done-row-cell{color:var(--accent);}
+
+  .done-actions{width:100%; display:flex; flex-direction:column; gap:10px;}
+  .excel-btn{
+    width:100%; padding:15px; border-radius:12px; border:1px solid var(--line); background:var(--panel-2);
+    color:var(--text); font-size:14px; font-weight:600; cursor:pointer; font-family:var(--sans);
+    display:flex; align-items:center; justify-content:center; gap:8px;
+  }
+  .excel-btn:active{border-color:var(--accent); color:var(--accent);}
+  .done-btn{
+    width:100%; padding:15px; border-radius:12px; border:1px solid var(--line); background:var(--panel-2);
+    color:var(--text); font-size:14px; font-weight:600; cursor:pointer; font-family:var(--sans);
+  }
+
+  .toast{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(10px); z-index:200;
+    background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:12px 18px;
+    font-size:13px; color:var(--text); box-shadow:0 14px 34px rgba(0,0,0,0.5);
+    opacity:0; pointer-events:none; transition:opacity 0.2s ease, transform 0.2s ease; max-width:90vw; text-align:center;
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+
+  /* ===================== VISUAL POLISH LAYER ===================== */
+  .task-head{position:relative; z-index:2;}
+  .invoice-switch{transition:border-color 0.2s var(--ease), background 0.2s var(--ease); box-shadow:inset 0 1px 0 rgba(255,255,255,0.03);}
+  .invoice-switch:active{background:var(--accent-soft);}
+  .worker-avatar{background:linear-gradient(145deg, var(--accent-soft), #1D2E2C); box-shadow:inset 0 1px 0 rgba(255,255,255,0.05);}
+  .task-progress-bar{box-shadow:inset 0 1px 2px rgba(0,0,0,0.3);}
+  .task-progress-fill{background:linear-gradient(90deg, var(--accent), var(--accent-2)); box-shadow:0 0 10px -1px rgba(95,175,166,0.6);}
+
+  .item-card, .qty-block, .cell-block, .done-time, .done-summary{
+    box-shadow:var(--shadow-sm);
+    background:linear-gradient(165deg, var(--panel) 0%, #1A1C1F 100%);
+  }
+  .item-declared{box-shadow:inset 0 1px 0 rgba(255,255,255,0.03);}
+
+  .qty-btn{transition:transform 0.15s var(--ease), border-color 0.15s var(--ease), background 0.15s var(--ease), box-shadow 0.15s var(--ease);}
+  .qty-btn:active{transform:scale(0.94); box-shadow:0 0 0 3px rgba(95,175,166,0.14);}
+
+  .cell-option, .sheet-option, .map-row-bar{
+    transition:border-color 0.2s var(--ease), background 0.2s var(--ease), transform 0.15s var(--ease), box-shadow 0.2s var(--ease);
+  }
+  .cell-option:active, .sheet-option:active, .map-row-bar:active{transform:scale(0.98);}
+  .cell-option.selected{box-shadow:0 0 0 1px rgba(95,175,166,0.2), 0 4px 16px rgba(95,175,166,0.14);}
+  .cell-option-check{transition:background 0.2s var(--ease), border-color 0.2s var(--ease);}
+  .sheet-option-icon{background:linear-gradient(145deg, var(--accent-soft), #1D2E2C);}
+
+  .confirm-btn, .sheet-confirm{
+    background:linear-gradient(135deg, var(--accent-2), var(--accent)); color:#132422;
+    box-shadow:0 4px 16px rgba(95,175,166,0.24);
+    transition:transform 0.15s var(--ease), box-shadow 0.15s var(--ease), filter 0.15s var(--ease);
+  }
+  .confirm-btn:active:not(:disabled), .sheet-confirm:active:not(:disabled){transform:scale(0.98); box-shadow:0 2px 10px rgba(95,175,166,0.28); opacity:1; filter:brightness(1.05);}
+  .confirm-btn:disabled, .sheet-confirm:disabled{box-shadow:none;}
+
+  .excel-btn, .done-btn, .task-pause-btn, .pause-resume-btn{
+    transition:border-color 0.2s var(--ease), color 0.2s var(--ease), transform 0.15s var(--ease);
+  }
+  .excel-btn:active, .done-btn:active{transform:scale(0.98);}
+
+  .done-icon{background:radial-gradient(circle at 35% 30%, #325F4A, var(--green-soft)); box-shadow:0 0 0 6px rgba(127,183,126,0.1), 0 8px 24px rgba(127,183,126,0.18); animation:fadeInUp 0.4s var(--ease) both;}
+  .done-screen.show{animation:fadeInUp 0.35s var(--ease) both;}
+  .sheet{box-shadow:var(--shadow-md); animation:fadeInUp 0.25s var(--ease) both;}
+  .sheet-overlay.show{backdrop-filter:blur(3px);}
+
+  .map-cell, .qty-btn, .sheet-option-icon{transition:transform 0.15s var(--ease);}
+  .custom-cell-display{box-shadow:0 4px 16px rgba(95,175,166,0.1);}
+  .shortfall-note{
+    display:none; margin:0 0 14px; padding:12px 14px; border-radius:12px;
+    background:var(--terracotta-soft); border:1px solid rgba(217,142,110,0.4);
+    color:var(--terracotta); font-size:13px; line-height:1.5;
+  }
+  .shortfall-note.show{display:block;}
+  .last-cell-toggle{
+    display:none; align-items:center; gap:9px; margin-top:12px; padding:11px 13px;
+    border:1px solid var(--line); border-radius:11px; font-size:13px; color:var(--muted);
+    cursor:pointer;
+  }
+  .last-cell-toggle.show{display:flex;}
+  .last-cell-toggle input{width:17px; height:17px; accent-color:var(--accent); flex-shrink:0;}
+  .cell-option-note.short{color:var(--terracotta);}
+  .toast{background:rgba(37,40,44,0.92); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); box-shadow:var(--shadow-md), 0 20px 50px rgba(0,0,0,0.4);}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+</head>
+<body>
+
+  <div class="phone">
+
+    <div id="taskScreen">
+      <div class="task-head">
+        <div class="task-head-top">
+          <div class="task-head-row">
+            <div class="worker-chip" onclick="event.stopPropagation(); toggleWorkerMenu()">
+              <div class="worker-avatar" id="workerAvatar">И</div>
+              <span class="worker-name" id="workerNameLabel">Иван</span>
+              <div class="worker-menu" id="workerMenu">
+                <div class="worker-menu-item" onclick="logout()">Выйти</div>
+              </div>
+            </div>
+            <div class="invoice-switch-wrap">
+              <div class="invoice-switch" id="invoiceSwitch" onclick="event.stopPropagation(); toggleInvoicePopover()">
+                <span class="invoice-switch-text">Накладная <b id="invoiceNum">—</b> · <span id="invoiceClient"></span></span>
+                <svg class="invoice-switch-chevron" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <div class="invoice-popover" id="invoicePopover"></div>
+            </div>
+            <div class="task-head-spacer"></div>
+          </div>
+        </div>
+        <div class="task-progress-bar"><div class="task-progress-fill" id="progressFill" style="width:33%;"></div></div>
+        <div class="task-pause-row">
+          <div class="task-pause-btn" id="pauseBtn" onclick="openPauseSheet()">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="4" y="3" width="3" height="10" rx="1" fill="currentColor"/><rect x="9" y="3" width="3" height="10" rx="1" fill="currentColor"/></svg>
+            Поставить на паузу
+          </div>
+        </div>
+      </div>
+
+      <div class="pause-banner" id="pauseBanner">
+        <div class="pause-banner-text">На паузе: <b id="pauseReasonLabel"></b></div>
+        <button class="pause-resume-btn" onclick="resumeTask()">Возобновить</button>
+      </div>
+
+      <div class="task-body">
+        <div class="item-card">
+          <div class="task-progress-text" id="progressText" style="margin-bottom:8px; text-align:center;">—</div>
+          <div class="item-name" id="itemName">Загрузка…</div>
+          <div class="item-sku" id="itemSku"></div>
+          <div class="item-declared">
+            <span id="itemDeclaredLabel">Заявлено по накладной</span>
+            <b id="itemDeclared">—</b>
+          </div>
+        </div>
+
+        <div class="shortfall-note" id="shortfallNote"></div>
+
+        <div class="qty-block">
+          <div class="qty-label" id="qtyLabel">Сколько приняли по факту</div>
+          <div class="qty-stepper">
+            <button class="qty-btn" id="qtyMinus" aria-label="Меньше">−</button>
+            <div class="qty-value" id="qtyValue">0</div>
+            <button class="qty-btn" id="qtyPlus" aria-label="Больше">+</button>
+          </div>
+          <div class="qty-diff" id="qtyDiff"></div>
+        </div>
+
+        <div class="cell-block">
+          <div class="cell-label" id="cellLabel">Куда положить — рекомендации Кладовщика</div>
+          <div class="cell-options" id="cellOptions"></div>
+          <div class="custom-cell-display" id="customCellDisplay">
+            <div>
+              <div class="custom-cell-label">Выбрано вручную</div>
+              <div class="custom-cell-id" id="customCellId"></div>
+            </div>
+            <div class="cell-option-check" style="background:var(--accent); border-color:var(--accent); position:relative;">
+              <span style="content:''; position:absolute; left:6px; top:2px; width:5px; height:9px; border:solid #182422; border-width:0 2px 2px 0; transform:rotate(45deg); display:block;"></span>
+            </div>
+          </div>
+          <div class="cell-manual" id="manualCellBtn" onclick="openSheet()" style="margin-top:10px;">Своё место</div>
+          <!-- Отбор короче заявленного закрывает позицию с расхождением, поэтому
+               спрашиваем прямо, а не догадываемся: пустая ячейка и «больше не
+               повезли» для склада разные вещи. -->
+          <label class="last-cell-toggle" id="lastCellToggle">
+            <input type="checkbox" id="isFinalCheck">
+            <span>Это последняя ячейка — больше товара нет</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="task-footer">
+        <button class="confirm-btn" id="confirmBtn" onclick="confirmItem()" disabled>Выберите место и подтвердите</button>
+      </div>
+    </div>
+
+    <div class="sheet-overlay" id="sheetOverlay" onclick="if(event.target===this) closeSheet()">
+      <div class="sheet">
+
+        <div class="sheet-step show" id="sheetStepChoice">
+          <div class="sheet-title">Своё место</div>
+          <div class="sheet-sub">Как хотите указать, куда положили товар</div>
+          <div class="sheet-option" onclick="showToast('Сканер штрихкода ячейки — подключим вместе со сканером на складе')">
+            <div class="sheet-option-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 6V4h3M17 4h3v2M20 18v2h-3M7 20H4v-2M4 10v4M20 10v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </div>
+            Сканировать штрихкод
+          </div>
+          <div class="sheet-option" onclick="goSheetStep('manual')">
+            <div class="sheet-option-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 17.5v2.5h2.5L18 8.5l-2.5-2.5L4 17.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+            </div>
+            Ввести вручную
+          </div>
+          <div class="sheet-option" onclick="goSheetStep('map')">
+            <div class="sheet-option-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="7" height="7" rx="1.3" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="4" width="7" height="7" rx="1.3" stroke="currentColor" stroke-width="1.6"/><rect x="3" y="15" width="7" height="7" rx="1.3" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="15" width="7" height="7" rx="1.3" stroke="currentColor" stroke-width="1.6"/></svg>
+            </div>
+            Выбрать на карте склада
+          </div>
+        </div>
+
+        <div class="sheet-step" id="sheetStepManual">
+          <div class="sheet-back" onclick="goSheetStep('choice')">← Назад</div>
+          <div class="sheet-title">Ввести место вручную</div>
+          <div class="sheet-sub">Например: A-14 · ярус 2</div>
+          <input type="text" class="sheet-input" id="manualCellInput" placeholder="Ряд-стеллаж · ярус" oninput="document.getElementById('manualConfirmBtn').disabled = !this.value.trim();">
+          <button class="sheet-confirm" id="manualConfirmBtn" disabled onclick="confirmManualCell()">Подтвердить место</button>
+        </div>
+
+        <div class="sheet-step" id="sheetStepMap">
+          <div class="sheet-back" onclick="goSheetStep('choice')">← Назад</div>
+          <div class="sheet-title" id="mapTitle">Выберите ряд</div>
+          <div class="sheet-sub" id="mapSub">Терракотовые места уже заняты</div>
+          <div class="map-rows-picker" id="mapRowsPicker"></div>
+          <div id="mapRackView" style="display:none;">
+            <div class="map-back" onclick="showMapRowsPicker()">← Другой ряд</div>
+            <div class="map-rack-row" id="mapRackRow"></div>
+          </div>
+        </div>
+
+        <div class="sheet-step" id="sheetStepPause">
+          <div class="sheet-title">Причина паузы</div>
+          <div class="sheet-sub">Начальник склада увидит это в отчёте по накладной</div>
+          <div class="sheet-option" onclick="pauseTask('Перерыв')">
+            <div class="sheet-option-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/><path d="M12 7v5l3 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </div>
+            Перерыв
+          </div>
+          <div class="sheet-option" onclick="pauseTask('Жду уточнения по товару')">
+            <div class="sheet-option-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/><path d="M9.5 9.5a2.5 2.5 0 013.7-2.2c.9.5 1.3 1.7.6 2.6-.7.9-1.8 1-1.8 2.6M12 16.5h.01" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </div>
+            Жду уточнения по товару
+          </div>
+          <input type="text" class="sheet-input" id="pauseCustomInput" placeholder="Своя причина" oninput="document.getElementById('pauseCustomBtn').disabled = !this.value.trim();" style="margin-top:6px;">
+          <button class="sheet-confirm" id="pauseCustomBtn" disabled onclick="pauseTask(document.getElementById('pauseCustomInput').value.trim())">Поставить на паузу</button>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="done-screen" id="doneScreen">
+      <div class="task-logout" style="position:static; margin-bottom:16px;" onclick="logout()">Выйти</div>
+      <div class="done-icon">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7" stroke="#7FB77E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="done-title" id="doneTitle">Приёмка завершена</div>
+      <div class="done-sub" id="doneSub">Накладная полностью обработана. Владелец склада увидит расхождения в журнале, если они есть.</div>
+      <div class="done-time" id="doneTime"></div>
+      <div class="done-summary" id="doneSummary"></div>
+      <div class="done-actions">
+        <button class="excel-btn" onclick="downloadExcel()">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 3v13m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Скачать в Excel
+        </button>
+        <button class="done-btn" onclick="goToNextInvoice()">К следующей накладной</button>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+  const API_BASE = 'https://api.argus-ai.online';
+  const TOKEN = localStorage.getItem('argus_token');
+  const ROLE = localStorage.getItem('argus_role');
+  if(!TOKEN || ROLE !== 'worker'){
+    window.location.href = 'index.html';
+    throw new Error('not authenticated');
+  }
+
+  function decodeJwtPayload(token){
+    try{
+      const payload = token.split('.')[1];
+      // atob отдаёт байты, а не текст: каждый символ строки — один байт.
+      // Кириллица в UTF-8 многобайтная, поэтому без явного декодирования
+      // имя работника превращается в мусор вида "Ð'Ð»Ð°Ð´Ð¸Ð¼Ð¸Ñ€".
+      const bin = atob(payload.replace(/-/g,'+').replace(/_/g,'/'));
+      const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+      return JSON.parse(new TextDecoder().decode(bytes));
+    } catch(e){ return {}; }
+  }
+
+  async function apiFetch(path, options = {}){
+    const res = await fetch(API_BASE + path, {
+      method: options.method || 'GET',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN },
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+    if(res.status === 401){
+      localStorage.removeItem('argus_token');
+      localStorage.removeItem('argus_role');
+      window.location.href = 'index.html';
+      throw new Error('сессия истекла');
+    }
+    const data = await res.json().catch(() => null);
+    if(!res.ok) throw new Error((data && data.error) || 'Ошибка запроса');
+    return data;
+  }
+
+  function logout(){
+    localStorage.removeItem('argus_token');
+    localStorage.removeItem('argus_role');
+    window.location.href = 'index.html';
+  }
+
+  let invoices = [];
+  let currentInvoice = null;
+  let currentItemIndex = 0;
+  let currentQty = 0;
+  let selectedCellBlockId = null;
+  let selectedCellLabel = null;
+  let cellRows = [];
+  const results = [];
+
+  function toggleWorkerMenu(){
+    document.getElementById('workerMenu').classList.toggle('show');
+  }
+  document.addEventListener('click', function(e){
+    if(!e.target.closest('.worker-chip') && !e.target.closest('.worker-menu')){
+      document.getElementById('workerMenu').classList.remove('show');
+    }
+  });
+
+  const authPayload = decodeJwtPayload(TOKEN);
+  const workerName = authPayload.name || 'Сотрудник';
+  document.getElementById('workerNameLabel').textContent = workerName.split(' ')[0];
+  document.getElementById('workerAvatar').textContent = workerName.trim()[0].toUpperCase();
+
+  function formatBlockLabel(rowNum, block){
+    const rackPart = block.rack_start === block.rack_end ? block.rack_start : (block.rack_start + '–' + block.rack_end);
+    const tierPart = block.tier_start === block.tier_end ? block.tier_start : (block.tier_start + '–' + block.tier_end);
+    return rowNum + '.' + rackPart + '.' + tierPart;
+  }
+
+  async function init(){
+    try{
+      invoices = await apiFetch('/api/invoices');
+      cellRows = await apiFetch('/api/cells/rows');
+    } catch(e){
+      showToast('Не удалось загрузить данные: ' + e.message);
+      return;
+    }
+    if(invoices.length === 0){
+      document.querySelector('.task-body').innerHTML = '<div class="item-card" style="text-align:center; color:var(--muted);">Накладных пока нет — попросите руководителя склада добавить их в кабинете.</div>';
+      document.getElementById('confirmBtn').style.display = 'none';
+      return;
+    }
+    await selectInvoice(invoices[0].id);
+  }
+
+  function toggleInvoicePopover(){
+    const pop = document.getElementById('invoicePopover');
+    const sw = document.getElementById('invoiceSwitch');
+    const opening = !pop.classList.contains('show');
+    if(opening){
+      const statusLabel = {open:'не начата', in_progress:'в процессе', completed:'завершена'};
+      pop.innerHTML = invoices.map((inv) => `
+        <div class="invoice-popover-item ${currentInvoice && inv.id === currentInvoice.id ? 'active' : ''}" onclick="event.stopPropagation(); selectInvoice('${inv.id}')">
+          <div>
+            <div class="invoice-popover-item-name">${inv.company_name}</div>
+            <div class="invoice-popover-item-sub">${inv.number}</div>
+          </div>
+          <div class="invoice-popover-item-count">${inv.direction === 'out' ? 'отгрузка' : 'приёмка'} · ${statusLabel[inv.status] || inv.status}</div>
+        </div>
+      `).join('');
+      pop.classList.add('show');
+      sw.classList.add('open');
+    } else {
+      pop.classList.remove('show');
+      sw.classList.remove('open');
+    }
+  }
+
+  async function selectInvoice(invoiceId){
+    document.getElementById('invoicePopover').classList.remove('show');
+    document.getElementById('invoiceSwitch').classList.remove('open');
+    try{
+      currentInvoice = await apiFetch('/api/invoices/' + invoiceId);
+    } catch(e){
+      showToast('Не удалось загрузить накладную: ' + e.message);
+      return;
+    }
+    taskStartTime = new Date();
+    totalPausedMs = 0;
+    pauseLog = [];
+    pauseStart = null;
+    results.length = 0;
+    document.getElementById('pauseBanner').classList.remove('show');
+    document.getElementById('doneScreen').classList.remove('show');
+    document.getElementById('taskScreen').style.display = '';
+    renderCurrentItem();
+  }
+
+  document.addEventListener('click', function(){
+    document.getElementById('invoicePopover').classList.remove('show');
+    document.getElementById('invoiceSwitch').classList.remove('open');
+  });
+
+  function findNextUnreceivedIndex(){
+    return currentInvoice.items.findIndex(it => !it.receiving_id);
+  }
+
+  // Накладная сама говорит, что с ней делать: приход кладут, расход отбирают.
+  // Отдельного переключателя режимов нет намеренно — работник открывает
+  // документ и делает то, что в документе написано.
+  function isPicking(){
+    return currentInvoice && currentInvoice.direction === 'out';
+  }
+
+  function renderCurrentItem(){
+    document.getElementById('invoiceNum').textContent = currentInvoice.number;
+    document.getElementById('invoiceClient').textContent = currentInvoice.company_name;
+    if(isPicking()){ renderPickItem(); return; }
+
+    document.getElementById('itemDeclaredLabel').textContent = 'Заявлено по накладной';
+    document.getElementById('qtyLabel').textContent = 'Сколько приняли по факту';
+    document.getElementById('cellLabel').textContent = 'Куда положить — рекомендации Кладовщика';
+    document.getElementById('shortfallNote').classList.remove('show');
+    document.getElementById('lastCellToggle').classList.remove('show');
+    document.getElementById('manualCellBtn').style.display = '';
+
+    const idx = findNextUnreceivedIndex();
+    if(idx === -1){
+      showDone();
+      return;
+    }
+    currentItemIndex = idx;
+    const item = currentInvoice.items[idx];
+    currentQty = Number(item.declared_qty);
+    selectedCellBlockId = null;
+    selectedCellLabel = null;
+    document.getElementById('customCellDisplay').classList.remove('show');
+
+    const total = currentInvoice.items.length;
+    document.getElementById('progressText').textContent = (idx + 1) + ' / ' + total;
+    document.getElementById('progressFill').style.width = Math.round(((idx + 1) / total) * 100) + '%';
+
+    document.getElementById('itemName').textContent = item.name;
+    document.getElementById('itemSku').textContent = item.sku;
+    document.getElementById('itemDeclared').textContent = item.declared_qty + ' шт';
+    document.getElementById('qtyValue').textContent = currentQty;
+    document.getElementById('qtyValue').classList.remove('warn');
+    document.getElementById('qtyDiff').classList.remove('show');
+
+    renderCellOptions(item.sku);
+    updateConfirmState();
+  }
+
+  async function renderCellOptions(sku){
+    const wrap = document.getElementById('cellOptions');
+    wrap.innerHTML = '<div style="font-size:13px; color:var(--muted); text-align:center; padding:8px;">Подбираю ячейку…</div>';
+
+    let options;
+    try{
+      const data = await apiFetch('/api/agents/kladovshchik/suggest-cell?sku=' + encodeURIComponent(sku));
+      options = data.options;
+    } catch(e){
+      wrap.innerHTML = '<div style="font-size:13px; color:var(--muted); text-align:center; padding:8px;">Не удалось подобрать ячейку — выберите «Своё место»</div>';
+      return;
+    }
+
+    if(options.length === 0){
+      wrap.innerHTML = '<div style="font-size:13px; color:var(--muted); text-align:center; padding:8px;">Свободных ячеек не нашлось — выберите «Своё место»</div>';
+      return;
+    }
+    const noteText = { same_sku: 'тот же товар уже здесь', empty: 'свободно' };
+    wrap.innerHTML = options.map((c, i) => `
+      <div class="cell-option" id="cell-${i}" onclick="selectCellOption('${c.blockId}', '${c.label}', ${i})">
+        <div>
+          <div class="cell-option-id">${c.label}</div>
+          <div class="cell-option-note">${noteText[c.reason] || 'свободно'}</div>
+        </div>
+        <div class="cell-option-check"></div>
+      </div>
+    `).join('');
+  }
+
+  /* ============================ Отбор ============================
+     Зеркало приёмки: тот же экран, та же шапка, те же паузы. Разница в том,
+     что ячейки не подбираются, а показываются те, где товар лежит, — в
+     порядке обхода склада, так что список сам работает маршрутом.
+
+     Одну позицию можно отбирать из нескольких ячеек: сервер принимает
+     несколько записей на строку накладной и считает расхождением только
+     последнюю недостачу (см. shipping/routes.js). */
+
+  let pickSuggestion = null;
+
+  function findNextUnpickedIndex(){
+    return currentInvoice.items.findIndex(it => !it.closed);
+  }
+
+  async function renderPickItem(){
+    document.getElementById('itemDeclaredLabel').textContent = 'Нужно отобрать';
+    document.getElementById('qtyLabel').textContent = 'Сколько взяли из ячейки';
+    document.getElementById('cellLabel').textContent = 'Откуда взять — по порядку обхода';
+    // Своё место при отборе не предлагаем: брать можно только оттуда, где
+    // товар действительно лежит, а это сервер и так перечисляет.
+    document.getElementById('manualCellBtn').style.display = 'none';
+    document.getElementById('customCellDisplay').classList.remove('show');
+
+    const idx = findNextUnpickedIndex();
+    if(idx === -1){ showDone(); return; }
+    currentItemIndex = idx;
+    const item = currentInvoice.items[idx];
+
+    const total = currentInvoice.items.length;
+    document.getElementById('progressText').textContent = (idx + 1) + ' / ' + total;
+    document.getElementById('progressFill').style.width = Math.round(((idx + 1) / total) * 100) + '%';
+    document.getElementById('itemName').textContent = item.name;
+    document.getElementById('itemSku').textContent = item.sku;
+
+    selectedCellBlockId = null;
+    selectedCellLabel = null;
+    document.getElementById('isFinalCheck').checked = false;
+    document.getElementById('cellOptions').innerHTML =
+      '<div style="font-size:13px; color:var(--muted); text-align:center; padding:8px;">Ищу, где лежит…</div>';
+
+    try{
+      pickSuggestion = await apiFetch('/api/shipping/suggest/' + item.id);
+    } catch(e){
+      const box = document.getElementById('cellOptions');
+      box.innerHTML = '<div style="font-size:13px; color:var(--muted); text-align:center; padding:8px;"></div>';
+      // textContent, а не разметка: текст ошибки приходит с сервера, и
+      // собирать из него HTML незачем.
+      box.firstChild.textContent = 'Не удалось узнать, где лежит товар: ' + e.message;
+      return;
+    }
+
+    const remaining = pickSuggestion.item.remaining;
+    document.getElementById('itemDeclared').textContent = remaining + ' шт';
+    currentQty = Math.min(remaining, pickSuggestion.cells[0] ? pickSuggestion.cells[0].available : remaining);
+    document.getElementById('qtyValue').textContent = currentQty;
+
+    const note = document.getElementById('shortfallNote');
+    if(pickSuggestion.shortfall > 0){
+      // Говорим о нехватке ДО того, как человек пошёл к стеллажам, а не после.
+      note.textContent = 'На складе не хватает ' + pickSuggestion.shortfall
+        + ' шт: всего доступно ' + pickSuggestion.totalAvailable + ' из ' + remaining
+        + '. Отберите сколько есть и отметьте последнюю ячейку — расхождение уйдёт владельцу в журнал.';
+      note.classList.add('show');
+    } else {
+      note.classList.remove('show');
+    }
+
+    renderPickCells();
+    updatePickConfirm();
+  }
+
+  function renderPickCells(){
+    const wrap = document.getElementById('cellOptions');
+    const cells = pickSuggestion.cells;
+    if(cells.length === 0){
+      wrap.innerHTML = '<div style="font-size:13px; color:var(--muted); text-align:center; padding:8px;">Этого товара нет ни в одной ячейке.</div>';
+      document.getElementById('lastCellToggle').classList.add('show');
+      return;
+    }
+    const remaining = pickSuggestion.item.remaining;
+    wrap.innerHTML = cells.map((c, i) => {
+      const label = blockLabel(c);
+      const short = c.available < remaining;
+      return '<div class="cell-option" id="cell-' + i + '" onclick="selectPickCell(' + i + ')">'
+        + '<div><div class="cell-option-id">' + label + '</div>'
+        + '<div class="cell-option-note' + (short ? ' short' : '') + '">'
+        + c.available + ' шт' + (short ? ' — меньше, чем нужно' : '') + '</div></div>'
+        + '<div class="cell-option-check"></div></div>';
+    }).join('');
+  }
+
+  function blockLabel(c){
+    const rack = c.rackStart === c.rackEnd ? c.rackStart : c.rackStart + '–' + c.rackEnd;
+    const tier = c.tierStart === c.tierEnd ? c.tierStart : c.tierStart + '–' + c.tierEnd;
+    return c.rowNum + '.' + rack + '.' + tier;
+  }
+
+  function selectPickCell(i){
+    const c = pickSuggestion.cells[i];
+    selectedCellBlockId = c.cellBlockId;
+    selectedCellLabel = blockLabel(c);
+    document.querySelectorAll('.cell-option').forEach(el => el.classList.remove('selected'));
+    const el = document.getElementById('cell-' + i);
+    if(el) el.classList.add('selected');
+    // Больше, чем лежит в ячейке, взять нельзя — и больше, чем осталось по
+    // накладной, тоже незачем.
+    currentQty = Math.min(pickSuggestion.item.remaining, c.available);
+    document.getElementById('qtyValue').textContent = currentQty;
+    stepPickQty(0);
+  }
+
+  function updatePickConfirm(){
+    const btn = document.getElementById('confirmBtn');
+    const toggle = document.getElementById('lastCellToggle');
+    const remaining = pickSuggestion ? pickSuggestion.item.remaining : 0;
+    // Галочку «последняя ячейка» показываем только когда отбор не закрывает
+    // позицию: если взяли всё, она закроется сама и спрашивать не о чем.
+    toggle.classList.toggle('show', selectedCellBlockId !== null && currentQty < remaining);
+    if(!selectedCellBlockId){
+      btn.disabled = true;
+      btn.textContent = pickSuggestion && pickSuggestion.cells.length === 0
+        ? 'Товара нет — закрыть позицию'
+        : 'Выберите ячейку';
+      if(pickSuggestion && pickSuggestion.cells.length === 0) btn.disabled = true;
+      return;
+    }
+    btn.disabled = false;
+    btn.textContent = 'Взял ' + currentQty + ' шт из ' + selectedCellLabel;
+  }
+
+  // При отборе потолок задают две вещи: сколько лежит в выбранной ячейке и
+  // сколько ещё осталось добрать по строке. Взять больше нельзя ни в том, ни в
+  // другом смысле — сервер это тоже проверит, но узнавать об этом после
+  // похода к стеллажу поздно.
+  function stepPickQty(delta){
+    if(!pickSuggestion) return;
+    const cell = pickSuggestion.cells.find(c => c.cellBlockId === selectedCellBlockId);
+    const cap = Math.min(pickSuggestion.item.remaining, cell ? cell.available : pickSuggestion.item.remaining);
+    currentQty = Math.max(1, Math.min(cap, currentQty + delta));
+    document.getElementById('qtyValue').textContent = currentQty;
+
+    const valEl = document.getElementById('qtyValue');
+    const diffEl = document.getElementById('qtyDiff');
+    const short = currentQty < pickSuggestion.item.remaining;
+    valEl.classList.toggle('warn', short);
+    if(short){
+      diffEl.textContent = 'Останется добрать ' + (pickSuggestion.item.remaining - currentQty) + ' шт';
+      diffEl.classList.add('show');
+    } else {
+      diffEl.classList.remove('show');
+    }
+    updatePickConfirm();
+  }
+
+  async function confirmPick(){
+    const item = currentInvoice.items[currentItemIndex];
+    const btn = document.getElementById('confirmBtn');
+    btn.disabled = true;
+    btn.textContent = 'Сохраняю…';
+    const willClose = currentQty >= pickSuggestion.item.remaining;
+    const isFinal = willClose || document.getElementById('isFinalCheck').checked;
+    try{
+      await apiFetch('/api/shipping', {
+        method: 'POST',
+        body: {
+          invoiceItemId: item.id,
+          pickedQty: currentQty,
+          cellBlockId: selectedCellBlockId,
+          isFinal,
+          pausedMs: totalPausedMs,
+          pauseReasons: pauseLog.map(p => p.reason),
+        },
+      });
+      if(isFinal){
+        results.push({
+          name: item.name, sku: item.sku, declared: Number(item.declared_qty),
+          accepted: Number(pickSuggestion.item.alreadyPicked) + currentQty,
+          cell: selectedCellLabel,
+        });
+      }
+      currentInvoice = await apiFetch('/api/invoices/' + currentInvoice.id);
+      cellRows = await apiFetch('/api/cells/rows');
+      renderCurrentItem();
+    } catch(e){
+      showToast('Не удалось сохранить: ' + e.message);
+      updatePickConfirm();
+    }
+  }
+
+  function stepQty(delta){
+    if(isPicking()){ return stepPickQty(delta); }
+    const item = currentInvoice.items[currentItemIndex];
+    const declared = Number(item.declared_qty);
+    currentQty = Math.max(0, currentQty + delta);
+    document.getElementById('qtyValue').textContent = currentQty;
+    const diffEl = document.getElementById('qtyDiff');
+    const valEl = document.getElementById('qtyValue');
+    if(currentQty !== declared){
+      valEl.classList.add('warn');
+      const diff = currentQty - declared;
+      diffEl.textContent = 'Расхождение с накладной: ' + (diff > 0 ? '+' : '') + diff + ' шт';
+      diffEl.classList.add('show');
+    } else {
+      valEl.classList.remove('warn');
+      diffEl.classList.remove('show');
+    }
+  }
+
+  function setupHoldButton(el, delta){
+    let holdTimeout = null;
+    let holdInterval = null;
+    let speed = 420;
+
+    function tick(){
+      stepQty(delta);
+      speed = Math.max(45, speed * 0.72);
+      clearInterval(holdInterval);
+      holdInterval = setInterval(tick, speed);
+    }
+
+    function start(e){
+      e.preventDefault();
+      speed = 420;
+      stepQty(delta);
+      holdTimeout = setTimeout(tick, 380);
+    }
+    function stop(){
+      clearTimeout(holdTimeout);
+      clearInterval(holdInterval);
+    }
+
+    el.addEventListener('mousedown', start);
+    el.addEventListener('touchstart', start, {passive:false});
+    ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev => el.addEventListener(ev, stop));
+  }
+
+  setupHoldButton(document.getElementById('qtyMinus'), -1);
+  setupHoldButton(document.getElementById('qtyPlus'), 1);
+
+  function selectCellOption(blockId, label, i){
+    document.querySelectorAll('.cell-option').forEach(el => el.classList.remove('selected'));
+    document.getElementById('cell-' + i).classList.add('selected');
+    document.getElementById('customCellDisplay').classList.remove('show');
+    selectedCellBlockId = blockId;
+    selectedCellLabel = label;
+    updateConfirmState();
+  }
+
+  function updateConfirmState(){
+    const btn = document.getElementById('confirmBtn');
+    if(selectedCellLabel){
+      btn.disabled = false;
+      btn.textContent = 'Подтвердить и положить';
+    } else {
+      btn.disabled = true;
+      btn.textContent = 'Выберите место и подтвердите';
+    }
+  }
+
+  async function confirmItem(){
+    if(isPicking()){ return confirmPick(); }
+    const item = currentInvoice.items[currentItemIndex];
+    const btn = document.getElementById('confirmBtn');
+    btn.disabled = true;
+    btn.textContent = 'Сохраняю…';
+    try{
+      await apiFetch('/api/receiving', {
+        method: 'POST',
+        body: {
+          invoiceItemId: item.id,
+          acceptedQty: currentQty,
+          cellBlockId: selectedCellBlockId || null,
+          pausedMs: totalPausedMs,
+          pauseReasons: pauseLog.map(p => p.reason),
+        },
+      });
+      results.push({
+        name: item.name, sku: item.sku, declared: Number(item.declared_qty),
+        accepted: currentQty, cell: selectedCellLabel || 'своё место',
+      });
+      currentInvoice = await apiFetch('/api/invoices/' + currentInvoice.id);
+      if(selectedCellBlockId) cellRows = await apiFetch('/api/cells/rows');
+      renderCurrentItem();
+    } catch(e){
+      showToast('Не удалось сохранить: ' + e.message);
+      updateConfirmState();
+    }
+  }
+
+  async function goToNextInvoice(){
+    const idx = invoices.findIndex(inv => inv.id === currentInvoice.id);
+    const next = invoices[(idx + 1) % invoices.length];
+    await selectInvoice(next.id);
+  }
+
+  function showDone(){
+    document.getElementById('taskScreen').style.display = 'none';
+    document.getElementById('doneScreen').classList.add('show');
+    document.getElementById('invoiceNum').textContent = currentInvoice.number;
+    // Экран завершения говорит о том, что человек только что делал: собирать
+    // и принимать — разные работы, и подписи не должны их путать.
+    document.getElementById('doneTitle').textContent = isPicking() ? 'Отгрузка собрана' : 'Приёмка завершена';
+    document.getElementById('doneSub').textContent = 'Накладная ' + currentInvoice.number + ' полностью обработана. Владелец склада увидит расхождения в журнале, если они есть.';
+
+    const endTime = new Date();
+    const netMs = (endTime - taskStartTime) - totalPausedMs;
+    let timeHtml = `
+      <div class="done-time-row"><span>Начало</span><span>${formatClock(taskStartTime)}</span></div>
+      <div class="done-time-row"><span>Окончание</span><span>${formatClock(endTime)}</span></div>
+      <div class="done-time-row"><span>Чистое время работы</span><span>${formatDuration(netMs)}</span></div>
+    `;
+    if(pauseLog.length > 0){
+      timeHtml += `<div class="done-time-row pause"><span>Пауз</span><span>${pauseLog.length} (${formatDuration(totalPausedMs)})</span></div>`;
+    }
+    document.getElementById('doneTime').innerHTML = timeHtml;
+
+    document.getElementById('doneSummary').innerHTML = results.map(r => {
+      const hasDiff = r.accepted !== r.declared;
+      return `
+        <div class="done-row ${hasDiff ? 'done-row-warn' : ''}">
+          <div class="done-row-name">${r.name}</div>
+          <div class="done-row-sku">${r.sku}</div>
+          <div class="done-row-meta">
+            <span>${isPicking() ? 'Отобрано' : 'Принято'}: <span class="done-row-qty">${r.accepted} / ${r.declared}</span></span>
+            <span class="done-row-cell">→ ${r.cell}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function downloadExcel(){
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('ru-RU') + ' ' + now.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
+    const netMs = (now - taskStartTime) - totalPausedMs;
+
+    const rows = results.map(r => ({
+      'Товар': r.name,
+      'SKU': r.sku,
+      'Заявлено': r.declared,
+      'Принято': r.accepted,
+      'Расхождение': r.accepted - r.declared,
+      'Ячейка': r.cell,
+      'Накладная': currentInvoice.number,
+      'Клиент': currentInvoice.company_name,
+      'Дата приёмки': dateStr,
+      'Начало': formatClock(taskStartTime),
+      'Окончание': formatClock(now),
+      'Чистое время': formatDuration(netMs),
+      'Пауз': pauseLog.length,
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [
+      {wch:32}, {wch:12}, {wch:10}, {wch:10}, {wch:12}, {wch:16}, {wch:12}, {wch:16}, {wch:16},
+      {wch:9}, {wch:11}, {wch:13}, {wch:7}
+    ];
+    const wb = XLSX.utils.book_new();
+    const sheetName = isPicking() ? 'Отгрузка' : 'Приёмка';
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    XLSX.writeFile(wb, sheetName + ' ' + currentInvoice.number + '.xlsx');
+  }
+
+  let toastTimer = null;
+  function showToast(text){
+    const el = document.getElementById('toast');
+    el.textContent = text;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
+  }
+
+  function openSheet(){
+    document.getElementById('sheetOverlay').classList.add('show');
+    goSheetStep('choice');
+  }
+  function closeSheet(){
+    document.getElementById('sheetOverlay').classList.remove('show');
+  }
+  function goSheetStep(step){
+    document.querySelectorAll('.sheet-step').forEach(s => s.classList.remove('show'));
+    if(step === 'choice') document.getElementById('sheetStepChoice').classList.add('show');
+    if(step === 'manual'){
+      document.getElementById('sheetStepManual').classList.add('show');
+      document.getElementById('manualCellInput').value = '';
+      document.getElementById('manualConfirmBtn').disabled = true;
+      setTimeout(() => document.getElementById('manualCellInput').focus(), 50);
+    }
+    if(step === 'map'){
+      document.getElementById('sheetStepMap').classList.add('show');
+      showMapRowsPicker();
+    }
+    if(step === 'pause'){
+      document.getElementById('sheetStepPause').classList.add('show');
+      document.getElementById('pauseCustomInput').value = '';
+      document.getElementById('pauseCustomBtn').disabled = true;
+    }
+  }
+
+  function openPauseSheet(){
+    document.getElementById('sheetOverlay').classList.add('show');
+    goSheetStep('pause');
+  }
+
+  let taskStartTime = null;
+  let pauseStart = null;
+  let totalPausedMs = 0;
+  let pauseLog = [];
+
+  function pauseTask(reason){
+    if(!reason) return;
+    pauseStart = new Date();
+    pauseLog.push({reason: reason, start: pauseStart, end: null});
+    closeSheet();
+    document.getElementById('pauseReasonLabel').textContent = reason;
+    document.getElementById('pauseBanner').classList.add('show');
+    document.getElementById('confirmBtn').disabled = true;
+    document.querySelectorAll('.qty-btn, .cell-option, .cell-manual').forEach(el => el.style.pointerEvents = 'none');
+  }
+
+  function resumeTask(){
+    if(!pauseStart) return;
+    const now = new Date();
+    totalPausedMs += (now - pauseStart);
+    pauseLog[pauseLog.length - 1].end = now;
+    pauseStart = null;
+    document.getElementById('pauseBanner').classList.remove('show');
+    document.querySelectorAll('.qty-btn, .cell-option, .cell-manual').forEach(el => el.style.pointerEvents = '');
+    updateConfirmState();
+  }
+
+  function formatDuration(ms){
+    const totalSec = Math.round(ms / 1000);
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    return min + ' мин ' + String(sec).padStart(2,'0') + ' с';
+  }
+
+  function formatClock(date){
+    return String(date.getHours()).padStart(2,'0') + ':' + String(date.getMinutes()).padStart(2,'0');
+  }
+
+  function confirmManualCell(){
+    const val = document.getElementById('manualCellInput').value.trim();
+    if(!val) return;
+    applyCustomCell(null, val);
+  }
+
+  function showMapRowsPicker(){
+    document.getElementById('mapRackView').style.display = 'none';
+    document.getElementById('mapRowsPicker').style.display = 'flex';
+    document.getElementById('mapTitle').textContent = 'Выберите ряд';
+    document.getElementById('mapSub').textContent = 'Сначала ряд, потом стеллаж и ярус внутри него';
+
+    const picker = document.getElementById('mapRowsPicker');
+    if(cellRows.length === 0){
+      picker.innerHTML = '<div style="font-size:13px; color:var(--muted);">Склад ещё не настроен</div>';
+      return;
+    }
+    picker.innerHTML = cellRows.map((row) =>
+      `<div class="map-row-bar" onclick="showMapRow(${row.row_num})">
+         <div class="map-row-bar-num">${row.row_num}</div>
+         <div class="map-row-bar-tag">ряд</div>
+       </div>`
+    ).join('');
+  }
+
+  function showMapRow(rowNum){
+    document.getElementById('mapRowsPicker').style.display = 'none';
+    document.getElementById('mapRackView').style.display = 'block';
+    document.getElementById('mapTitle').textContent = 'Ряд ' + rowNum;
+    document.getElementById('mapSub').textContent = 'Залитые места уже заняты — насколько, видно по заливке';
+
+    const row = cellRows.find(r => r.row_num === rowNum);
+    const rackGroups = {};
+    row.blocks.forEach(b => {
+      const key = b.rack_start === b.rack_end ? String(b.rack_start) : (b.rack_start + '-' + b.rack_end);
+      (rackGroups[key] = rackGroups[key] || []).push(b);
+    });
+    document.getElementById('mapRackRow').innerHTML = Object.entries(rackGroups).map(([rackKey, blocks]) => `
+      <div class="map-rack">
+        <div class="map-rack-tiers">
+          ${blocks.sort((a,b) => b.tier_start - a.tier_start).map(b => {
+            const label = formatBlockLabel(rowNum, b);
+            const free = b.state === 'empty';
+            const action = free ? `onclick="applyCustomCell('${b.id}', '${label}')"` : '';
+            // Долю заполнения не показываем: сервер знает про ячейку только
+            // «пусто/занято» (fill_pct всегда 0 или 100), и полоска на часть
+            // ширины выглядела бы как процент, которого никто не считал.
+            return `<div class="map-cell ${free ? 'free' : 'occupied'}" ${action} title="${label}"></div>`;
+          }).join('')}
+        </div>
+        <div class="map-rack-label">${rowNum}.${rackKey}</div>
+      </div>
+    `).join('');
+  }
+
+  function applyCustomCell(blockId, label){
+    document.querySelectorAll('.cell-option').forEach(el => el.classList.remove('selected'));
+    selectedCellBlockId = blockId;
+    selectedCellLabel = label;
+    document.getElementById('customCellId').textContent = label;
+    document.getElementById('customCellDisplay').classList.add('show');
+    closeSheet();
+    updateConfirmState();
+  }
+
+  taskStartTime = new Date();
+  init();
+</script>
+
+</body>
+</html>

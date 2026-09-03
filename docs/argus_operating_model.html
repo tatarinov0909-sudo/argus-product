@@ -1,0 +1,392 @@
+<title>Операционная модель Аргуса</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --paper: #f6f3ec;
+    --paper-raised: #fbf9f4;
+    --ink: #1c1b18;
+    --ink-soft: #6b665a;
+    --ink-faint: #a49d8c;
+    --line: #ddd6c7;
+    --line-strong: #c7bea9;
+    --amber: #a85a17;
+    --amber-ink: #7a4111;
+    --amber-soft: #f0dcc0;
+    --teal: #2f6e64;
+    --teal-soft: #dde9e4;
+    --slate: #556070;
+    --slate-soft: #e2e6ea;
+    --shadow: 0 1px 2px rgba(28,27,24,0.06), 0 8px 20px -12px rgba(28,27,24,0.18);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #17181a; --paper-raised: #1e2022; --ink: #ece8de; --ink-soft: #a9a495; --ink-faint: #736e60;
+      --line: #34322c; --line-strong: #47443a; --amber: #e2a13d; --amber-ink: #f0c47c; --amber-soft: #3a2d17;
+      --teal: #7cc3b2; --teal-soft: #1d302c; --slate: #9fb0c2; --slate-soft: #232a32;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #17181a; --paper-raised: #1e2022; --ink: #ece8de; --ink-soft: #a9a495; --ink-faint: #736e60;
+    --line: #34322c; --line-strong: #47443a; --amber: #e2a13d; --amber-ink: #f0c47c; --amber-soft: #3a2d17;
+    --teal: #7cc3b2; --teal-soft: #1d302c; --slate: #9fb0c2; --slate-soft: #232a32;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 100%;
+  }
+
+  .wrap { max-width: 900px; margin: 0 auto; padding: clamp(28px, 5vw, 64px) clamp(18px, 4vw, 40px) 90px; }
+
+  .masthead {
+    display: flex; justify-content: space-between; align-items: flex-end; gap: 24px;
+    padding-bottom: 22px; border-bottom: 2px solid var(--ink); margin-bottom: 26px;
+  }
+  .masthead-file { font-family: 'IBM Plex Mono', monospace; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
+  .masthead-file span { color: var(--amber-ink); }
+  h1 {
+    font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: clamp(32px, 5.5vw, 46px);
+    line-height: 1.05; letter-spacing: -0.01em; margin: 6px 0 0; text-wrap: balance;
+    font-variation-settings: "opsz" 40;
+  }
+  .masthead-right { text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--ink-soft); flex-shrink: 0; }
+
+  .dek { max-width: 66ch; color: var(--ink-soft); font-size: 17px; margin: 18px 0 40px; }
+  .dek strong { color: var(--ink); font-weight: 600; }
+
+  .principle {
+    display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: center;
+    background: var(--paper-raised); border: 1px solid var(--line); border-left: 3px solid var(--teal);
+    border-radius: 4px; padding: 16px 20px; margin-bottom: 48px; box-shadow: var(--shadow);
+  }
+  .principle-tag { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--teal); white-space: nowrap; }
+  .principle p { margin: 0; font-size: 14.5px; color: var(--ink-soft); }
+  .principle p strong { color: var(--ink); font-weight: 600; }
+
+  .section-label {
+    display: flex; align-items: center; gap: 12px; font-family: 'IBM Plex Mono', monospace; font-size: 12px;
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); margin: 0 0 8px;
+  }
+  .section-label::after { content: ""; flex: 1; height: 1px; background: var(--line-strong); }
+  .section-sub { font-size: 14px; color: var(--ink-soft); margin: 0 0 24px; max-width: 60ch; }
+
+  /* ---------- Legend ---------- */
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 22px; }
+  .legend-item { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink-soft); }
+  .legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .legend-dot.human { background: var(--amber); }
+  .legend-dot.agent { background: var(--teal); }
+  .legend-dot.system { background: var(--slate); }
+
+  /* ---------- Flow (timeline) ---------- */
+  .flow { position: relative; margin-bottom: 50px; }
+  .flow-rail { position: absolute; left: 15px; top: 6px; bottom: 6px; width: 2px; background: var(--line-strong); }
+  .flow-step { position: relative; padding: 0 0 22px 44px; }
+  .flow-step:last-child { padding-bottom: 0; }
+  .flow-dot {
+    position: absolute; left: 8px; top: 3px; width: 16px; height: 16px; border-radius: 50%;
+    border: 3px solid var(--paper); box-shadow: 0 0 0 1.5px var(--line-strong);
+  }
+  .flow-dot.human { background: var(--amber); }
+  .flow-dot.agent { background: var(--teal); }
+  .flow-dot.system { background: var(--slate); }
+  .flow-num { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink-faint); margin-bottom: 2px; }
+  .flow-title { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 16.5px; margin-bottom: 4px; font-variation-settings: "opsz" 18; }
+  .flow-desc { font-size: 14px; color: var(--ink-soft); max-width: 62ch; }
+  .flow-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .chip {
+    font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.03em; padding: 3px 9px;
+    border-radius: 20px; border: 1px solid currentColor;
+  }
+  .chip.human { color: var(--amber-ink); background: var(--amber-soft); }
+  .chip.agent { color: var(--teal); background: var(--teal-soft); }
+  .chip.system { color: var(--slate); background: var(--slate-soft); }
+
+  /* ---------- Agent cards ---------- */
+  .roster { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; margin-bottom: 54px; }
+  @media (max-width: 700px) { .roster { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--paper-raised); border: 1px solid var(--line); border-radius: 6px;
+    padding: 22px 22px 20px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 12px;
+  }
+  .card.wide { grid-column: 1 / -1; }
+  .card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
+  .card-role { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 21px; font-variation-settings: "opsz" 20; }
+  .stamp {
+    font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; font-weight: 500; letter-spacing: 0.06em;
+    text-transform: uppercase; padding: 5px 10px; border-radius: 3px; border: 1.5px solid currentColor;
+    white-space: nowrap; transform: rotate(-2deg); flex-shrink: 0;
+  }
+  .stamp.built { color: var(--teal); background: var(--teal-soft); }
+  .stamp.blocked { color: var(--amber-ink); background: var(--amber-soft); }
+  .stamp.idle { color: var(--ink-faint); background: transparent; border-style: dashed; }
+
+  .card-note { font-size: 12.5px; color: var(--ink-faint); font-style: italic; margin: -4px 0 2px; }
+
+  .card-meta { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 13.5px; padding-top: 12px; border-top: 1px dashed var(--line-strong); }
+  .card-meta dt { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-faint); padding-top: 2px; white-space: nowrap; }
+  .card-meta dd { margin: 0; color: var(--ink); }
+  .card-meta dd.muted { color: var(--ink-soft); }
+
+  .footnote { display: flex; gap: 14px; font-size: 13.5px; color: var(--ink-soft); border-top: 2px solid var(--ink); padding-top: 20px; }
+  .footnote .mark { font-family: 'IBM Plex Mono', monospace; color: var(--amber-ink); flex-shrink: 0; }
+  .footnote strong { color: var(--ink); font-weight: 600; }
+
+  ::selection { background: var(--amber-soft); color: var(--ink); }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div>
+      <div class="masthead-file">Дело №<span>АРГУС-ПРОЦЕСС</span> · для внешнего обзора</div>
+      <h1>Операционная модель Аргуса</h1>
+    </div>
+    <div class="masthead-right">23.08.2026</div>
+  </header>
+
+  <p class="dek">
+    Как склад на Аргусе проходит путь от приёмки товара до сдачи на маркетплейс и обратно —
+    и какие шаги в этом пути берёт на себя <strong>человек</strong>, а какие —
+    <strong>ИИ-агент</strong>.
+  </p>
+
+  <div class="principle">
+    <div class="principle-tag">Принцип</div>
+    <p><strong>Решают правила, ИИ объясняет.</strong> Количество, ячейку, маршрут, стоимость упаковки
+      считает алгоритм — агент только подсказывает и говорит по-человечески. Ни один агент не может
+      отправить человека к несуществующей ячейке или придумать цифру.</p>
+  </div>
+
+  <div class="section-label">Поставка → заказ → отгрузка</div>
+  <p class="section-sub">От приёмки товара на складе до подтверждения на воротах маркетплейса.</p>
+
+  <div class="legend">
+    <div class="legend-item"><span class="legend-dot human"></span>человек</div>
+    <div class="legend-item"><span class="legend-dot agent"></span>агент Аргуса</div>
+    <div class="legend-item"><span class="legend-dot system"></span>автоматически, без участия человека</div>
+  </div>
+
+  <div class="flow">
+    <div class="flow-rail"></div>
+
+    <div class="flow-step">
+      <div class="flow-dot human"></div>
+      <div class="flow-num">01</div>
+      <div class="flow-title">Приёмка</div>
+      <div class="flow-desc">Приёмщик принимает товар и указывает, куда положил — Кладовщик подсказывает ячейку.</div>
+      <div class="flow-chips"><span class="chip human">Приёмщик</span><span class="chip agent">Кладовщик</span></div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-dot system"></div>
+      <div class="flow-num">02</div>
+      <div class="flow-title">Селлер видит поставку</div>
+      <div class="flow-desc">В личном кабинете селлера статус меняется на «Поставка принята» — без звонков и переписки.</div>
+      <div class="flow-chips"><span class="chip system">Уведомление</span></div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-dot system"></div>
+      <div class="flow-num">03</div>
+      <div class="flow-title">Заказ падает в систему</div>
+      <div class="flow-desc">С маркетплейса (Wildberries, Ozon) в Аргус приходит новый заказ.</div>
+      <div class="flow-chips"><span class="chip system">API WB / Ozon</span></div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-dot agent"></div>
+      <div class="flow-num">04</div>
+      <div class="flow-title">Сборочный лист и «лист грузчика»</div>
+      <div class="flow-desc">Работник склада получает лист по своему заказу. Если заказов много — Кладовщик
+        сводит их в общий «лист грузчика»: все позиции просуммированы, с точными адресами ячеек —
+        собирают один раз, а не бегают по складу за каждым заказом отдельно.</div>
+      <div class="flow-chips"><span class="chip human">Сборщик</span><span class="chip agent">Кладовщик</span></div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-dot system"></div>
+      <div class="flow-num">05</div>
+      <div class="flow-title">Остаток списывается</div>
+      <div class="flow-desc">Аргус сам уменьшает остаток в личном кабинете селлера через API маркетплейса.</div>
+      <div class="flow-chips"><span class="chip system">API WB / Ozon</span></div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-dot system"></div>
+      <div class="flow-num">06</div>
+      <div class="flow-title">QR на вход и на выход</div>
+      <div class="flow-desc">Каждому заказу присваивается пара QR-кодов — по ним видно точный путь заказа по складу.</div>
+      <div class="flow-chips"><span class="chip system">Трекинг</span></div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-dot system"></div>
+      <div class="flow-num">07</div>
+      <div class="flow-title">Заказ собран</div>
+      <div class="flow-desc">Аргус пишет селлеру: заказ собран и готов к отправке.</div>
+      <div class="flow-chips"><span class="chip system">Уведомление</span></div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-dot human"></div>
+      <div class="flow-num">08</div>
+      <div class="flow-title">Погрузка</div>
+      <div class="flow-desc">Приходит машина. Логист склада (человек) отмечает, какие заказы едут этим рейсом;
+        работник склада получает лист товаров к отгрузке.</div>
+      <div class="flow-chips"><span class="chip human">Логист склада</span></div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-dot system"></div>
+      <div class="flow-num">09</div>
+      <div class="flow-title">Отгружено</div>
+      <div class="flow-desc">Селлеру приходит сообщение: товар отгружен со склада.</div>
+      <div class="flow-chips"><span class="chip system">Уведомление</span></div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-dot system"></div>
+      <div class="flow-num">10</div>
+      <div class="flow-title">Сдача на маркетплейс</div>
+      <div class="flow-desc">На воротах WB/Ozon сканируют код поставки. Как только он отсканирован —
+        оповещение уходит начальнику склада, а дальше сразу селлеру: товар принят маркетплейсом.</div>
+      <div class="flow-chips"><span class="chip system">Скан на воротах МП</span></div>
+    </div>
+
+  </div>
+
+  <div class="section-label">Возврат</div>
+  <p class="section-sub">Тот же язык уведомлений, но в обратную сторону — от селлера до полки склада.</p>
+
+  <div class="flow">
+    <div class="flow-rail"></div>
+
+    <div class="flow-step">
+      <div class="flow-dot human"></div>
+      <div class="flow-num">01</div>
+      <div class="flow-title">Заявка на возврат</div>
+      <div class="flow-desc">Селлер присылает QR возврата или заполняет заявку по форме.</div>
+      <div class="flow-chips"><span class="chip human">Селлер</span></div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-dot agent"></div>
+      <div class="flow-num">02</div>
+      <div class="flow-title">Машина назначена</div>
+      <div class="flow-desc">Агент Логист видит заявку и подбирает машину под забор — либо селлер привозит сам.</div>
+      <div class="flow-chips"><span class="chip agent">Логист</span></div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-dot human"></div>
+      <div class="flow-num">03</div>
+      <div class="flow-title">Приёмка возврата</div>
+      <div class="flow-desc">Дальше — тот же процесс, что и обычная приёмка.</div>
+      <div class="flow-chips"><span class="chip human">Приёмщик</span><span class="chip agent">Кладовщик</span></div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-dot human"></div>
+      <div class="flow-num">04</div>
+      <div class="flow-title">Сортировка: годный / брак</div>
+      <div class="flow-desc">Товар раскладывается на две зоны склада. Брак фиксируется с фото и описанием дефекта —
+        не просто «испорчено», а видно, что именно.</div>
+      <div class="flow-chips"><span class="chip human">Приёмщик</span><span class="chip agent">Кладовщик</span></div>
+    </div>
+
+  </div>
+
+  <div class="section-label">Агенты</div>
+  <p class="section-sub">Пять ролей, которые обслуживают процесс выше. Статус — что уже в коде, что ждёт данных.</p>
+
+  <div class="roster">
+
+    <article class="card">
+      <div class="card-top">
+        <div class="card-role">Кладовщик</div>
+        <div class="stamp built">Наполовину готов</div>
+      </div>
+      <p class="card-note">Знает, что и где лежит.</p>
+      <dl class="card-meta">
+        <dt>Делает</dt><dd>подсказывает ячейку при приёмке; сводит заказы в общий «лист грузчика» с адресами; сортирует возвраты на «годный» / «брак»</dd>
+        <dt>Статус</dt><dd class="muted">подсказка ячейки и лист грузчика — частично в коде; возвраты не начаты</dd>
+      </dl>
+    </article>
+
+    <article class="card">
+      <div class="card-top">
+        <div class="card-role">Упаковщик</div>
+        <div class="stamp blocked">Не начат</div>
+      </div>
+      <p class="card-note">Считает, во что обойдётся упаковать заказ.</p>
+      <dl class="card-meta">
+        <dt>Вход</dt><dd>габариты товара, параметры упаковки (напр. число слоёв ПП-плёнки), цена материала</dd>
+        <dt>Считает</dt><dd>расход материала + трудозатраты (ставка сотрудника ₽/час × его норма упаковки шт/час) → итоговая себестоимость</dd>
+        <dt>Ждёт</dt><dd class="muted">габариты товара из 1С, тарифы по материалам и ставкам от склада</dd>
+      </dl>
+    </article>
+
+    <article class="card">
+      <div class="card-top">
+        <div class="card-role">Логист <span style="color:var(--ink-faint); font-weight:400; font-size:14px;">(агент)</span></div>
+        <div class="stamp blocked">Не начат</div>
+      </div>
+      <p class="card-note">Не путать с логистом на погрузке (шаг 8) — тот человек и отмечает вручную, что едет этим рейсом.</p>
+      <dl class="card-meta">
+        <dt>Делает</dt><dd>получает собранные заказы с адресами доставки, строит маршрут; назначает машину под забор возврата</dd>
+        <dt>Вход</dt><dd>время на точку (напр. «выгрузка — 3 часа»), длина смены водителя (напр. 10 часов)</dd>
+        <dt>Ждёт</dt><dd class="muted">сервис карт (Яндекс/2ГИС), данные о машинах и водителях</dd>
+      </dl>
+    </article>
+
+    <article class="card">
+      <div class="card-top">
+        <div class="card-role">Аналитик</div>
+        <div class="stamp blocked">Заблокирован</div>
+      </div>
+      <p class="card-note">Смотрит на склад сверху.</p>
+      <dl class="card-meta">
+        <dt>Делает</dt><dd>считает расхождения при приёмке, загруженность склада, контролирует приходы (план/факт)</dd>
+        <dt>Прогнозирует</dt><dd>динамику заказов на завтра и дальше → сколько сотрудников понадобится</dd>
+        <dt>Ждёт</dt><dd class="muted">историю движений за месяцы — сейчас её нет</dd>
+      </dl>
+    </article>
+
+    <article class="card wide">
+      <div class="card-top">
+        <div class="card-role">Оркестратор</div>
+        <div class="stamp idle">После остальных</div>
+      </div>
+      <p class="card-note" style="margin:0;">Единственный, кому реально нужна языковая модель — понимает свободный
+        вопрос человека («а этот заказ куда делся?», «сколько осталось футболок M?») и передаёт его нужному
+        агенту. Смысла нет, пока агент один — маршрутизировать не между кем.</p>
+    </article>
+
+  </div>
+
+  <div class="footnote">
+    <span class="mark">※</span>
+    <p style="margin:0">
+      Данные для агентов идут из двух мест: <strong>1С</strong> — номенклатура, остатки, накладные;
+      <strong>сам Аргус</strong> — ячейки, что где лежит, зоны, сотрудники, журнал действий.
+      1С не отвечает на вопросы в реальном времени — только пакетная выгрузка, поэтому агенты всегда
+      читают базу Аргуса, а не 1С напрямую.
+    </p>
+  </div>
+
+</div>
