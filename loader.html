@@ -195,6 +195,44 @@
   .custom-cell-label{font-size:11.5px; color:var(--muted); margin-bottom:2px;}
   .custom-cell-id{font-family:var(--mono); font-size:16px; font-weight:700; color:var(--accent);}
 
+  /* ---------- Разбор возврата по состоянию товара ----------
+     Три состояния из реального процесса: годный обратно в продажу, брак
+     (чинить нельзя, решает продавец) и брак упаковки (товар цел, нужна
+     перепаковка). Цвет у каждого свой, чтобы состояние читалось до текста. */
+  .bucket-block{display:none; background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:20px;}
+  .bucket-block.show{display:block;}
+  .bucket-options{display:flex; flex-direction:column; gap:10px;}
+  .bucket-option{
+    display:flex; justify-content:space-between; align-items:center; gap:12px; padding:14px 16px;
+    background:var(--panel-2); border:1.5px solid var(--line); border-radius:12px; cursor:pointer;
+  }
+  .bucket-option-dot{width:10px; height:10px; border-radius:50%; flex-shrink:0;}
+  .bucket-option-main{display:flex; align-items:center; gap:12px; min-width:0;}
+  .bucket-option-name{font-size:14.5px; font-weight:600;}
+  .bucket-option-note{font-size:12px; color:var(--muted); margin-top:2px;}
+  .bucket-option-done{font-size:12px; font-family:var(--mono); color:var(--muted); flex-shrink:0;}
+  .bucket-option[data-bucket="good"] .bucket-option-dot{background:var(--green);}
+  .bucket-option[data-bucket="defective"] .bucket-option-dot{background:var(--terracotta);}
+  .bucket-option[data-bucket="packaging_defect"] .bucket-option-dot{background:var(--yellow);}
+  .bucket-option.selected[data-bucket="good"]{border-color:var(--green); background:var(--green-soft);}
+  .bucket-option.selected[data-bucket="defective"]{border-color:var(--terracotta); background:var(--terracotta-soft);}
+  .bucket-option.selected[data-bucket="packaging_defect"]{border-color:var(--yellow); background:var(--yellow-soft);}
+
+  /* Кнопка «машина уехала» на экране завершения отгрузки. Собран и отгружен —
+     разные события, поэтому и подтверждение отдельное. */
+  .ship-btn{
+    width:100%; padding:15px; border-radius:12px; border:1px solid var(--accent);
+    background:var(--accent-soft); color:var(--accent-2); font-family:var(--sans);
+    font-size:14.5px; font-weight:700; cursor:pointer;
+  }
+  .ship-btn:disabled{opacity:0.55; cursor:default;}
+  .ship-done-note{
+    display:none; align-items:center; justify-content:center; gap:8px; padding:14px;
+    border-radius:12px; background:var(--green-soft); border:1px solid var(--green);
+    color:var(--green); font-size:13.5px; font-weight:600;
+  }
+  .ship-done-note.show{display:flex;}
+
   /* ---------- Модалка "своё место" ---------- */
   .sheet-overlay{
     display:none; position:fixed; inset:0; background:rgba(21,23,26,0.75); z-index:100;
@@ -430,6 +468,46 @@
 
         <div class="shortfall-note" id="shortfallNote"></div>
 
+        <!-- Возврат разбирается по состоянию товара, а не просто принимается:
+             от состояния зависит, вернётся ли товар в продажу, ляжет в брак
+             или уйдёт на перепаковку. Поэтому состояние спрашиваем до
+             количества — сначала «что это», потом «сколько». -->
+        <div class="bucket-block" id="bucketBlock">
+          <div class="cell-label">Состояние товара</div>
+          <div class="bucket-options" id="bucketOptions">
+            <div class="bucket-option" data-bucket="good" onclick="selectBucket('good')">
+              <div class="bucket-option-main">
+                <div class="bucket-option-dot"></div>
+                <div>
+                  <div class="bucket-option-name">Хороший</div>
+                  <div class="bucket-option-note">обратно в продажу</div>
+                </div>
+              </div>
+              <div class="bucket-option-done" id="bucketDone-good"></div>
+            </div>
+            <div class="bucket-option" data-bucket="defective" onclick="selectBucket('defective')">
+              <div class="bucket-option-main">
+                <div class="bucket-option-dot"></div>
+                <div>
+                  <div class="bucket-option-name">Брак</div>
+                  <div class="bucket-option-note">продавать нельзя — решает продавец</div>
+                </div>
+              </div>
+              <div class="bucket-option-done" id="bucketDone-defective"></div>
+            </div>
+            <div class="bucket-option" data-bucket="packaging_defect" onclick="selectBucket('packaging_defect')">
+              <div class="bucket-option-main">
+                <div class="bucket-option-dot"></div>
+                <div>
+                  <div class="bucket-option-name">Брак упаковки</div>
+                  <div class="bucket-option-note">товар цел, нужна перепаковка</div>
+                </div>
+              </div>
+              <div class="bucket-option-done" id="bucketDone-packaging_defect"></div>
+            </div>
+          </div>
+        </div>
+
         <div class="qty-block">
           <div class="qty-label" id="qtyLabel">Сколько приняли по факту</div>
           <div class="qty-stepper">
@@ -440,7 +518,7 @@
           <div class="qty-diff" id="qtyDiff"></div>
         </div>
 
-        <div class="cell-block">
+        <div class="cell-block" id="cellBlock">
           <div class="cell-label" id="cellLabel">Куда положить — рекомендации Кладовщика</div>
           <div class="cell-options" id="cellOptions"></div>
           <div class="custom-cell-display" id="customCellDisplay">
@@ -545,6 +623,11 @@
       <div class="done-time" id="doneTime"></div>
       <div class="done-summary" id="doneSummary"></div>
       <div class="done-actions">
+        <button class="ship-btn" id="shipBtn" style="display:none;" onclick="confirmShipped()">Отгрузили — машина уехала</button>
+        <div class="ship-done-note" id="shipDoneNote">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Заказ отгружен
+        </div>
         <button class="excel-btn" onclick="downloadExcel()">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 3v13m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Скачать в Excel
@@ -651,14 +734,18 @@
     const sw = document.getElementById('invoiceSwitch');
     const opening = !pop.classList.contains('show');
     if(opening){
-      const statusLabel = {open:'не начата', in_progress:'в процессе', completed:'завершена'};
+      const statusLabel = {
+        open:'не начата', in_progress:'в процессе', completed:'завершена',
+        ready:'собран', shipped:'отгружен',
+      };
+      const directionLabel = {out:'отгрузка', return:'возврат', in:'приёмка'};
       pop.innerHTML = invoices.map((inv) => `
         <div class="invoice-popover-item ${currentInvoice && inv.id === currentInvoice.id ? 'active' : ''}" onclick="event.stopPropagation(); selectInvoice('${inv.id}')">
           <div>
             <div class="invoice-popover-item-name">${inv.company_name}</div>
             <div class="invoice-popover-item-sub">${inv.number}</div>
           </div>
-          <div class="invoice-popover-item-count">${inv.direction === 'out' ? 'отгрузка' : 'приёмка'} · ${statusLabel[inv.status] || inv.status}</div>
+          <div class="invoice-popover-item-count">${directionLabel[inv.direction] || 'приёмка'} · ${statusLabel[inv.status] || inv.status}</div>
         </div>
       `).join('');
       pop.classList.add('show');
@@ -689,6 +776,16 @@
     renderCurrentItem();
   }
 
+  // Накладную перечитываем после каждого сохранения — и заодно поправляем её
+  // статус в списке. Список грузится один раз при входе, и без этого
+  // переключатель врал: разобранный возврат оставался «не начата».
+  async function reloadCurrentInvoice(){
+    currentInvoice = await apiFetch('/api/invoices/' + currentInvoice.id);
+    const row = invoices.find(inv => inv.id === currentInvoice.id);
+    if(row) row.status = currentInvoice.status;
+    return currentInvoice;
+  }
+
   document.addEventListener('click', function(){
     document.getElementById('invoicePopover').classList.remove('show');
     document.getElementById('invoiceSwitch').classList.remove('open');
@@ -698,18 +795,26 @@
     return currentInvoice.items.findIndex(it => !it.receiving_id);
   }
 
-  // Накладная сама говорит, что с ней делать: приход кладут, расход отбирают.
-  // Отдельного переключателя режимов нет намеренно — работник открывает
-  // документ и делает то, что в документе написано.
+  // Накладная сама говорит, что с ней делать: приход кладут, расход отбирают,
+  // возврат разбирают по состоянию. Отдельного переключателя режимов нет
+  // намеренно — работник открывает документ и делает то, что в документе
+  // написано.
   function isPicking(){
     return currentInvoice && currentInvoice.direction === 'out';
+  }
+
+  function isReturn(){
+    return currentInvoice && currentInvoice.direction === 'return';
   }
 
   function renderCurrentItem(){
     document.getElementById('invoiceNum').textContent = currentInvoice.number;
     document.getElementById('invoiceClient').textContent = currentInvoice.company_name;
     if(isPicking()){ renderPickItem(); return; }
+    if(isReturn()){ renderReturnItem(); return; }
 
+    document.getElementById('bucketBlock').classList.remove('show');
+    document.getElementById('cellBlock').style.display = '';
     document.getElementById('itemDeclaredLabel').textContent = 'Заявлено по накладной';
     document.getElementById('qtyLabel').textContent = 'Сколько приняли по факту';
     document.getElementById('cellLabel').textContent = 'Куда положить — рекомендации Кладовщика';
@@ -789,6 +894,8 @@
   }
 
   async function renderPickItem(){
+    document.getElementById('bucketBlock').classList.remove('show');
+    document.getElementById('cellBlock').style.display = '';
     document.getElementById('itemDeclaredLabel').textContent = 'Нужно отобрать';
     document.getElementById('qtyLabel').textContent = 'Сколько взяли из ячейки';
     document.getElementById('cellLabel').textContent = 'Откуда взять — по порядку обхода';
@@ -954,7 +1061,7 @@
           cell: selectedCellLabel,
         });
       }
-      currentInvoice = await apiFetch('/api/invoices/' + currentInvoice.id);
+      await reloadCurrentInvoice();
       cellRows = await apiFetch('/api/cells/rows');
       renderCurrentItem();
     } catch(e){
@@ -963,8 +1070,171 @@
     }
   }
 
+  /* ============================ Возврат ============================
+     Возврат приходит на склад как обычная поставка, но принимается не «сколько
+     штук», а «сколько штук в каком состоянии»: годное возвращается в продажу,
+     брак ложится отдельно и ждёт решения продавца, брак упаковки уходит на
+     перепаковку и потом становится годным.
+
+     Одну строку можно разбирать в несколько заходов — по заходу на состояние.
+     Строка закрывается, когда разобрано всё заявленное количество (см.
+     returns/routes.js). */
+
+  const BUCKET_NAME = {
+    good: 'хороший',
+    defective: 'брак',
+    packaging_defect: 'брак упаковки',
+  };
+
+  let selectedBucket = null;
+
+  function returnedOf(item){
+    return Number(item.returned_qty || 0);
+  }
+
+  function findNextUnsortedIndex(){
+    return currentInvoice.items.findIndex(it => returnedOf(it) < Number(it.declared_qty));
+  }
+
+  function returnRemaining(){
+    const item = currentInvoice.items[currentItemIndex];
+    return Number(item.declared_qty) - returnedOf(item);
+  }
+
+  function renderReturnItem(){
+    document.getElementById('bucketBlock').classList.add('show');
+    document.getElementById('itemDeclaredLabel').textContent = 'Осталось разобрать';
+    document.getElementById('qtyLabel').textContent = 'Сколько штук в этом состоянии';
+    document.getElementById('shortfallNote').classList.remove('show');
+    document.getElementById('lastCellToggle').classList.remove('show');
+    document.getElementById('customCellDisplay').classList.remove('show');
+
+    const idx = findNextUnsortedIndex();
+    if(idx === -1){ showDone(); return; }
+    currentItemIndex = idx;
+    const item = currentInvoice.items[idx];
+
+    const total = currentInvoice.items.length;
+    document.getElementById('progressText').textContent = (idx + 1) + ' / ' + total;
+    document.getElementById('progressFill').style.width = Math.round(((idx + 1) / total) * 100) + '%';
+    document.getElementById('itemName').textContent = item.name;
+    document.getElementById('itemSku').textContent = item.sku;
+
+    const remaining = returnRemaining();
+    // Пока строку не начали разбирать, «10 из 10» — лишний шум: показываем
+    // остаток дробью только когда часть уже разобрана.
+    document.getElementById('itemDeclared').textContent = remaining === Number(item.declared_qty)
+      ? remaining + ' шт'
+      : remaining + ' из ' + item.declared_qty;
+
+    // Уже разобранное показываем прямо в списке состояний: работник видит, что
+    // он с этой строкой уже сделал, и не пересчитывает в уме.
+    const sorted = {good:0, defective:0, packaging_defect:0};
+    (item.buckets || []).forEach(b => { sorted[b.qualityBucket] = (sorted[b.qualityBucket] || 0) + Number(b.qty); });
+    Object.keys(sorted).forEach(k => {
+      const el = document.getElementById('bucketDone-' + k);
+      if(el) el.textContent = sorted[k] > 0 ? sorted[k] + ' шт' : '';
+    });
+
+    selectedBucket = null;
+    selectedCellBlockId = null;
+    selectedCellLabel = null;
+    document.querySelectorAll('.bucket-option').forEach(el => el.classList.remove('selected'));
+    document.getElementById('cellBlock').style.display = 'none';
+
+    currentQty = remaining;
+    document.getElementById('qtyValue').textContent = currentQty;
+    document.getElementById('qtyValue').classList.remove('warn');
+    document.getElementById('qtyDiff').classList.remove('show');
+    updateReturnConfirm();
+  }
+
+  function selectBucket(bucket){
+    selectedBucket = bucket;
+    document.querySelectorAll('.bucket-option').forEach(el => {
+      el.classList.toggle('selected', el.getAttribute('data-bucket') === bucket);
+    });
+
+    const cellBlock = document.getElementById('cellBlock');
+    const item = currentInvoice.items[currentItemIndex];
+    selectedCellBlockId = null;
+    selectedCellLabel = null;
+    document.getElementById('customCellDisplay').classList.remove('show');
+    cellBlock.style.display = '';
+
+    if(bucket === 'good'){
+      // Годный товар возвращается в обычный оборот — значит и место ему
+      // подбирает Кладовщик, как на обычной приёмке.
+      document.getElementById('cellLabel').textContent = 'Куда положить — рекомендации Кладовщика';
+      document.getElementById('manualCellBtn').style.display = '';
+      renderCellOptions(item.sku);
+    } else {
+      // А вот брак Кладовщик подсказывать НЕ должен: он предлагает ячейку по
+      // артикулу, то есть отправил бы испорченный товар к годному тому же
+      // самому. Место для брака работник указывает сам — это отдельные ячейки
+      // склада, и знает о них человек, а не подсказка по артикулу.
+      document.getElementById('cellLabel').textContent = 'Куда отнесли — можно не указывать';
+      document.getElementById('manualCellBtn').style.display = '';
+      document.getElementById('cellOptions').innerHTML =
+        '<div style="font-size:13px; color:var(--muted); text-align:center; padding:8px;">'
+        + 'Для брака ячейку подбирает не Кладовщик, а вы — укажите своё место или пропустите.</div>';
+    }
+    updateReturnConfirm();
+  }
+
+  function stepReturnQty(delta){
+    const cap = returnRemaining();
+    currentQty = Math.max(1, Math.min(cap, currentQty + delta));
+    document.getElementById('qtyValue').textContent = currentQty;
+    updateReturnConfirm();
+  }
+
+  function updateReturnConfirm(){
+    const btn = document.getElementById('confirmBtn');
+    if(!selectedBucket){
+      btn.disabled = true;
+      btn.textContent = 'Выберите состояние товара';
+      return;
+    }
+    btn.disabled = false;
+    const tail = selectedCellLabel ? ' → ' + selectedCellLabel : '';
+    btn.textContent = currentQty + ' шт — ' + BUCKET_NAME[selectedBucket] + tail;
+  }
+
+  async function confirmReturn(){
+    const item = currentInvoice.items[currentItemIndex];
+    const btn = document.getElementById('confirmBtn');
+    btn.disabled = true;
+    btn.textContent = 'Сохраняю…';
+    try{
+      await apiFetch('/api/returns', {
+        method: 'POST',
+        body: {
+          invoiceItemId: item.id,
+          qty: currentQty,
+          qualityBucket: selectedBucket,
+          cellBlockId: selectedCellBlockId || null,
+          pausedMs: totalPausedMs,
+          pauseReasons: pauseLog.map(p => p.reason),
+        },
+      });
+      results.push({
+        name: item.name, sku: item.sku, declared: Number(item.declared_qty),
+        accepted: currentQty, cell: selectedCellLabel || BUCKET_NAME[selectedBucket],
+        bucket: selectedBucket,
+      });
+      await reloadCurrentInvoice();
+      if(selectedCellBlockId) cellRows = await apiFetch('/api/cells/rows');
+      renderCurrentItem();
+    } catch(e){
+      showToast('Не удалось сохранить: ' + e.message);
+      updateReturnConfirm();
+    }
+  }
+
   function stepQty(delta){
     if(isPicking()){ return stepPickQty(delta); }
+    if(isReturn()){ return stepReturnQty(delta); }
     const item = currentInvoice.items[currentItemIndex];
     const declared = Number(item.declared_qty);
     currentQty = Math.max(0, currentQty + delta);
@@ -1022,7 +1292,10 @@
     updateConfirmState();
   }
 
+  // Ячейку выбирают из трёх мест — подсказка, ручной ввод и карта, — и все три
+  // зовут сюда. Ветка возврата стоит один раз здесь, а не в каждом из них.
   function updateConfirmState(){
+    if(isReturn()){ return updateReturnConfirm(); }
     const btn = document.getElementById('confirmBtn');
     if(selectedCellLabel){
       btn.disabled = false;
@@ -1035,6 +1308,7 @@
 
   async function confirmItem(){
     if(isPicking()){ return confirmPick(); }
+    if(isReturn()){ return confirmReturn(); }
     const item = currentInvoice.items[currentItemIndex];
     const btn = document.getElementById('confirmBtn');
     btn.disabled = true;
@@ -1054,7 +1328,7 @@
         name: item.name, sku: item.sku, declared: Number(item.declared_qty),
         accepted: currentQty, cell: selectedCellLabel || 'своё место',
       });
-      currentInvoice = await apiFetch('/api/invoices/' + currentInvoice.id);
+      await reloadCurrentInvoice();
       if(selectedCellBlockId) cellRows = await apiFetch('/api/cells/rows');
       renderCurrentItem();
     } catch(e){
@@ -1073,10 +1347,28 @@
     document.getElementById('taskScreen').style.display = 'none';
     document.getElementById('doneScreen').classList.add('show');
     document.getElementById('invoiceNum').textContent = currentInvoice.number;
-    // Экран завершения говорит о том, что человек только что делал: собирать
-    // и принимать — разные работы, и подписи не должны их путать.
-    document.getElementById('doneTitle').textContent = isPicking() ? 'Отгрузка собрана' : 'Приёмка завершена';
-    document.getElementById('doneSub').textContent = 'Накладная ' + currentInvoice.number + ' полностью обработана. Владелец склада увидит расхождения в журнале, если они есть.';
+    // Экран завершения говорит о том, что человек только что делал: собирать,
+    // принимать и разбирать возврат — разные работы, и подписи не должны их
+    // путать.
+    document.getElementById('doneTitle').textContent =
+      isPicking() ? 'Отгрузка собрана' : (isReturn() ? 'Возврат разобран' : 'Приёмка завершена');
+    document.getElementById('doneSub').textContent = isReturn()
+      ? 'Возврат ' + currentInvoice.number + ' разобран по состоянию товара. Продавец увидит, что вернулось в продажу, а что легло в брак.'
+      : 'Накладная ' + currentInvoice.number + ' полностью обработана. Владелец склада увидит расхождения в журнале, если они есть.';
+
+    // «Собран» и «отгружен» — разные события: заказ может стоять собранным
+    // часами, пока не придёт машина. Поэтому отгрузку подтверждают отдельно, и
+    // только у заказа, который уже полностью собран.
+    const shipBtn = document.getElementById('shipBtn');
+    const shipNote = document.getElementById('shipDoneNote');
+    shipNote.classList.toggle('show', isPicking() && currentInvoice.status === 'shipped');
+    if(isPicking() && currentInvoice.status === 'ready'){
+      shipBtn.style.display = '';
+      shipBtn.disabled = false;
+      shipBtn.textContent = 'Отгрузили — машина уехала';
+    } else {
+      shipBtn.style.display = 'none';
+    }
 
     const endTime = new Date();
     const netMs = (endTime - taskStartTime) - totalPausedMs;
@@ -1091,18 +1383,42 @@
     document.getElementById('doneTime').innerHTML = timeHtml;
 
     document.getElementById('doneSummary').innerHTML = results.map(r => {
-      const hasDiff = r.accepted !== r.declared;
+      // У возврата строка — это одно состояние, а не вся позиция: «7 из 10
+      // хорошего» это норма, а не недостача. Расхождением помечаем только
+      // приёмку и отбор, где количество действительно должно сойтись.
+      const hasDiff = !isReturn() && r.accepted !== r.declared;
+      const qtyText = isReturn()
+        ? r.accepted + ' из ' + r.declared
+        : r.accepted + ' / ' + r.declared;
+      const label = isPicking() ? 'Отобрано' : (isReturn() ? 'Разобрано' : 'Принято');
       return `
         <div class="done-row ${hasDiff ? 'done-row-warn' : ''}">
           <div class="done-row-name">${r.name}</div>
           <div class="done-row-sku">${r.sku}</div>
           <div class="done-row-meta">
-            <span>${isPicking() ? 'Отобрано' : 'Принято'}: <span class="done-row-qty">${r.accepted} / ${r.declared}</span></span>
+            <span>${label}: <span class="done-row-qty">${qtyText}</span></span>
             <span class="done-row-cell">→ ${r.cell}</span>
           </div>
         </div>
       `;
     }).join('');
+  }
+
+  async function confirmShipped(){
+    const btn = document.getElementById('shipBtn');
+    btn.disabled = true;
+    btn.textContent = 'Отмечаю…';
+    try{
+      await apiFetch('/api/shipping/' + currentInvoice.id + '/ship', { method: 'POST' });
+      await reloadCurrentInvoice();
+      btn.style.display = 'none';
+      document.getElementById('shipDoneNote').classList.add('show');
+      showToast('Заказ отмечен как отгруженный');
+    } catch(e){
+      showToast('Не удалось отметить отгрузку: ' + e.message);
+      btn.disabled = false;
+      btn.textContent = 'Отгрузили — машина уехала';
+    }
   }
 
   function downloadExcel(){
@@ -1191,7 +1507,7 @@
     document.getElementById('pauseReasonLabel').textContent = reason;
     document.getElementById('pauseBanner').classList.add('show');
     document.getElementById('confirmBtn').disabled = true;
-    document.querySelectorAll('.qty-btn, .cell-option, .cell-manual').forEach(el => el.style.pointerEvents = 'none');
+    document.querySelectorAll('.qty-btn, .cell-option, .cell-manual, .bucket-option').forEach(el => el.style.pointerEvents = 'none');
   }
 
   function resumeTask(){
@@ -1201,7 +1517,7 @@
     pauseLog[pauseLog.length - 1].end = now;
     pauseStart = null;
     document.getElementById('pauseBanner').classList.remove('show');
-    document.querySelectorAll('.qty-btn, .cell-option, .cell-manual').forEach(el => el.style.pointerEvents = '');
+    document.querySelectorAll('.qty-btn, .cell-option, .cell-manual, .bucket-option').forEach(el => el.style.pointerEvents = '');
     updateConfirmState();
   }
 
