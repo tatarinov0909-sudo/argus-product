@@ -218,6 +218,42 @@
   .bucket-option.selected[data-bucket="defective"]{border-color:var(--terracotta); background:var(--terracotta-soft);}
   .bucket-option.selected[data-bucket="packaging_defect"]{border-color:var(--yellow); background:var(--yellow-soft);}
 
+  /* ---------- Лист грузчика и перепаковка ----------
+     Оба экрана не привязаны к документу: лист сводит несколько заказов, а
+     перепаковка вообще про полку, а не про накладную. Поэтому живут рядом с
+     задачей, а не внутри неё. */
+  .job-screen{display:none; flex:1; flex-direction:column; background:var(--bg);}
+  .job-screen.show{display:flex;}
+  .job-head{padding:18px 20px 14px; border-bottom:1px solid var(--line-soft); background:var(--panel);}
+  .job-title{font-size:17px; font-weight:700;}
+  .job-sub{font-size:12.5px; color:var(--muted); margin-top:4px;}
+  .job-body{flex:1; padding:18px 20px 24px; display:flex; flex-direction:column; gap:14px; overflow-y:auto;}
+  .job-back{font-size:13px; color:var(--muted); cursor:pointer; margin-bottom:10px;}
+  .job-back:active{color:var(--accent);}
+  .pick-line{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px;}
+  .pick-line-name{font-size:15px; font-weight:700;}
+  .pick-line-sku{font-family:var(--mono); font-size:12px; color:var(--muted); margin-top:2px;}
+  .pick-line-need{margin-top:10px; font-size:13px; color:var(--muted);}
+  .pick-line-need b{color:var(--accent); font-family:var(--mono); font-size:16px;}
+  .pick-cells{margin-top:10px; display:flex; flex-direction:column; gap:6px;}
+  .pick-cell{display:flex; justify-content:space-between; align-items:center; padding:10px 12px;
+    background:var(--panel-2); border:1px solid var(--line); border-radius:10px;}
+  .pick-cell-id{font-family:var(--mono); font-size:15px; font-weight:700;}
+  .pick-cell-take{font-size:13px; color:var(--accent);}
+  .pick-orders{margin-top:10px; padding-top:10px; border-top:1px dashed var(--line);
+    font-size:12px; color:var(--muted); display:flex; flex-wrap:wrap; gap:8px;}
+  .pick-short{margin-top:10px; padding:10px 12px; border-radius:10px; font-size:12.5px;
+    background:var(--terracotta-soft); border:1px solid var(--terracotta); color:var(--terracotta);}
+  .job-total{background:var(--panel-2); border:1px solid var(--line); border-radius:12px;
+    padding:14px 16px; font-size:13px; color:var(--muted); display:flex; justify-content:space-between;}
+  .job-total b{color:var(--text); font-family:var(--mono);}
+  .job-empty{text-align:center; color:var(--muted); font-size:13.5px; padding:28px 12px;}
+  .stock-row{display:flex; justify-content:space-between; align-items:center; padding:13px 15px;
+    background:var(--panel-2); border:1.5px solid var(--line); border-radius:12px; cursor:pointer;}
+  .stock-row.selected{border-color:var(--accent); background:var(--accent-soft);}
+  .stock-row-sku{font-family:var(--mono); font-size:14px; font-weight:700;}
+  .stock-row-state{font-size:12px; color:var(--muted); margin-top:2px;}
+  .stock-row-qty{font-family:var(--mono); font-size:15px;}
   /* Кнопка «машина уехала» на экране завершения отгрузки. Собран и отгружен —
      разные события, поэтому и подтверждение отдельное. */
   .ship-btn{
@@ -613,6 +649,31 @@
       </div>
     </div>
 
+    <!-- Лист грузчика: план обхода по нескольким заказам сразу. Собрать
+         записывают потом по каждому заказу как обычно — здесь именно план,
+         чтобы работник прошёл склад один раз, а не по разу на заказ. -->
+    <div class="job-screen" id="pickListScreen">
+      <div class="job-head">
+        <div class="job-title">Лист грузчика</div>
+        <div class="job-sub" id="pickListSub">Считаю…</div>
+      </div>
+      <div class="job-body">
+        <div class="job-back" onclick="closeJob()">← К накладным</div>
+        <div id="pickListBody"></div>
+      </div>
+    </div>
+
+    <!-- Перепаковка и перестановка: работа про полку, а не про документ. -->
+    <div class="job-screen" id="moveScreen">
+      <div class="job-head">
+        <div class="job-title">Перепаковка и перестановка</div>
+        <div class="job-sub" id="moveSub">Выберите ячейку, из которой берёте товар</div>
+      </div>
+      <div class="job-body">
+        <div class="job-back" onclick="closeJob()">← К накладным</div>
+        <div id="moveBody"></div>
+      </div>
+    </div>
     <div class="done-screen" id="doneScreen">
       <div class="task-logout" style="position:static; margin-bottom:16px;" onclick="logout()">Выйти</div>
       <div class="done-icon">
@@ -707,6 +768,26 @@
   document.getElementById('workerNameLabel').textContent = workerName.split(' ')[0];
   document.getElementById('workerAvatar').textContent = workerName.trim()[0].toUpperCase();
 
+  // Названия и артикулы приезжают из 1С — это данные, а не разметка. Тот же
+  // помощник, что и в кабинете: здесь он понадобился, когда появились экраны,
+  // собирающие список товаров строкой.
+  function escapeHTML(str){
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+  // «1 заказ / 2 заказа / 5 заказов» — в кабинете такой помощник есть, тут не
+  // было: экраны до сих пор обходились числами без существительных.
+  function pluralRu(n, one, few, many){
+    const mod10 = n % 10;
+    const mod100 = n % 100;
+    if(mod10 === 1 && mod100 !== 11) return one;
+    if(mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+    return many;
+  }
   function formatBlockLabel(rowNum, block){
     const rackPart = block.rack_start === block.rack_end ? block.rack_start : (block.rack_start + '–' + block.rack_end);
     const tierPart = block.tier_start === block.tier_end ? block.tier_start : (block.tier_start + '–' + block.tier_end);
@@ -739,7 +820,22 @@
         ready:'собран', shipped:'отгружен',
       };
       const directionLabel = {out:'отгрузка', return:'возврат', in:'приёмка'};
-      pop.innerHTML = invoices.map((inv) => `
+      // Две работы, не привязанные к документу, живут здесь же: переключатель —
+      // это «что я сейчас делаю», а не только «какая накладная».
+      const jobs = `
+        <div class="invoice-popover-item" onclick="event.stopPropagation(); openPickList()">
+          <div>
+            <div class="invoice-popover-item-name">Лист грузчика</div>
+            <div class="invoice-popover-item-sub">собрать всё по заказам за один обход</div>
+          </div>
+        </div>
+        <div class="invoice-popover-item" onclick="event.stopPropagation(); openMove()">
+          <div>
+            <div class="invoice-popover-item-name">Перепаковка и перестановка</div>
+            <div class="invoice-popover-item-sub">переложить товар или вернуть его в продажу</div>
+          </div>
+        </div>`;
+      pop.innerHTML = jobs + invoices.map((inv) => `
         <div class="invoice-popover-item ${currentInvoice && inv.id === currentInvoice.id ? 'active' : ''}" onclick="event.stopPropagation(); selectInvoice('${inv.id}')">
           <div>
             <div class="invoice-popover-item-name">${inv.company_name}</div>
@@ -1341,6 +1437,224 @@
     const idx = invoices.findIndex(inv => inv.id === currentInvoice.id);
     const next = invoices[(idx + 1) % invoices.length];
     await selectInvoice(next.id);
+  }
+
+  /* ==================== Работы без документа ====================
+     Лист грузчика и перепаковка не относятся к одной накладной, поэтому у них
+     свои экраны, а задача с накладной просто прячется под ними и возвращается
+     нетронутой. */
+
+  const QUALITY_NAME = { good: 'годный', defective: 'брак', packaging_defect: 'брак упаковки' };
+  let moveState = { cellBlockId: null, cellLabel: null, stock: null, block: null, qty: 1 };
+
+  function openJob(id){
+    document.getElementById('invoicePopover').classList.remove('show');
+    document.getElementById('invoiceSwitch').classList.remove('open');
+    document.getElementById('taskScreen').style.display = 'none';
+    document.getElementById('doneScreen').classList.remove('show');
+    document.getElementById('pickListScreen').classList.remove('show');
+    document.getElementById('moveScreen').classList.remove('show');
+    document.getElementById(id).classList.add('show');
+  }
+
+  function closeJob(){
+    document.getElementById('pickListScreen').classList.remove('show');
+    document.getElementById('moveScreen').classList.remove('show');
+    document.getElementById('taskScreen').style.display = '';
+    if(currentInvoice) renderCurrentItem();
+  }
+
+  async function openPickList(){
+    openJob('pickListScreen');
+    const sub = document.getElementById('pickListSub');
+    const body = document.getElementById('pickListBody');
+    sub.textContent = 'Считаю…';
+    body.innerHTML = '';
+
+    let list;
+    try{
+      list = await apiFetch('/api/shipping/pick-list');
+    } catch(e){
+      sub.textContent = 'Не удалось собрать лист';
+      body.innerHTML = '<div class="job-empty"></div>';
+      body.firstChild.textContent = e.message;
+      return;
+    }
+
+    if(list.lines.length === 0){
+      sub.textContent = 'Собирать нечего';
+      body.innerHTML = '<div class="job-empty">Незакрытых заказов нет — всё уже собрано.</div>';
+      return;
+    }
+
+    sub.textContent = list.orders.length + ' ' + pluralRu(list.orders.length, 'заказ', 'заказа', 'заказов')
+      + ' · ' + list.totalUnits + ' шт · ' + list.cellsToVisit + ' '
+      + pluralRu(list.cellsToVisit, 'ячейка', 'ячейки', 'ячеек');
+
+    const totals = '<div class="job-total"><span>Всего собрать</span><b>' + list.totalUnits + ' шт</b></div>';
+    body.innerHTML = totals + list.lines.map(function(l){
+      const cells = l.cells.map(function(c){
+        return '<div class="pick-cell"><span class="pick-cell-id">' + escapeHTML(c.label)
+          + '</span><span class="pick-cell-take">взять ' + c.take + ' шт</span></div>';
+      }).join('');
+      const orders = l.perOrder.map(function(o){
+        return '<span>' + escapeHTML(String(o.invoiceNumber)) + ' — ' + o.qty + ' шт</span>';
+      }).join('');
+      const short = l.shortfall > 0
+        ? '<div class="pick-short">На складе не хватает ' + l.shortfall + ' шт — соберите сколько есть.</div>'
+        : '';
+      return '<div class="pick-line">'
+        + '<div class="pick-line-name">' + escapeHTML(l.name) + '</div>'
+        + '<div class="pick-line-sku">' + escapeHTML(l.sku) + '</div>'
+        + '<div class="pick-line-need">Собрать <b>' + l.needQty + '</b> шт</div>'
+        + '<div class="pick-cells">' + cells + '</div>'
+        + short
+        + '<div class="pick-orders">' + orders + '</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  /* ---------- Перепаковка и перестановка ----------
+     Шаг за шагом: ячейка → что в ней лежит → сколько → что делаем. Начинаем с
+     ячейки, а не с товара: работник стоит у полки и видит именно её. */
+
+  async function openMove(){
+    openJob('moveScreen');
+    moveState = { cellBlockId: null, cellLabel: null, stock: null, block: null, qty: 1 };
+    try{ cellRows = await apiFetch('/api/cells/rows'); } catch(e){ /* покажем то, что уже есть */ }
+    renderMoveCells();
+  }
+
+  function renderMoveCells(){
+    document.getElementById('moveSub').textContent = 'Выберите ячейку, из которой берёте товар';
+    const occupied = [];
+    cellRows.forEach(function(row){
+      (row.blocks || []).forEach(function(b){
+        if((b.stock || []).length > 0) occupied.push({ block: b, rowNum: row.row_num });
+      });
+    });
+    const body = document.getElementById('moveBody');
+    if(occupied.length === 0){
+      body.innerHTML = '<div class="job-empty">Ни в одной ячейке пока ничего не лежит.</div>';
+      return;
+    }
+    body.innerHTML = occupied.map(function(o){
+      const label = formatBlockLabel(o.rowNum, o.block);
+      const total = o.block.stock.reduce(function(sum, st){ return sum + Number(st.qty); }, 0);
+      const states = [...new Set(o.block.stock.map(function(st){
+        return QUALITY_NAME[st.quality] || 'годный';
+      }))].join(', ');
+      return '<div class="stock-row" onclick="pickMoveCell(\'' + o.block.id + '\', \'' + label + '\')">'
+        + '<div><div class="stock-row-sku">' + label + '</div>'
+        + '<div class="stock-row-state">' + escapeHTML(states) + '</div></div>'
+        + '<div class="stock-row-qty">' + total + ' шт</div></div>';
+    }).join('');
+  }
+
+  function pickMoveCell(blockId, label){
+    moveState.cellBlockId = blockId;
+    moveState.cellLabel = label;
+    let block = null;
+    cellRows.forEach(function(row){
+      (row.blocks || []).forEach(function(b){ if(b.id === blockId) block = b; });
+    });
+    if(!block) return;
+    moveState.block = block;
+    document.getElementById('moveSub').textContent = 'Ячейка ' + label + ' — что берём?';
+    document.getElementById('moveBody').innerHTML =
+      '<div class="job-back" onclick="renderMoveCells()">← Другая ячейка</div>'
+      + (block.stock || []).map(function(st, i){
+        const state = QUALITY_NAME[st.quality] || 'годный';
+        return '<div class="stock-row" onclick="pickMoveStock(' + i + ')">'
+          + '<div><div class="stock-row-sku">' + escapeHTML(st.sku) + '</div>'
+          + '<div class="stock-row-state">' + state + '</div></div>'
+          + '<div class="stock-row-qty">' + Number(st.qty) + ' шт</div></div>';
+      }).join('');
+  }
+
+  function pickMoveStock(i){
+    moveState.stock = moveState.block.stock[i];
+    moveState.qty = Number(moveState.stock.qty);
+    renderMoveAction();
+  }
+
+  function renderMoveAction(){
+    const st = moveState.stock;
+    const state = QUALITY_NAME[st.quality] || 'годный';
+    document.getElementById('moveSub').textContent = st.sku + ' в ячейке ' + moveState.cellLabel;
+    // Перепаковку предлагаем только тому, что её ждёт: годный товар
+    // перепаковывать незачем, а настоящий брак ею не чинится — это и есть
+    // разница между двумя видами брака, о которой говорил владелец склада.
+    const canRepack = st.quality === 'packaging_defect';
+    document.getElementById('moveBody').innerHTML =
+      '<div class="job-back" onclick="pickMoveCell(\'' + moveState.cellBlockId + '\', \'' + moveState.cellLabel + '\')">← Другой товар</div>'
+      + '<div class="pick-line"><div class="pick-line-name">' + escapeHTML(st.sku) + '</div>'
+      + '<div class="pick-line-sku">' + state + ' · ' + Number(st.qty) + ' шт в ячейке</div>'
+      + '<div class="qty-block" style="background:none; border:none; padding:14px 0 0;">'
+      + '<div class="qty-label">Сколько штук</div>'
+      + '<div class="qty-stepper">'
+      + '<button class="qty-btn" onclick="stepMoveQty(-1)">−</button>'
+      + '<div class="qty-value" id="moveQty">' + moveState.qty + '</div>'
+      + '<button class="qty-btn" onclick="stepMoveQty(1)">+</button>'
+      + '</div></div></div>'
+      + (canRepack
+        ? '<button class="confirm-btn" style="margin-top:14px;" onclick="doRepack()">Перепаковал — товар снова годный</button>'
+        : '')
+      + '<div class="cell-manual" style="margin-top:12px;" onclick="startMoveToCell()">Переставить в другую ячейку</div>';
+  }
+
+  function stepMoveQty(delta){
+    const cap = Number(moveState.stock.qty);
+    moveState.qty = Math.max(1, Math.min(cap, moveState.qty + delta));
+    const el = document.getElementById('moveQty');
+    if(el) el.textContent = moveState.qty;
+  }
+
+  function startMoveToCell(){
+    document.getElementById('moveSub').textContent = 'Куда переставить ' + moveState.qty + ' шт?';
+    const all = [];
+    cellRows.forEach(function(row){
+      (row.blocks || []).forEach(function(b){
+        if(b.id !== moveState.cellBlockId) all.push({ block: b, rowNum: row.row_num });
+      });
+    });
+    document.getElementById('moveBody').innerHTML =
+      '<div class="job-back" onclick="renderMoveAction()">← Назад</div>'
+      + all.map(function(o){
+        const label = formatBlockLabel(o.rowNum, o.block);
+        const busy = (o.block.stock || []).length > 0 ? 'занята' : 'свободна';
+        return '<div class="stock-row" onclick="doMoveToCell(\'' + o.block.id + '\')">'
+          + '<div><div class="stock-row-sku">' + label + '</div>'
+          + '<div class="stock-row-state">' + busy + '</div></div></div>';
+      }).join('');
+  }
+
+  async function doRepack(){
+    await sendMove({ toQuality: 'good' }, 'Перепаковал ' + moveState.qty + ' шт — товар снова в продаже');
+  }
+
+  async function doMoveToCell(toBlockId){
+    await sendMove({ toCellBlockId: toBlockId }, 'Переставил ' + moveState.qty + ' шт');
+  }
+
+  async function sendMove(extra, okText){
+    const st = moveState.stock;
+    const body = Object.assign({
+      sku: st.sku,
+      companyId: st.companyId,
+      fromCellBlockId: moveState.cellBlockId,
+      qty: moveState.qty,
+      fromQuality: st.quality || 'good',
+    }, extra);
+    try{
+      await apiFetch('/api/cells/move', { method: 'POST', body });
+    } catch(e){
+      showToast('Не удалось: ' + e.message);
+      return;
+    }
+    showToast(okText);
+    try{ cellRows = await apiFetch('/api/cells/rows'); } catch(e){ /* обновим при следующем входе */ }
+    renderMoveCells();
   }
 
   function showDone(){
