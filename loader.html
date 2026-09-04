@@ -987,14 +987,23 @@
     updateConfirmState();
   }
 
+  // Какой именно подсказке следует ответ работника — нужно, чтобы сервер узнал,
+  // согласились с ней или положили по-своему.
+  let lastSuggestionId = null;
+
   async function renderCellOptions(sku){
     const wrap = document.getElementById('cellOptions');
     wrap.innerHTML = '<div style="font-size:13px; color:var(--muted); text-align:center; padding:8px;">Подбираю ячейку…</div>';
 
     let options;
     try{
-      const data = await apiFetch('/api/agents/kladovshchik/suggest-cell?sku=' + encodeURIComponent(sku));
+      // Компанию передаём, чтобы подсказка шла туда, где у этого продавца
+      // уже сложилась своя зона: склад работал по своему порядку до нас.
+      const company = currentInvoice && currentInvoice.company_id
+        ? '&companyId=' + encodeURIComponent(currentInvoice.company_id) : '';
+      const data = await apiFetch('/api/agents/kladovshchik/suggest-cell?sku=' + encodeURIComponent(sku) + company);
       options = data.options;
+      lastSuggestionId = data.suggestionId || null;
     } catch(e){
       wrap.innerHTML = '<div style="font-size:13px; color:var(--muted); text-align:center; padding:8px;">Не удалось подобрать ячейку — выберите «Своё место»</div>';
       return;
@@ -1004,7 +1013,11 @@
       wrap.innerHTML = '<div style="font-size:13px; color:var(--muted); text-align:center; padding:8px;">Свободных ячеек не нашлось — выберите «Своё место»</div>';
       return;
     }
-    const noteText = { same_sku: 'тот же товар уже здесь', empty: 'свободно' };
+    const noteText = {
+      same_sku: 'тот же товар уже здесь',
+      near_company: 'рядом с товаром этого продавца',
+      empty: 'свободно',
+    };
     wrap.innerHTML = options.map((c, i) => `
       <div class="cell-option" id="cell-${i}" onclick="selectCellOption('${c.blockId}', '${c.label}', ${i})">
         <div>
@@ -1465,6 +1478,7 @@
           invoiceItemId: item.id,
           acceptedQty: currentQty,
           cellBlockId: selectedCellBlockId || null,
+          suggestionId: lastSuggestionId,
           pausedMs: totalPausedMs,
           pauseReasons: pauseLog.map(p => p.reason),
         },
