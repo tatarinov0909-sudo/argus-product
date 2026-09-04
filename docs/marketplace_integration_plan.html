@@ -1,0 +1,334 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Аргус на маркетплейсах</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#15171A;
+    --panel:#1D2023;
+    --panel-2:#25282C;
+    --line:#32363B;
+    --line-soft:#2A2E32;
+    --accent:#5FAFA6;
+    --accent-2:#7FC9BE;
+    --accent-soft:#1E2E2C;
+    --terracotta:#D98E6E;
+    --terracotta-soft:#2C231E;
+    --sand:#C9A66B;
+    --sand-soft:#2A2419;
+    --green:#7FB77E;
+    --text:#E8E6E1;
+    --muted:#8D9096;
+    --wb:#C348A8;
+    --ozon:#4C7DF0;
+    --ym:#E8654A;
+    --mono:'IBM Plex Mono', ui-monospace, monospace;
+    --sans:'Inter', system-ui, -apple-system, sans-serif;
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --bg:#F7F6F3; --panel:#FFFFFF; --panel-2:#F1EFEA; --line:#DEDAD2; --line-soft:#E7E4DD;
+      --accent:#2E7D74; --accent-2:#1F6058; --accent-soft:#E4F0EE;
+      --terracotta:#A85A36; --terracotta-soft:#F6E9E2;
+      --sand:#8A6D2E; --sand-soft:#F5EFDF; --green:#3F7A3E;
+      --text:#1B1E20; --muted:#6B6F74;
+      --wb:#9B2C84; --ozon:#2A55C4; --ym:#C0442A;
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#F7F6F3; --panel:#FFFFFF; --panel-2:#F1EFEA; --line:#DEDAD2; --line-soft:#E7E4DD;
+    --accent:#2E7D74; --accent-2:#1F6058; --accent-soft:#E4F0EE;
+    --terracotta:#A85A36; --terracotta-soft:#F6E9E2;
+    --sand:#8A6D2E; --sand-soft:#F5EFDF; --green:#3F7A3E;
+    --text:#1B1E20; --muted:#6B6F74;
+    --wb:#9B2C84; --ozon:#2A55C4; --ym:#C0442A;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:var(--sans); font-size:16px; line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  .page{max-width:760px; margin:0 auto; padding:56px 24px 96px;}
+
+  .eyebrow{
+    font-family:var(--mono); font-size:11.5px; letter-spacing:0.14em;
+    text-transform:uppercase; color:var(--muted);
+  }
+  h1{font-size:34px; line-height:1.15; font-weight:700; letter-spacing:-0.02em; margin:14px 0 12px; text-wrap:balance;}
+  .lede{font-size:17px; color:var(--muted); margin:0; max-width:60ch;}
+  .rule{height:1px; background:var(--line); border:0; margin:40px 0;}
+
+  h2{font-size:21px; font-weight:700; letter-spacing:-0.01em; margin:0 0 6px; text-wrap:balance;}
+  h2 + .sub{color:var(--muted); font-size:14.5px; margin:0 0 20px;}
+  section{margin-top:44px;}
+  p{margin:0 0 14px; max-width:65ch;}
+
+  .scheme{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:22px; display:grid; gap:14px; margin:22px 0 8px;}
+  .scheme-row{display:flex; align-items:center; gap:12px; flex-wrap:wrap;}
+  .mp{display:inline-flex; align-items:center; gap:8px; background:var(--panel-2); border:1px solid var(--line); border-radius:999px; padding:7px 14px; font-size:13.5px; font-weight:500;}
+  .dot{width:9px; height:9px; border-radius:50%; flex:none;}
+  .dot.wb{background:var(--wb);} .dot.ozon{background:var(--ozon);} .dot.ym{background:var(--ym);}
+  .arrow{font-family:var(--mono); color:var(--muted); font-size:15px;}
+  .core{border:1px solid var(--accent); background:var(--accent-soft); color:var(--accent-2); border-radius:10px; padding:9px 16px; font-weight:600; font-size:14px;}
+  .scheme-note{color:var(--muted); font-size:13.5px; margin:0;}
+
+  table{width:100%; border-collapse:collapse; font-size:14.5px;}
+  .table-wrap{overflow-x:auto; margin:8px 0 0;}
+  th, td{text-align:left; padding:11px 14px; border-bottom:1px solid var(--line-soft); vertical-align:top;}
+  th{font-family:var(--mono); font-size:11px; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); font-weight:500; border-bottom:1px solid var(--line);}
+  td:first-child{white-space:nowrap;}
+  .name{display:inline-flex; align-items:center; gap:8px; font-weight:600;}
+
+  .blockers{background:var(--terracotta-soft); border:1px solid var(--terracotta); border-radius:14px; padding:22px 24px;}
+  .blockers h2{color:var(--terracotta);}
+  .blockers ol{margin:16px 0 0; padding-left:22px;}
+  .blockers li{margin-bottom:14px;}
+  .blockers li:last-child{margin-bottom:0;}
+  .blockers b{color:var(--text);}
+
+  .steps{display:grid; gap:8px; margin-top:8px;}
+  .step{display:grid; grid-template-columns:auto 1fr; gap:14px; align-items:baseline; padding:11px 0; border-bottom:1px solid var(--line-soft);}
+  .step:last-child{border-bottom:0;}
+  .step-num{font-family:var(--mono); font-size:12.5px; color:var(--accent); font-weight:600;}
+  .step-text{font-size:14.5px;}
+
+  .phases{display:grid; gap:12px; margin-top:8px;}
+  .phase{display:grid; grid-template-columns:auto 1fr; gap:16px; align-items:start; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px 18px;}
+  .phase.done{border-color:var(--green);}
+  .phase-num{font-family:var(--mono); font-size:13px; font-weight:600; color:var(--accent); background:var(--accent-soft); border-radius:7px; width:30px; height:30px; display:flex; align-items:center; justify-content:center; flex:none;}
+  .phase.done .phase-num{color:var(--green); background:transparent; border:1px solid var(--green);}
+  .phase h3{margin:3px 0 4px; font-size:15.5px; font-weight:600;}
+  .phase p{margin:0; font-size:14px; color:var(--muted);}
+  .tag{font-family:var(--mono); font-size:10.5px; letter-spacing:0.08em; text-transform:uppercase; color:var(--green); border:1px solid var(--green); border-radius:5px; padding:1px 6px; margin-left:8px; white-space:nowrap;}
+
+  .need{display:grid; gap:10px; margin-top:8px;}
+  .need-item{display:grid; grid-template-columns:auto 1fr; gap:14px; align-items:start; border-left:2px solid var(--sand); background:var(--sand-soft); padding:14px 16px; border-radius:0 10px 10px 0;}
+  .need-mark{font-family:var(--mono); color:var(--sand); font-size:13px; font-weight:600;}
+  .need-item p{margin:0; font-size:14.5px;}
+  .need-item p + p{margin-top:5px; color:var(--muted); font-size:13.5px;}
+
+  .out{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;}
+  .out span{font-size:13.5px; color:var(--muted); background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:7px 12px;}
+
+  footer{margin-top:56px; padding-top:20px; border-top:1px solid var(--line); color:var(--muted); font-size:13px;}
+  code{font-family:var(--mono); font-size:0.9em; background:var(--panel-2); border:1px solid var(--line-soft); border-radius:5px; padding:1px 5px;}
+</style>
+
+<div class="page">
+
+  <header>
+    <div class="eyebrow">Аргус · план работ · редакция 2</div>
+    <h1>Аргус на маркетплейсах</h1>
+    <p class="lede">
+      Как подключить Wildberries, Ozon и Яндекс Маркет по модели FBS: что делаем
+      сразу, что осознанно откладываем и что решает владелец.
+    </p>
+  </header>
+
+  <hr class="rule">
+
+  <section>
+    <h2>Подход: конкретика сначала, обобщение потом</h2>
+    <p class="sub">Первая редакция предлагала обратное — и это была ошибка.</p>
+
+    <p>
+      Площадки различаются не названиями полей, а процессом: у Wildberries сборочные
+      задания и поставки, у Ozon отправления с делением на грузоместа, у Яндекса свой
+      словарь статусов. Обобщать это, не написав ни одной интеграции, значит угадывать —
+      и переписывать на второй.
+    </p>
+    <p>
+      Поэтому разделяем дорогое и дешёвое. <b>Схема данных закладывается сразу:</b>
+      переделывать её на живых данных дорого. <b>Общее ядро выделяется на второй
+      площадке</b> — тогда впервые видно, что действительно общее, а что показалось.
+      Первая площадка пишется прямо, без слоёв и заготовок под будущее.
+    </p>
+
+    <div class="scheme">
+      <div class="scheme-row">
+        <span class="mp"><span class="dot wb"></span>Wildberries</span>
+        <span class="mp"><span class="dot ozon"></span>Ozon</span>
+        <span class="mp"><span class="dot ym"></span>Яндекс Маркет</span>
+      </div>
+      <div class="scheme-row"><span class="arrow">↓ первая — напрямую, ядро появится на второй ↓</span></div>
+      <div class="scheme-row">
+        <span class="core">Аргус</span>
+        <span class="arrow">→</span>
+        <span class="mp">Склад: приёмка, сборка, отгрузка</span>
+      </div>
+      <p class="scheme-note">Сроки называем после второй площадки, не раньше.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Работаем по FBS</h2>
+    <p class="sub">Это выбор, а не умолчание.</p>
+    <p>
+      FBS — товар лежит у нас, заказы приходят поштучно. Ровно то, что Аргус уже умеет:
+      ячейки, подбор, отгрузка, статусы. FBO — сборка паллеты на склад маркетплейса —
+      <b>в этот проект не входит</b>: он уже работает через 1С, и от площадки там нужны
+      только оформление поставки, тайм-слот и коробочные штрихкоды. Отдельная задача,
+      более поздняя и более дешёвая.
+    </p>
+  </section>
+
+  <section class="blockers">
+    <h2>Три вещи, без которых интеграция не работает</h2>
+    <ol>
+      <li>
+        <b>Резерв остатка.</b> Один товар — три витрины. Заказ пришёл на одной площадке,
+        остаток обязан упасть на двух других немедленно, иначе та же коробка продастся
+        дважды и отмену оплатит продавец. Значит: «лежит в ячейке» и «можно продать» —
+        разные числа. Публикуем доступное минус небольшой буфер; гонку между тремя
+        площадками иначе не погасить.
+      </li>
+      <li>
+        <b>Одна коробка — три артикула.</b> У нас лежит <code>PB100005</code>, на каждой
+        площадке он под своим номером. Заказ приходит с чужим артикулом, а идти надо к
+        нашей полке. Это сопоставление нельзя вычислить — его должен кто-то дать.
+      </li>
+      <li>
+        <b>Один и тот же заказ двумя путями.</b> Сегодня: площадка → менеджер заливает в
+        1С → 1С отдаёт Аргусу. Сводить два потока по номеру заказа мы <b>не будем</b> —
+        это вечный источник ошибок. Вместо этого один источник на пару «продавец +
+        площадка», переключается флагом: интеграция включена — эти заказы больше не идут
+        через 1С.
+      </li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Что входит в первую версию</h2>
+    <p class="sub">Без стикера коробку нельзя отгрузить, без поставки — некуда сдать. Это не «потом».</p>
+    <div class="steps">
+      <div class="step"><div class="step-num">01</div><div class="step-text">Получить новые заказы</div></div>
+      <div class="step"><div class="step-num">02</div><div class="step-text">Подтвердить сборку — на площадку, иначе заказ отменится по её правилам и штраф получит продавец</div></div>
+      <div class="step"><div class="step-num">03</div><div class="step-text">Получить стикер заказа. Свой не печатаем — сохраняем файл площадки и печатаем при упаковке</div></div>
+      <div class="step"><div class="step-num">04</div><div class="step-text">Создать поставку или добавить заказ в существующую</div></div>
+      <div class="step"><div class="step-num">05</div><div class="step-text">Получить штрихкод поставки</div></div>
+      <div class="step"><div class="step-num">06</div><div class="step-text">Отметить отгрузку</div></div>
+    </div>
+    <p style="margin-top:18px;">
+      Плюс <b>чтение списка возвратов</b> и связь с исходным заказом: физически возврат
+      приезжает коробкой, а это обычная приёмка, которая уже работает. Разбор «годен /
+      брак» тоже уже сделан — отдельной интеграции возвратам не нужно.
+    </p>
+    <p>
+      <b>Единица работы:</b> один заказ площадки = один документ, работник собирает по
+      одному, как сейчас. Честно работает на десятках заказов в день. Волновая сборка —
+      когда поток вырастет, не раньше.
+    </p>
+  </section>
+
+  <section>
+    <h2>Про ключи — честно</h2>
+    <p class="sub">Формулировка «первая версия только на чтение» была неточной.</p>
+    <p>
+      Ключ, который отдаёт продавец, <b>умеет писать</b>. Ограничение живёт в нашем коде,
+      а не в ключе, и выглядит как один флаг у пары «продавец + площадка», выключенный по
+      умолчанию. В базе ключ лежит только зашифрованным.
+    </p>
+    <p>
+      Пилот на чтении — максимум неделя на проверку связи, дальше запись включаем на одном
+      небольшом продавце. Дольше держать нельзя: пока запись выключена, продавец работает
+      в кабинете площадки и в Аргусе одновременно — это двойная работа, и он её бросит.
+      Отдельно и обязательно: письменное согласие продавца на хранение ключа.
+    </p>
+  </section>
+
+  <section>
+    <h2>Порядок работ</h2>
+    <p class="sub">Одна площадка целиком, потом остальные.</p>
+    <div class="phases">
+      <div class="phase done">
+        <div class="phase-num">✓</div>
+        <div>
+          <h3>Схема данных<span class="tag">сделано</span></h3>
+          <p>Источник у внешнего номера, артикулы площадок, хранилище ключей, резервы
+          остатка. Четыре миграции на проде, 262 проверки зелёные. Обмен с 1С ограничен
+          своим источником — иначе он подхватил бы первый же заказ площадки как свой.</p>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-num">2</div>
+        <div>
+          <h3>Одна площадка целиком</h3>
+          <p>Все шесть вызовов, статусы «собран» и «отгружен» на площадку, стикеры,
+          поставка. Без абстракций и заготовок. Запись выключена первую неделю.</p>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-num">3</div>
+        <div>
+          <h3>Остатки наружу</h3>
+          <p>Доступное минус буфер, по событию через существующую очередь обмена, а не по
+          таймеру: серия сборок не должна превращаться в серию запросов.</p>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-num">4</div>
+        <div>
+          <h3>Возвраты — чтение списка</h3>
+          <p>Знать, что едет, и связать с исходным заказом при приёмке.</p>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-num">5</div>
+        <div>
+          <h3>Вторая площадка — и только здесь общее ядро</h3>
+          <p>Выделяется из двух работающих реализаций, а не придумывается заранее.</p>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="phase-num">6</div>
+        <div>
+          <h3>Третья площадка</h3>
+          <p>По готовому ядру. Вот теперь она действительно дешёвая — и только теперь
+          можно называть срок.</p>
+        </div>
+      </div>
+    </div>
+    <div class="out">
+      <span>Вне проекта: FBO</span>
+      <span>волновая сборка</span>
+      <span>вебхуки — сначала опрос для всех трёх</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Что остаётся за вами</h2>
+    <p class="sub">Три вопроса. Всё остальное решено и не ждёт ответа.</p>
+    <div class="need">
+      <div class="need-item">
+        <div class="need-mark">01</div>
+        <div>
+          <p>Первая площадка — Wildberries или Ozon?</p>
+          <p>Одна, не две. Делать параллельно — растянуть и не доделать ни одну.</p>
+        </div>
+      </div>
+      <div class="need-item">
+        <div class="need-mark">02</div>
+        <div>
+          <p>Есть ли где-нибудь связка «артикул площадки ↔ номенклатура 1С»?</p>
+          <p>В 1С, в таблице у менеджера, где угодно. Есть — работа сводится к импорту.
+          Нет — её надо собирать, и это самая долгая часть проекта.</p>
+        </div>
+      </div>
+      <div class="need-item">
+        <div class="need-mark">03</div>
+        <div>
+          <p>Ключ одного реального продавца и его письменное согласие на хранение.</p>
+          <p>Без живого кабинета такие интеграции не делаются.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Редакция 2 · 4 сентября 2026 · учтены решения по 11 спорным местам первой редакции ·
+    дополняет «Операционную модель Аргуса», шаги 03, 05, 07 и 10
+  </footer>
+
+</div>
