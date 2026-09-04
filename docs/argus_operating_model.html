@@ -1,3 +1,5 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Операционная модель Аргуса</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -376,6 +378,73 @@
       <p class="card-note" style="margin:0;">Единственный, кому реально нужна языковая модель — понимает свободный
         вопрос человека («а этот заказ куда делся?», «сколько осталось футболок M?») и передаёт его нужному
         агенту. Смысла нет, пока агент один — маршрутизировать не между кем.</p>
+    </article>
+
+  </div>
+
+  <div class="section-label">Что дальше</div>
+  <p class="section-sub">Открытые пункты на 04.09.2026 — что осталось и от чего каждый зависит.</p>
+
+  <div class="roster">
+
+    <article class="card">
+      <div class="card-top">
+        <div class="card-role">Описание дефекта при браке</div>
+        <div class="stamp">Можно делать сразу</div>
+      </div>
+      <p class="card-note">Сейчас у брака есть только количество. Документ требует, чтобы было видно, что именно испорчено.</p>
+      <dl class="card-meta">
+        <dt>Нужно</dt><dd>текстовое описание дефекта при разборе возврата — поле в базе и в экране работника</dd>
+        <dt>Зависит от</dt><dd class="muted">ни от чего, всё есть</dd>
+      </dl>
+    </article>
+
+    <article class="card">
+      <div class="card-top">
+        <div class="card-role">Фото дефекта</div>
+        <div class="stamp">Нужно решение</div>
+      </div>
+      <p class="card-note">Та же строка документа, что и выше, но упирается в другое: файлов в Аргусе не хранится нигде.</p>
+      <dl class="card-meta">
+        <dt>Нужно</dt><dd>решить, где живут файлы — на своём сервере или в облачном хранилище, и сколько это стоит</dd>
+        <dt>Зависит от</dt><dd class="muted">решения владельца, не от кода</dd>
+      </dl>
+    </article>
+
+    <article class="card">
+      <div class="card-top">
+        <div class="card-role">Комплектация наборов</div>
+        <div class="stamp">Отложено</div>
+      </div>
+      <p class="card-note">Заказ приходит на набор из нескольких товаров под своим кодом. Состав набора известен заранее, поэтому документ «Комплектация» из 1С повторять не нужно — списываем составляющие сразу, а сборщику даём лист на сборку набора.</p>
+      <dl class="card-meta">
+        <dt>Нужно</dt><dd>состав каждого набора: из каких кодов он собирается</dd>
+        <dt>Зависит от</dt><dd class="muted">отложено владельцем до закрытия статусов и возвратов — они закрыты</dd>
+      </dl>
+    </article>
+
+    <article class="card">
+      <div class="card-top">
+        <div class="card-role">Вместимость ячейки</div>
+        <div class="stamp">Ждёт 1С</div>
+      </div>
+      <p class="card-note">Заполненность ячейки считается от условных 500 штук — соглашение, а не измерение: габаритов у товара нет.</p>
+      <dl class="card-meta">
+        <dt>Нужно</dt><dd>объём в литрах отдельным свойством товара в 1С — владелец референсной компании собирается его залить</dd>
+        <dt>Зависит от</dt><dd class="muted">данных в 1С плюс одна правка модуля выгрузки: сейчас он читает код, наименование и вес</dd>
+      </dl>
+    </article>
+
+    <article class="card">
+      <div class="card-top">
+        <div class="card-role">Запись обратно в 1С</div>
+        <div class="stamp">Запрещено пока</div>
+      </div>
+      <p class="card-note">Приёмки и отгрузки копятся в очереди событий и ждут: менять данные в живой базе 1С сейчас нельзя. Владелец сказал — пока, потом можно.</p>
+      <dl class="card-meta">
+        <dt>Нужно</dt><dd>разрешение менять данные в 1С; сама очередь уже есть и наполняется</dd>
+        <dt>Зависит от</dt><dd class="muted">договорённости с владельцем базы, не от кода</dd>
+      </dl>
     </article>
 
   </div>
