@@ -1268,6 +1268,7 @@
     <div class="nav-item" id="nav-warehouse" onclick="switchView('warehouse')"><span class="nav-dot"></span>Склад и ячейки</div>
     <div class="nav-item" id="nav-staff" onclick="switchView('staff')"><span class="nav-dot"></span>Сотрудники</div>
     <div class="nav-item" id="nav-1c" onclick="switchView('1c')"><span class="nav-dot"></span>Подключение 1С</div>
+    <div class="nav-item" id="nav-mp" onclick="switchView('mp')"><span class="nav-dot"></span>Площадки</div>
     <div class="nav-item"><span class="nav-dot"></span>Тариф</div>
 
     <div class="sidebar-footer">
@@ -1592,6 +1593,48 @@
       </div>
     </div>
 
+    <div class="view" id="view-mp">
+      <div class="staff-wrap">
+        <div class="staff-head">
+          <div>
+            <div class="staff-title">Площадки</div>
+            <div class="staff-sub">Аргус сам забирает сборочные задания с маркетплейса и заводит их заказами склада. В кабинете продавца при этом не меняется ничего: Аргус только читает.</div>
+          </div>
+        </div>
+
+        <div class="oc-status-bar" id="mpStatusBar">
+          <div class="oc-status-dot" id="mpStatusDot"></div>
+          <div>
+            <div class="oc-status-title" id="mpStatusTitle">Загрузка…</div>
+            <div class="oc-status-sub" id="mpStatusSub">—</div>
+          </div>
+        </div>
+
+        <div id="mpList"></div>
+        <div id="mpSyncResult"></div>
+
+        <div class="staff-head" style="margin-top:34px;">
+          <div>
+            <div class="staff-title">Подключить продавца</div>
+            <div class="staff-sub">Нужен только ключ API продавца и его согласие. Ключ сохраняется зашифрованным и обратно не показывается никому — ни здесь, ни продавцу.</div>
+          </div>
+        </div>
+
+        <div style="background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px;">
+          <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+            <select id="mpCompanySelect" style="flex:1; min-width:180px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:9px 10px; color:var(--text); font-family:var(--sans); font-size:13px;"></select>
+            <select id="mpMarketSelect" style="flex:0 0 190px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:9px 10px; color:var(--text); font-family:var(--sans); font-size:13px;">
+              <option value="wb">Wildberries</option>
+            </select>
+          </div>
+          <textarea id="mpTokenInput" rows="3" placeholder="Ключ API продавца — длинная строка вида eyJhbGciOiJFUzI1NiIs…" style="width:100%; box-sizing:border-box; resize:vertical; margin-bottom:10px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:9px 10px; color:var(--text); font-family:var(--sans); font-size:13px;"></textarea>
+          <button type="button" onclick="connectMarketplace()" style="background:var(--accent); color:#182422; border:none; border-radius:8px; padding:10px 16px; font-size:13px; font-weight:700; cursor:pointer;">Подключить</button>
+        </div>
+
+        <div class="oc-note">Аргус спрашивает у площадки только сборочные задания и список складов продавца. Карточки, цены, реклама и аналитика не читаются. Изменить на площадке Аргус не может ничего — такой возможности в нём просто нет.</div>
+      </div>
+    </div>
+
     <div class="view" id="view-1c">
       <div class="oc-wrap">
 
@@ -1693,6 +1736,6 @@
 
 </div>
 
-<script src="cabinet_main.js?v=33" defer></script>
+<script src="cabinet_main.js?v=34" defer></script>
 </body>
 </html>

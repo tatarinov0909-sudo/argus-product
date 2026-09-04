@@ -111,14 +111,17 @@
     document.getElementById('view-warehouse').classList.toggle('active', view==='warehouse');
     document.getElementById('view-staff').classList.toggle('active', view==='staff');
     document.getElementById('view-1c').classList.toggle('active', view==='1c');
+    document.getElementById('view-mp').classList.toggle('active', view==='mp');
     document.getElementById('nav-chat').classList.toggle('active', view==='chat');
     document.getElementById('nav-journal').classList.toggle('active', view==='journal');
     document.getElementById('nav-warehouse').classList.toggle('active', view==='warehouse');
     document.getElementById('nav-staff').classList.toggle('active', view==='staff');
     document.getElementById('nav-1c').classList.toggle('active', view==='1c');
+    document.getElementById('nav-mp').classList.toggle('active', view==='mp');
     if(view==='journal'){ document.getElementById('navBadge').classList.remove('show'); }
     // Переписку тянем при первом открытии чата, а не при загрузке кабинета:
     // человек может весь день просидеть на складе и ни разу сюда не зайти.
+    if(view==='mp'){ loadMarketplaces(); }
     if(view==='chat'){
       loadChatHistory();
       const badge = document.getElementById('chatBadge');
@@ -210,6 +213,7 @@
     }
     renderCompaniesList();
     renderInvoiceCompanySelect();
+    renderMpCompanySelect();
   }
 
   function renderCompaniesList(){
@@ -2524,6 +2528,160 @@
   }
   initChat();
 
+  /* ===================== Площадки ===================== */
+
+  // Здесь владелец подключает ключ продавца и видит, живая ли связь. Всё,
+  // что делает Аргус на площадке, — читает сборочные задания. Ни одной
+  // кнопки, которая что-то там меняет, на этом экране нет и быть не должно:
+  // в кабинете продавца мы не трогаем ничего.
+
+  let marketplaces = [];
+
+  const MP_TITLES = { wb: 'Wildberries' };
+  const mpTitle = (code) => MP_TITLES[code] || code;
+
+  function renderMpCompanySelect(){
+    const select = document.getElementById('mpCompanySelect');
+    if(!select) return;
+    if(companies.length === 0){
+      select.innerHTML = '<option value="">Сначала добавьте продавца</option>';
+      return;
+    }
+    select.innerHTML = companies.map(c => `<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('');
+  }
+
+  async function loadMarketplaces(){
+    try{
+      marketplaces = await apiFetch('/api/marketplaces');
+    } catch(e){
+      marketplaces = [];
+      showWhToast('Не удалось загрузить площадки: ' + e.message);
+    }
+    renderMarketplaces();
+  }
+
+  function renderMarketplaces(){
+    const dot = document.getElementById('mpStatusDot');
+    const title = document.getElementById('mpStatusTitle');
+    const sub = document.getElementById('mpStatusSub');
+    const list = document.getElementById('mpList');
+    if(!list) return;
+
+    if(marketplaces.length === 0){
+      dot.classList.remove('connected');
+      title.textContent = 'Ни одна площадка не подключена';
+      sub.textContent = 'Заказы с маркетплейсов пока не приходят — Аргус видит только накладные из 1С';
+      list.innerHTML = '';
+      return;
+    }
+
+    // Живой считается связь, которая была недавно. Само подключение ни о чём
+    // не говорит: ключ мог протухнуть, и снаружи это выглядит как затишье.
+    const alive = marketplaces.filter(m => m.lastUsedAt
+      && (Date.now() - new Date(m.lastUsedAt).getTime()) < 60 * 60 * 1000).length;
+    dot.classList.toggle('connected', alive > 0);
+    title.textContent = alive > 0 ? 'Заказы приходят' : 'Подключено, но связи давно не было';
+    sub.textContent = marketplaces.length + ' '
+      + pluralRu(marketplaces.length, 'подключение', 'подключения', 'подключений')
+      + ' · Аргус опрашивает площадки сам, раз в пять минут';
+
+    list.innerHTML = marketplaces.map(m => {
+      const seen = formatLastSeen(m.lastUsedAt);
+      const when = seen ? 'Последняя связь: ' + seen : 'Связи ещё не было';
+      const mode = m.writeEnabled
+        ? 'Запись на площадку РАЗРЕШЕНА'
+        : 'Только чтение — на площадке ничего не меняется';
+      return '<div class="staff-row" style="grid-template-columns:1.3fr 1fr 1.2fr auto; align-items:center;">'
+        + '<div class="staff-name">' + escapeHTML(m.company) + '</div>'
+        + '<div class="staff-key">' + escapeHTML(mpTitle(m.marketplace)) + '</div>'
+        + '<div class="staff-date">' + when + '</div>'
+        + '<div class="staff-action" onclick="syncMarketplace(\'' + m.companyId + '\')">Забрать заказы</div>'
+        + '</div>'
+        + '<div class="staff-row" style="grid-template-columns:1.3fr 1fr 1.2fr auto; opacity:0.85;">'
+        + '<div class="staff-date" style="grid-column:1/3;">' + mode + '</div>'
+        + '<div class="staff-action" onclick="checkMarketplace(\'' + m.companyId + '\')">Проверить связь</div>'
+        + '<div class="staff-action revoke" onclick="disconnectMarketplace(\'' + m.companyId + '\', \'' + m.marketplace + '\')">Отключить</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  function showMpResult(html){
+    const box = document.getElementById('mpSyncResult');
+    if(!box) return;
+    box.innerHTML = html ? '<div class="oc-note" style="margin-top:14px;">' + html + '</div>' : '';
+  }
+
+  async function connectMarketplace(){
+    const companyId = document.getElementById('mpCompanySelect').value;
+    const marketplace = document.getElementById('mpMarketSelect').value;
+    const input = document.getElementById('mpTokenInput');
+    const token = input.value.trim();
+    if(!companyId){ showWhToast('Выберите продавца.'); return; }
+    if(!token){ showWhToast('Вставьте ключ API продавца.'); return; }
+    try{
+      const res = await apiFetch('/api/marketplaces/credentials', {
+        method: 'POST', body: { companyId, marketplace, token },
+      });
+      // Ключ из поля убираем сразу: он больше не нужен, а лежать открытым на
+      // экране ему незачем.
+      input.value = '';
+      await loadMarketplaces();
+      const who = res.seller ? res.seller.name : mpTitle(marketplace);
+      showWhToast('Подключено: ' + who);
+      showMpResult('Ключ принят площадкой. Продавец: <b>' + escapeHTML(who)
+        + '</b>. Ключ сохранён зашифрованным — показать его обратно нельзя.');
+    } catch(e){
+      showWhToast('Не подключилось: ' + e.message);
+    }
+  }
+
+  async function checkMarketplace(companyId){
+    try{
+      const res = await apiFetch('/api/marketplaces/' + companyId + '/wb/check');
+      const whs = (res.warehouses || []).map(w => escapeHTML(w.name)).join(', ') || 'складов не заведено';
+      showMpResult('Связь есть. Продавец: <b>' + escapeHTML(res.seller.name) + '</b>, ИНН '
+        + escapeHTML(res.seller.inn || '—') + '. Склады на площадке: ' + whs + '.');
+      await loadMarketplaces();
+    } catch(e){
+      showMpResult('Связи нет: ' + escapeHTML(e.message));
+    }
+  }
+
+  async function syncMarketplace(companyId){
+    showMpResult('Спрашиваю площадку…');
+    try{
+      const r = await apiFetch('/api/marketplaces/sync', { method: 'POST', body: { companyId } });
+      let text = 'Заданий у площадки: <b>' + r.seen + '</b>. Новых заказов заведено: <b>'
+        + r.created + '</b>, уже были: ' + r.existed + '.';
+      if(r.unmapped && r.unmapped.length){
+        // Несопоставленное показываем всегда и поимённо: такой заказ склад
+        // физически не соберёт, и узнать об этом надо здесь, а не у полки.
+        const arts = [...new Set(r.unmapped.map(u => u.article).filter(Boolean))];
+        text += '<br><br>Не удалось узнать товар у ' + r.unmapped.length + ' '
+          + pluralRu(r.unmapped.length, 'задания', 'заданий', 'заданий')
+          + '. Артикул' + (arts.length > 1 ? 'ы' : '') + ': ' + escapeHTML(arts.join(', '))
+          + '. Такой заказ виден в накладных, но собрать его нечем, пока артикул не появится в таблице сопоставления.';
+      }
+      showMpResult(text);
+      await loadMarketplaces();
+      loadInvoicesList();
+    } catch(e){
+      showMpResult('Не получилось забрать заказы: ' + escapeHTML(e.message));
+    }
+  }
+
+  async function disconnectMarketplace(companyId, marketplace){
+    if(!confirm('Отключить площадку? Заказы перестанут приходить. Уже заведённые накладные останутся.')) return;
+    try{
+      await apiFetch('/api/marketplaces/' + companyId + '/' + marketplace, { method: 'DELETE' });
+      await loadMarketplaces();
+      showMpResult('');
+      showWhToast('Площадка отключена.');
+    } catch(e){
+      showWhToast('Не удалось отключить: ' + e.message);
+    }
+  }
+
   /* ===================== Инициализация ===================== */
 
   addInvoiceItemRow();
@@ -2534,6 +2692,7 @@
   refreshAlertBadge();
   load1CKey();
   load1CStatus();
+  loadMarketplaces();
 
   apiFetch('/api/cells/rows').then(rows => {
     if(rows.length > 0){
