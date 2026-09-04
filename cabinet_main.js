@@ -119,7 +119,11 @@
     if(view==='journal'){ document.getElementById('navBadge').classList.remove('show'); }
     // Переписку тянем при первом открытии чата, а не при загрузке кабинета:
     // человек может весь день просидеть на складе и ни разу сюда не зайти.
-    if(view==='chat') loadChatHistory();
+    if(view==='chat'){
+      loadChatHistory();
+      const badge = document.getElementById('chatBadge');
+      if(badge) badge.classList.remove('show');
+    }
   }
 
   let whToastTimer = null;
@@ -2311,6 +2315,20 @@
   // начинался с чистого экрана, даже если разговор был минуту назад.
   let chatLoaded = false;
 
+  // Сколько Кладовщик сказал сам, пока владелец сюда не заходил. Считается при
+  // открытии кабинета: смысл проактивности в том, чтобы человек узнал о
+  // проблеме, НЕ открывая чат.
+  async function refreshAlertBadge(){
+    const badge = document.getElementById("chatBadge");
+    if(!badge) return;
+    let unread = 0;
+    try{
+      const data = await apiFetch("/api/alerts");
+      unread = (data.alerts || []).filter(function(a){ return !a.seen_at; }).length;
+    } catch(e){ return; }
+    badge.textContent = unread > 0 ? String(unread) : "";
+    badge.classList.toggle("show", unread > 0);
+  }
   async function loadChatHistory(){
     if(chatLoaded) return;
     chatLoaded = true;
@@ -2322,17 +2340,58 @@
       // человека за то, что не подгрузилась история, незачем: чат работает.
       return;
     }
-    if(!messages || messages.length === 0) return;
+    // Тревоги живут отдельно от переписки, и намеренно: последние сообщения
+    // чата уходят в модель как история разговора, а сообщения, которые никто
+    // не писал, отравили бы контекст и съели бюджет живых вопросов.
+    let alerts = [];
+    try{
+      const data = await apiFetch('/api/alerts');
+      alerts = (data.alerts || []).map(function(a){
+        return { kind: 'alert', id: a.id, text: a.text, created_at: a.created_at, seen: !!a.seen_at };
+      });
+    } catch(e){ /* без тревог чат работает как работал */ }
+
+    const stream = (messages || []).map(function(m){
+      return Object.assign({ kind: 'chat' }, m);
+    }).concat(alerts);
+    stream.sort(function(a, b){ return new Date(a.created_at) - new Date(b.created_at); });
+
+    if(stream.length === 0) return;
     const empty = document.getElementById('chatEmpty');
     if(empty) empty.remove();
-    messages.forEach(m => {
-      if(m.role === 'user'){
+    stream.forEach(function(m){
+      if(m.kind === 'alert'){
+        addAlert(m);
+      } else if(m.role === 'user'){
         addUserMessage(m.text, formatChatTime(m.created_at));
       } else {
-        (m.steps || []).forEach(step => addRoutingStep(step, formatChatTime(m.created_at)));
+        (m.steps || []).forEach(function(step){ addRoutingStep(step, formatChatTime(m.created_at)); });
         addAgentReply(m.text, m.agent, formatChatTime(m.created_at));
       }
     });
+  }
+
+  // Кладовщик заговорил сам, без вопроса. Человеку важно понять это с первого
+  // взгляда: выше нет реплики, на которую он отвечает.
+  function addAlert(alert){
+    const chatBody = document.querySelector('.chat-body');
+    if(!chatBody) return;
+    const look = AGENT_LOOK['Кладовщик'];
+    const body = '<div class="msg-alert">'
+      + '<span class="msg-alert-mark">Заметил сам</span>'
+      + '<div class="msg-alert-text">' + escapeHTML(alert.text).replace(/\n/g, '<br>') + '</div>'
+      + '</div>';
+    const msg = document.createElement('div');
+    msg.className = 'msg';
+    msg.innerHTML = agentMessageHtml('Кладовщик', look.cls, look.avatar, body,
+      formatChatTime(alert.created_at));
+    chatBody.appendChild(msg);
+    chatBody.scrollTop = chatBody.scrollHeight;
+    // Отметка «прочитано» ничего не скрывает: если причина не ушла, тревога
+    // останется. Это пометка для владельца, а не способ от неё избавиться.
+    if(!alert.seen){
+      apiFetch('/api/alerts/' + alert.id + '/seen', { method: 'POST' }).catch(function(){});
+    }
   }
 
   function formatChatTime(iso){
@@ -2472,6 +2531,7 @@
   loadStaff();
   loadCompanies().then(loadInvoicesList);
   loadJournal();
+  refreshAlertBadge();
   load1CKey();
   load1CStatus();
 
