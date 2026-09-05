@@ -1127,32 +1127,77 @@
     ].join(' · ');
   }
 
+  // Показывать ли пустые стеллажи. У живого склада ряд — это сто с лишним
+  // стеллажей в семь ярусов, а занято в нём двадцать ячеек: рисовать всё
+  // подряд значит выдать простыню на семьсот клеток с горизонтальной
+  // прокруткой, в которой глазами ничего не найти.
+  let whShowEmpty = {};
+  function toggleRowEmpty(rowNum){
+    whShowEmpty[rowNum] = !whShowEmpty[rowNum];
+    renderWarehouseMap();
+  }
+  window.toggleRowEmpty = toggleRowEmpty;
+
   function renderRackRowHtml(rowNum){
     const meta = rowMeta[rowNum];
     const rackCount = meta.rackCount, tierCount = meta.tierCount;
-    let cellsHtml = '';
     let occ = 0, tot = 0, fillSum = 0;
 
     cellBlocks[rowNum].forEach(b => {
       tot++;
       if(b.state === 'occupied'){ occ++; fillSum += Number(b.fill) || 0; }
+    });
+
+    // Какие стеллажи вообще показывать. Свёрнуто — только те, где что-то
+    // лежит; развёрнуто — те, где ЕСТЬ ячейки. Даже в развёрнутом виде
+    // не рисуем пустые колонки сетки: в справочнике ячейки идут с пропусками,
+    // и колонка без единой полки — это место, которого на складе нет.
+    const occupiedRacks = new Set();
+    const existingRacks = new Set();
+    cellBlocks[rowNum].forEach(b => {
+      for(let r = b.r0; r <= b.r1; r++){
+        existingRacks.add(r);
+        if(b.state === 'occupied') occupiedRacks.add(r);
+      }
+    });
+    const collapsed = !whShowEmpty[rowNum] && occupiedRacks.size > 0;
+    const visible = [...(collapsed ? occupiedRacks : existingRacks)].sort((a, b) => a - b);
+    // Стеллаж -> его колонка на экране. Пропуски схлопываются, но не молча:
+    // между несоседними стеллажами рисуется разрыв, иначе человек решит, что
+    // склад устроен вплотную, и промахнётся мимо полки.
+    const colOf = new Map();
+    let col = 0, prev = null;
+    const gaps = [];
+    visible.forEach(r => {
+      col += 1;
+      if(prev !== null && r !== prev + 1){ gaps.push({ col, from: prev, to: r }); }
+      colOf.set(r, col);
+      prev = r;
+    });
+    const shownCols = col;
+
+    let cellsHtml = '';
+    cellBlocks[rowNum].forEach(b => {
+      if(!colOf.has(b.r0)) return;
       const addr = blockAddr(rowNum, b);
       const mergedClass = (b.r0 !== b.r1 || b.t0 !== b.t1) ? ' merged' : '';
       const gridRowStart = tierCount - b.t1 + 1;
       const gridRowSpan = b.t1 - b.t0 + 1;
+      const c0 = colOf.get(b.r0), c1 = colOf.get(b.r1) || c0;
       const style = b.state === 'occupied'
-        ? ` style="grid-column:${b.r0} / span ${b.r1 - b.r0 + 1}; grid-row:${gridRowStart} / span ${gridRowSpan};${cellPaintVars(b.fill)}"`
-        : ` style="grid-column:${b.r0} / span ${b.r1 - b.r0 + 1}; grid-row:${gridRowStart} / span ${gridRowSpan};"`;
-      // Раньше здесь в data-атрибуты клался только stock[0] — при клике по
-      // объединённой ячейке с тремя артикулами было видно один. Теперь на
-      // ячейке лежит её id, а содержимое берётся целиком из blockById.
+        ? ` style="grid-column:${c0} / span ${c1 - c0 + 1}; grid-row:${gridRowStart} / span ${gridRowSpan};${cellPaintVars(b.fill)}"`
+        : ` style="grid-column:${c0} / span ${c1 - c0 + 1}; grid-row:${gridRowStart} / span ${gridRowSpan};"`;
       cellsHtml += `<div class="wh-cell in-grid ${b.state}${mergedClass}${b.state === 'occupied' ? fillModeClass : ''}" data-row="${rowNum}" data-id="${b.r0}" data-tier="${b.t0}" data-addr="${addr}" data-state="${b.state}" data-block-id="${b.blockId}"${style} onclick="selectCell(this)" title="${addr}"></div>`;
     });
 
     let labelsHtml = '';
-    for(let r = 1; r <= rackCount; r++){
-      labelsHtml += `<div class="wh-rack-label" data-rack="${r}" style="grid-column:${r}; grid-row:${tierCount + 1};">${escapeHTML(String(rowLabel(rowNum)))}.${r}</div>`;
-    }
+    visible.forEach(r => {
+      const c = colOf.get(r);
+      labelsHtml += `<div class="wh-rack-label" data-rack="${r}" style="grid-column:${c}; grid-row:${tierCount + 1};">${escapeHTML(String(rowLabel(rowNum)))}.${r}</div>`;
+    });
+    gaps.forEach(g => {
+      labelsHtml += `<div class="wh-rack-gap" style="grid-column:${g.col}; grid-row:1 / span ${tierCount + 1};" title="Пропущены стеллажи ${g.from + 1}–${g.to - 1}"></div>`;
+    });
 
     const pct = tot ? Math.round(occ / tot * 100) : 0;
     // Полоса растёт и красится по средней заполненности, а цифры рядом считают
@@ -1169,7 +1214,10 @@
     // просмотром и правкой — уходить с неё никуда не нужно.
     const body = editing
       ? rowEditorHtml(rowNum)
-      : `<div class="wh-rack-grid" style="grid-template-columns:repeat(${rackCount}, 64px); grid-template-rows:repeat(${tierCount}, 32px) auto;">${cellsHtml}${labelsHtml}</div>`;
+      : `<div class="wh-rack-grid" style="grid-template-columns:repeat(${shownCols}, 64px); grid-template-rows:repeat(${tierCount}, 32px) auto;">${cellsHtml}${labelsHtml}</div>`
+        + (occupiedRacks.size === 0 ? '' : `<button class="wh-collapse-btn" type="button" onclick="toggleRowEmpty(${rowNum})">${collapsed
+            ? 'Показать весь ряд — ' + existingRacks.size + ' ' + pluralRu(existingRacks.size, 'стеллаж', 'стеллажа', 'стеллажей')
+            : 'Свернуть до занятых — ' + occupiedRacks.size + ' из ' + existingRacks.size}</button>`);
 
     return `<div class="wh-row-group${editing ? ' editing' : ''}" id="fp-row-${rowNum}">
       <button class="wh-panel-back" onclick="showWhSummary()">← Назад к сводке</button>

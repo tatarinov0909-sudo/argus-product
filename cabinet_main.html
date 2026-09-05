@@ -558,6 +558,22 @@
   }
   .staff-add button:hover{opacity:0.92;}
 
+  /* Разрыв на месте свёрнутых стеллажей: без него схлопнутый ряд выглядит
+     как сплошная стенка, и человек промахнётся мимо полки, решив, что
+     соседние ячейки стоят вплотную. */
+  .wh-rack-gap{
+    border-left:1px dashed var(--line);
+    margin:0 -1px; min-width:10px; align-self:stretch;
+  }
+  .wh-collapse-btn{
+    margin-top:10px; padding:7px 12px; font-size:12px; cursor:pointer;
+    background:var(--panel-2); color:var(--muted);
+    border:1px solid var(--line); border-radius:8px;
+    font-family:var(--sans);
+    transition:color 0.15s var(--ease), border-color 0.15s var(--ease);
+  }
+  .wh-collapse-btn:hover{color:var(--text); border-color:var(--accent-soft);}
+
   .staff-toggle{
     display:flex; align-items:center; gap:9px; cursor:pointer; user-select:none;
     padding:11px 14px; border:1px solid var(--line); border-radius:10px;
@@ -1868,6 +1884,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=52" defer></script>
+<script src="cabinet_main.js?v=53" defer></script>
 </body>
 </html>
