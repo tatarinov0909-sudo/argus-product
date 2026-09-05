@@ -308,7 +308,8 @@
       <div class="ws-dates">
         <div class="ws-mode-switch">
           <button class="ws-mode-btn active" id="modeByDate" onclick="setViewMode('dates')">По датам</button>
-          <button class="ws-mode-btn" id="modeTotal" onclick="setViewMode('total')">Общий остаток</button>
+          <button class="ws-mode-btn" id="modeTotal" onclick="setViewMode('total')">Остаток</button>
+          <button class="ws-mode-btn" id="modeMoves" onclick="setViewMode('moves')">Движение</button>
         </div>
         <button class="ws-mode-btn" style="width:100%; margin-bottom:14px;" onclick="exportActs()">Выгрузить в Excel</button>
         <div class="ws-dates-head" id="wsDatesHead">
@@ -522,13 +523,98 @@
     currentViewMode = mode;
     document.getElementById('modeByDate').classList.toggle('active', mode === 'dates');
     document.getElementById('modeTotal').classList.toggle('active', mode === 'total');
+    document.getElementById('modeMoves').classList.toggle('active', mode === 'moves');
     document.getElementById('wsDatesHead').style.display = mode === 'dates' ? 'flex' : 'none';
     document.getElementById('wsDatesList').style.display = mode === 'dates' ? 'block' : 'none';
     if(mode === 'dates'){
       renderAct(currentActIndex || 0);
+    } else if(mode === 'moves'){
+      loadMovements();
     } else {
       loadSellerStock();
     }
+  }
+
+  /* ---------- Движение: что отгрузили и что вернулось ----------
+     Остаток отвечает на «сколько лежит», но не на «куда делось». Именно из-за
+     второго вопроса продавец и звонит на склад. */
+  let movements = null;
+
+  const BUCKET_NAME = {
+    good: 'годный',
+    defective: 'брак',
+    packaging_defect: 'повреждена упаковка',
+  };
+
+  async function loadMovements(){
+    document.getElementById('wsContent').innerHTML =
+      '<div class="act-wrap"><div class="act-card">Загружаю…</div></div>';
+    try{
+      movements = await apiFetch('/api/sellers/movements');
+    } catch(e){
+      document.getElementById('wsContent').innerHTML =
+        '<div class="act-wrap"><div class="act-card">Не удалось загрузить: '
+        + escapeHtml(e.message) + '</div></div>';
+      return;
+    }
+    renderMovements();
+  }
+
+  function fmtWhen(iso){
+    if(!iso) return '—';
+    return new Date(iso).toLocaleString('ru-RU',
+      {day:'numeric', month:'long', hour:'2-digit', minute:'2-digit'});
+  }
+
+  function renderMovements(){
+    const sh = movements.shipped;
+    const rt = movements.returned;
+
+    const shipHtml = sh.length === 0
+      ? '<div style="color:var(--muted); padding:18px 0;">Отгрузок пока не было.</div>'
+      : `<table class="total-table">
+          <thead><tr><th>Когда</th><th>Товар</th><th>Заказ</th><th class="num">Шт</th></tr></thead>
+          <tbody>${sh.map(r => `
+            <tr>
+              <td>${escapeHtml(fmtWhen(r.at))}</td>
+              <td>${escapeHtml(r.name)}<span class="total-sku">${escapeHtml(r.sku)}</span></td>
+              <td>${escapeHtml(r.order)}<span class="total-sku">${escapeHtml(r.source)}</span></td>
+              <td class="num running">${r.qty}</td>
+            </tr>`).join('')}</tbody>
+        </table>`;
+
+    const retHtml = rt.length === 0
+      ? '<div style="color:var(--muted); padding:18px 0;">Возвратов пока не было.</div>'
+      : `<table class="total-table">
+          <thead><tr><th>Когда</th><th>Товар</th><th>Признано</th><th class="num">Шт</th></tr></thead>
+          <tbody>${rt.map(r => `
+            <tr>
+              <td>${escapeHtml(fmtWhen(r.at))}</td>
+              <td>${escapeHtml(r.name)}<span class="total-sku">${escapeHtml(r.sku)}</span></td>
+              <td class="${r.bucket === 'good' ? '' : 'delta'}">${escapeHtml(BUCKET_NAME[r.bucket] || r.bucket)}${
+                r.note ? `<span class="total-sku">${escapeHtml(r.note)}</span>` : ''}</td>
+              <td class="num">${r.qty}</td>
+            </tr>`).join('')}</tbody>
+        </table>`;
+
+    document.getElementById('wsContent').innerHTML = `
+      <div class="act-wrap">
+        <div class="act-card">
+          <div class="total-head">
+            <div class="total-title">Отгрузки</div>
+            <div class="total-sub">${escapeHtml(currentAccountName)} · что уехало с вашего товара</div>
+          </div>
+          ${shipHtml}
+        </div>
+        <div class="act-card" style="margin-top:16px;">
+          <div class="total-head">
+            <div class="total-title">Возвраты</div>
+            <div class="total-sub">что вернулось и чем это признали при разборе</div>
+          </div>
+          ${retHtml}
+        </div>
+      </div>
+    `;
   }
 
   // Настоящий остаток — то, что лежит в ячейках прямо сейчас.
