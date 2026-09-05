@@ -113,7 +113,7 @@
   .invoice-popover-item-sub{font-size:12px; color:var(--muted); margin-top:2px;}
   .invoice-popover-item-count{font-size:12px; color:var(--muted); font-family:var(--mono); flex-shrink:0; margin-left:10px;}
   .invoice-popover-item.active .invoice-popover-item-count{color:var(--accent);}
-  .task-pause-row{display:flex; justify-content:center; margin-top:8px;}
+  .task-pause-row{display:flex; justify-content:center; align-items:center; gap:10px; margin-top:8px;}
   .task-pause-btn{
     font-size:12px; color:var(--muted); cursor:pointer; display:flex; align-items:center; gap:5px;
     padding:5px 10px; border-radius:7px;
@@ -159,6 +159,56 @@
   .qty-btn:active{background:var(--accent-soft); border-color:var(--accent); color:var(--accent);}
   .qty-value{font-size:40px; font-weight:700; font-family:var(--mono); min-width:90px;}
   .qty-value.warn{color:var(--terracotta);}
+
+  /* Количество набирается с клавиатуры, а не только плюсиками: принять 240
+     штук кнопкой «+» — это 240 нажатий, работник в это время стоит у полки. */
+  input.qty-value{
+    background:none; border:0; padding:0; color:var(--text);
+    text-align:center; width:130px; min-width:0;
+    appearance:textfield; -moz-appearance:textfield;
+  }
+  input.qty-value:focus{outline:none; box-shadow:0 3px 0 var(--accent);}
+  input.qty-value.warn{color:var(--terracotta);}
+
+  /* Секундомер. Раньше время работы всплывало только в конце задания — то
+     есть узнать его можно было, когда изменить уже ничего нельзя. */
+  .task-timer{
+    display:flex; align-items:center; gap:6px;
+    font-family:var(--mono); font-size:13px; font-weight:600;
+    color:var(--accent); background:var(--accent-soft);
+    padding:5px 12px; border-radius:7px;
+    letter-spacing:0.06em; font-variant-numeric:tabular-nums;
+  }
+  .task-timer.paused{color:var(--yellow); background:var(--yellow-soft);}
+  .task-timer-dot{width:6px; height:6px; border-radius:50%; background:currentColor;}
+  .task-timer.running .task-timer-dot{animation:timerPulse 2s ease-in-out infinite;}
+  @keyframes timerPulse{0%,100%{opacity:1;} 50%{opacity:0.25;}}
+  @media (prefers-reduced-motion: reduce){
+    .task-timer.running .task-timer-dot{animation:none;}
+  }
+
+  /* Сборка набора */
+  .kit-need{
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:14px 16px; margin-bottom:14px;
+  }
+  .kit-need-name{font-size:15px; font-weight:600; margin-bottom:3px;}
+  .kit-need-sku{font-family:var(--mono); font-size:11.5px; color:var(--muted); margin-bottom:10px;}
+  .kit-need-row{display:flex; justify-content:space-between; font-size:13px; color:var(--muted);}
+  .kit-need-row b{color:var(--text);}
+  .kit-part{
+    display:flex; justify-content:space-between; align-items:baseline; gap:12px;
+    padding:11px 0; border-bottom:1px solid var(--line-soft); font-size:13.5px;
+  }
+  .kit-part:last-child{border-bottom:0;}
+  .kit-part-name{flex:1;}
+  .kit-part-sku{font-family:var(--mono); font-size:11px; color:var(--muted); display:block;}
+  .kit-part-qty{font-family:var(--mono); font-size:13px; white-space:nowrap;}
+  .kit-part-qty.short{color:var(--terracotta);}
+  .kit-section-label{
+    font-size:11px; letter-spacing:0.09em; text-transform:uppercase;
+    color:var(--muted); margin:18px 0 8px;
+  }
   .qty-diff{margin-top:12px; font-size:13px; color:var(--terracotta); display:none;}
   .qty-diff.show{display:block;}
 
@@ -270,6 +320,12 @@
     font-size:12px; color:var(--muted); display:flex; flex-wrap:wrap; gap:8px;}
   .pick-short{margin-top:10px; padding:10px 12px; border-radius:10px; font-size:12.5px;
     background:var(--terracotta-soft); border:1px solid var(--terracotta); color:var(--terracotta);}
+  .pick-kit-btn{
+    margin-top:9px; padding:8px 12px; border-radius:8px; text-align:center;
+    background:var(--accent); color:#12211F; font-weight:600; font-size:13px;
+    cursor:pointer; user-select:none;
+  }
+  .pick-kit-btn:active{transform:scale(0.985);}
   .job-total{background:var(--panel-2); border:1px solid var(--line); border-radius:12px;
     padding:14px 16px; font-size:13px; color:var(--muted); display:flex; justify-content:space-between;}
   .job-total b{color:var(--text); font-family:var(--mono);}
@@ -505,6 +561,7 @@
         </div>
         <div class="task-progress-bar"><div class="task-progress-fill" id="progressFill" style="width:33%;"></div></div>
         <div class="task-pause-row">
+          <div class="task-timer running" id="taskTimer"><span class="task-timer-dot"></span><span id="taskTimerValue">0:00</span></div>
           <div class="task-pause-btn" id="pauseBtn" onclick="openPauseSheet()">
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="4" y="3" width="3" height="10" rx="1" fill="currentColor"/><rect x="9" y="3" width="3" height="10" rx="1" fill="currentColor"/></svg>
             Поставить на паузу
@@ -590,7 +647,7 @@
           <div class="qty-label" id="qtyLabel">Сколько приняли по факту</div>
           <div class="qty-stepper">
             <button class="qty-btn" id="qtyMinus" aria-label="Меньше">−</button>
-            <div class="qty-value" id="qtyValue">0</div>
+            <input class="qty-value" id="qtyValue" type="text" inputmode="numeric" pattern="[0-9]*" value="0" aria-label="Количество" oninput="qtyTyped(this.value)" onfocus="this.select()">
             <button class="qty-btn" id="qtyPlus" aria-label="Больше">+</button>
           </div>
           <div class="qty-diff" id="qtyDiff"></div>
@@ -703,6 +760,17 @@
         <div class="job-back" onclick="closeJob()">← К накладным</div>
         <div id="pickListBody"></div>
       </div>
+    </div>
+
+    <!-- Сборка набора. Заказан один артикул, а на полке лежат два-четыре
+         разных товара: работник берёт компоненты и складывает их вместе.
+         Открывается из листа грузчика, где нехватка набора и обнаруживается. -->
+    <div class="job-screen" id="kitScreen">
+      <div class="job-head">
+        <div class="job-title">Сборка набора</div>
+        <div class="job-sub" id="kitSub">—</div>
+      </div>
+      <div class="job-body" id="kitBody"></div>
     </div>
 
     <!-- Перепаковка и перестановка: работа про полку, а не про документ. -->
@@ -904,6 +972,7 @@
       return;
     }
     taskStartTime = new Date();
+    startTaskTimer();
     totalPausedMs = 0;
     pauseLog = [];
     pauseStart = null;
@@ -979,7 +1048,7 @@
     document.getElementById('itemName').textContent = item.name;
     document.getElementById('itemSku').textContent = item.sku;
     document.getElementById('itemDeclared').textContent = item.declared_qty + ' шт';
-    document.getElementById('qtyValue').textContent = currentQty;
+    document.getElementById('qtyValue').value = currentQty;
     document.getElementById('qtyValue').classList.remove('warn');
     document.getElementById('qtyDiff').classList.remove('show');
 
@@ -1086,7 +1155,7 @@
     const remaining = pickSuggestion.item.remaining;
     document.getElementById('itemDeclared').textContent = remaining + ' шт';
     currentQty = Math.min(remaining, pickSuggestion.cells[0] ? pickSuggestion.cells[0].available : remaining);
-    document.getElementById('qtyValue').textContent = currentQty;
+    document.getElementById('qtyValue').value = currentQty;
 
     const note = document.getElementById('shortfallNote');
     if(pickSuggestion.shortfall > 0){
@@ -1139,7 +1208,7 @@
     // Больше, чем лежит в ячейке, взять нельзя — и больше, чем осталось по
     // накладной, тоже незачем.
     currentQty = Math.min(pickSuggestion.item.remaining, c.available);
-    document.getElementById('qtyValue').textContent = currentQty;
+    document.getElementById('qtyValue').value = currentQty;
     stepPickQty(0);
   }
 
@@ -1171,7 +1240,7 @@
     const cell = pickSuggestion.cells.find(c => c.cellBlockId === selectedCellBlockId);
     const cap = Math.min(pickSuggestion.item.remaining, cell ? cell.available : pickSuggestion.item.remaining);
     currentQty = Math.max(1, Math.min(cap, currentQty + delta));
-    document.getElementById('qtyValue').textContent = currentQty;
+    document.getElementById('qtyValue').value = currentQty;
 
     const valEl = document.getElementById('qtyValue');
     const diffEl = document.getElementById('qtyDiff');
@@ -1296,7 +1365,7 @@
     document.getElementById('cellBlock').style.display = 'none';
 
     currentQty = remaining;
-    document.getElementById('qtyValue').textContent = currentQty;
+    document.getElementById('qtyValue').value = currentQty;
     document.getElementById('qtyValue').classList.remove('warn');
     document.getElementById('qtyDiff').classList.remove('show');
     updateReturnConfirm();
@@ -1342,7 +1411,7 @@
   function stepReturnQty(delta){
     const cap = returnRemaining();
     currentQty = Math.max(1, Math.min(cap, currentQty + delta));
-    document.getElementById('qtyValue').textContent = currentQty;
+    document.getElementById('qtyValue').value = currentQty;
     updateReturnConfirm();
   }
 
@@ -1396,7 +1465,7 @@
     const item = currentInvoice.items[currentItemIndex];
     const declared = Number(item.declared_qty);
     currentQty = Math.max(0, currentQty + delta);
-    document.getElementById('qtyValue').textContent = currentQty;
+    document.getElementById('qtyValue').value = currentQty;
     const diffEl = document.getElementById('qtyDiff');
     const valEl = document.getElementById('qtyValue');
     if(currentQty !== declared){
@@ -1510,6 +1579,208 @@
   const QUALITY_NAME = { good: 'годный', defective: 'брак', packaging_defect: 'брак упаковки' };
   let moveState = { cellBlockId: null, cellLabel: null, stock: null, block: null, qty: 1 };
 
+  /* ---------- Количество с клавиатуры ----------
+     Кнопки «плюс» и «минус» остаются: ими удобно поправить на единицу. Но
+     принять 240 штук плюсиком — это 240 нажатий у полки, поэтому число можно
+     просто набрать. Ограничения (остаток по строке, сколько лежит в ячейке)
+     живут в stepQty и здесь НЕ дублируются: два места с одним правилом
+     однажды разойдутся. */
+  function qtyTyped(raw){
+    const digits = String(raw).replace(/[^0-9]/g, '');
+    if(digits === '') return; // человек стирает поле, чтобы набрать заново
+    stepQty(Number(digits) - currentQty);
+  }
+
+  /* ---------- Секундомер ----------
+     Время работы считалось и раньше, но показывалось только в конце задания —
+     то есть когда изменить уже ничего нельзя. Теперь оно на виду и стоит
+     на паузе вместе с работой. */
+  let taskTimerInterval = null;
+
+  function renderTaskTimer(){
+    const box = document.getElementById('taskTimer');
+    const val = document.getElementById('taskTimerValue');
+    if(!box || !val || !taskStartTime) return;
+    const paused = pauseStart !== null;
+    // На паузе часы стоят: время замирает на моменте, когда её поставили.
+    const now = paused ? pauseStart.getTime() : Date.now();
+    const seconds = Math.max(0, Math.floor((now - taskStartTime.getTime() - totalPausedMs) / 1000));
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    val.textContent = h > 0
+      ? h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0')
+      : m + ':' + String(s).padStart(2, '0');
+    box.classList.toggle('paused', paused);
+    box.classList.toggle('running', !paused);
+  }
+
+  function startTaskTimer(){
+    renderTaskTimer();
+    if(taskTimerInterval) return;
+    taskTimerInterval = setInterval(renderTaskTimer, 1000);
+  }
+
+  /* ---------- Сборка набора ----------
+     Половина заказов с площадки — наборы: артикула набора на полке нет и быть
+     не может, пока его не собрали, а компоненты лежат рядом. Лист сборки уже
+     говорит, что нехватку можно закрыть сборкой, — здесь работник это делает.
+     Считает по-прежнему сервер: он проверяет ВСЕ компоненты до первого
+     списания, иначе можно разобрать годный товар и не собрать ничего. */
+  let pickListLines = [];
+  let kitState = null;
+
+  async function openKitAssembly(index){
+    const line = pickListLines[index];
+    if(!line || !line.kit) return;
+    kitState = {
+      line: line,
+      qty: Math.max(1, line.kit.canBuild),
+      cellBlockId: null,
+      cellLabel: null,
+      options: [],
+      loading: true,
+    };
+    openJob('kitScreen');
+    renderKitScreen();
+    try{
+      const r = await apiFetch('/api/agents/kladovshchik/suggest-cell?sku='
+        + encodeURIComponent(line.sku) + '&companyId=' + encodeURIComponent(line.companyId));
+      kitState.options = r.options || [];
+    } catch(e){
+      kitState.options = [];
+    }
+    kitState.loading = false;
+    // Одна подсказка — не выбор: выбираем её сразу, чтобы работнику осталось
+    // нажать «собрать», а не подтверждать очевидное.
+    if(kitState.options.length === 1){
+      kitState.cellBlockId = kitState.options[0].blockId;
+      kitState.cellLabel = kitState.options[0].label;
+    }
+    renderKitScreen();
+  }
+
+  function stepKitQty(delta){
+    if(!kitState) return;
+    const max = kitState.line.kit.canBuild;
+    kitState.qty = Math.max(1, Math.min(max, kitState.qty + delta));
+    renderKitScreen();
+  }
+
+  function kitQtyTyped(raw){
+    if(!kitState) return;
+    const digits = String(raw).replace(/[^0-9]/g, '');
+    if(digits === '') return;
+    stepKitQty(Number(digits) - kitState.qty);
+  }
+
+  function selectKitCell(blockId, label){
+    if(!kitState) return;
+    kitState.cellBlockId = blockId;
+    kitState.cellLabel = label;
+    renderKitScreen();
+  }
+
+  function renderKitScreen(){
+    if(!kitState) return;
+    const line = kitState.line;
+    const kit = line.kit;
+    const sub = document.getElementById('kitSub');
+    const body = document.getElementById('kitBody');
+
+    sub.textContent = 'Не хватает ' + line.shortfall + ' шт на полке · собрать можно '
+      + kit.canBuild;
+
+    const parts = kit.components.map(function(c){
+      const need = c.perKit * kitState.qty;
+      const short = c.available < need;
+      return '<div class="kit-part">'
+        + '<div class="kit-part-name">' + escapeHTML(c.name)
+        + '<span class="kit-part-sku">' + escapeHTML(c.sku) + '</span></div>'
+        + '<div class="kit-part-qty' + (short ? ' short' : '') + '">взять ' + need
+        + ' · есть ' + c.available + '</div>'
+        + '</div>';
+    }).join('');
+
+    let cells;
+    if(kitState.loading){
+      cells = '<div class="job-empty">Подбираю ячейку…</div>';
+    } else if(kitState.options.length === 0){
+      cells = '<div class="job-empty">Свободной ячейки не нашлось — освободите место и вернитесь.</div>';
+    } else {
+      cells = kitState.options.map(function(o){
+        const on = o.blockId === kitState.cellBlockId;
+        return '<div class="stock-row' + (on ? ' selected' : '') + '" '
+          + 'onclick="selectKitCell(\'' + o.blockId + '\', \'' + o.label + '\')">'
+          + '<div><div class="stock-row-sku">' + escapeHTML(o.label) + '</div>'
+          + '<div class="stock-row-state">' + (KIT_CELL_REASON[o.reason] || 'ячейка') + '</div></div>'
+          + '<div class="stock-row-qty">' + (on ? 'выбрана' : '') + '</div></div>';
+      }).join('');
+    }
+
+    const ready = Boolean(kitState.cellBlockId);
+    body.innerHTML = ''
+      + '<div class="job-back" onclick="openPickList()">← К листу грузчика</div>'
+      + '<div class="kit-need">'
+      +   '<div class="kit-need-name">' + escapeHTML(line.name) + '</div>'
+      +   '<div class="kit-need-sku">' + escapeHTML(line.sku) + '</div>'
+      +   '<div class="kit-need-row"><span>Нужно по заказам</span><b>' + line.needQty + ' шт</b></div>'
+      +   '<div class="kit-need-row"><span>Не хватает на полке</span><b>' + line.shortfall + ' шт</b></div>'
+      + '</div>'
+      + '<div class="kit-section-label">Сколько собрать</div>'
+      + '<div class="qty-stepper" style="margin:0 0 4px;">'
+      +   '<button class="qty-btn" onclick="stepKitQty(-1)" aria-label="Меньше">−</button>'
+      +   '<input class="qty-value" type="text" inputmode="numeric" pattern="[0-9]*" '
+      +     'value="' + kitState.qty + '" aria-label="Сколько наборов собрать" '
+      +     'oninput="kitQtyTyped(this.value)" onfocus="this.select()">'
+      +   '<button class="qty-btn" onclick="stepKitQty(1)" aria-label="Больше">+</button>'
+      + '</div>'
+      + '<div class="kit-section-label">Взять с полок</div>'
+      + parts
+      + '<div class="kit-section-label">Куда положить готовые</div>'
+      + cells
+      + '<button class="confirm-btn" id="kitConfirm" ' + (ready ? '' : 'disabled ')
+      +   'onclick="confirmKit()">'
+      +   (ready
+        ? 'Собрал ' + kitState.qty + ' — положил в ' + escapeHTML(kitState.cellLabel)
+        : 'Выберите ячейку')
+      + '</button>';
+  }
+
+  const KIT_CELL_REASON = {
+    same_sku: 'этот набор здесь уже лежит',
+    near_company: 'зона этого продавца',
+    empty: 'свободная ячейка',
+  };
+
+  async function confirmKit(){
+    if(!kitState || !kitState.cellBlockId) return;
+    const btn = document.getElementById('kitConfirm');
+    btn.disabled = true;
+    btn.textContent = 'Собираю…';
+    try{
+      await apiFetch('/api/kits/assemble', {
+        method: 'POST',
+        body: {
+          companyId: kitState.line.companyId,
+          kitSku: kitState.line.sku,
+          qty: kitState.qty,
+          toCellBlockId: kitState.cellBlockId,
+        },
+      });
+      showToast('Собрано ' + kitState.qty + ' — в ячейке ' + kitState.cellLabel);
+      kitState = null;
+      openPickList();
+    } catch(e){
+      // Сервер отказал — почти всегда потому, что компонент кто-то забрал,
+      // пока работник шёл. Показываем его слова целиком: там названо, чего
+      // именно не хватило.
+      btn.disabled = false;
+      showToast(e.message);
+      renderKitScreen();
+    }
+  }
+
   function openJob(id){
     document.getElementById('invoicePopover').classList.remove('show');
     document.getElementById('invoiceSwitch').classList.remove('open');
@@ -1517,12 +1788,14 @@
     document.getElementById('doneScreen').classList.remove('show');
     document.getElementById('pickListScreen').classList.remove('show');
     document.getElementById('moveScreen').classList.remove('show');
+    document.getElementById('kitScreen').classList.remove('show');
     document.getElementById(id).classList.add('show');
   }
 
   function closeJob(){
     document.getElementById('pickListScreen').classList.remove('show');
     document.getElementById('moveScreen').classList.remove('show');
+    document.getElementById('kitScreen').classList.remove('show');
     document.getElementById('taskScreen').style.display = '';
     if(currentInvoice) renderCurrentItem();
   }
@@ -1554,8 +1827,12 @@
       + ' · ' + list.totalUnits + ' шт · ' + list.cellsToVisit + ' '
       + pluralRu(list.cellsToVisit, 'ячейка', 'ячейки', 'ячеек');
 
+    // Строки держим целиком: экран сборки набора берёт из них состав и
+    // продавца, чтобы не тащить всё это через атрибуты в разметке.
+    pickListLines = list.lines;
+
     const totals = '<div class="job-total"><span>Всего собрать</span><b>' + list.totalUnits + ' шт</b></div>';
-    body.innerHTML = totals + list.lines.map(function(l){
+    body.innerHTML = totals + list.lines.map(function(l, index){
       const cells = l.cells.map(function(c){
         return '<div class="pick-cell"><span class="pick-cell-id">' + escapeHTML(c.label)
           + '</span><span class="pick-cell-take">взять ' + c.take + ' шт</span></div>';
@@ -1563,9 +1840,24 @@
       const orders = l.perOrder.map(function(o){
         return '<span>' + escapeHTML(String(o.invoiceNumber)) + ' — ' + o.qty + ' шт</span>';
       }).join('');
-      const short = l.shortfall > 0
-        ? '<div class="pick-short">На складе не хватает ' + l.shortfall + ' шт — соберите сколько есть.</div>'
-        : '';
+      // Нехватка набора — не всегда нехватка: артикула набора на полке нет и
+      // быть не может, пока его не собрали, а компоненты лежат рядом.
+      let short = '';
+      if(l.shortfall > 0 && l.kit && l.kit.canBuild > 0){
+        short = '<div class="pick-short">Не хватает ' + l.shortfall
+          + ' шт, но это набор — можно собрать ' + l.kit.canBuild
+          + ' из компонентов.'
+          + (l.kit.stillShort > 0 ? ' Останется добрать ' + l.kit.stillShort + ' шт.' : '')
+          + '<div class="pick-kit-btn" onclick="openKitAssembly(' + index + ')">Собрать набор →</div>'
+          + '</div>';
+      } else if(l.shortfall > 0 && l.kit){
+        short = '<div class="pick-short">Не хватает ' + l.shortfall
+          + ' шт. Это набор, но собрать не из чего — кончился '
+          + escapeHTML(l.kit.limitedBy.join(', ')) + '.</div>';
+      } else if(l.shortfall > 0){
+        short = '<div class="pick-short">На складе не хватает ' + l.shortfall
+          + ' шт — соберите сколько есть.</div>';
+      }
       return '<div class="pick-line">'
         + '<div class="pick-line-name">' + escapeHTML(l.name) + '</div>'
         + '<div class="pick-line-sku">' + escapeHTML(l.sku) + '</div>'
@@ -1975,6 +2267,8 @@
   }
 
   taskStartTime = new Date();
+
+  startTaskTimer();
   init();
 </script>
 
