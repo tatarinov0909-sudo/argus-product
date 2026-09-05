@@ -1685,9 +1685,12 @@
     // сказать об этом, чем показать адрес, которого на схеме нет.
     const stale = hitCount < product.locations.length;
     const addrs = product.locations.map(l => {
+      // Имя со стеллажа важнее наших координат: человек ищет глазами
+      // табличку, а не пересчитывает ряд-стеллаж-ярус в уме.
       const rack = l.rackFrom === l.rackTo ? l.rackFrom : `${l.rackFrom}–${l.rackTo}`;
       const tier = l.tierFrom === l.tierTo ? l.tierFrom : `${l.tierFrom}–${l.tierTo}`;
-      return `<span class="wh-search-addr" onclick="scrollToWhRow(${l.row})">${l.row}.${rack}.${tier}<i>${l.qty.toLocaleString('ru-RU')} шт</i></span>`;
+      const name = l.label || `${l.row}.${rack}.${tier}`;
+      return `<span class="wh-search-addr" onclick="scrollToWhRow(${l.row})">${escapeHTML(name)}<i>${l.qty.toLocaleString('ru-RU')} шт</i></span>`;
     }).join('');
 
     banner.innerHTML = `
