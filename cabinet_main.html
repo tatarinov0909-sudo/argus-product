@@ -589,6 +589,11 @@
      .wh-cell.empty и .wh-cell.occupied задают background целиком, коротким
      свойством, и любая краска отсюда стиралась молча. Псевдоэлементу порядок
      правил не важен. */
+  /* Остаток, выведенный из учёта, а не проверенный на полке. Отличаем
+     пунктирной левой границей: сумма у него такая же настоящая, а вот
+     уверенность — другая. */
+  .wh-detail-stock-item.from-1c{border-left:2px dashed var(--yellow); padding-left:8px;}
+
   .wh-beam{
     position:absolute; left:3px; right:3px; height:2px; margin-bottom:-1px;
     border-radius:1px; background:var(--yellow); opacity:0.85;
@@ -1955,6 +1960,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=62" defer></script>
+<script src="cabinet_main.js?v=63" defer></script>
 </body>
 </html>

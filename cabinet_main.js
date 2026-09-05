@@ -2081,14 +2081,23 @@
         : '') + from1c;
     } else {
       const totalQty = stock.reduce((sum, it) => sum + Number(it.qty || 0), 0);
+      // Сколько из этого проверено руками, а сколько выведено из учёта.
+      // Разница важнее суммы: по первому можно отгружать не глядя, второе
+      // стоит сверить с полкой, прежде чем обещать клиенту.
+      const derived = stock.filter(it => it.source === '1c').length;
       rows = `
         <div class="wh-detail-row">
           <span>Всего</span>
           <span>${totalQty.toLocaleString('ru-RU')} шт · ${stock.length} ${pluralRu(stock.length, 'артикул', 'артикула', 'артикулов')}</span>
         </div>
+        ${derived === 0 ? '' : `<div class="wh-detail-note" style="margin:6px 0 10px;">
+          ${derived === stock.length ? 'Разложено по учёту 1С' : derived + ' из них по учёту 1С'} —
+          полку никто не проверял. Проверится на первой приёмке или пересчёте.</div>`}
         <div class="wh-detail-stock">
           ${stock.map(it => `
-            <div class="wh-detail-stock-item">
+            <div class="wh-detail-stock-item${it.source === '1c' ? ' from-1c' : ''}"${it.source === '1c'
+              ? ' title="Выведено из учёта: 1С говорит, что этого товара всего столько и лежит он в одной ячейке. Полку никто не проверял."'
+              : ''}>
               <span class="wh-detail-stock-sku" title="${escapeHTML(it.sku)}">${escapeHTML(it.sku)}</span>
               <span class="wh-detail-stock-qty">${Number(it.qty || 0).toLocaleString('ru-RU')} шт</span>
               <span class="wh-detail-stock-client" title="${escapeHTML(companyNameById(it.companyId) || '')}">${escapeHTML(companyNameById(it.companyId) || '—')}</span>
