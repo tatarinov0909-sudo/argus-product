@@ -1178,16 +1178,25 @@
     // Стеллаж -> его колонка на экране. Пропуски схлопываются, но не молча:
     // между несоседними стеллажами рисуется разрыв, иначе человек решит, что
     // склад устроен вплотную, и промахнётся мимо полки.
+    // Разрыв — СВОЯ узкая колонка, а не элемент поверх соседней ячейки.
+    // Первая версия клала его в ту же колонку, что и следующий стеллаж, и он
+    // просто уходил под неё: свёрнутый ряд выглядел сплошным, а подписи
+    // прыгали через номер без всякого объяснения.
     const colOf = new Map();
+    const colWidths = [];
     let col = 0, prev = null;
     const gaps = [];
     visible.forEach(r => {
-      col += 1;
-      if(prev !== null && r !== prev + 1){ gaps.push({ col, from: prev, to: r }); }
+      if(prev !== null && r !== prev + 1){
+        col += 1; colWidths.push('18px');
+        gaps.push({ col, from: prev + 1, to: r - 1 });
+      }
+      col += 1; colWidths.push('64px');
       colOf.set(r, col);
       prev = r;
     });
     const shownCols = col;
+    const gridCols = colWidths.join(' ');
 
     let cellsHtml = '';
     cellBlocks[rowNum].forEach(b => {
@@ -1209,7 +1218,10 @@
       labelsHtml += `<div class="wh-rack-label" data-rack="${r}" style="grid-column:${c}; grid-row:${tierCount + 1};">${escapeHTML(String(rowLabel(rowNum)))}.${r}</div>`;
     });
     gaps.forEach(g => {
-      labelsHtml += `<div class="wh-rack-gap" style="grid-column:${g.col}; grid-row:1 / span ${tierCount + 1};" title="Пропущены стеллажи ${g.from + 1}–${g.to - 1}"></div>`;
+      const many = g.to > g.from;
+      const what = many ? `стеллажи ${g.from}–${g.to}` : `стеллаж ${g.from}`;
+      labelsHtml += `<div class="wh-rack-gap" style="grid-column:${g.col}; grid-row:1 / span ${tierCount};"`
+        + ` title="Здесь пусто: ${what}. Нажмите «Показать весь ряд», чтобы увидеть."></div>`;
     });
 
     const pct = tot ? Math.round(occ / tot * 100) : 0;
@@ -1227,7 +1239,7 @@
     // просмотром и правкой — уходить с неё никуда не нужно.
     const body = editing
       ? rowEditorHtml(rowNum)
-      : `<div class="wh-rack-grid" style="grid-template-columns:repeat(${shownCols}, 64px); grid-template-rows:repeat(${tierCount}, 32px) auto;">${cellsHtml}${labelsHtml}</div>`
+      : `<div class="wh-rack-grid" style="grid-template-columns:${gridCols}; grid-template-rows:repeat(${tierCount}, 32px) auto;">${cellsHtml}${labelsHtml}</div>`
         + (occupiedRacks.size === 0 ? '' : `<button class="wh-collapse-btn" type="button" onclick="toggleRowEmpty(${rowNum})">${collapsed
             ? 'Показать весь ряд — ' + existingRacks.size + ' ' + pluralRu(existingRacks.size, 'стеллаж', 'стеллажа', 'стеллажей')
             : 'Свернуть до занятых — ' + occupiedRacks.size + ' из ' + existingRacks.size}</button>`);
