@@ -2055,18 +2055,90 @@
     // Дни — потому что двести строк подряд читать нельзя.
     let html = head;
     let lastDay = null;
-    journalEntries.forEach(function(entry){
-      const key = journalDayKey(entry.created_at);
-      if(key !== lastDay){
-        html += '<div class="j-day-sep" data-day-sep="' + key + '">'
-          + escapeHTML(journalDayLabel(key)) + '</div>';
-        lastDay = key;
+    groupJournalDay(journalEntries).forEach(function(node){
+      if(node.day !== lastDay){
+        html += '<div class="j-day-sep" data-day-sep="' + node.day + '">'
+          + escapeHTML(journalDayLabel(node.day)) + '</div>';
+        lastDay = node.day;
       }
-      html += journalEntryHtml(entry, fresh.has(entry.id), key);
+      if(node.kind === 'entry'){
+        html += journalEntryHtml(node.entry, fresh.has(node.entry.id), node.day);
+        return;
+      }
+      html += journalGroupHtml(node, fresh);
     });
     list.innerHTML = html;
     renderJournalCalendar();
   }
+
+  // Одна приёмка на двенадцать позиций — это двенадцать одинаковых строк
+  // подряд. Читать их незачем: важно, что приёмка была и чем закончилась.
+  // Поэтому рутина по одному документу сворачивается в строку с раскрытием.
+  //
+  // Что НЕ сворачивается никогда: то, что ждёт решения. Прятать под плюсик
+  // единственное, ради чего владелец сюда зашёл, — значит сломать журнал.
+  const GROUP_MIN = 3;
+
+  function groupJournalDay(entries){
+    const out = [];
+    const buckets = new Map();
+    entries.forEach(function(e){
+      const day = journalDayKey(e.created_at);
+      const groupable = e.status !== 'pending' && e.invoice_id;
+      const key = groupable ? day + '|' + e.invoice_id : null;
+      if(!key){ out.push({ kind: 'entry', day: day, entry: e }); return; }
+      if(!buckets.has(key)){
+        const node = { kind: 'group', day: day, id: key.replace(/[^a-zA-Z0-9]/g, ''),
+          invoiceNumber: e.invoice_number, agent: e.agent, entries: [] };
+        buckets.set(key, node);
+        out.push(node);
+      }
+      buckets.get(key).entries.push(e);
+    });
+    // Группа из одной-двух записей ничего не экономит, только прячет.
+    return out.map(function(node){
+      if(node.kind === 'group' && node.entries.length < GROUP_MIN){
+        return node.entries.map(function(e){
+          return { kind: 'entry', day: node.day, entry: e };
+        });
+      }
+      return node;
+    }).flat();
+  }
+
+  function journalGroupHtml(node, fresh){
+    const hasNew = node.entries.some(function(e){ return fresh.has(e.id); });
+    const times = node.entries.map(function(e){ return formatEntryTime(e.created_at); });
+    const span = times.length > 1
+      ? times[times.length - 1] + ' – ' + times[0]
+      : times[0];
+    return '<div class="j-group' + (hasNew ? ' j-new' : '') + '" data-group="' + node.id + '">'
+      + '<div class="j-group-head" data-toggle-group="' + node.id + '">'
+      +   '<svg class="j-group-chev" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">'
+      +     '<path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+      +   '<span class="j-group-title">' + escapeHTML(node.agent || 'Кладовщик')
+      +     ' · ' + escapeHTML(node.invoiceNumber || '') + '</span>'
+      +   '<span class="j-group-count">' + node.entries.length + ' '
+      +     pluralRu(node.entries.length, 'запись', 'записи', 'записей') + '</span>'
+      +   '<span class="j-group-time">' + escapeHTML(span) + '</span>'
+      + '</div>'
+      + '<div class="j-group-body">'
+      +   node.entries.map(function(e){
+            return journalEntryHtml(e, fresh.has(e.id), node.day);
+          }).join('')
+      + '</div>'
+      + '</div>';
+  }
+
+  function toggleJournalGroup(id){
+    const box = document.querySelector('.j-group[data-group="' + id + '"]');
+    if(box) box.classList.toggle('open');
+  }
+
+  document.addEventListener('click', function(e){
+    const head = e.target.closest && e.target.closest('[data-toggle-group]');
+    if(head) toggleJournalGroup(head.dataset.toggleGroup);
+  });
 
   function journalEntryHtml(entry, isNew, dayKey){
     return (function(){
@@ -2241,6 +2313,13 @@
   }
   function applyFilters(){
     const search = document.getElementById('jSearch').value.trim().toLowerCase();
+    // Пока фильтр включён, группы раскрыты: спрятать найденное под плюсик —
+    // худшее, что может сделать поиск.
+    const filtering = Boolean(search) || Boolean(journalDayFilter)
+      || activeFilter !== 'all' || attentionOnly;
+    document.querySelectorAll('.j-group').forEach(function(g){
+      g.classList.toggle('open', filtering);
+    });
     const agentKeys = ['orchestrator','warehouse','analyst'].includes(activeFilter) ? [activeFilter] : [];
     const needPending = attentionOnly;
     let visibleCount = 0;
@@ -2283,12 +2362,23 @@
     document.getElementById('statConfirmed').textContent = confirmed;
     document.getElementById('statPending').textContent = pending;
     document.getElementById('statTotal').textContent = visibleCount;
+    hideEmptyGroups();
     hideEmptyDaySeparators();
   }
 
   let sortMode = 'time';
 
   // Разделитель дня без единой видимой записи под ним — мусор на экране.
+  // Заголовок группы без единой видимой записи внутри — такой же мусор,
+  // как и пустой разделитель дня.
+  function hideEmptyGroups(){
+    document.querySelectorAll('.j-group').forEach(function(g){
+      const any = [...g.querySelectorAll('.j-entry')]
+        .some(function(el){ return el.style.display !== 'none'; });
+      g.style.display = any ? '' : 'none';
+    });
+  }
+
   function hideEmptyDaySeparators(){
     document.querySelectorAll('[data-day-sep]').forEach(function(sep){
       const key = sep.dataset.daySep;

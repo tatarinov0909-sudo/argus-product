@@ -1202,6 +1202,19 @@
     100%{background:transparent; box-shadow:none;}
   }
   @media (prefers-reduced-motion: reduce){ .staff-row.j-flash{animation:none; box-shadow:inset 2px 0 0 var(--accent);} }
+  .j-group{margin-bottom:6px; border:1px solid var(--line); border-radius:10px; overflow:hidden;
+    background:var(--panel-2);}
+  .j-group-head{display:flex; align-items:center; gap:10px; padding:11px 14px; cursor:pointer;
+    user-select:none; transition:background 0.15s var(--ease);}
+  .j-group-head:hover{background:var(--panel);}
+  .j-group-chev{color:var(--muted); flex:0 0 auto; transition:transform 0.2s var(--ease);}
+  .j-group.open .j-group-chev{transform:rotate(90deg);}
+  .j-group-title{font-size:13px; font-weight:600; flex:1; min-width:0; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap;}
+  .j-group-count{font-size:11.5px; color:var(--accent); font-family:var(--mono); white-space:nowrap;}
+  .j-group-time{font-size:11px; color:var(--muted); font-family:var(--mono); white-space:nowrap;}
+  .j-group-body{display:none; padding:4px 10px 10px; border-top:1px solid var(--line);}
+  .j-group.open .j-group-body{display:block;}
   .nav-item{transition:background 0.2s var(--ease), color 0.2s var(--ease), transform 0.2s var(--ease); position:relative;}
   .nav-item:hover{background:var(--panel-2); transform:translateX(2px);}
   .nav-item.active{background:linear-gradient(135deg, var(--accent-soft), rgba(95,175,166,0.08)); box-shadow:inset 0 0 0 1px rgba(95,175,166,0.18);}
@@ -1831,6 +1844,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=40" defer></script>
+<script src="cabinet_main.js?v=41" defer></script>
 </body>
 </html>
