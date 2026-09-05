@@ -431,7 +431,11 @@
   async function loadActs(){
     let invoices;
     try{
-      invoices = await apiFetch('/api/invoices');
+      // Только приёмки: без direction сюда попадали и заказы на отгрузку, и
+      // возвраты — и все они показывались продавцу как «акты приёмки», с
+      // пустой колонкой «принято». С заказами маркетплейса этот список стал бы
+      // на девять десятых чужим по смыслу.
+      invoices = await apiFetch('/api/invoices?direction=in');
     } catch(e){
       document.getElementById('wsContent').innerHTML = '<div style="color:var(--muted);">Не удалось загрузить акты: ' + e.message + '</div>';
       return;
