@@ -307,6 +307,7 @@
           <button class="ws-mode-btn active" id="modeByDate" onclick="setViewMode('dates')">По датам</button>
           <button class="ws-mode-btn" id="modeTotal" onclick="setViewMode('total')">Общий остаток</button>
         </div>
+        <button class="ws-mode-btn" style="width:100%; margin-bottom:14px;" onclick="exportActs()">Выгрузить в Excel</button>
         <div class="ws-dates-head" id="wsDatesHead">
           <div class="ws-dates-title">Даты приёмки</div>
           <button class="cal-btn" onclick="toggleCal(event)" title="Календарь" aria-label="Календарь">
@@ -329,6 +330,7 @@
     <div class="cal-grid" id="calGrid"></div>
   </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
   const API_BASE = 'https://api.argus-ai.online';
   let TOKEN = localStorage.getItem('argus_token');
@@ -392,6 +394,35 @@
   document.getElementById('keyInput').addEventListener('keydown', function(e){
     if(e.key === 'Enter') checkKey();
   });
+
+  /* ---------- Выгрузка в Excel ----------
+     Продавцу файл нужен чаще, чем экран: свести у себя, отправить бухгалтеру,
+     сверить с поставщиком. Собирается из уже загруженных актов, второго
+     похода на сервер нет. */
+  function exportActs(){
+    if(typeof XLSX === 'undefined'){ alert('Выгрузка ещё грузится, повторите через секунду.'); return; }
+    if(!acts.length){ alert('Пока нечего выгружать — актов нет.'); return; }
+    const rows = [];
+    acts.forEach(function(act){
+      act.items.forEach(function(it){
+        rows.push({
+          'Дата': act.date,
+          'Акт': act.number,
+          'Товар': it.name,
+          'Артикул': it.sku,
+          'Заявлено': it.declared,
+          'Принято': it.accepted === null ? '' : it.accepted,
+          'Расхождение': it.accepted === null ? '' : (it.accepted - it.declared),
+        });
+      });
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{wch:12},{wch:16},{wch:34},{wch:16},{wch:11},{wch:10},{wch:13}].map(function(c){ return c; });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Приёмки');
+    const stamp = new Date().toLocaleDateString('ru-RU').replace(/\./g, '-');
+    XLSX.writeFile(wb, 'Приёмки ' + (currentAccountName || 'продавец') + ' ' + stamp + '.xlsx');
+  }
 
   async function loadActs(){
     let invoices;

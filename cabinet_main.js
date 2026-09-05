@@ -324,10 +324,13 @@
     }
   }
 
+  let lastInvoices = [];
+
   async function loadInvoicesList(){
     let invoices = [];
     try{
       invoices = await apiFetch('/api/invoices');
+      lastInvoices = invoices;
     } catch(e){
       document.getElementById('invoicesList').innerHTML = '<div class="staff-empty">Не удалось загрузить накладные: ' + e.message + '</div>';
       return;
@@ -1434,6 +1437,10 @@
                    oninput="onWhSearchInput()" onkeydown="onWhSearchKey(event)">
             <div class="wh-search-drop" id="whSearchDrop" hidden></div>
           </div>
+          <button class="wh-configure-btn" type="button" onclick="exportWarehouse()">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2v8m0 0l-3-3m3 3l3-3M3 13h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Выгрузить остатки
+          </button>
           <button class="wh-configure-btn" type="button" onclick="openWhSettings()">
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M11.5 2.5l2 2L5 13H3v-2l8.5-8.5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
             Настроить склад
@@ -1842,6 +1849,7 @@
         <div class="wh-detail-id">${displayAddr}</div>
         <div class="wh-detail-status ${state}">${statusLabel}</div>
         ${rows}
+        ${stock.length ? `<button class="wh-onboarding-btn" style="margin-top:14px; width:100%;" type="button" onclick="exportCell('${el.dataset.blockId}')">Выгрузить в Excel</button>` : ''}
       </div>
     `;
     keepStill(el, () => detail.classList.add('open'));
@@ -2853,6 +2861,90 @@
     } catch(e){
       showWhToast(e.message);
     }
+  }
+
+  /* ===================== Выгрузка в Excel =====================
+     Каждый список, который владелец видит на экране, должен уметь стать
+     файлом: показать поставщику, отправить бухгалтеру, свести у себя. Файл
+     собирается из того, что уже загружено, — второго похода на сервер нет. */
+
+  function saveXlsx(fileName, sheetName, rows, widths){
+    if(typeof XLSX === 'undefined'){
+      showWhToast('Выгрузка ещё грузится, повторите через секунду.');
+      return;
+    }
+    if(!rows.length){ showWhToast('Выгружать нечего — список пуст.'); return; }
+    const ws = XLSX.utils.json_to_sheet(rows);
+    if(widths) ws['!cols'] = widths.map(w => ({wch: w}));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    const stamp = new Date().toLocaleDateString('ru-RU').replace(/\./g, '-');
+    XLSX.writeFile(wb, fileName + ' ' + stamp + '.xlsx');
+  }
+
+  // Весь склад: одна строка на «товар в ячейке». Именно в таком виде остатки
+  // сверяют с чужой системой — по адресу, а не по итогу.
+  function exportWarehouse(){
+    const rows = [];
+    Object.keys(cellBlocks).forEach(function(rowNum){
+      cellBlocks[rowNum].forEach(function(b){
+        const addr = cellAddrLabel(rowNum, b);
+        if(!b.stock || b.stock.length === 0){
+          rows.push({ 'Ячейка': addr, 'Артикул': '', 'Продавец': '', 'Количество': 0,
+            'Состояние ячейки': 'пусто' });
+          return;
+        }
+        b.stock.forEach(function(it){
+          rows.push({
+            'Ячейка': addr,
+            'Артикул': it.sku,
+            'Продавец': companyNameById(it.companyId) || '',
+            'Количество': Number(it.qty || 0),
+            'Состояние ячейки': 'занята',
+          });
+        });
+      });
+    });
+    saveXlsx('Остатки склада', 'Остатки', rows, [14, 18, 24, 13, 17]);
+  }
+
+  function cellAddrLabel(rowNum, b){
+    const rack = b.r0 === b.r1 ? b.r0 : b.r0 + '–' + b.r1;
+    const tier = b.t0 === b.t1 ? b.t0 : b.t0 + '–' + b.t1;
+    return rowNum + '.' + rack + '.' + tier;
+  }
+
+  function exportCell(blockId){
+    const entry = blockById[blockId];
+    if(!entry){ showWhToast('Ячейка не найдена.'); return; }
+    const addr = cellAddrLabel(entry.rowNum, entry.block);
+    const rows = (entry.block.stock || []).map(function(it){
+      return {
+        'Ячейка': addr,
+        'Артикул': it.sku,
+        'Продавец': companyNameById(it.companyId) || '',
+        'Количество': Number(it.qty || 0),
+      };
+    });
+    if(rows.length === 0){ showWhToast('Ячейка ' + addr + ' пуста — выгружать нечего.'); return; }
+    saveXlsx('Ячейка ' + addr, 'Ячейка', rows, [14, 18, 24, 13]);
+  }
+
+  function exportInvoices(){
+    const statusLabel = {open:'не начата', in_progress:'в процессе', completed:'завершена',
+      ready:'собрана', shipped:'отгружена'};
+    const dirLabel = {in:'приёмка', out:'отгрузка', return:'возврат'};
+    const rows = lastInvoices.map(function(inv){
+      return {
+        'Номер': inv.number,
+        'Продавец': inv.company_name,
+        'Направление': dirLabel[inv.direction] || inv.direction || '',
+        'Статус': statusLabel[inv.status] || inv.status,
+        'Источник': inv.source === 'wb' ? 'Wildberries' : '1С',
+        'Создана': inv.created_at ? new Date(inv.created_at).toLocaleString('ru-RU') : '',
+      };
+    });
+    saveXlsx('Накладные', 'Накладные', rows, [18, 24, 13, 13, 13, 18]);
   }
 
   /* ===================== Инициализация ===================== */
