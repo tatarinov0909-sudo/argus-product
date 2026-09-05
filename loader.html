@@ -320,6 +320,34 @@
     font-size:12px; color:var(--muted); display:flex; flex-wrap:wrap; gap:8px;}
   .pick-short{margin-top:10px; padding:10px 12px; border-radius:10px; font-size:12.5px;
     background:var(--terracotta-soft); border:1px solid var(--terracotta); color:var(--terracotta);}
+  .inv-hint{
+    background:var(--panel-2); border:1px solid var(--line); border-radius:10px;
+    padding:11px 13px; font-size:12.5px; color:var(--muted); margin-bottom:14px; line-height:1.45;
+  }
+  .inv-line{
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:14px 16px; margin-bottom:12px;
+  }
+  .inv-line-head{display:flex; justify-content:space-between; align-items:flex-start; gap:12px;}
+  .inv-line-name{font-size:14.5px; font-weight:600; line-height:1.3;}
+  .inv-line-sku{display:block; font-family:var(--mono); font-size:11px; color:var(--muted); font-weight:400; margin-top:3px;}
+  .inv-line-was{font-size:11.5px; color:var(--muted); text-align:right; white-space:nowrap;}
+  .inv-line-was b{display:block; font-family:var(--mono); font-size:17px; color:var(--text); margin-top:2px;}
+  .inv-line-diff{margin-top:10px; font-size:12.5px; color:var(--yellow); text-align:center;}
+  .inv-extra{
+    display:flex; align-items:flex-start; gap:11px; cursor:pointer;
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:13px 15px; margin:4px 0 16px; font-size:13px; line-height:1.35;
+  }
+  .inv-extra.on{border-color:var(--yellow); background:var(--yellow-soft);}
+  .inv-extra span{display:block; font-size:11.5px; color:var(--muted); margin-top:3px;}
+  .inv-extra-box{
+    width:19px; height:19px; border-radius:5px; border:1.5px solid var(--line);
+    display:flex; align-items:center; justify-content:center; flex:0 0 auto;
+    font-size:12px; color:var(--yellow); margin-top:1px;
+  }
+  .inv-extra.on .inv-extra-box{border-color:var(--yellow);}
+
   .pick-kit-btn{
     margin-top:9px; padding:8px 12px; border-radius:8px; text-align:center;
     background:var(--accent); color:#12211F; font-weight:600; font-size:13px;
@@ -762,6 +790,16 @@
       </div>
     </div>
 
+    <!-- Пересчёт ячейки. Заданий здесь не бывает по своей воле: они появляются
+         только после того, как руководитель назначил пересчёт. -->
+    <div class="job-screen" id="invScreen">
+      <div class="job-head">
+        <div class="job-title">Пересчёт ячеек</div>
+        <div class="job-sub" id="invSub">—</div>
+      </div>
+      <div class="job-body" id="invBody"></div>
+    </div>
+
     <!-- Сборка набора. Заказан один артикул, а на полке лежат два-четыре
          разных товара: работник берёт компоненты и складывает их вместе.
          Открывается из листа грузчика, где нехватка набора и обнаруживается. -->
@@ -943,6 +981,12 @@
           <div>
             <div class="invoice-popover-item-name">Перепаковка и перестановка</div>
             <div class="invoice-popover-item-sub">переложить товар или вернуть его в продажу</div>
+          </div>
+        </div>
+        <div class="invoice-popover-item" onclick="event.stopPropagation(); openInventory()">
+          <div>
+            <div class="invoice-popover-item-name">Пересчёт ячеек</div>
+            <div class="invoice-popover-item-sub">только если руководитель назначил</div>
           </div>
         </div>`;
       pop.innerHTML = jobs + invoices.map((inv) => `
@@ -1814,6 +1858,188 @@
     }
   }
 
+  /* ---------- Пересчёт ячейки ----------
+     Работник инвентаризацию не начинает: он видит только те ячейки, которые
+     назначил владелец. Поэтому здесь нет ни выбора ячейки, ни поиска — есть
+     список заданий, и он либо пуст, либо нет.
+
+     Считает работник, а решает владелец: расхождение отсюда уходит наверх и
+     остаток не трогает. Так и написано на экране, чтобы работник не думал,
+     что «поправил цифру». */
+  let invTasks = [];
+  let invState = null;
+
+  async function openInventory(){
+    openJob('invScreen');
+    invState = null;
+    document.getElementById('invSub').textContent = 'Смотрю задания…';
+    document.getElementById('invBody').innerHTML = '';
+    try{
+      invTasks = await apiFetch('/api/inventory/tasks');
+    } catch(e){
+      invTasks = [];
+      document.getElementById('invSub').textContent = 'Не удалось загрузить';
+      document.getElementById('invBody').innerHTML =
+        '<div class="job-back" onclick="closeJob()">← К накладным</div>'
+        + '<div class="job-empty">' + escapeHTML(e.message) + '</div>';
+      return;
+    }
+    renderInvList();
+  }
+
+  function renderInvList(){
+    const sub = document.getElementById('invSub');
+    const body = document.getElementById('invBody');
+    const back = '<div class="job-back" onclick="closeJob()">← К накладным</div>';
+
+    if(invTasks.length === 0){
+      sub.textContent = 'Заданий нет';
+      body.innerHTML = back
+        + '<div class="job-empty">Пересчёт не назначен. Его назначает руководитель склада — '
+        + 'сам по себе он не появляется.</div>';
+      return;
+    }
+
+    sub.textContent = invTasks.length + ' '
+      + pluralRu(invTasks.length, 'ячейка', 'ячейки', 'ячеек') + ' к пересчёту';
+    body.innerHTML = back + invTasks.map(function(t){
+      return '<div class="stock-row" onclick="openInvTask(\'' + t.id + '\')">'
+        + '<div><div class="stock-row-sku">' + escapeHTML(t.label) + '</div>'
+        + '<div class="stock-row-state">' + escapeHTML(t.reason) + '</div></div>'
+        + '<div class="stock-row-qty">посчитать →</div></div>';
+    }).join('');
+  }
+
+  async function openInvTask(id){
+    document.getElementById('invSub').textContent = 'Открываю ячейку…';
+    try{
+      const t = await apiFetch('/api/inventory/tasks/' + id + '/open', { method: 'POST' });
+      // Считаем от снимка, сделанного сервером в этот момент: если в ячейке
+      // пойдёт работа, счёт не примут, и это правильно.
+      invState = {
+        id: t.id,
+        label: t.label,
+        reason: t.reason,
+        lines: (t.expected || []).map(function(l){ return Object.assign({}, l, { counted: l.qty }); }),
+        extra: false,
+      };
+      renderInvTask();
+    } catch(e){
+      showToast(e.message);
+      renderInvList();
+    }
+  }
+
+  function stepInvQty(i, delta){
+    if(!invState) return;
+    const line = invState.lines[i];
+    line.counted = Math.max(0, Number(line.counted) + delta);
+    renderInvTask();
+  }
+
+  function invQtyTyped(i, raw){
+    if(!invState) return;
+    const digits = String(raw).replace(/[^0-9]/g, '');
+    if(digits === '') return;
+    invState.lines[i].counted = Number(digits);
+    updateInvConfirm();
+  }
+
+  function toggleInvExtra(){
+    if(!invState) return;
+    invState.extra = !invState.extra;
+    renderInvTask();
+  }
+
+  const INV_QUALITY = { good: 'годный', defective: 'брак', packaging_defect: 'брак упаковки' };
+
+  function invChanged(){
+    if(!invState) return false;
+    if(invState.extra) return true;
+    return invState.lines.some(function(l){ return Number(l.counted) !== Number(l.qty); });
+  }
+
+  function updateInvConfirm(){
+    const btn = document.getElementById('invConfirm');
+    if(!btn) return;
+    btn.textContent = invChanged()
+      ? 'Отправить расхождение руководителю'
+      : 'Всё сошлось — закрыть ячейку';
+  }
+
+  function renderInvTask(){
+    if(!invState) return;
+    document.getElementById('invSub').textContent = 'Ячейка ' + invState.label
+      + ' · ' + invState.reason;
+
+    const lines = invState.lines.length === 0
+      ? '<div class="job-empty">По данным Аргуса ячейка пуста. Если это так — так и отметьте.</div>'
+      : invState.lines.map(function(l, i){
+        const diff = Number(l.counted) - Number(l.qty);
+        return '<div class="inv-line">'
+          + '<div class="inv-line-head">'
+          +   '<div class="inv-line-name">' + escapeHTML(l.name)
+          +     '<span class="inv-line-sku">' + escapeHTML(l.sku)
+          +     (l.quality && l.quality !== 'good'
+                ? ' · ' + (INV_QUALITY[l.quality] || l.quality) : '') + '</span></div>'
+          +   '<div class="inv-line-was">числится<b>' + l.qty + '</b></div>'
+          + '</div>'
+          + '<div class="qty-stepper" style="margin-top:10px;">'
+          +   '<button class="qty-btn" onclick="stepInvQty(' + i + ', -1)" aria-label="Меньше">−</button>'
+          +   '<input class="qty-value" type="text" inputmode="numeric" pattern="[0-9]*" '
+          +     'value="' + l.counted + '" aria-label="Сколько насчитали" '
+          +     'oninput="invQtyTyped(' + i + ', this.value)" onfocus="this.select()">'
+          +   '<button class="qty-btn" onclick="stepInvQty(' + i + ', 1)" aria-label="Больше">+</button>'
+          + '</div>'
+          + (diff !== 0
+            ? '<div class="inv-line-diff">' + (diff > 0 ? '+' : '') + diff + ' к тому, что числится</div>'
+            : '')
+          + '</div>';
+      }).join('');
+
+    document.getElementById('invBody').innerHTML = ''
+      + '<div class="job-back" onclick="openInventory()">← К списку ячеек</div>'
+      + '<div class="inv-hint">Считайте то, что видите на полке. Исправлять остаток '
+      +   'вы не будете — расхождение уйдёт руководителю, решает он.</div>'
+      + lines
+      + '<div class="inv-extra' + (invState.extra ? ' on' : '') + '" onclick="toggleInvExtra()">'
+      +   '<div class="inv-extra-box">' + (invState.extra ? '✓' : '') + '</div>'
+      +   '<div>В ячейке есть товар, которого нет в списке'
+      +     '<span>отметьте, если нашли что-то лишнее — артикул укажет руководитель</span></div>'
+      + '</div>'
+      + '<button class="confirm-btn" id="invConfirm" onclick="confirmInvCount()"></button>';
+    updateInvConfirm();
+  }
+
+  async function confirmInvCount(){
+    if(!invState) return;
+    const btn = document.getElementById('invConfirm');
+    btn.disabled = true;
+    btn.textContent = 'Сохраняю…';
+    try{
+      const res = await apiFetch('/api/inventory/tasks/' + invState.id + '/count', {
+        method: 'POST',
+        body: {
+          lines: invState.lines.map(function(l){
+            return { sku: l.sku, companyId: l.companyId, quality: l.quality, qty: l.counted };
+          }),
+          note: invState.extra ? 'Работник отметил: в ячейке есть товар не из списка' : null,
+        },
+      });
+      showToast(res.matched
+        ? 'Ячейка ' + invState.label + ' сошлась'
+        : 'Расхождение записано — решит руководитель');
+      invState = null;
+      openInventory();
+    } catch(e){
+      // Чаще всего это «в ячейке была работа, пока вы считали»: сервер не
+      // принимает устаревший счёт, и пересчитать надо заново.
+      btn.disabled = false;
+      showToast(e.message);
+      openInventory();
+    }
+  }
+
   function openJob(id){
     document.getElementById('invoicePopover').classList.remove('show');
     document.getElementById('invoiceSwitch').classList.remove('open');
@@ -1822,6 +2048,7 @@
     document.getElementById('pickListScreen').classList.remove('show');
     document.getElementById('moveScreen').classList.remove('show');
     document.getElementById('kitScreen').classList.remove('show');
+    document.getElementById('invScreen').classList.remove('show');
     document.getElementById(id).classList.add('show');
   }
 
@@ -1829,6 +2056,7 @@
     document.getElementById('pickListScreen').classList.remove('show');
     document.getElementById('moveScreen').classList.remove('show');
     document.getElementById('kitScreen').classList.remove('show');
+    document.getElementById('invScreen').classList.remove('show');
     document.getElementById('taskScreen').style.display = '';
     if(currentInvoice) renderCurrentItem();
   }

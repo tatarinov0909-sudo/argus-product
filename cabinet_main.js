@@ -112,16 +112,19 @@
     document.getElementById('view-staff').classList.toggle('active', view==='staff');
     document.getElementById('view-1c').classList.toggle('active', view==='1c');
     document.getElementById('view-mp').classList.toggle('active', view==='mp');
+    document.getElementById('view-inv').classList.toggle('active', view==='inv');
     document.getElementById('nav-chat').classList.toggle('active', view==='chat');
     document.getElementById('nav-journal').classList.toggle('active', view==='journal');
     document.getElementById('nav-warehouse').classList.toggle('active', view==='warehouse');
     document.getElementById('nav-staff').classList.toggle('active', view==='staff');
     document.getElementById('nav-1c').classList.toggle('active', view==='1c');
     document.getElementById('nav-mp').classList.toggle('active', view==='mp');
+    document.getElementById('nav-inv').classList.toggle('active', view==='inv');
     if(view==='journal'){ document.getElementById('navBadge').classList.remove('show'); }
     // Переписку тянем при первом открытии чата, а не при загрузке кабинета:
     // человек может весь день просидеть на складе и ни разу сюда не зайти.
     if(view==='mp'){ loadMarketplaces(); }
+    if(view==='inv'){ loadInventory(); }
     if(view==='chat'){
       loadChatHistory();
       const badge = document.getElementById('chatBadge');
@@ -2682,6 +2685,176 @@
     }
   }
 
+  /* ===================== Инвентаризация ===================== */
+
+  // Пересчёт назначает владелец — работник его не начинает. Здесь три вещи:
+  // как часто считать, что уйдёт в работу прямо сейчас, и что ждёт решения.
+  //
+  // Решение — единственное место во всей инвентаризации, где остаток вообще
+  // меняется. Поэтому расхождение показывается построчно: что числилось, что
+  // насчитали и на сколько это расходится.
+
+  let invSettings = null;
+  let invWaiting = [];
+
+  async function loadInventory(){
+    try{
+      invSettings = await apiFetch('/api/inventory/settings');
+    } catch(e){ invSettings = null; }
+    try{
+      invWaiting = await apiFetch('/api/inventory/tasks?status=waiting_owner');
+    } catch(e){ invWaiting = []; }
+    renderInventory();
+  }
+
+  function renderInventory(){
+    const s = invSettings;
+    if(s){
+      const set = (id, v) => { const el = document.getElementById(id); if(el) el.value = v; };
+      set('invRecountDays', s.recountAfterDays);
+      set('invCellsPerRun', s.cellsPerRun);
+      set('invMinDays', s.minDaysBetweenRuns);
+    }
+    renderInvWaiting();
+  }
+
+  function renderInvWaiting(){
+    const box = document.getElementById('invWaitingList');
+    if(!box) return;
+    const dot = document.getElementById('invStatusDot');
+    const title = document.getElementById('invStatusTitle');
+    const sub = document.getElementById('invStatusSub');
+
+    if(invWaiting.length === 0){
+      if(dot) dot.classList.add('connected');
+      if(title) title.textContent = 'Расхождений нет';
+      if(sub) sub.textContent = 'Всё, что посчитали, сошлось с тем, что в базе';
+      box.innerHTML = '';
+      return;
+    }
+    if(dot) dot.classList.remove('connected');
+    if(title) title.textContent = invWaiting.length + ' '
+      + pluralRu(invWaiting.length, 'ячейка ждёт', 'ячейки ждут', 'ячеек ждут') + ' вашего решения';
+    if(sub) sub.textContent = 'До решения остаток не изменён ни на штуку';
+
+    box.innerHTML = invWaiting.map(function(t){
+      const rows = invDiffRows(t).map(function(d){
+        return '<div class="inv-diff-row">'
+          + '<div><b>' + escapeHTML(d.name || d.sku) + '</b>'
+          + '<span class="inv-diff-sku">' + escapeHTML(d.sku) + '</span></div>'
+          + '<div class="inv-diff-nums">числилось ' + d.expectedQty
+          + ' · насчитали ' + d.countedQty
+          + ' <span class="' + (d.diff > 0 ? 'up' : 'down') + '">'
+          + (d.diff > 0 ? '+' : '') + d.diff + '</span></div>'
+          + '</div>';
+      }).join('');
+      const note = t.note
+        ? '<div class="inv-note">' + escapeHTML(t.note) + '</div>'
+        : '';
+      return '<div class="inv-card">'
+        + '<div class="inv-card-head">'
+        +   '<div><b>Ячейка ' + escapeHTML(t.label) + '</b>'
+        +   '<span class="inv-card-reason">' + escapeHTML(t.reason) + '</span></div>'
+        +   '<div class="inv-card-when">' + (t.countedAt
+              ? new Date(t.countedAt).toLocaleString('ru-RU') : '') + '</div>'
+        + '</div>'
+        + (rows || '<div class="inv-diff-row"><div>Количества сошлись</div></div>')
+        + note
+        + '<div class="inv-card-actions">'
+        +   '<button class="inv-btn danger" onclick="resolveInv(\'' + t.id + '\', \'reject\')">Отклонить</button>'
+        +   '<button class="inv-btn" onclick="resolveInv(\'' + t.id + '\', \'apply\')">Принять пересчёт</button>'
+        + '</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  // Разница считается здесь же, из снимка и посчитанного: сервер отдаёт обе
+  // стороны, и показывать их без сравнения значит заставлять владельца
+  // сличать два списка глазами.
+  function invDiffRows(t){
+    const key = (l) => l.sku + '|' + (l.companyId || '') + '|' + (l.quality || 'good');
+    const was = new Map((t.expected || []).map((l) => [key(l), l]));
+    const now = new Map((t.counted || []).map((l) => [key(l), l]));
+    const out = [];
+    was.forEach(function(l, k){
+      const c = now.has(k) ? Number(now.get(k).qty) : 0;
+      if(Number(l.qty) !== c){
+        out.push({ sku: l.sku, name: l.name, expectedQty: Number(l.qty), countedQty: c,
+          diff: c - Number(l.qty) });
+      }
+    });
+    now.forEach(function(l, k){
+      if(was.has(k)) return;
+      out.push({ sku: l.sku, name: l.name, expectedQty: 0, countedQty: Number(l.qty),
+        diff: Number(l.qty) });
+    });
+    return out;
+  }
+
+  async function saveInvSettings(){
+    const num = (id) => Number(document.getElementById(id).value);
+    try{
+      invSettings = await apiFetch('/api/inventory/settings', {
+        method: 'PATCH',
+        body: {
+          recountAfterDays: num('invRecountDays'),
+          cellsPerRun: num('invCellsPerRun'),
+          minDaysBetweenRuns: num('invMinDays'),
+        },
+      });
+      showWhToast('Настройки пересчёта сохранены.');
+      renderInventory();
+    } catch(e){
+      showWhToast(e.message);
+    }
+  }
+
+  async function previewInv(){
+    const box = document.getElementById('invPreview');
+    box.innerHTML = '<div class="oc-note">Считаю…</div>';
+    try{
+      const r = await apiFetch('/api/inventory/preview');
+      if(!r.cells.length){
+        box.innerHTML = '<div class="oc-note">Считать нечего: все ячейки проверяли недавно.</div>';
+        return;
+      }
+      box.innerHTML = '<div class="oc-note">В работу уйдёт ' + r.cells.length + ' '
+        + pluralRu(r.cells.length, 'ячейка', 'ячейки', 'ячеек') + ':<br>'
+        + r.cells.map(function(c){
+          return '<b>' + escapeHTML(c.label) + '</b> — ' + escapeHTML(c.reason);
+        }).join('<br>') + '</div>';
+    } catch(e){
+      box.innerHTML = '<div class="oc-note">' + escapeHTML(e.message) + '</div>';
+    }
+  }
+
+  async function startInvRun(){
+    try{
+      const r = await apiFetch('/api/inventory/runs', { method: 'POST', body: {} });
+      showWhToast('Назначено ' + r.cells.length + ' '
+        + pluralRu(r.cells.length, 'ячейка', 'ячейки', 'ячеек') + ' — работник увидит их у себя.');
+      document.getElementById('invPreview').innerHTML = '';
+      loadInventory();
+    } catch(e){
+      // Тут почти всегда осмысленный отказ: рано, или прошлое не досчитано.
+      showWhToast(e.message);
+    }
+  }
+
+  async function resolveInv(taskId, decision){
+    if(decision === 'apply'
+      && !confirm('Принять пересчёт? Остаток в ячейке станет таким, каким его увидел работник.')) return;
+    try{
+      await apiFetch('/api/inventory/tasks/' + taskId + '/resolve', {
+        method: 'POST', body: { decision },
+      });
+      showWhToast(decision === 'apply' ? 'Остаток исправлен.' : 'Пересчёт отклонён.');
+      loadInventory();
+    } catch(e){
+      showWhToast(e.message);
+    }
+  }
+
   /* ===================== Инициализация ===================== */
 
   addInvoiceItemRow();
@@ -2693,6 +2866,7 @@
   load1CKey();
   load1CStatus();
   loadMarketplaces();
+  loadInventory();
 
   apiFetch('/api/cells/rows').then(rows => {
     if(rows.length > 0){
