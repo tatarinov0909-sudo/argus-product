@@ -120,7 +120,12 @@
     document.getElementById('nav-1c').classList.toggle('active', view==='1c');
     document.getElementById('nav-mp').classList.toggle('active', view==='mp');
     document.getElementById('nav-inv').classList.toggle('active', view==='inv');
-    if(view==='journal'){ document.getElementById('navBadge').classList.remove('show'); }
+    if(view==='journal'){
+      journalUnread = 0;
+      document.getElementById('navBadge').classList.remove('show');
+      // Открыли журнал — сразу свежий, а не то, что было 25 секунд назад.
+      loadJournal(false);
+    }
     // Переписку тянем при первом открытии чата, а не при загрузке кабинета:
     // человек может весь день просидеть на складе и ни разу сюда не зайти.
     if(view==='mp'){ loadMarketplaces(); }
@@ -1920,8 +1925,12 @@
   function toggleCal(){
     document.getElementById('dnPopover').classList.toggle('open');
   }
-  function pickDay(d, e){
+  function pickDay(dayKey, e){
+    if(e) e.stopPropagation();
+    journalDayFilter = dayKey;
     document.getElementById('dnPopover').classList.remove('open');
+    renderJournalCalendar();
+    applyFilters();
   }
   function toggleAccountMenu(){
     document.getElementById('accountMenu').classList.toggle('open');
@@ -1946,18 +1955,56 @@
 
   const AGENT_LABEL = {'Кладовщик':'warehouse', 'Аналитик':'analyst', 'Оркестратор':'orchestrator'};
 
-  async function loadJournal(){
+  // Журнал грузился один раз при входе в кабинет — работник принимал товар,
+  // а владелец видел это только после перезагрузки страницы. Для журнала,
+  // смысл которого «что происходит на складе», это было почти бесполезно.
+  let journalSeenIds = new Set();
+  let journalPollTimer = null;
+  let journalUnread = 0;
+
+  async function loadJournal(initial){
+    let fresh;
     try{
-      journalEntries = await apiFetch('/api/journal');
-      renderContextPanel();
+      fresh = await apiFetch('/api/journal');
     } catch(e){
-      journalEntries = [];
-      renderContextPanel();
-      showWhToast('Не удалось загрузить журнал: ' + e.message);
+      if(initial){
+        journalEntries = [];
+        renderContextPanel();
+        showWhToast('Не удалось загрузить журнал: ' + e.message);
+        renderJournalEntries();
+        applyFilters();
+        renderWhSummary();
+      }
+      return; // молчаливый опрос не должен ругаться на каждую потерю связи
     }
-    renderJournalEntries();
+
+    // Что появилось с прошлого раза. На первой загрузке новым не считаем
+    // ничего: иначе вход в кабинет подсвечивал бы всю ленту.
+    const newIds = initial ? [] : fresh.map(e => e.id).filter(id => !journalSeenIds.has(id));
+    journalSeenIds = new Set(fresh.map(e => e.id));
+    journalEntries = fresh;
+
+    renderContextPanel();
+    renderJournalEntries(newIds);
     applyFilters();
     renderWhSummary();
+
+    if(newIds.length > 0 && !document.getElementById('view-journal').classList.contains('active')){
+      journalUnread += newIds.length;
+      const badge = document.getElementById('navBadge');
+      badge.textContent = journalUnread > 99 ? '99+' : journalUnread;
+      badge.classList.add('show');
+    }
+  }
+
+  function startJournalPolling(){
+    if(journalPollTimer) return;
+    // Двадцать пять секунд: журнал должен успевать за сменой, но не устраивать
+    // сервер каждую секунду ради страницы, на которую могут не смотреть.
+    journalPollTimer = setInterval(function(){
+      if(document.hidden) return;
+      loadJournal(false);
+    }, 25000);
   }
 
   function formatEntryTime(iso){
@@ -1967,17 +2014,66 @@
 
   const STATUS_LABEL = {auto:'применено автоматически', pending:'требует внимания', confirmed:'подтверждено вами', rolled_back:'откат выполнен'};
 
-  function renderJournalEntries(){
+  function journalDayKey(iso){
+    const d = new Date(iso);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+      + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  const MONTHS_RU = ['января','февраля','марта','апреля','мая','июня',
+    'июля','августа','сентября','октября','ноября','декабря'];
+
+  function journalDayLabel(key){
+    const [y, m, d] = key.split('-').map(Number);
+    const today = new Date();
+    const isToday = today.getFullYear() === y && today.getMonth() + 1 === m && today.getDate() === d;
+    const yest = new Date(Date.now() - 86400000);
+    const isYest = yest.getFullYear() === y && yest.getMonth() + 1 === m && yest.getDate() === d;
+    const base = d + ' ' + MONTHS_RU[m - 1];
+    if(isToday) return 'Сегодня, ' + base;
+    if(isYest) return 'Вчера, ' + base;
+    return base + ' ' + y;
+  }
+
+  function renderJournalEntries(newIds){
     const list = document.getElementById('jList');
     if(journalEntries.length === 0){
       list.innerHTML = '';
+      renderJournalCalendar();
       return;
     }
-    list.innerHTML = journalEntries.map(entry => {
+    const fresh = new Set(newIds || []);
+
+    // Приколотое сверху: то, что ждёт решения. Раньше оно лежало вперемешку с
+    // рутиной, и «есть ли у меня работа» приходилось выяснивать глазами.
+    const pending = journalEntries.filter(e => e.status === 'pending');
+    const head = pending.length === 0 ? '' :
+      '<div class="j-pinned"><div class="j-pinned-head">'
+      + pending.length + ' ' + pluralRu(pending.length, 'запись ждёт', 'записи ждут', 'записей ждут')
+      + ' вашего решения</div></div>';
+
+    // Дни — потому что двести строк подряд читать нельзя.
+    let html = head;
+    let lastDay = null;
+    journalEntries.forEach(function(entry){
+      const key = journalDayKey(entry.created_at);
+      if(key !== lastDay){
+        html += '<div class="j-day-sep" data-day-sep="' + key + '">'
+          + escapeHTML(journalDayLabel(key)) + '</div>';
+        lastDay = key;
+      }
+      html += journalEntryHtml(entry, fresh.has(entry.id), key);
+    });
+    list.innerHTML = html;
+    renderJournalCalendar();
+  }
+
+  function journalEntryHtml(entry, isNew, dayKey){
+    return (function(){
       const agentClass = AGENT_LABEL[entry.agent] || 'warehouse';
       const canResolve = entry.status === 'pending';
       return `
-        <div class="j-entry ${agentClass}" data-client="" data-risk="${entry.status === 'pending' ? 'high' : 'low'}" data-order="0" data-day="1" data-entry-id="${entry.id}">
+        <div class="j-entry ${agentClass}${isNew ? ' j-new' : ''}" data-client="" data-risk="${entry.status === 'pending' ? 'high' : 'low'}" data-order="0" data-day="${dayKey}" data-entry-id="${entry.id}">
           <input type="checkbox" class="j-check" onclick="event.stopPropagation(); updateBulk()" ${canResolve ? '' : 'style=\"visibility:hidden;\"'}>
           <div class="j-avatar">
             <svg width="20" height="20" viewBox="0 0 22 22"><use href="#icon-warehouse-agent"/></svg>
@@ -1995,7 +2091,40 @@
           </div>
         </div>
       `;
-    }).join('');
+    })();
+  }
+
+
+  // Календарь был макетом: дни августа зашиты в разметку, а нажатие на день
+  // только закрывало окошко. Строим его из настоящих дат записей.
+  let journalDayFilter = null;
+
+  function renderJournalCalendar(){
+    const box = document.getElementById('dnPopover');
+    if(!box) return;
+    const days = {};
+    journalEntries.forEach(function(e){
+      const k = journalDayKey(e.created_at);
+      days[k] = (days[k] || 0) + 1;
+    });
+    const keys = Object.keys(days).sort().reverse().slice(0, 30);
+    if(keys.length === 0){
+      box.innerHTML = '<div class="dn-cal-head"><span>Записей нет</span></div>';
+      return;
+    }
+    box.innerHTML = '<div class="dn-cal-head"><span>Дни с записями</span>'
+      + (journalDayFilter
+        ? '<button type="button" class="dn-reset" onclick="pickDay(null, event)">Все дни</button>'
+        : '')
+      + '</div>'
+      + '<div class="dn-list">'
+      + keys.map(function(k){
+        return '<button type="button" class="dn-day-row' + (journalDayFilter === k ? ' selected' : '')
+          + '" onclick="pickDay(\'' + k + '\', event)">'
+          + '<span>' + escapeHTML(journalDayLabel(k)) + '</span>'
+          + '<span class="dn-day-count">' + days[k] + '</span></button>';
+      }).join('')
+      + '</div>';
   }
 
   function renderContextPanel(){
@@ -2064,6 +2193,7 @@
         ].join(' ').toLowerCase();
         show = searchable.includes(search);
       }
+      if(show && journalDayFilter){ show = entry.dataset.day === journalDayFilter; }
       entry.style.display = show ? 'flex' : 'none';
       if(show){
         visibleCount++;
@@ -2078,15 +2208,32 @@
     const jEmpty = document.getElementById('jEmpty');
     jEmpty.classList.toggle('show', visibleCount === 0);
     jEmpty.textContent = 'По выбранным фильтрам записей не найдено.';
-    const today = new Date();
-    document.getElementById('dnSub').textContent = today.toLocaleDateString('ru-RU', {day:'numeric', month:'long'}) + ' · ' + visibleCount + (visibleCount === 1 ? ' запись' : ' записей');
+    // Подпись описывает то, что видно СЕЙЧАС: с включённым фильтром «19 записей»
+    // над списком из трёх — вранье, а журналу верить надо.
+    const scope = journalDayFilter ? journalDayLabel(journalDayFilter) : 'Все дни';
+    const tail = pending > 0
+      ? ' · ' + pending + ' ' + pluralRu(pending, 'ждёт', 'ждут', 'ждут') + ' решения'
+      : '';
+    document.getElementById('dnSub').textContent = scope + ' · ' + visibleCount + ' '
+      + pluralRu(visibleCount, 'запись', 'записи', 'записей') + tail;
     document.getElementById('statAuto').textContent = auto;
     document.getElementById('statConfirmed').textContent = confirmed;
     document.getElementById('statPending').textContent = pending;
     document.getElementById('statTotal').textContent = visibleCount;
+    hideEmptyDaySeparators();
   }
 
   let sortMode = 'time';
+
+  // Разделитель дня без единой видимой записи под ним — мусор на экране.
+  function hideEmptyDaySeparators(){
+    document.querySelectorAll('[data-day-sep]').forEach(function(sep){
+      const key = sep.dataset.daySep;
+      const any = [...document.querySelectorAll('.j-entry[data-day="' + key + '"]')]
+        .some(function(el){ return el.style.display !== 'none'; });
+      sep.style.display = any ? '' : 'none';
+    });
+  }
 
   function toggleSort(){
     document.getElementById('jSortMenu').classList.toggle('open');
@@ -2953,7 +3100,7 @@
   loadWarehouseInfo();
   loadStaff();
   loadCompanies().then(loadInvoicesList);
-  loadJournal();
+  loadJournal(true).then(startJournalPolling);
   refreshAlertBadge();
   load1CKey();
   load1CStatus();
