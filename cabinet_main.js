@@ -50,6 +50,11 @@
       const wh = await apiFetch('/api/warehouses/me');
       warehouseName = wh.name;
       document.getElementById('whSelectLabel').textContent = wh.name + (wh.city ? ' · ' + wh.city : '');
+      // Код склада на экране «Сотрудники» до сих пор был из макета — 7734,
+      // склада с таким кодом не существует. Владелец читал его как настоящий,
+      // и по нему нельзя было понять даже, в каком складе он сейчас сидит.
+      const codeChip = document.getElementById('whCodeChip');
+      if(codeChip) codeChip.textContent = wh.warehouse_code || '—';
       renderWhStatusLine();
     } catch(e){ /* nothing to show if this fails, sidebar keeps its placeholder */ }
     const name = authPayload.ownerName || 'Владелец';
