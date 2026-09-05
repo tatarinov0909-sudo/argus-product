@@ -995,6 +995,7 @@
         const block = {
           r0: b.rack_start, r1: b.rack_end, t0: b.tier_start, t1: b.tier_end,
           state: b.state, fill: b.fill_pct, blockId: b.id, stock: b.stock || [],
+          label: b.label || null, stock1c: b.stock_1c || [],
         };
         blockById[b.id] = {block, rowNum: row.row_num};
         return block;
@@ -1074,6 +1075,10 @@
   }
 
   function blockAddr(rowNum, block){
+    // Имя со стеллажа сильнее наших координат: работник ищет табличку
+    // «01-10-015», а не «1.15.2», и переводить одно в другое в уме — его
+    // лишняя работа и наша будущая ошибка.
+    if(block.label) return block.label;
     const rackPart = block.r0 === block.r1 ? block.r0 : (block.r0 + '–' + block.r1);
     const tierPart = block.t0 === block.t1 ? block.t0 : (block.t0 + '–' + block.t1);
     return rowLabel(rowNum) + '.' + rackPart + '.' + tierPart;
@@ -1896,10 +1901,30 @@
 
     const entry = blockById[el.dataset.blockId];
     const stock = (entry && entry.block.stock) || [];
+    const stock1c = (entry && entry.block.stock1c) || [];
+
+    // Что говорит про эту полку учёт владельца. Отдельным блоком и с прямой
+    // оговоркой про количество: регистр отвечает «этот товар лежит здесь»,
+    // но не «сколько». Дописать сюда число было бы выдумкой, а на выдуманных
+    // числах этот склад уже жил полгода.
+    const from1c = stock1c.length === 0 ? '' : `
+      <div class="wh-detail-note" style="margin-top:10px;">
+        По данным 1С здесь лежит — количество учёт не хранит:
+      </div>
+      <div class="wh-detail-stock">
+        ${stock1c.map(it => `
+          <div class="wh-detail-stock-item">
+            <span class="wh-detail-stock-sku" title="${escapeHTML(it.sku)}">${escapeHTML(it.sku)}</span>
+            <span class="wh-detail-stock-client" style="grid-column:2 / span 2;" title="${escapeHTML(it.name || '')}">${escapeHTML(it.name || '')}</span>
+          </div>
+        `).join('')}
+      </div>`;
 
     let rows;
     if(stock.length === 0){
-      rows = '<div class="wh-detail-note">Ячейка пуста</div>';
+      rows = (stock1c.length === 0
+        ? '<div class="wh-detail-note">Ячейка пуста</div>'
+        : '<div class="wh-detail-note">Через Аргус сюда ещё ничего не принимали.</div>') + from1c;
     } else {
       const totalQty = stock.reduce((sum, it) => sum + Number(it.qty || 0), 0);
       rows = `
@@ -1916,7 +1941,7 @@
             </div>
           `).join('')}
         </div>
-      `;
+      ` + from1c;
     }
 
     // Карточка живёт сбоку и не двигается с места. Раньше она вставлялась
