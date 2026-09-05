@@ -558,6 +558,17 @@
   }
   .staff-add button:hover{opacity:0.92;}
 
+  .staff-toggle{
+    display:flex; align-items:center; gap:9px; cursor:pointer; user-select:none;
+    padding:11px 14px; border:1px solid var(--line); border-radius:10px;
+    background:var(--panel); font-size:13px; color:var(--text);
+    transition:border-color 0.15s var(--ease), background 0.15s var(--ease);
+  }
+  .staff-toggle:hover{border-color:var(--accent-soft); background:var(--panel-2);}
+  .staff-toggle-arrow{color:var(--muted); font-size:11px; transition:transform 0.15s var(--ease);}
+  .staff-toggle.open .staff-toggle-arrow{transform:rotate(90deg);}
+  .staff-toggle-count{color:var(--muted);}
+  #staffRows{margin-top:10px;}
   .staff-table{background:var(--panel); border:1px solid var(--line); border-radius:12px; overflow:hidden;}
   .staff-row{
     display:grid; grid-template-columns:1fr 130px 120px 100px 90px; align-items:center; gap:10px;
@@ -1614,16 +1625,11 @@
           <button onclick="addStaffMember()">+ Сгенерировать ключ</button>
         </div>
 
-        <div class="staff-table">
-          <div class="staff-row head">
-            <div>Имя</div>
-            <div>Ключ</div>
-            <div>Выдан</div>
-            <div>Статус</div>
-            <div></div>
-          </div>
-          <div id="staffRows"></div>
+        <div class="staff-toggle" id="staffToggle" onclick="toggleStaffList()">
+          <span class="staff-toggle-arrow" id="staffToggleArrow">▸</span>
+          <span id="staffToggleLabel">Работники</span>
         </div>
+        <div id="staffRows" hidden></div>
 
         <div class="staff-head" style="margin-top:34px;">
           <div>
@@ -1858,6 +1864,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=47" defer></script>
+<script src="cabinet_main.js?v=48" defer></script>
 </body>
 </html>

@@ -188,16 +188,30 @@
       showWhToast('Некуда вывести сотрудников: страница загрузилась не полностью. Обновите через Ctrl+Shift+R.');
       return;
     }
+    // Счётчик в заголовке — главное здесь. Он берётся из тех же данных, что
+    // и строки, поэтому отвечает на вопрос «они вообще приехали?» даже когда
+    // список свёрнут и ни одной строки на экране нет.
+    const label = document.getElementById('staffToggleLabel');
+    if(label){
+      label.innerHTML = staffError
+        ? 'Работники <span class="staff-toggle-count">— не загрузились</span>'
+        : 'Работники <span class="staff-toggle-count">· ' + staffMembers.length + '</span>';
+    }
+
     if(staffError){
-      wrap.innerHTML = '<div class="staff-empty">Не удалось загрузить сотрудников: '
+      wrap.innerHTML = '<div class="staff-empty">Не удалось загрузить работников: '
         + staffError + '</div>';
       return;
     }
     if(staffMembers.length === 0){
-      wrap.innerHTML = '<div class="staff-empty">Сотрудников пока нет — добавьте первого выше.</div>';
+      wrap.innerHTML = '<div class="staff-empty">Работников пока нет — добавьте первого выше.</div>';
       return;
     }
-    wrap.innerHTML = staffMembers.map((s) => {
+    // Развернуть сам, если человек только что выдал ключ: иначе он нажимает
+    // «сгенерировать» и не видит результата — ровно на это и была жалоба.
+    wrap.innerHTML = '<div class="staff-row head"><div>Имя</div><div>Ключ</div>'
+      + '<div>Выдан</div><div>Статус</div><div></div></div>'
+      + staffMembers.map((s) => {
       const issued = new Date(s.issued_at).toLocaleDateString('ru-RU');
       return `
         <div class="staff-row ${s.active ? '' : 'revoked'}">
@@ -211,6 +225,16 @@
     }).join('');
   }
 
+  function toggleStaffList(open){
+    const rows = document.getElementById('staffRows');
+    const btn = document.getElementById('staffToggle');
+    if(!rows || !btn) return;
+    const show = (open === undefined) ? rows.hidden : !!open;
+    rows.hidden = !show;
+    btn.classList.toggle('open', show);
+  }
+  window.toggleStaffList = toggleStaffList;
+
   async function addStaffMember(){
     const input = document.getElementById('staffNameInput');
     const name = input.value.trim();
@@ -219,7 +243,8 @@
       const key = await apiFetch('/api/staff', {method:'POST', body:{name}});
       input.value = '';
       await loadStaff();
-      showWhToast('Ключ ' + key.key_code + ' выдан сотруднику «' + name + '».');
+      toggleStaffList(true);
+      showWhToast('Ключ ' + key.key_code + ' выдан работнику «' + name + '».');
     } catch(e){
       showWhToast('Не удалось выдать ключ: ' + e.message);
     }
