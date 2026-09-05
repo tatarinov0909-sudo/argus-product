@@ -347,10 +347,11 @@
     }
     const statusLabel = {open:'не начата', in_progress:'в процессе', completed:'завершена'};
     wrap.innerHTML = invoices.map(inv => `
-      <div class="staff-row" data-invoice-id="${inv.id}" style="grid-template-columns:1fr 1.2fr 1fr;">
+      <div class="staff-row" data-invoice-id="${inv.id}" style="grid-template-columns:1fr 1.2fr 1fr auto;">
         <div class="staff-key">${inv.number}</div>
         <div class="staff-name">${inv.company_name}</div>
         <div><span class="staff-status ${inv.status === 'completed' ? 'active' : ''}">${statusLabel[inv.status] || inv.status}</span></div>
+        <div class="staff-action" data-history-invoice="${inv.id}" data-history-label="${escapeHTML(inv.number)}">История</div>
       </div>
     `).join('');
   }
@@ -1854,7 +1855,9 @@
         <div class="wh-detail-id">${displayAddr}</div>
         <div class="wh-detail-status ${state}">${statusLabel}</div>
         ${rows}
-        ${stock.length ? `<button class="wh-onboarding-btn" style="margin-top:14px; width:100%;" type="button" onclick="exportCell('${el.dataset.blockId}')">Выгрузить в Excel</button>` : ''}
+        <button class="wh-onboarding-btn" style="margin-top:14px; width:100%;" type="button"
+                data-history-cell="${el.dataset.blockId}" data-history-label="${displayAddr}">Что здесь происходило</button>
+        ${stock.length ? `<button class="wh-onboarding-btn" style="margin-top:8px; width:100%;" type="button" onclick="exportCell('${el.dataset.blockId}')">Выгрузить в Excel</button>` : ''}
       </div>
     `;
     keepStill(el, () => detail.classList.add('open'));
@@ -1958,14 +1961,22 @@
   // Журнал грузился один раз при входе в кабинет — работник принимал товар,
   // а владелец видел это только после перезагрузки страницы. Для журнала,
   // смысл которого «что происходит на складе», это было почти бесполезно.
+  // Обратный ход: журнал, суженный до одной ячейки или одной накладной.
+  // Фильтруем на сервере, а не в кабинете: в ленте последние 200 записей, и
+  // история ячейки за прошлый месяц в них просто не попадёт.
+  let journalScope = null;   // {kind:'cell'|'invoice', id, label}
+
   let journalSeenIds = new Set();
   let journalPollTimer = null;
   let journalUnread = 0;
 
   async function loadJournal(initial){
     let fresh;
+    const query = journalScope
+      ? '?' + (journalScope.kind === 'cell' ? 'cellBlockId=' : 'invoiceId=') + journalScope.id
+      : '';
     try{
-      fresh = await apiFetch('/api/journal');
+      fresh = await apiFetch('/api/journal' + query);
     } catch(e){
       if(initial){
         journalEntries = [];
@@ -2038,11 +2049,27 @@
   function renderJournalEntries(newIds){
     const list = document.getElementById('jList');
     if(journalEntries.length === 0){
-      list.innerHTML = '';
+      list.innerHTML = journalScope
+        ? '<div class="j-scope"><span class="j-scope-kind">'
+          + (journalScope.kind === 'cell' ? 'История ячейки' : 'История накладной')
+          + '</span><b>' + escapeHTML(journalScope.label) + '</b>'
+          + '<span class="j-scope-close" data-journal-scope-clear>Показать весь журнал ✕</span></div>'
+          + '<div class="staff-empty">Записей по '
+          + (journalScope.kind === 'cell' ? 'этой ячейке' : 'этой накладной') + ' пока нет.</div>'
+        : '';
       renderJournalCalendar();
       return;
     }
     const fresh = new Set(newIds || []);
+
+    // Пока журнал сужен, об этом должно быть написано крупно: иначе пустая
+    // лента читается как «на складе ничего не происходило».
+    const scopeBar = journalScope
+      ? '<div class="j-scope"><span class="j-scope-kind">'
+        + (journalScope.kind === 'cell' ? 'История ячейки' : 'История накладной')
+        + '</span><b>' + escapeHTML(journalScope.label) + '</b>'
+        + '<span class="j-scope-close" data-journal-scope-clear>Показать весь журнал ✕</span></div>'
+      : '';
 
     // Приколотое сверху: то, что ждёт решения. Раньше оно лежало вперемешку с
     // рутиной, и «есть ли у меня работа» приходилось выяснивать глазами.
@@ -2053,7 +2080,7 @@
       + ' вашего решения</div></div>';
 
     // Дни — потому что двести строк подряд читать нельзя.
-    let html = head;
+    let html = scopeBar + head;
     let lastDay = null;
     groupJournalDay(journalEntries).forEach(function(node){
       if(node.day !== lastDay){
@@ -2234,6 +2261,38 @@
     if(inv){ e.stopPropagation(); goToJournalInvoice(inv.dataset.goInvoice); }
   });
 
+  async function showJournalFor(kind, id, label){
+    journalScope = { kind: kind, id: id, label: label };
+    // Фильтры ленты сбрасываем: они относились к общему журналу, и молча
+    // унести их в историю ячейки — способ показать пустой экран без причины.
+    journalDayFilter = null;
+    const search = document.getElementById('jSearch');
+    if(search) search.value = '';
+    switchView('journal');
+    await loadJournal(true);
+  }
+
+  async function clearJournalScope(){
+    journalScope = null;
+    await loadJournal(true);
+  }
+
+  document.addEventListener('click', function(e){
+    if(e.target.closest && e.target.closest('[data-journal-scope-clear]')) clearJournalScope();
+    const hist = e.target.closest && e.target.closest('[data-history-cell]');
+    if(hist){
+      e.stopPropagation();
+      showJournalFor('cell', hist.dataset.historyCell, hist.dataset.historyLabel || 'ячейка');
+      return;
+    }
+    const histInv = e.target.closest && e.target.closest('[data-history-invoice]');
+    if(histInv){
+      e.stopPropagation();
+      showJournalFor('invoice', histInv.dataset.historyInvoice,
+        histInv.dataset.historyLabel || 'накладная');
+    }
+  });
+
   async function goToJournalCell(blockId){
     switchView('warehouse');
     // Карта могла ещё ни разу не рисоваться: ждём её, а не гадаем задержкой.
@@ -2347,8 +2406,12 @@
         }
       }
     });
+    // Когда журнал сужен до ячейки или накладной и записей нет, лента уже
+    // объясняет это своими словами. Второе сообщение рядом только спорит с
+    // первым: «записей нет» и «по фильтрам не найдено» — про разное.
     const jEmpty = document.getElementById('jEmpty');
-    jEmpty.classList.toggle('show', visibleCount === 0);
+    const explainedAlready = journalScope && journalEntries.length === 0;
+    jEmpty.classList.toggle('show', visibleCount === 0 && !explainedAlready);
     jEmpty.textContent = 'По выбранным фильтрам записей не найдено.';
     // Подпись описывает то, что видно СЕЙЧАС: с включённым фильтром «19 записей»
     // над списком из трёх — вранье, а журналу верить надо.
