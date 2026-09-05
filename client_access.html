@@ -175,6 +175,9 @@
   }
   .total-current-label{font-size:12px; color:var(--muted);}
   .total-current-num{font-size:26px; font-weight:700; font-family:var(--mono); color:var(--accent);}
+  .total-sku{display:block; font-family:var(--mono); font-size:11px; color:var(--muted); margin-top:3px;}
+  .total-note{margin:12px 0 4px; padding:11px 13px; border-radius:9px; font-size:12.5px; line-height:1.45;
+    background:rgba(217,142,110,0.1); border:1px solid rgba(217,142,110,0.3); color:#D98E6E;}
   .total-table{width:100%; border-collapse:collapse;}
   .total-table th{
     text-align:left; font-size:10.5px; color:var(--muted); text-transform:uppercase; letter-spacing:0.4px;
@@ -512,7 +515,10 @@
   let currentViewMode = 'dates';
 
   function setViewMode(mode){
-    if(acts.length === 0) return;
+    // Остаток существует независимо от того, были ли приёмки в Аргусе: товар
+    // мог приехать в систему выгрузкой из 1С. Раньше пустой список актов
+    // блокировал и остаток тоже.
+    if(acts.length === 0 && mode === 'dates') return;
     currentViewMode = mode;
     document.getElementById('modeByDate').classList.toggle('active', mode === 'dates');
     document.getElementById('modeTotal').classList.toggle('active', mode === 'total');
@@ -521,52 +527,80 @@
     if(mode === 'dates'){
       renderAct(currentActIndex || 0);
     } else {
-      renderTotalView();
+      loadSellerStock();
     }
   }
 
-  function renderTotalView(){
-    const sorted = [...acts].sort((a, b) => {
-      const da = parseActDate(a.date), db = parseActDate(b.date);
-      return new Date(da.y, da.m - 1, da.d) - new Date(db.y, db.m - 1, db.d);
-    });
+  // Настоящий остаток — то, что лежит в ячейках прямо сейчас.
+  //
+  // Раньше здесь складывались приёмки нарастающим итогом и назывались
+  // остатком. Пока склад только принимал, цифра почти совпадала; с первой же
+  // отгрузкой она расходится навсегда — и растёт, что бы ни происходило.
+  let stockRows = null;
 
-    let running = 0;
-    let lastMonth = null;
-    let rowsHtml = '';
-    sorted.forEach(act => {
-      const delivered = act.items.reduce((s, it) => s + (it.accepted || 0), 0);
-      running += delivered;
-      const parsed = parseActDate(act.date);
-      const monthLabel = MONTH_NAMES[parsed.m - 1] + ' ' + parsed.y;
-      if(monthLabel !== lastMonth){
-        rowsHtml += `<tr><td colspan="4" class="month-sep">${monthLabel}</td></tr>`;
-        lastMonth = monthLabel;
-      }
-      rowsHtml += `
-        <tr>
-          <td>${act.date}</td>
-          <td>№ ${act.number}</td>
-          <td class="num delta">+${delivered}</td>
-          <td class="num running">${running}</td>
-        </tr>
-      `;
-    });
+  async function loadSellerStock(){
+    try{
+      stockRows = await apiFetch('/api/sellers/stock');
+    } catch(e){
+      stockRows = null;
+      document.getElementById('wsContent').innerHTML =
+        '<div class="act-wrap"><div class="act-card">Не удалось загрузить остаток: '
+        + escapeHtml(e.message) + '</div></div>';
+      return;
+    }
+    renderTotalView();
+  }
+
+  function escapeHtml(str){
+    const d = document.createElement('div');
+    d.textContent = str == null ? '' : String(str);
+    return d.innerHTML;
+  }
+
+  function renderTotalView(){
+    if(stockRows === null){ loadSellerStock(); return; }
+
+    if(stockRows.length === 0){
+      document.getElementById('wsContent').innerHTML = `
+        <div class="act-wrap"><div class="act-card">
+          <div class="total-head">
+            <div class="total-title">Остаток на складе</div>
+            <div class="total-sub">${escapeHtml(currentAccountName)}</div>
+          </div>
+          <div style="color:var(--muted); padding:24px 0; text-align:center;">
+            Вашего товара на складе сейчас нет.
+          </div>
+        </div></div>`;
+      return;
+    }
+
+    const total = stockRows.reduce((s, r) => s + r.qty, 0);
+    const notForSale = stockRows.reduce((s, r) => s + r.notForSale, 0);
+
+    const rowsHtml = stockRows.map(r => `
+      <tr>
+        <td>${escapeHtml(r.name)}<span class="total-sku">${escapeHtml(r.sku)}</span></td>
+        <td class="num running">${r.qty.toLocaleString('ru-RU')}</td>
+        <td class="num ${r.notForSale > 0 ? 'delta' : ''}">${r.notForSale > 0 ? r.notForSale : '—'}</td>
+        <td class="num">${r.cells}</td>
+      </tr>
+    `).join('');
 
     document.getElementById('wsContent').innerHTML = `
       <div class="act-wrap">
         <div class="act-card">
           <div class="total-head">
-            <div class="total-title">Общий остаток</div>
-            <div class="total-sub">${currentAccountName} · нарастающим итогом по всем поставкам</div>
+            <div class="total-title">Остаток на складе</div>
+            <div class="total-sub">${escapeHtml(currentAccountName)} · на эту минуту, с учётом отгрузок</div>
           </div>
           <div class="total-current">
-            <span class="total-current-label">Всего привезено и принято</span>
-            <span class="total-current-num">${running} шт</span>
+            <span class="total-current-label">Можно продавать</span>
+            <span class="total-current-num">${total.toLocaleString('ru-RU')} шт</span>
           </div>
+          ${notForSale > 0 ? `<div class="total-note">Ещё ${notForSale.toLocaleString('ru-RU')} шт лежат на складе, но продавать их нельзя: брак или повреждённая упаковка. Решение по ним за вами.</div>` : ''}
           <table class="total-table">
             <thead>
-              <tr><th>Дата</th><th>Акт</th><th class="num">Привезено</th><th class="num">Итого</th></tr>
+              <tr><th>Товар</th><th class="num">Можно продавать</th><th class="num">Не в продаже</th><th class="num">Ячеек</th></tr>
             </thead>
             <tbody>${rowsHtml}</tbody>
           </table>
