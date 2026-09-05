@@ -347,7 +347,7 @@
     }
     const statusLabel = {open:'не начата', in_progress:'в процессе', completed:'завершена'};
     wrap.innerHTML = invoices.map(inv => `
-      <div class="staff-row" style="grid-template-columns:1fr 1.2fr 1fr;">
+      <div class="staff-row" data-invoice-id="${inv.id}" style="grid-template-columns:1fr 1.2fr 1fr;">
         <div class="staff-key">${inv.number}</div>
         <div class="staff-name">${inv.company_name}</div>
         <div><span class="staff-status ${inv.status === 'completed' ? 'active' : ''}">${statusLabel[inv.status] || inv.status}</span></div>
@@ -2084,6 +2084,7 @@
               <span class="j-time">${formatEntryTime(entry.created_at)}</span>
             </div>
             <div class="j-text">${entry.action_text}</div>
+            ${journalLinksHtml(entry)}
             <div class="j-meta">
               <span class="j-status ${entry.status === 'auto' ? 'auto' : entry.status === 'confirmed' ? 'applied' : entry.status === 'rolled_back' ? 'pending' : 'pending'}">${STATUS_LABEL[entry.status] || entry.status}</span>
               ${canResolve ? `<span class="staff-action" style="display:inline-block; margin-left:8px;" onclick="resolveJournalEntry('${entry.id}', 'confirm')">Подтвердить</span><span class="staff-action revoke" style="display:inline-block; margin-left:8px;" onclick="resolveJournalEntry('${entry.id}', 'rollback')">Откатить</span>` : ''}
@@ -2125,6 +2126,68 @@
           + '<span class="dn-day-count">' + days[k] + '</span></button>';
       }).join('')
       + '</div>';
+  }
+
+  // Запись журнала обязана вести туда, о чём говорит. Раньше адрес ячейки
+  // существовал только внутри фразы: прочитать можно, пойти нельзя.
+  //
+  // Обработчик один на весь список, а не onclick в каждой строке: записей
+  // двести, и двести замыканий ради двух видов перехода — лишнее.
+  const ICON_CELL = '<svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">'
+    + '<rect x="2.5" y="2.5" width="11" height="11" rx="1.6" stroke="currentColor" stroke-width="1.5"/>'
+    + '<path d="M2.5 8h11M8 2.5v11" stroke="currentColor" stroke-width="1.2"/></svg>';
+  const ICON_DOC = '<svg width="11" height="11" viewBox="0 0 16 16" fill="none" aria-hidden="true">'
+    + '<path d="M4 2.5h5.5L12.5 6v7.5H4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>'
+    + '<path d="M6 8.5h4.5M6 11h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>';
+
+  function journalLinksHtml(entry){
+    const parts = [];
+    if(entry.cell_label){
+      parts.push('<span class="j-link" data-go-cell="' + entry.cell_block_id
+        + '" title="Показать на карте склада">' + ICON_CELL
+        + escapeHTML(entry.cell_label) + '</span>');
+    }
+    if(entry.invoice_number){
+      parts.push('<span class="j-link" data-go-invoice="' + entry.invoice_id
+        + '" title="Показать накладную">' + ICON_DOC
+        + escapeHTML(entry.invoice_number) + '</span>');
+    }
+    return parts.length ? '<div class="j-links">' + parts.join('') + '</div>' : '';
+  }
+
+  document.addEventListener('click', function(e){
+    const cell = e.target.closest && e.target.closest('[data-go-cell]');
+    if(cell){ e.stopPropagation(); goToJournalCell(cell.dataset.goCell); return; }
+    const inv = e.target.closest && e.target.closest('[data-go-invoice]');
+    if(inv){ e.stopPropagation(); goToJournalInvoice(inv.dataset.goInvoice); }
+  });
+
+  async function goToJournalCell(blockId){
+    switchView('warehouse');
+    // Карта могла ещё ни разу не рисоваться: ждём её, а не гадаем задержкой.
+    for(let i = 0; i < 40; i += 1){
+      const el = document.querySelector('.wh-cell[data-block-id="' + blockId + '"]');
+      if(el){
+        const entry = blockById[blockId];
+        if(entry) focusRow(entry.rowNum);
+        selectCell(el);
+        el.scrollIntoView({behavior:'smooth', block:'center'});
+        return;
+      }
+      await new Promise(r => setTimeout(r, 100));
+    }
+    showWhToast('Ячейка не найдена на схеме — возможно, её перестроили.');
+  }
+
+  function goToJournalInvoice(invoiceId){
+    switchView('staff');
+    setTimeout(function(){
+      const row = document.querySelector('[data-invoice-id="' + invoiceId + '"]');
+      if(!row){ showWhToast('Накладная не найдена в списке.'); return; }
+      row.scrollIntoView({behavior:'smooth', block:'center'});
+      row.classList.add('j-flash');
+      setTimeout(function(){ row.classList.remove('j-flash'); }, 2400);
+    }, 120);
   }
 
   function renderContextPanel(){
