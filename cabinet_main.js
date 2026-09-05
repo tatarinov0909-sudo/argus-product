@@ -2039,24 +2039,32 @@
     // оговоркой про количество: регистр отвечает «этот товар лежит здесь»,
     // но не «сколько». Дописать сюда число было бы выдумкой, а на выдуманных
     // числах этот склад уже жил полгода.
+    // Список из 1С — своя вёрстка, а не чужая сетка «артикул · количество ·
+    // клиент»: количества здесь нет вовсе, и втискивание в три колонки резало
+    // и артикул, и название многоточием, хотя место было.
     const from1c = stock1c.length === 0 ? '' : `
-      <div class="wh-detail-note" style="margin-top:10px;">
-        По данным 1С здесь лежит — количество учёт не хранит:
-      </div>
-      <div class="wh-detail-stock">
-        ${stock1c.map(it => `
-          <div class="wh-detail-stock-item">
-            <span class="wh-detail-stock-sku" title="${escapeHTML(it.sku)}">${escapeHTML(it.sku)}</span>
-            <span class="wh-detail-stock-client" style="grid-column:2 / span 2;" title="${escapeHTML(it.name || '')}">${escapeHTML(it.name || '')}</span>
-          </div>
-        `).join('')}
+      <div class="wh-1c">
+        <div class="wh-1c-head">
+          <span>По данным 1С</span>
+          <span class="wh-1c-count">${stock1c.length} ${pluralRu(stock1c.length, 'артикул', 'артикула', 'артикулов')}</span>
+        </div>
+        <div class="wh-1c-list">
+          ${stock1c.map(it => `
+            <div class="wh-1c-item">
+              <div class="wh-1c-sku">${escapeHTML(it.sku)}</div>
+              <div class="wh-1c-name">${escapeHTML(it.name || 'название не выгружено')}</div>
+            </div>
+          `).join('')}
+        </div>
+        <div class="wh-1c-foot">Сколько здесь штук — учёт склада не хранит.
+          Появится после первой приёмки через Аргус.</div>
       </div>`;
 
     let rows;
     if(stock.length === 0){
       rows = (stock1c.length === 0
         ? '<div class="wh-detail-note">Ячейка пуста</div>'
-        : '<div class="wh-detail-note">Через Аргус сюда ещё ничего не принимали.</div>') + from1c;
+        : '') + from1c;
     } else {
       const totalQty = stock.reduce((sum, it) => sum + Number(it.qty || 0), 0);
       rows = `

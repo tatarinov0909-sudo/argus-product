@@ -580,10 +580,15 @@
 
   /* Высокий отсек: полки над ячейкой не поставили, и место принадлежит ей.
      Отмечаем сдержанно — это норма склада, а не поломка. */
-  .wh-cell.tall{ border-style:solid; }
-  .wh-cell.tall::after{
-    content:''; position:absolute; left:6px; right:6px; top:5px; height:1px;
-    background:var(--line); opacity:0.5;
+  /* Высокий отсек: балку между ярусами не поставили, и место досталось
+     нижней ячейке. Отмечаем ровно там, где балки НЕ ХВАТАЕТ, — на границе
+     ярусов, считая от низа ячейки. Ярус 32px, поэтому линия повторяется
+     каждые 32px и встаёт правильно при любой высоте отсека: и когда
+     проглочен один ярус, и когда три. */
+  .wh-cell.tall{
+    border-style:solid;
+    background-image:repeating-linear-gradient(to top,
+      transparent 0 30px, var(--yellow) 30px 32px);
   }
   .wh-cell{ position:relative; }
 
@@ -591,6 +596,26 @@
      та же полупрозрачность, что и у столбиков на схеме, чтобы две разные
      величины нельзя было спутать. */
   .wh-row-group-meter-fill.by-places{ opacity:0.55; }
+
+  /* Что лежит в ячейке по учёту склада. Артикул сверху моноширинным —
+     его сверяют посимвольно; название ниже целиком, с переносом: резать его
+     многоточием бессмысленно, именно по названию человек товар и узнаёт. */
+  .wh-1c{margin-top:16px; border-top:1px solid var(--line-soft); padding-top:14px;}
+  .wh-1c-head{
+    display:flex; align-items:baseline; justify-content:space-between;
+    font-size:11px; letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--muted); margin-bottom:10px;
+  }
+  .wh-1c-count{font-family:var(--mono); letter-spacing:0; text-transform:none;}
+  .wh-1c-list{display:flex; flex-direction:column; gap:1px;
+    background:var(--line-soft); border:1px solid var(--line-soft); border-radius:8px; overflow:hidden;}
+  .wh-1c-item{background:var(--panel-2); padding:9px 11px;}
+  .wh-1c-sku{
+    font-family:var(--mono); font-size:12px; color:var(--accent-2);
+    letter-spacing:0.2px;
+  }
+  .wh-1c-name{font-size:12.5px; color:var(--text); line-height:1.35; margin-top:3px;}
+  .wh-1c-foot{margin-top:9px; font-size:11.5px; color:var(--muted); line-height:1.4;}
 
   .wh-rack-gap{
     align-self:stretch; position:relative;
@@ -1927,6 +1952,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=58" defer></script>
+<script src="cabinet_main.js?v=60" defer></script>
 </body>
 </html>
