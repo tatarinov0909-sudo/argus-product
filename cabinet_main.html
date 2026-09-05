@@ -589,12 +589,10 @@
      .wh-cell.empty и .wh-cell.occupied задают background целиком, коротким
      свойством, и любая краска отсюда стиралась молча. Псевдоэлементу порядок
      правил не важен. */
-  .wh-cell.tall::after{
-    content:''; position:absolute; inset:0; pointer-events:none;
-    border-radius:inherit;
-    background:repeating-linear-gradient(to top,
-      transparent 0 30px, var(--yellow) 30px 32px);
-    opacity:0.9;
+  .wh-beam{
+    position:absolute; left:3px; right:3px; height:2px; margin-bottom:-1px;
+    border-radius:1px; background:var(--yellow); opacity:0.85;
+    pointer-events:none;
   }
 
   /* Полоса ряда, посчитанная по занятым местам, а не по количеству товара:
@@ -1957,6 +1955,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=61" defer></script>
+<script src="cabinet_main.js?v=62" defer></script>
 </body>
 </html>

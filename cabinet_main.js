@@ -1249,8 +1249,22 @@
       const style = b.state === 'occupied'
         ? ` style="grid-column:${c0} / span ${c1 - c0 + 1}; grid-row:${gridRowStart} / span ${gridRowSpan};${cellPaintVars(b.fill)}"`
         : ` style="grid-column:${c0} / span ${c1 - c0 + 1}; grid-row:${gridRowStart} / span ${gridRowSpan};"`;
-      const hint = tall ? addr + ' — высокий отсек: полки над ним нет' : addr;
-      cellsHtml += `<div class="wh-cell in-grid ${b.state}${mergedClass}${tall ? ' tall' : ''}${b.state === 'occupied' ? fillModeClass : ''}" data-row="${rowNum}" data-id="${b.r0}" data-tier="${b.t0}" data-addr="${addr}" data-state="${b.state}" data-block-id="${b.blockId}"${style} onclick="selectCell(this)" title="${hint}"></div>`;
+      // Балок рисуем ровно столько, сколько ярусов ячейка проглотила: одна
+      // граница — одна недостающая балка. Повторяющийся фон этого не умел
+      // и дорисовывал лишнюю линию у верхнего края, где полка как раз есть.
+      //
+      // Позиция в процентах, а не в пикселях: высота ячейки зависит от
+      // промежутков в сетке, и считать её в коде значит однажды разъехаться
+      // с вёрсткой.
+      const missing = tTop - b.t1;
+      let beams = '';
+      for(let k = 1; k <= missing; k++){
+        beams += `<i class="wh-beam" style="bottom:${(k / gridRowSpan * 100).toFixed(3)}%"></i>`;
+      }
+      const hint = tall
+        ? addr + ' — высокий отсек: ' + missing + ' ' + pluralRu(missing, 'балки', 'балок', 'балок') + ' не хватает'
+        : addr;
+      cellsHtml += `<div class="wh-cell in-grid ${b.state}${mergedClass}${tall ? ' tall' : ''}${b.state === 'occupied' ? fillModeClass : ''}" data-row="${rowNum}" data-id="${b.r0}" data-tier="${b.t0}" data-addr="${addr}" data-state="${b.state}" data-block-id="${b.blockId}"${style} onclick="selectCell(this)" title="${hint}">${beams}</div>`;
     });
 
     let labelsHtml = '';
