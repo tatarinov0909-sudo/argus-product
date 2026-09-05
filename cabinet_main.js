@@ -1204,18 +1204,53 @@
     const shownCols = col;
     const gridCols = colWidths.join(' ');
 
+    // Дырка между полками — это не пустота, это высокий отсек. Если на этом
+    // стеллаже второй полки нет, а третья есть, значит балку между ними
+    // не ставили: первая ячейка просто выше. Поэтому ячейка растёт вверх,
+    // пока над ней нет полки.
+    //
+    // Но только до САМОЙ ВЕРХНЕЙ полки этого стеллажа: выше неё воздух,
+    // а не ячейка. Тянуть до потолка значило бы нарисовать место, куда
+    // ничего не положишь.
+    const has = new Set();
+    const topTier = new Map();
+    cellBlocks[rowNum].forEach(b => {
+      for(let r = b.r0; r <= b.r1; r++){
+        for(let t = b.t0; t <= b.t1; t++) has.add(r + ':' + t);
+        topTier.set(r, Math.max(topTier.get(r) || 0, b.t1));
+      }
+    });
+    function growUp(b){
+      let top = b.t1;
+      // Потолок роста — самая верхняя полка среди стеллажей этой ячейки.
+      let limit = Infinity;
+      for(let r = b.r0; r <= b.r1; r++) limit = Math.min(limit, topTier.get(r) || 0);
+      while(top + 1 <= limit){
+        let free = true;
+        for(let r = b.r0; r <= b.r1; r++){
+          if(has.has(r + ':' + (top + 1))){ free = false; break; }
+        }
+        if(!free) break;
+        top += 1;
+      }
+      return top;
+    }
+
     let cellsHtml = '';
     cellBlocks[rowNum].forEach(b => {
       if(!colOf.has(b.r0)) return;
       const addr = blockAddr(rowNum, b);
+      const tTop = growUp(b);
+      const tall = tTop > b.t1;
       const mergedClass = (b.r0 !== b.r1 || b.t0 !== b.t1) ? ' merged' : '';
-      const gridRowStart = tierCount - b.t1 + 1;
-      const gridRowSpan = b.t1 - b.t0 + 1;
+      const gridRowStart = tierCount - tTop + 1;
+      const gridRowSpan = tTop - b.t0 + 1;
       const c0 = colOf.get(b.r0), c1 = colOf.get(b.r1) || c0;
       const style = b.state === 'occupied'
         ? ` style="grid-column:${c0} / span ${c1 - c0 + 1}; grid-row:${gridRowStart} / span ${gridRowSpan};${cellPaintVars(b.fill)}"`
         : ` style="grid-column:${c0} / span ${c1 - c0 + 1}; grid-row:${gridRowStart} / span ${gridRowSpan};"`;
-      cellsHtml += `<div class="wh-cell in-grid ${b.state}${mergedClass}${b.state === 'occupied' ? fillModeClass : ''}" data-row="${rowNum}" data-id="${b.r0}" data-tier="${b.t0}" data-addr="${addr}" data-state="${b.state}" data-block-id="${b.blockId}"${style} onclick="selectCell(this)" title="${addr}"></div>`;
+      const hint = tall ? addr + ' — высокий отсек: полки над ним нет' : addr;
+      cellsHtml += `<div class="wh-cell in-grid ${b.state}${mergedClass}${tall ? ' tall' : ''}${b.state === 'occupied' ? fillModeClass : ''}" data-row="${rowNum}" data-id="${b.r0}" data-tier="${b.t0}" data-addr="${addr}" data-state="${b.state}" data-block-id="${b.blockId}"${style} onclick="selectCell(this)" title="${hint}"></div>`;
     });
 
     let labelsHtml = '';

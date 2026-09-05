@@ -578,6 +578,15 @@
     color:var(--muted);
   }
 
+  /* Высокий отсек: полки над ячейкой не поставили, и место принадлежит ей.
+     Отмечаем сдержанно — это норма склада, а не поломка. */
+  .wh-cell.tall{ border-style:solid; }
+  .wh-cell.tall::after{
+    content:''; position:absolute; left:6px; right:6px; top:5px; height:1px;
+    background:var(--line); opacity:0.5;
+  }
+  .wh-cell{ position:relative; }
+
   .wh-rack-gap{
     align-self:stretch; position:relative;
     background:repeating-linear-gradient(
@@ -1913,6 +1922,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=56" defer></script>
+<script src="cabinet_main.js?v=57" defer></script>
 </body>
 </html>
