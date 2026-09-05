@@ -574,6 +574,14 @@
   }
   .wh-collapse-btn:hover{color:var(--text); border-color:var(--accent-soft);}
 
+  /* Столбик, посчитанный по занятым местам, а не по количеству товара.
+     Полоска — чтобы его нельзя было спутать с настоящей заполненностью:
+     это разные величины, и рисовать их одинаково значит соврать. */
+  .wh-row-rect-fill.by-places{
+    fill-opacity:0.55;
+    stroke:var(--line); stroke-width:0.5;
+  }
+
   .staff-toggle{
     display:flex; align-items:center; gap:9px; cursor:pointer; user-select:none;
     padding:11px 14px; border:1px solid var(--line); border-radius:10px;
@@ -1884,6 +1892,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=53" defer></script>
+<script src="cabinet_main.js?v=54" defer></script>
 </body>
 </html>

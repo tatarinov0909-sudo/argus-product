@@ -962,15 +962,28 @@
       const fullness = blocks.length
         ? blocks.reduce((sum, b) => sum + (b.state === 'occupied' ? Number(b.fill) || 0 : 0), 0) / blocks.length
         : 0;
-      const pct = fullness / 100;
+
+      // Пока приёмка через Аргус не пошла, количеств в ячейках нет ни одного,
+      // и мерка «средняя заполненность мест» даёт ноль по всему складу:
+      // владелец видит семь одинаковых пустых столбиков, хотя товар лежит
+      // в двухстах девяти ячейках. Тогда меряем тем, что знаем достоверно, —
+      // долей занятых мест. Это ДРУГАЯ величина, поэтому и выглядит иначе:
+      // столбик в полоску, и в подсказке сказано прямо, что считается.
+      const noQty = taken > 0 && fullness === 0;
+      const shown = noQty ? (taken / blocks.length * 100) : fullness;
+      const pct = shown / 100;
       const fillH = Math.round(rowH * pct);
-      const paint = cellPaint(fullness);
+      const paint = cellPaint(shown);
       const meter = fillH > 0
-        ? `<rect class="wh-row-rect-fill" x="${xs[i]}" y="${topY + rowH - fillH}" width="${rowW}" height="${fillH}" rx="4" style="fill:${paint.edge};"/>`
+        ? `<rect class="wh-row-rect-fill${noQty ? ' by-places' : ''}" x="${xs[i]}" y="${topY + rowH - fillH}" width="${rowW}" height="${fillH}" rx="4" style="fill:${paint.edge};"/>`
         : '';
-      const titleText = blocks.length
-        ? `Ряд ${rowLabel(n)}: заполнен на ${Math.round(fullness)}%, занято мест ${taken} из ${blocks.length}`
-        : `Ряд ${rowLabel(n)}`;
+      const titleText = !blocks.length
+        ? `Ряд ${rowLabel(n)}`
+        : noQty
+          ? `Ряд ${rowLabel(n)}: занято мест ${taken} из ${blocks.length}`
+            + ` (${Math.round(shown)}%). Сколько товара в каждой — учёт не хранит,`
+            + ` появится после первой приёмки через Аргус.`
+          : `Ряд ${rowLabel(n)}: заполнен на ${Math.round(fullness)}%, занято мест ${taken} из ${blocks.length}`;
       rects += `<g onclick="focusRow(${n})"><title>${titleText}</title><rect class="wh-row-rect" id="row-rect-${n}" x="${xs[i]}" y="${topY}" width="${rowW}" height="${rowH}" rx="4"/>${meter}<text class="wh-row-num" x="${xs[i] + rowW/2}" y="${topY - 10}">${escapeHTML(String(rowLabel(n)))}</text></g>`;
       if(aisleAfter[i] && i < rowOrder.length - 1){
         const cx = xs[i] + rowW + gapAisle/2;
