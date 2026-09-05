@@ -587,6 +587,11 @@
   }
   .wh-cell{ position:relative; }
 
+  /* Полоса ряда, посчитанная по занятым местам, а не по количеству товара:
+     та же полупрозрачность, что и у столбиков на схеме, чтобы две разные
+     величины нельзя было спутать. */
+  .wh-row-group-meter-fill.by-places{ opacity:0.55; }
+
   .wh-rack-gap{
     align-self:stretch; position:relative;
     background:repeating-linear-gradient(
@@ -1922,6 +1927,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=57" defer></script>
+<script src="cabinet_main.js?v=58" defer></script>
 </body>
 </html>

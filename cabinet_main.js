@@ -1274,7 +1274,22 @@
     // штук, забит на 100% мест и почти пуст по товару. Цвет везде — на схеме,
     // в этой полосе и в самих ячейках — означает одно и то же.
     const fullness = tot ? Math.round(fillSum / tot) : 0;
-    const rowPaint = cellPaint(fullness);
+    // Та же развилка, что и на схеме сверху: пока приёмки через Аргус не было,
+    // количеств нет ни одного, и «заполнен на 0%» при шестидесяти шести
+    // занятых ячейках — не информация, а недоразумение. Тогда меряем долей
+    // занятых мест и говорим, что считаем именно её.
+    const noQty = occ > 0 && fullness === 0;
+    const shownPct = noQty ? Math.round(occ / tot * 100) : fullness;
+    const rowPaint = cellPaint(shownPct);
+    const statsText = !tot
+      ? 'ячеек нет'
+      : noQty
+        ? `занято мест ${occ} из ${tot} · ${shownPct}%`
+        : `заполнен на ${fullness}% · занято мест ${occ} из ${tot}`;
+    const statsTitle = noQty
+      ? 'Считаем занятые места: сколько товара в каждой ячейке, учёт склада'
+        + ' не хранит. Появится после первой приёмки через Аргус.'
+      : `Заполнен на ${fullness}%`;
     const editing = editingRowNum === rowNum;
 
     // Правка ячеек живёт здесь же, в панели ряда, а не в отдельном окне
@@ -1293,8 +1308,8 @@
       <div class="wh-row-group-head">
         <button class="wh-row-group-title wh-renamable" type="button" onclick="startRename('row', ${rowNum})"
                 title="Нажмите, чтобы переименовать ряд">Ряд ${escapeHTML(String(rowLabel(rowNum)))}</button>
-        <span class="wh-row-group-meter" title="Заполнен на ${fullness}%"><span class="wh-row-group-meter-fill" style="width:${fullness}%; background:${rowPaint.edge};"></span></span>
-        <span class="wh-row-group-stats">заполнен на ${fullness}% · занято мест ${occ} из ${tot}</span>
+        <span class="wh-row-group-meter" title="${statsTitle}"><span class="wh-row-group-meter-fill${noQty ? ' by-places' : ''}" style="width:${shownPct}%; background:${rowPaint.edge};"></span></span>
+        <span class="wh-row-group-stats" title="${statsTitle}">${statsText}</span>
         <button class="wh-row-edit-btn${editing ? ' active' : ''}" type="button"
                 onclick="toggleRowEdit(${rowNum})"
                 title="${editing ? 'Закончить правку ячеек' : 'Править ячейки этого ряда'}">
