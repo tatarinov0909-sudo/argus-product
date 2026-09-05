@@ -568,7 +568,7 @@
   .staff-toggle-arrow{color:var(--muted); font-size:11px; transition:transform 0.15s var(--ease);}
   .staff-toggle.open .staff-toggle-arrow{transform:rotate(90deg);}
   .staff-toggle-count{color:var(--muted);}
-  #staffRows{margin-top:10px;}
+  #staffRows, #companiesList{margin-top:10px;}
   .staff-table{background:var(--panel); border:1px solid var(--line); border-radius:12px; overflow:hidden;}
   .staff-row{
     display:grid; grid-template-columns:1fr 130px 120px 100px 90px; align-items:center; gap:10px;
@@ -1641,7 +1641,11 @@
           <input type="text" id="companyNameInput" placeholder="Название компании" onkeydown="if(event.key==='Enter') addCompany()">
           <button onclick="addCompany()">+ Добавить компанию</button>
         </div>
-        <div id="companiesList"></div>
+        <div class="staff-toggle" id="companiesToggle" onclick="toggleCompaniesList()">
+          <span class="staff-toggle-arrow" id="companiesToggleArrow">▸</span>
+          <span id="companiesToggleLabel">Компании</span>
+        </div>
+        <div id="companiesList" hidden></div>
 
         <div class="staff-head" style="margin-top:34px;">
           <div>
@@ -1864,6 +1868,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=48" defer></script>
+<script src="cabinet_main.js?v=49" defer></script>
 </body>
 </html>

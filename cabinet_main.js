@@ -225,15 +225,20 @@
     }).join('');
   }
 
-  function toggleStaffList(open){
-    const rows = document.getElementById('staffRows');
-    const btn = document.getElementById('staffToggle');
+  // Один сворачиватель на оба списка: работников и продавцов. Второй такой же
+  // функцией они бы разъехались в поведении при первой же правке.
+  function toggleList(rowsId, btnId, open){
+    const rows = document.getElementById(rowsId);
+    const btn = document.getElementById(btnId);
     if(!rows || !btn) return;
     const show = (open === undefined) ? rows.hidden : !!open;
     rows.hidden = !show;
     btn.classList.toggle('open', show);
   }
+  function toggleStaffList(open){ toggleList('staffRows', 'staffToggle', open); }
+  function toggleCompaniesList(open){ toggleList('companiesList', 'companiesToggle', open); }
   window.toggleStaffList = toggleStaffList;
+  window.toggleCompaniesList = toggleCompaniesList;
 
   async function addStaffMember(){
     const input = document.getElementById('staffNameInput');
@@ -282,6 +287,17 @@
 
   function renderCompaniesList(){
     const wrap = document.getElementById('companiesList');
+    if(!wrap) return;
+    const label = document.getElementById('companiesToggleLabel');
+    if(label){
+      // Не «сколько компаний», а сколько из них реально могут войти: продавец
+      // с отозванным ключом в кабинет не попадёт, и это стоит видеть не
+      // разворачивая список.
+      const withKey = companies.filter(c => c.keys.some(k => k.active)).length;
+      label.innerHTML = 'Компании <span class="staff-toggle-count">· ' + companies.length
+        + (companies.length && withKey < companies.length
+            ? ', с доступом ' + withKey : '') + '</span>';
+    }
     if(companies.length === 0){
       wrap.innerHTML = '<div class="staff-empty">Компаний пока нет — добавьте первую выше.</div>';
       return;
@@ -318,6 +334,7 @@
       await apiFetch('/api/sellers/companies', {method:'POST', body:{name}});
       input.value = '';
       await loadCompanies();
+      toggleCompaniesList(true);
       showWhToast('Компания «' + name + '» добавлена.');
     } catch(e){
       showWhToast('Не удалось добавить компанию: ' + e.message);
@@ -328,6 +345,7 @@
     try{
       const key = await apiFetch('/api/sellers/companies/' + companyId + '/keys', {method:'POST'});
       await loadCompanies();
+      toggleCompaniesList(true);
       showWhToast('Ключ ' + key.key_code + ' выдан.');
     } catch(e){
       showWhToast('Не удалось выдать ключ: ' + e.message);
