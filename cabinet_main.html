@@ -585,12 +585,17 @@
      ярусов, считая от низа ячейки. Ярус 32px, поэтому линия повторяется
      каждые 32px и встаёт правильно при любой высоте отсека: и когда
      проглочен один ярус, и когда три. */
-  .wh-cell.tall{
-    border-style:solid;
-    background-image:repeating-linear-gradient(to top,
+  /* Рисуем ОТДЕЛЬНЫМ слоем поверх ячейки, а не её фоном: ниже по файлу
+     .wh-cell.empty и .wh-cell.occupied задают background целиком, коротким
+     свойством, и любая краска отсюда стиралась молча. Псевдоэлементу порядок
+     правил не важен. */
+  .wh-cell.tall::after{
+    content:''; position:absolute; inset:0; pointer-events:none;
+    border-radius:inherit;
+    background:repeating-linear-gradient(to top,
       transparent 0 30px, var(--yellow) 30px 32px);
+    opacity:0.9;
   }
-  .wh-cell{ position:relative; }
 
   /* Полоса ряда, посчитанная по занятым местам, а не по количеству товара:
      та же полупрозрачность, что и у столбиков на схеме, чтобы две разные
@@ -1952,6 +1957,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=60" defer></script>
+<script src="cabinet_main.js?v=61" defer></script>
 </body>
 </html>
