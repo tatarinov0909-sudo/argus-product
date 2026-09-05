@@ -2,7 +2,7 @@
   const TOKEN = localStorage.getItem('argus_token');
   const ROLE = localStorage.getItem('argus_role');
   if(!TOKEN || ROLE !== 'owner'){
-    window.location.href = 'index.html';
+    window.location.href = 'login.html';
     throw new Error('not authenticated');
   }
 
@@ -27,7 +27,7 @@
     if(res.status === 401){
       localStorage.removeItem('argus_token');
       localStorage.removeItem('argus_role');
-      window.location.href = 'index.html';
+      window.location.href = 'login.html';
       throw new Error('сессия истекла');
     }
     const data = await res.json().catch(() => null);
@@ -38,7 +38,7 @@
   function logout(){
     localStorage.removeItem('argus_token');
     localStorage.removeItem('argus_role');
-    window.location.href = 'index.html';
+    window.location.href = 'login.html';
   }
 
   const authPayload = decodeJwtPayload(TOKEN);
