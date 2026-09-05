@@ -1589,6 +1589,11 @@
     const digits = String(raw).replace(/[^0-9]/g, '');
     if(digits === '') return; // человек стирает поле, чтобы набрать заново
     stepQty(Number(digits) - currentQty);
+    // stepQty в некоторых состояниях выходит раньше, чем перерисует поле
+    // (например, пока не пришла подсказка по отбору). Тогда на экране осталось
+    // бы набранное число, а на сервер ушло старое — молча и не в ту сторону.
+    const el = document.getElementById('qtyValue');
+    if(el && el.value !== String(currentQty)) el.value = currentQty;
   }
 
   /* ---------- Секундомер ----------
@@ -1640,6 +1645,7 @@
       cellLabel: null,
       options: [],
       loading: true,
+      error: null,
     };
     openJob('kitScreen');
     renderKitScreen();
@@ -1648,6 +1654,10 @@
         + encodeURIComponent(line.sku) + '&companyId=' + encodeURIComponent(line.companyId));
       kitState.options = r.options || [];
     } catch(e){
+      // Оборвавшаяся связь и полный склад выглядят одинаково только в коде.
+      // Для работника это разные вещи: в первом случае надо повторить, во
+      // втором — освободить ячейку.
+      kitState.error = e.message;
       kitState.options = [];
     }
     kitState.loading = false;
@@ -1657,6 +1667,26 @@
       kitState.cellBlockId = kitState.options[0].blockId;
       kitState.cellLabel = kitState.options[0].label;
     }
+    renderKitScreen();
+  }
+
+  // Повтор после сорванной связи: состояние уже собрано, нужен только
+  // повторный подбор ячейки.
+  async function retryKitCells(){
+    if(!kitState) return;
+    const line = kitState.line;
+    kitState.error = null;
+    kitState.loading = true;
+    renderKitScreen();
+    try{
+      const r = await apiFetch('/api/agents/kladovshchik/suggest-cell?sku='
+        + encodeURIComponent(line.sku) + '&companyId=' + encodeURIComponent(line.companyId));
+      kitState.options = r.options || [];
+    } catch(e){
+      kitState.error = e.message;
+      kitState.options = [];
+    }
+    kitState.loading = false;
     renderKitScreen();
   }
 
@@ -1705,6 +1735,9 @@
     let cells;
     if(kitState.loading){
       cells = '<div class="job-empty">Подбираю ячейку…</div>';
+    } else if(kitState.error){
+      cells = '<div class="job-empty">Не удалось подобрать ячейку: ' + escapeHTML(kitState.error)
+        + '<div class="pick-kit-btn" style="margin-top:12px;" onclick="retryKitCells()">Повторить</div></div>';
     } else if(kitState.options.length === 0){
       cells = '<div class="job-empty">Свободной ячейки не нашлось — освободите место и вернитесь.</div>';
     } else {
@@ -1742,7 +1775,7 @@
       + '<button class="confirm-btn" id="kitConfirm" ' + (ready ? '' : 'disabled ')
       +   'onclick="confirmKit()">'
       +   (ready
-        ? 'Собрал ' + kitState.qty + ' — положил в ' + escapeHTML(kitState.cellLabel)
+        ? 'Собрать ' + kitState.qty + ' — в ячейку ' + escapeHTML(kitState.cellLabel)
         : 'Выберите ячейку')
       + '</button>';
   }
@@ -1774,10 +1807,10 @@
     } catch(e){
       // Сервер отказал — почти всегда потому, что компонент кто-то забрал,
       // пока работник шёл. Показываем его слова целиком: там названо, чего
-      // именно не хватило.
-      btn.disabled = false;
+      // именно не хватило. И обязательно перечитываем лист: остатки на экране
+      // после такого отказа уже неправда, а работник по ним решает, что делать.
       showToast(e.message);
-      renderKitScreen();
+      openPickList();
     }
   }
 
@@ -1851,9 +1884,15 @@
           + '<div class="pick-kit-btn" onclick="openKitAssembly(' + index + ')">Собрать набор →</div>'
           + '</div>';
       } else if(l.shortfall > 0 && l.kit){
+        // Работнику нужно название, а не код: «кончился PB000021342» ему
+        // ничего не говорит и заставляет идти спрашивать.
+        const outOf = l.kit.limitedBy.map(function(sku){
+          const c = l.kit.components.find(function(x){ return x.sku === sku; });
+          return c ? c.name : sku;
+        });
         short = '<div class="pick-short">Не хватает ' + l.shortfall
           + ' шт. Это набор, но собрать не из чего — кончился '
-          + escapeHTML(l.kit.limitedBy.join(', ')) + '.</div>';
+          + escapeHTML(outOf.join(', ')) + '.</div>';
       } else if(l.shortfall > 0){
         short = '<div class="pick-short">На складе не хватает ' + l.shortfall
           + ' шт — соберите сколько есть.</div>';
