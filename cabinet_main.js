@@ -1182,18 +1182,14 @@
     // Первая версия клала его в ту же колонку, что и следующий стеллаж, и он
     // просто уходил под неё: свёрнутый ряд выглядел сплошным, а подписи
     // прыгали через номер без всякого объяснения.
-    // Имя яруса берём из имени ячейки: «07-10-022» — средняя группа. Свои
-    // координаты тут не годятся, потому что ярус 10 стоит на карте вторым:
-    // без подписи человек смотрит на полосу и не знает, что это за полка.
-    const tierName = new Map();
-    cellBlocks[rowNum].forEach(b => {
-      if(tierName.has(b.t0) || !b.label) return;
-      const parts = String(b.label).split('-');
-      if(parts.length === 3) tierName.set(b.t0, parts[1]);
-    });
-
     const colOf = new Map();
-    const colWidths = ['46px'];
+    // Первая колонка — номера ярусов, счётом снизу вверх: 1, 2, 3. Вторая
+    // полка снизу и есть вторая, как бы её ни назвали в 1С. Номер «10» у
+    // одного из ярусов — след того, что его доставили позже, когда привезли
+    // балки; к устройству склада это отношения не имеет. Настоящее имя не
+    // теряется — оно на самой ячейке («07-10-022»), и работник сверяет
+    // наклейку, а не ярус.
+    const colWidths = ['34px'];
     let col = 1, prev = null;
     const gaps = [];
     visible.forEach(r => {
@@ -1224,9 +1220,7 @@
 
     let labelsHtml = '';
     for(let t = 1; t <= tierCount; t++){
-      const nm = tierName.get(t);
-      labelsHtml += `<div class="wh-tier-label" style="grid-column:1; grid-row:${tierCount - t + 1};">`
-        + `${escapeHTML(nm ? String(nm) : String(t))}</div>`;
+      labelsHtml += `<div class="wh-tier-label" style="grid-column:1; grid-row:${tierCount - t + 1};">${t}</div>`;
     }
     visible.forEach(r => {
       const c = colOf.get(r);

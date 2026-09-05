@@ -570,6 +570,14 @@
     color:var(--muted); letter-spacing:0.3px;
   }
 
+  /* Номер яруса — просто счёт снизу вверх. Схема показывает устройство
+     склада, а не нумерацию, доставшуюся от 1С. */
+  .wh-tier-label{
+    display:flex; align-items:center; justify-content:flex-end;
+    padding-right:8px; font-family:var(--mono); font-size:11px;
+    color:var(--muted);
+  }
+
   .wh-rack-gap{
     align-self:stretch; position:relative;
     background:repeating-linear-gradient(
