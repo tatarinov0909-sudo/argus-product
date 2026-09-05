@@ -561,6 +561,15 @@
   /* Разрыв на месте свёрнутых стеллажей: без него схлопнутый ряд выглядит
      как сплошная стенка, и человек промахнётся мимо полки, решив, что
      соседние ячейки стоят вплотную. */
+  /* Номер яруса так, как он назван в 1С. Не по порядку сверху вниз:
+     вставной ярус 10 стоит вторым снизу, и подпись «2» отправила бы
+     человека не к той полке. */
+  .wh-tier-label{
+    display:flex; align-items:center; justify-content:flex-end;
+    padding-right:8px; font-family:var(--mono); font-size:11px;
+    color:var(--muted); letter-spacing:0.3px;
+  }
+
   .wh-rack-gap{
     align-self:stretch; position:relative;
     background:repeating-linear-gradient(
@@ -1896,6 +1905,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=55" defer></script>
+<script src="cabinet_main.js?v=56" defer></script>
 </body>
 </html>
