@@ -161,11 +161,20 @@
 
   let staffMembers = [];
 
+  // Причину неудачи пишем ТУДА, ГДЕ должны быть данные, а не во всплывашку:
+  // она гаснет через три секунды, и человек остаётся с пустым экраном без
+  // единого объяснения — ровно так «сотрудников не видно» и выглядело.
+  let staffError = '';
   async function loadStaff(){
+    staffError = '';
     try{
       staffMembers = await apiFetch('/api/staff');
+      if(!Array.isArray(staffMembers)){
+        staffError = 'Сервер вернул не список, а ' + typeof staffMembers;
+        staffMembers = [];
+      }
     } catch(e){
-      showWhToast('Не удалось загрузить сотрудников: ' + e.message);
+      staffError = e.message;
       staffMembers = [];
     }
     renderStaffTable();
@@ -173,6 +182,17 @@
 
   function renderStaffTable(){
     const wrap = document.getElementById('staffRows');
+    if(!wrap){
+      // Раньше здесь молча падало исключение: ни строк, ни пустого состояния,
+      // ни ошибки — просто пустое место под заголовком.
+      showWhToast('Некуда вывести сотрудников: страница загрузилась не полностью. Обновите через Ctrl+Shift+R.');
+      return;
+    }
+    if(staffError){
+      wrap.innerHTML = '<div class="staff-empty">Не удалось загрузить сотрудников: '
+        + staffError + '</div>';
+      return;
+    }
     if(staffMembers.length === 0){
       wrap.innerHTML = '<div class="staff-empty">Сотрудников пока нет — добавьте первого выше.</div>';
       return;
