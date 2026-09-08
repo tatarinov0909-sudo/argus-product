@@ -500,6 +500,7 @@
 
   /* Экран "Сотрудники" */
   .staff-wrap{flex:1; overflow-y:auto; padding:24px; display:flex; flex-direction:column; gap:20px;}
+  .staff-wrap > *{max-width:1080px; width:100%;}
 
   /* Экран "Подключение 1С" */
   .oc-wrap{flex:1; overflow-y:auto; padding:24px; max-width:640px;}
@@ -1309,6 +1310,86 @@
   .inv-card-actions{display:flex; gap:10px; justify-content:flex-end; margin-top:14px;}
   .inv-btn{background:var(--accent); color:#182422; border:none; border-radius:8px; padding:9px 15px; font-size:12.5px; font-weight:700; cursor:pointer;}
   .inv-btn.danger{background:none; border:1px solid var(--line); color:var(--muted);}
+  /* Числовое поле. Крутилки со стрелками браузер рисует своим спрайтом —
+     в тёмной теме он светлый и вылезает за скруглённую рамку. Убираем их
+     разом для всех числовых полей кабинета, а не на одном экране: поля
+     появятся и на других, и чинить это второй раз незачем. Число можно
+     набрать или стереть — стрелки для двузначных значений не нужны. */
+  input[type=number]{appearance:textfield; -moz-appearance:textfield;}
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none; margin:0;}
+  .num-field{
+    width:84px; text-align:center; background:var(--panel); border:1px solid var(--line);
+    border-radius:8px; padding:9px 10px; color:var(--text); flex:0 0 auto;
+    font-family:var(--mono); font-size:14px; font-variant-numeric:tabular-nums;
+  }
+  .num-field:focus{outline:none; border-color:var(--accent);}
+
+  /* Полоса выполнения. Проценты настоящие: знаменатель — число шагов, которые
+     мы действительно собираемся сделать, числитель — сколько закрыто. Полоса,
+     которая ползёт сама по таймеру, врёт о времени и приучает не верить
+     экрану; лучше честные рывки по 20%, чем ровная ложь. */
+  .wh-prog{background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:14px 16px;}
+  .wh-prog-top{display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-bottom:9px;}
+  .wh-prog-label{font-size:13px;}
+  .wh-prog-pct{font-family:var(--mono); font-size:13px; color:var(--accent-2); font-variant-numeric:tabular-nums;}
+  .wh-prog-track{height:6px; border-radius:4px; background:var(--line-soft); overflow:hidden;}
+  .wh-prog-fill{display:block; height:100%; width:0; border-radius:4px;
+    background:linear-gradient(90deg, var(--accent), var(--accent-2)); transition:width .3s ease;}
+  .wh-prog-steps{margin-top:8px; font-size:11.5px; color:var(--muted); font-family:var(--mono);}
+  .wh-prog.failed .wh-prog-fill{background:var(--terracotta);}
+  .wh-prog.failed .wh-prog-pct{color:var(--terracotta);}
+
+  /* Клиент и его площадка — одной карточкой. Раньше экран был устроен вокруг
+     подключения: форма занимала половину, а клиенты шли двумя строчками
+     таблицы каждый. Подключение случается один раз в жизни клиента, а
+     смотрят на этот экран каждый день — значит главным должен быть клиент. */
+  .mp-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(310px, 1fr)); gap:12px;}
+  .mp-card{background:var(--panel-2); border:1px solid var(--line); border-radius:12px;
+    padding:14px 15px; display:flex; flex-direction:column; gap:11px;}
+  .mp-card.live{border-color:var(--accent-soft);}
+  .mp-card.none{background:transparent; border-style:dashed;}
+  .mp-card-top{display:flex; align-items:flex-start; justify-content:space-between; gap:10px;}
+  .mp-card-name{font-size:14px; font-weight:600; line-height:1.3;}
+  .mp-card-sub{font-size:11.5px; color:var(--muted); margin-top:3px;}
+  .mp-chip{font-size:10.5px; padding:3px 8px; border-radius:20px; border:1px solid var(--line);
+    color:var(--muted); white-space:nowrap;}
+  .mp-chip.live{border-color:var(--green); color:var(--green); background:var(--green-soft);}
+  .mp-chip.stale{border-color:var(--yellow); color:var(--yellow); background:var(--yellow-soft);}
+  .mp-facts{display:flex; gap:20px;}
+  .mp-fact b{display:block; font-family:var(--mono); font-size:19px; line-height:1.15;}
+  .mp-fact b.zero{color:var(--muted);}
+  .mp-fact b.hot{color:var(--accent-2);}
+  .mp-fact span{font-size:10.5px; color:var(--muted);}
+  .mp-card-acts{display:flex; gap:14px; flex-wrap:wrap; margin-top:auto;
+    padding-top:10px; border-top:1px solid var(--line-soft);}
+  .mp-act{font-size:12px; color:var(--accent-2); cursor:pointer;}
+  .mp-act:hover{text-decoration:underline;}
+  .mp-act.warn{color:var(--terracotta);}
+  .mp-fold{background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:0 16px;}
+  .mp-fold summary{cursor:pointer; padding:14px 0; font-size:13px; font-weight:600; list-style:none;}
+  .mp-fold summary::-webkit-details-marker{display:none;}
+  .mp-fold summary::before{content:'+  '; color:var(--accent); font-family:var(--mono);}
+  .mp-fold[open] summary::before{content:'\2212  ';}
+  .mp-fold-body{padding-bottom:16px;}
+  .mp-field{width:100%; box-sizing:border-box; background:var(--panel); border:1px solid var(--line);
+    border-radius:8px; padding:9px 10px; color:var(--text); font-family:var(--sans); font-size:13px;}
+
+  /* Совет по частоте пересчёта. Считается по этому же складу арифметикой,
+     а не языковой моделью: причины показываются рядом с числами, чтобы
+     владелец мог их проверить и не соглашаться. */
+  .inv-advice{background:var(--panel-2); border:1px solid var(--accent-soft); border-radius:10px; padding:16px;}
+  .inv-advice-head{display:flex; justify-content:space-between; align-items:center;
+    gap:12px; flex-wrap:wrap; margin-bottom:12px;}
+  .inv-advice-title{font-size:13.5px; font-weight:600;}
+  .inv-advice-nums{display:flex; gap:22px; flex-wrap:wrap; margin-bottom:12px;}
+  .inv-advice-num b{display:block; font-family:var(--mono); font-size:20px; line-height:1.15; color:var(--accent-2);}
+  .inv-advice-num span{font-size:11px; color:var(--muted);}
+  .inv-advice ul{margin:0; padding-left:17px; font-size:12.5px; color:var(--muted); line-height:1.65;}
+  .inv-advice-same{font-size:12px; color:var(--green);}
+
+  .inv-set-panel{background:var(--panel-2); border:1px solid var(--line); border-radius:10px;
+    padding:16px; max-width:600px;}
   .inv-set-row{display:flex; justify-content:space-between; align-items:center; gap:16px; padding:11px 0; border-bottom:1px solid var(--line);}
   .inv-set-row:last-of-type{border-bottom:0;}
   .inv-set-row b{font-size:13.5px; font-weight:600;}
@@ -1833,18 +1914,19 @@
             <div class="staff-sub">Счёт отнимает смену у сборки, поэтому пересчёт должен быть редким. Слишком частый перестают делать честно.</div>
           </div>
         </div>
-        <div style="background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:16px;">
+        <div id="invAdvice"></div>
+        <div class="inv-set-panel">
           <div class="inv-set-row">
             <div><b>Одну ячейку не считать чаще, чем раз в</b><span>дней</span></div>
-            <input type="number" id="invRecountDays" min="1" max="3650" style="background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:9px 10px; color:var(--text); font-family:var(--sans); font-size:13px; width:90px;">
+            <input type="number" class="num-field" id="invRecountDays" min="1" max="3650">
           </div>
           <div class="inv-set-row">
             <div><b>Ячеек за один заход</b><span>сколько уходит работнику</span></div>
-            <input type="number" id="invCellsPerRun" min="1" max="200" style="background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:9px 10px; color:var(--text); font-family:var(--sans); font-size:13px; width:90px;">
+            <input type="number" class="num-field" id="invCellsPerRun" min="1" max="200">
           </div>
           <div class="inv-set-row">
             <div><b>Пауза между заходами</b><span>дней</span></div>
-            <input type="number" id="invMinDays" min="0" max="365" style="background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:9px 10px; color:var(--text); font-family:var(--sans); font-size:13px; width:90px;">
+            <input type="number" class="num-field" id="invMinDays" min="0" max="365">
           </div>
           <button type="button" onclick="saveInvSettings()" style="margin-top:6px; background:var(--accent); color:#182422; border:none; border-radius:8px; padding:10px 16px; font-size:13px; font-weight:700; cursor:pointer;">Сохранить</button>
         </div>
@@ -1860,8 +1942,12 @@
               по ней нельзя решить, чем заняться; «у Слим Тим набралось 153» — можно.
               Выберите продавца и отправьте его заказы на сборку одной кнопкой.</div>
           </div>
-          <button class="wh-onboarding-btn" type="button" onclick="loadMpOrders()">Обновить</button>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button class="wh-onboarding-btn" type="button" onclick="pullOrdersFromMp()">Забрать новые с площадок</button>
+            <button class="wh-onboarding-btn" type="button" onclick="loadMpOrders()">Обновить</button>
+          </div>
         </div>
+        <div id="ordersProgress"></div>
         <div id="ordersContent"><div class="staff-empty">Загружаем…</div></div>
       </div>
     </div>
@@ -1870,9 +1956,10 @@
       <div class="staff-wrap">
         <div class="staff-head">
           <div>
-            <div class="staff-title">Площадки</div>
-            <div class="staff-sub">Аргус сам забирает сборочные задания с маркетплейса и заводит их заказами склада. В кабинете продавца при этом не меняется ничего: Аргус только читает.</div>
+            <div class="staff-title">Клиенты и площадки</div>
+            <div class="staff-sub">Все ваши клиенты и то, что у каждого с маркетплейсом. Аргус сам забирает сборочные задания и заводит их заказами склада; в кабинете продавца при этом не меняется ничего — Аргус только читает.</div>
           </div>
+          <button class="wh-onboarding-btn" type="button" onclick="pullAllMarketplaces()">Забрать заказы у всех</button>
         </div>
 
         <div class="oc-status-bar" id="mpStatusBar">
@@ -1883,26 +1970,24 @@
           </div>
         </div>
 
+        <div id="mpProgress"></div>
         <div id="mpList"></div>
         <div id="mpSyncResult"></div>
 
-        <div class="staff-head" style="margin-top:34px;">
-          <div>
-            <div class="staff-title">Подключить продавца</div>
-            <div class="staff-sub">Нужен только ключ API продавца и его согласие. Ключ сохраняется зашифрованным и обратно не показывается никому — ни здесь, ни продавцу.</div>
+        <details class="mp-fold" id="mpConnectFold">
+          <summary>Подключить площадку клиенту</summary>
+          <div class="mp-fold-body">
+            <div class="staff-sub" style="margin-bottom:12px;">Нужен только ключ API продавца и его согласие. Ключ сохраняется зашифрованным и обратно не показывается никому — ни здесь, ни продавцу.</div>
+            <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+              <select id="mpCompanySelect" class="mp-field" style="flex:1; min-width:180px; width:auto;"></select>
+              <select id="mpMarketSelect" class="mp-field" style="flex:0 0 190px; width:auto;">
+                <option value="wb">Wildberries</option>
+              </select>
+            </div>
+            <textarea id="mpTokenInput" class="mp-field" rows="3" placeholder="Ключ API продавца — длинная строка вида eyJhbGciOiJFUzI1NiIs…" style="resize:vertical; margin-bottom:10px;"></textarea>
+            <button type="button" onclick="connectMarketplace()" style="background:var(--accent); color:#182422; border:none; border-radius:8px; padding:10px 16px; font-size:13px; font-weight:700; cursor:pointer;">Подключить</button>
           </div>
-        </div>
-
-        <div style="background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px;">
-          <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
-            <select id="mpCompanySelect" style="flex:1; min-width:180px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:9px 10px; color:var(--text); font-family:var(--sans); font-size:13px;"></select>
-            <select id="mpMarketSelect" style="flex:0 0 190px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:9px 10px; color:var(--text); font-family:var(--sans); font-size:13px;">
-              <option value="wb">Wildberries</option>
-            </select>
-          </div>
-          <textarea id="mpTokenInput" rows="3" placeholder="Ключ API продавца — длинная строка вида eyJhbGciOiJFUzI1NiIs…" style="width:100%; box-sizing:border-box; resize:vertical; margin-bottom:10px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:9px 10px; color:var(--text); font-family:var(--sans); font-size:13px;"></textarea>
-          <button type="button" onclick="connectMarketplace()" style="background:var(--accent); color:#182422; border:none; border-radius:8px; padding:10px 16px; font-size:13px; font-weight:700; cursor:pointer;">Подключить</button>
-        </div>
+        </details>
 
         <div class="oc-note">Аргус спрашивает у площадки только сборочные задания и список складов продавца. Карточки, цены, реклама и аналитика не читаются. Изменить на площадке Аргус не может ничего — такой возможности в нём просто нет.</div>
       </div>
@@ -2010,6 +2095,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=64" defer></script>
+<script src="cabinet_main.js?v=65" defer></script>
 </body>
 </html>

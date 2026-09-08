@@ -461,8 +461,76 @@
     if(mins < 60) return mins + ' ' + pluralRu(mins, 'минуту', 'минуты', 'минут') + ' назад';
     const hours = Math.round(mins / 60);
     if(hours < 24) return hours + ' ' + pluralRu(hours, 'час', 'часа', 'часов') + ' назад';
-    return then.toLocaleString('ru-RU');
+    const days = Math.round(hours / 24);
+    if(days <= 30) return days + ' ' + pluralRu(days, 'день', 'дня', 'дней') + ' назад';
+    return then.toLocaleDateString('ru-RU');
   }
+
+  // Дата без часов: «с 8 сент.» отвечает на вопрос «давно ли лежит», а
+  // «3 часа назад» — нет, если речь про третий день.
+  function fmtDay(iso){
+    if(!iso) return '';
+    return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+  }
+
+  // Полоса выполнения с настоящими процентами.
+  //
+  // Знаменатель — число шагов, которые мы правда собираемся сделать; процент
+  // двигается на закрытом шаге, а не на начатом. Полоса, ползущая по таймеру,
+  // врёт о времени и приучает не верить экрану: лучше честные рывки, чем
+  // ровная ложь. Поэтому здесь нельзя показать 1%, 2%, 3% на трёх шагах —
+  // будет 0, 33, 67, 100, и это правда.
+  function whProgress(hostId, total, firstLabel){
+    const host = document.getElementById(hostId);
+    if(!host) return { step(){}, fail(){}, finish(){} };
+    let done = 0;
+    host.innerHTML = '<div class="wh-prog">'
+      + '<div class="wh-prog-top"><div class="wh-prog-label"></div><div class="wh-prog-pct">0%</div></div>'
+      + '<div class="wh-prog-track"><i class="wh-prog-fill"></i></div>'
+      + '<div class="wh-prog-steps"></div></div>';
+    const box = host.querySelector('.wh-prog');
+    const label = box.querySelector('.wh-prog-label');
+    const pct = box.querySelector('.wh-prog-pct');
+    const fill = box.querySelector('.wh-prog-fill');
+    const steps = box.querySelector('.wh-prog-steps');
+    function paint(text){
+      const share = total > 0 ? Math.round(done / total * 100) : 0;
+      if(text) label.textContent = text;
+      pct.textContent = share + '%';
+      fill.style.width = share + '%';
+      // «Сделано N из M», а не «шаг N»: рядом стоит процент, и эти два числа
+      // обязаны говорить одно и то же. «Шаг 3 из 3» при 67% выглядит как
+      // ошибка счёта, даже когда оба верны по-своему.
+      steps.textContent = 'сделано ' + done + ' из ' + total;
+    }
+    paint(firstLabel || 'Начинаем…');
+    return {
+      step(text){ done = Math.min(total, done + 1); paint(text); },
+      // Упало — полоса всё равно доходит до конца: шаги-то сделаны, просто
+      // часть работы не удалась. Красный цвет и текст говорят об этом яснее,
+      // чем полоса, застывшая на 67% без объяснения.
+      fail(text){ box.classList.add('failed'); done = total; paint(text); },
+      finish(text){
+        done = total; paint(text || 'Готово');
+        // Полоса не убирается мгновенно: человек должен успеть увидеть,
+        // что дошло до конца, а не заметить исчезновение краем глаза.
+        setTimeout(() => { if(host.firstChild === box) host.innerHTML = ''; }, 2200);
+      },
+    };
+  }
+
+  // Сбой, о котором иначе никто не узнал бы.
+  //
+  // Экран «Заказы с МП» неделю показывал «Загружаем…»: запрос проходил, а
+  // отрисовка падала на функции, которой не существовало. Падение случилось
+  // после try/catch загрузчика, поэтому обещание просто отклонялось в
+  // тишине — ни ошибки на экране, ни строчки в консоли для владельца.
+  // Один обработчик на весь кабинет: любой такой сбой теперь виден.
+  window.addEventListener('unhandledrejection', (e) => {
+    const msg = e && e.reason && e.reason.message ? e.reason.message : 'неизвестная ошибка';
+    if(msg === 'сессия истекла') return;
+    showWhToast('Сбой в кабинете: ' + msg);
+  });
 
   async function load1CStatus(manual){
     try{
@@ -3197,59 +3265,140 @@
     select.innerHTML = companies.map(c => `<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('');
   }
 
+  // Экран собирается из трёх источников: клиенты, их ключи площадок и то,
+  // сколько заказов у каждого накопилось. Без третьего экран отвечает на
+  // вопрос «подключено ли», а владельцу каждый день нужен другой — «у кого
+  // сколько лежит».
   async function loadMarketplaces(){
-    try{
-      marketplaces = await apiFetch('/api/marketplaces');
-    } catch(e){
-      marketplaces = [];
-      showWhToast('Не удалось загрузить площадки: ' + e.message);
-    }
+    const [mps, pend] = await Promise.all([
+      apiFetch('/api/marketplaces').catch((e) => {
+        showWhToast('Не удалось загрузить площадки: ' + e.message);
+        return [];
+      }),
+      apiFetch('/api/supplies/pending').catch(() => []),
+    ]);
+    marketplaces = mps || [];
+    mpPending = pend || [];
+    if(companies.length === 0) await loadCompanies();
     renderMarketplaces();
   }
+
+  let mpPending = [];
+
+  // Связь считается живой по дате последнего ответа площадки, а не по факту
+  // подключения: ключ мог протухнуть, и снаружи это выглядит как затишье.
+  // Один такой ключ у нас уже умер молча, поэтому «подключено» отдельно от
+  // «отвечает».
+  function mpState(cred){
+    if(!cred) return { css: 'none', chip: '', chipCss: '', word: 'площадка не подключена' };
+    const ms = cred.lastUsedAt ? Date.now() - new Date(cred.lastUsedAt).getTime() : null;
+    if(ms === null) return { css: '', chip: 'связи не было', chipCss: 'stale', word: 'подключено, связи ещё не было' };
+    if(ms < 60 * 60 * 1000) return { css: 'live', chip: 'на связи', chipCss: 'live', word: 'связь ' + formatLastSeen(cred.lastUsedAt) };
+    return { css: '', chip: 'молчит', chipCss: 'stale', word: 'последняя связь ' + formatLastSeen(cred.lastUsedAt) };
+  }
+
+  function renderMpCards(){
+    const list = document.getElementById('mpList');
+    if(!list) return;
+    if(companies.length === 0){
+      list.innerHTML = '<div class="staff-empty">Клиентов пока нет. Добавьте продавца на экране «Сотрудники» — площадку можно подключить сразу после этого.</div>';
+      return;
+    }
+    const cards = companies.map((c) => {
+      const cred = marketplaces.find((m) => m.companyId === c.id) || null;
+      const pend = mpPending.find((x) => x.companyId === c.id) || null;
+      const st = mpState(cred);
+      const orders = pend ? pend.orders : 0;
+      const units = pend ? pend.units : 0;
+      const hasKey = c.keys.some((k) => k.active);
+      const acts = cred
+        ? '<span class="mp-act" onclick="syncMarketplace(\'' + c.id + '\')">Забрать заказы</span>'
+          + '<span class="mp-act" onclick="checkMarketplace(\'' + c.id + '\')">Проверить связь</span>'
+          + '<span class="mp-act warn" onclick="disconnectMarketplace(\'' + c.id + '\', \''
+          + cred.marketplace + '\')">Отключить</span>'
+        : '<span class="mp-act" onclick="connectMpFor(\'' + c.id + '\')">Подключить площадку</span>';
+      return '<div class="mp-card ' + st.css + '">'
+        + '<div class="mp-card-top">'
+        +   '<div><div class="mp-card-name">' + escapeHTML(c.name) + '</div>'
+        +   '<div class="mp-card-sub">' + (cred ? escapeHTML(mpTitle(cred.marketplace)) + ' · ' : '')
+        +     st.word + '</div></div>'
+        +   (st.chip ? '<div class="mp-chip ' + st.chipCss + '">' + st.chip + '</div>' : '')
+        + '</div>'
+        + (cred
+            ? '<div class="mp-facts">'
+              + '<div class="mp-fact"><b class="' + (orders > 0 ? 'hot' : 'zero') + '">' + orders
+              +   '</b><span>' + pluralRu(orders, 'заказ ждёт', 'заказа ждут', 'заказов ждут') + '</span></div>'
+              + '<div class="mp-fact"><b class="' + (units > 0 ? '' : 'zero') + '">'
+              +   units.toLocaleString('ru-RU') + '</b><span>штук в них</span></div>'
+              + (pend && pend.oldest
+                  ? '<div class="mp-fact"><b>' + escapeHTML(fmtDay(pend.oldest))
+                    + '</b><span>самый старый</span></div>'
+                  : '')
+              + '</div>'
+            : '<div class="mp-card-sub">' + (hasKey
+                ? 'Кабинет продавца выдан — клиент видит свой остаток. Заказы с маркетплейса пока не приходят.'
+                : 'Ни кабинета, ни площадки. Клиент есть только в накладных.') + '</div>')
+        + '<div class="mp-card-acts">' + acts + '</div>'
+        + '</div>';
+    });
+    // Сначала те, у кого лежат заказы, потом подключённые, потом остальные:
+    // экран должен открываться на том, чем надо заняться.
+    const weight = (c) => {
+      const pend = mpPending.find((x) => x.companyId === c.id);
+      if(pend && pend.orders > 0) return 0;
+      if(marketplaces.some((m) => m.companyId === c.id)) return 1;
+      return 2;
+    };
+    const order = companies.map((c, i) => ({ i, w: weight(c) }))
+      .sort((a, b) => a.w - b.w || a.i - b.i);
+    list.innerHTML = '<div class="mp-grid">' + order.map((o) => cards[o.i]).join('') + '</div>';
+  }
+
+  // Подключить конкретному клиенту: разворачиваем форму и подставляем его,
+  // чтобы не искать имя в списке из тридцати.
+  function connectMpFor(companyId){
+    const fold = document.getElementById('mpConnectFold');
+    const select = document.getElementById('mpCompanySelect');
+    if(select) select.value = companyId;
+    if(fold){
+      fold.open = true;
+      fold.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    const input = document.getElementById('mpTokenInput');
+    if(input) input.focus();
+  }
+  window.connectMpFor = connectMpFor;
 
   function renderMarketplaces(){
     const dot = document.getElementById('mpStatusDot');
     const title = document.getElementById('mpStatusTitle');
     const sub = document.getElementById('mpStatusSub');
-    const list = document.getElementById('mpList');
-    if(!list) return;
+    if(!document.getElementById('mpList')) return;
+
+    const waiting = mpPending.reduce((s, x) => s + x.orders, 0);
+    const alive = marketplaces.filter(m => m.lastUsedAt
+      && (Date.now() - new Date(m.lastUsedAt).getTime()) < 60 * 60 * 1000).length;
+    const writers = marketplaces.filter(m => m.writeEnabled).length;
 
     if(marketplaces.length === 0){
       dot.classList.remove('connected');
       title.textContent = 'Ни одна площадка не подключена';
-      sub.textContent = 'Заказы с маркетплейсов пока не приходят — Аргус видит только накладные из 1С';
-      list.innerHTML = '';
-      return;
+      sub.textContent = companies.length + ' '
+        + pluralRu(companies.length, 'клиент', 'клиента', 'клиентов')
+        + ' в складе · заказы с маркетплейсов пока не приходят, Аргус видит только накладные из 1С';
+    } else {
+      dot.classList.toggle('connected', alive > 0);
+      title.textContent = waiting > 0
+        ? waiting + ' ' + pluralRu(waiting, 'заказ ждёт', 'заказа ждут', 'заказов ждут') + ' поставки'
+        : (alive > 0 ? 'Заказы приходят, ждущих нет' : 'Подключено, но связи давно не было');
+      sub.textContent = marketplaces.length + ' из ' + companies.length + ' '
+        + pluralRu(companies.length, 'клиента', 'клиентов', 'клиентов') + ' на площадках · '
+        + (writers > 0
+            ? writers + ' с разрешённой записью'
+            : 'только чтение — на площадках ничего не меняется')
+        + ' · Аргус опрашивает их сам, раз в пять минут';
     }
-
-    // Живой считается связь, которая была недавно. Само подключение ни о чём
-    // не говорит: ключ мог протухнуть, и снаружи это выглядит как затишье.
-    const alive = marketplaces.filter(m => m.lastUsedAt
-      && (Date.now() - new Date(m.lastUsedAt).getTime()) < 60 * 60 * 1000).length;
-    dot.classList.toggle('connected', alive > 0);
-    title.textContent = alive > 0 ? 'Заказы приходят' : 'Подключено, но связи давно не было';
-    sub.textContent = marketplaces.length + ' '
-      + pluralRu(marketplaces.length, 'подключение', 'подключения', 'подключений')
-      + ' · Аргус опрашивает площадки сам, раз в пять минут';
-
-    list.innerHTML = marketplaces.map(m => {
-      const seen = formatLastSeen(m.lastUsedAt);
-      const when = seen ? 'Последняя связь: ' + seen : 'Связи ещё не было';
-      const mode = m.writeEnabled
-        ? 'Запись на площадку РАЗРЕШЕНА'
-        : 'Только чтение — на площадке ничего не меняется';
-      return '<div class="staff-row" style="grid-template-columns:1.3fr 1fr 1.2fr auto; align-items:center;">'
-        + '<div class="staff-name">' + escapeHTML(m.company) + '</div>'
-        + '<div class="staff-key">' + escapeHTML(mpTitle(m.marketplace)) + '</div>'
-        + '<div class="staff-date">' + when + '</div>'
-        + '<div class="staff-action" onclick="syncMarketplace(\'' + m.companyId + '\')">Забрать заказы</div>'
-        + '</div>'
-        + '<div class="staff-row" style="grid-template-columns:1.3fr 1fr 1.2fr auto; opacity:0.85;">'
-        + '<div class="staff-date" style="grid-column:1/3;">' + mode + '</div>'
-        + '<div class="staff-action" onclick="checkMarketplace(\'' + m.companyId + '\')">Проверить связь</div>'
-        + '<div class="staff-action revoke" onclick="disconnectMarketplace(\'' + m.companyId + '\', \'' + m.marketplace + '\')">Отключить</div>'
-        + '</div>';
-    }).join('');
+    renderMpCards();
   }
 
   function showMpResult(html){
@@ -3349,7 +3498,61 @@
       invWaiting = await apiFetch('/api/inventory/tasks?status=waiting_owner');
     } catch(e){ invWaiting = []; }
     renderInventory();
+    loadInvAdvice();
   }
+
+  // Совет «как часто считать».
+  //
+  // Считает сервер по этому же складу: доля ячеек, где пересчёт нашёл
+  // расхождение, доля сборок, не нашедших товар на полке, и сколько ячеек
+  // под товаром. Языковая модель здесь ничего бы не добавила — данных ровно
+  // три, — зато могла бы выдумать четвёртое. Причины показываются рядом
+  // с числами, чтобы владелец мог не согласиться со знанием дела.
+  let invAdvice = null;
+
+  async function loadInvAdvice(){
+    try{ invAdvice = await apiFetch('/api/inventory/advice'); }
+    catch(e){ invAdvice = null; }
+    renderInvAdvice();
+  }
+
+  function renderInvAdvice(){
+    const box = document.getElementById('invAdvice');
+    if(!box) return;
+    const a = invAdvice;
+    if(!a){ box.innerHTML = ''; return; }
+    const s = invSettings || {};
+    const same = s.recountAfterDays === a.recountAfterDays
+      && s.cellsPerRun === a.cellsPerRun
+      && s.minDaysBetweenRuns === a.minDaysBetweenRuns;
+    box.innerHTML = '<div class="inv-advice">'
+      + '<div class="inv-advice-head">'
+      +   '<div class="inv-advice-title">Аргус советует</div>'
+      +   (same
+            ? '<div class="inv-advice-same">Так и настроено</div>'
+            : '<button type="button" class="wh-onboarding-btn" onclick="applyInvAdvice()">Применить</button>')
+      + '</div>'
+      + '<div class="inv-advice-nums">'
+      +   '<div class="inv-advice-num"><b>' + a.recountAfterDays + '</b><span>дней между пересчётами ячейки</span></div>'
+      +   '<div class="inv-advice-num"><b>' + a.cellsPerRun + '</b><span>ячеек за заход</span></div>'
+      +   '<div class="inv-advice-num"><b>' + a.minDaysBetweenRuns + '</b><span>дней пауза</span></div>'
+      +   (a.cycleDays > 0
+            ? '<div class="inv-advice-num"><b>' + a.cycleDays + '</b><span>дней на весь склад</span></div>'
+            : '')
+      + '</div>'
+      + '<ul>' + a.reasons.map(r => '<li>' + escapeHTML(r) + '</li>').join('') + '</ul>'
+      + '</div>';
+  }
+
+  async function applyInvAdvice(){
+    if(!invAdvice) return;
+    const set = (id, v) => { const el = document.getElementById(id); if(el) el.value = v; };
+    set('invRecountDays', invAdvice.recountAfterDays);
+    set('invCellsPerRun', invAdvice.cellsPerRun);
+    set('invMinDays', invAdvice.minDaysBetweenRuns);
+    await saveInvSettings();
+  }
+  window.applyInvAdvice = applyInvAdvice;
 
   function renderInventory(){
     const s = invSettings;
@@ -3448,6 +3651,9 @@
       });
       showWhToast('Настройки пересчёта сохранены.');
       renderInventory();
+      // Пауза входит в расчёт нормы за заход, поэтому совет пересчитывается
+      // после сохранения: иначе он остался бы советом к прежним настройкам.
+      loadInvAdvice();
     } catch(e){
       showWhToast(e.message);
     }
@@ -3598,20 +3804,23 @@
     if(!host) return;
     try{
       ordersPartners = await apiFetch('/api/supplies/pending');
+      const total = ordersPartners.reduce((s, p) => s + p.orders, 0);
+      const badge = document.getElementById('ordersBadge');
+      if(badge){
+        badge.textContent = total > 0 ? String(total) : '';
+        badge.classList.toggle('show', total > 0);
+      }
+      if(ordersPicked && !ordersPartners.some(p => p.companyId === ordersPicked)) ordersPicked = null;
+      renderMpOrders();
+      if(ordersPicked) loadPartnerOrders(ordersPicked);
     } catch(e){
-      host.innerHTML = '<div class="staff-empty">Не удалось загрузить заказы: '
+      // Отрисовка внутри того же try, что и запрос. Раньше она была снаружи,
+      // и её падение оставляло экран на «Загружаем…» навсегда: запрос-то
+      // прошёл. Сообщение общее нарочно — владельцу всё равно, на чём
+      // именно мы споткнулись, ему важно, что это не он виноват.
+      host.innerHTML = '<div class="staff-empty">Не удалось показать заказы: '
         + escapeHTML(e.message) + '</div>';
-      return;
     }
-    const total = ordersPartners.reduce((s, p) => s + p.orders, 0);
-    const badge = document.getElementById('ordersBadge');
-    if(badge){
-      badge.textContent = total > 0 ? String(total) : '';
-      badge.classList.toggle('show', total > 0);
-    }
-    if(ordersPicked && !ordersPartners.some(p => p.companyId === ordersPicked)) ordersPicked = null;
-    renderMpOrders();
-    if(ordersPicked) loadPartnerOrders(ordersPicked);
   }
   window.loadMpOrders = loadMpOrders;
 
@@ -3630,7 +3839,7 @@
           <div class="ord-name">${escapeHTML(p.companyName)}</div>
           <div class="ord-meta">${p.units.toLocaleString('ru-RU')} шт${
             p.marketplace ? ' · ' + escapeHTML(String(p.marketplace).toUpperCase()) : ''
-          }${p.oldest ? ' · с ' + fmtWhen(p.oldest) : ''}${
+          }${p.oldest ? ' · с ' + fmtDay(p.oldest) : ''}${
             p.incomplete > 0
               ? ` · <span class="ord-warn">${p.incomplete} не собрать</span>`
               : ''
@@ -3702,6 +3911,58 @@
       </div>
     `;
   }
+
+  // Забрать заказы со всех подключённых площадок.
+  //
+  // Раньше за этим приходилось идти на другой экран и нажимать «Забрать
+  // заказы» отдельно у каждого клиента. Шагов здесь ровно столько, сколько
+  // подключений плюс один на пересчёт накопившегося, — отсюда и настоящий
+  // процент. Одна упавшая площадка не останавливает остальные: заказы
+  // остальных клиентов не должны зависеть от чужого просроченного ключа.
+  async function pullMarketplaces(hostId, after){
+    let mps;
+    try{
+      mps = await apiFetch('/api/marketplaces');
+    } catch(e){
+      showWhToast('Не удалось узнать список площадок: ' + e.message);
+      return;
+    }
+    if(mps.length === 0){
+      showWhToast('Ни одна площадка не подключена — забирать нечего.');
+      return;
+    }
+    const p = whProgress(hostId, mps.length + 1, 'Спрашиваю площадки…');
+    let seen = 0, created = 0, unmapped = 0;
+    const broken = [];
+    for(const m of mps){
+      try{
+        const r = await apiFetch('/api/marketplaces/sync', {
+          method: 'POST', body: { companyId: m.companyId },
+        });
+        seen += r.seen || 0;
+        created += r.created || 0;
+        unmapped += (r.unmapped || []).length;
+        p.step(m.company + ' — заданий ' + (r.seen || 0) + ', новых ' + (r.created || 0));
+      } catch(e){
+        broken.push(m.company);
+        p.step(m.company + ' — не ответила');
+      }
+    }
+    try{ await after(); } catch(e){ /* ниже всё равно скажем результат */ }
+    let text = 'Заданий у площадок ' + seen + ', новых заказов ' + created;
+    if(unmapped > 0) text += ', не сопоставлено ' + unmapped;
+    if(broken.length > 0){
+      p.fail(text + '. Не ответили: ' + broken.join(', '));
+      showWhToast('Не ответили: ' + broken.join(', '));
+    } else {
+      p.finish(text);
+    }
+  }
+
+  function pullOrdersFromMp(){ return pullMarketplaces('ordersProgress', loadMpOrders); }
+  window.pullOrdersFromMp = pullOrdersFromMp;
+  function pullAllMarketplaces(){ return pullMarketplaces('mpProgress', loadMarketplaces); }
+  window.pullAllMarketplaces = pullAllMarketplaces;
 
   // Одна кнопка: собрать поставку из всех готовых заказов продавца.
   //
