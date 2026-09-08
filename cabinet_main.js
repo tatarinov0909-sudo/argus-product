@@ -118,6 +118,7 @@
     document.getElementById('view-1c').classList.toggle('active', view==='1c');
     document.getElementById('view-mp').classList.toggle('active', view==='mp');
     document.getElementById('view-inv').classList.toggle('active', view==='inv');
+    document.getElementById('view-orders').classList.toggle('active', view==='orders');
     document.getElementById('nav-chat').classList.toggle('active', view==='chat');
     document.getElementById('nav-journal').classList.toggle('active', view==='journal');
     document.getElementById('nav-warehouse').classList.toggle('active', view==='warehouse');
@@ -125,6 +126,7 @@
     document.getElementById('nav-1c').classList.toggle('active', view==='1c');
     document.getElementById('nav-mp').classList.toggle('active', view==='mp');
     document.getElementById('nav-inv').classList.toggle('active', view==='inv');
+    document.getElementById('nav-orders').classList.toggle('active', view==='orders');
     if(view==='journal'){
       journalUnread = 0;
       document.getElementById('navBadge').classList.remove('show');
@@ -141,6 +143,7 @@
     // функцию (см. блок инициализации), а не через классы в HTML.
     if(view==='mp'){ loadMarketplaces(); }
     if(view==='inv'){ loadInventory(); }
+    if(view==='orders'){ loadMpOrders(); }
     if(view==='chat'){
       loadChatHistory();
       const badge = document.getElementById('chatBadge');
@@ -3574,6 +3577,151 @@
     });
     saveXlsx('Накладные', 'Накладные', rows, [18, 24, 13, 13, 13, 18]);
   }
+
+
+  /* ===================== Заказы с маркетплейсов ===================== */
+
+  // Экран менеджера. Порядок намеренно такой: сперва продавцы с числом
+  // накопившегося, и только по клику — сами заказы. Список из двухсот заказов
+  // подряд не отвечает на вопрос «чем заняться», а список продавцов отвечает.
+  let ordersPartners = [];
+  let ordersPicked = null;
+  let ordersRows = [];
+
+  async function loadMpOrders(){
+    const host = document.getElementById('ordersContent');
+    if(!host) return;
+    try{
+      ordersPartners = await apiFetch('/api/supplies/pending');
+    } catch(e){
+      host.innerHTML = '<div class="staff-empty">Не удалось загрузить заказы: '
+        + escapeHTML(e.message) + '</div>';
+      return;
+    }
+    const total = ordersPartners.reduce((s, p) => s + p.orders, 0);
+    const badge = document.getElementById('ordersBadge');
+    if(badge){
+      badge.textContent = total > 0 ? String(total) : '';
+      badge.classList.toggle('show', total > 0);
+    }
+    if(ordersPicked && !ordersPartners.some(p => p.companyId === ordersPicked)) ordersPicked = null;
+    renderMpOrders();
+    if(ordersPicked) loadPartnerOrders(ordersPicked);
+  }
+  window.loadMpOrders = loadMpOrders;
+
+  function renderMpOrders(){
+    const host = document.getElementById('ordersContent');
+    if(!host) return;
+    if(ordersPartners.length === 0){
+      host.innerHTML = '<div class="staff-empty">Заказов без поставки нет — всё разобрано.</div>';
+      return;
+    }
+    const partners = ordersPartners.map(p => `
+      <div class="ord-partner${p.companyId === ordersPicked ? ' active' : ''}"
+           onclick="pickOrdersPartner('${p.companyId}')">
+        <div class="ord-count">${p.orders}</div>
+        <div>
+          <div class="ord-name">${escapeHTML(p.companyName)}</div>
+          <div class="ord-meta">${p.units.toLocaleString('ru-RU')} шт${
+            p.marketplace ? ' · ' + escapeHTML(String(p.marketplace).toUpperCase()) : ''
+          }${p.oldest ? ' · с ' + fmtWhen(p.oldest) : ''}${
+            p.incomplete > 0
+              ? ` · <span class="ord-warn">${p.incomplete} не собрать</span>`
+              : ''
+          }</div>
+        </div>
+        <div class="ord-meta">${p.companyId === ordersPicked ? 'открыт' : 'открыть →'}</div>
+      </div>
+    `).join('');
+
+    host.innerHTML = partners
+      + '<div id="ordersDetail"></div>';
+  }
+
+  function pickOrdersPartner(companyId){
+    ordersPicked = ordersPicked === companyId ? null : companyId;
+    renderMpOrders();
+    if(ordersPicked) loadPartnerOrders(ordersPicked);
+  }
+  window.pickOrdersPartner = pickOrdersPartner;
+
+  async function loadPartnerOrders(companyId){
+    const box = document.getElementById('ordersDetail');
+    if(!box) return;
+    box.innerHTML = '<div class="staff-empty">Загружаем заказы…</div>';
+    try{
+      ordersRows = await apiFetch('/api/supplies/pending/' + companyId);
+    } catch(e){
+      box.innerHTML = '<div class="staff-empty">Не удалось загрузить: ' + escapeHTML(e.message) + '</div>';
+      return;
+    }
+    const partner = ordersPartners.find(p => p.companyId === companyId);
+    const ready = ordersRows.filter(o => o.ready);
+    const stuck = ordersRows.length - ready.length;
+
+    box.innerHTML = `
+      <div class="ord-actions">
+        <button class="wh-onboarding-btn" type="button"
+                onclick="makeSupply('${companyId}')"
+                ${ready.length === 0 ? 'disabled' : ''}>
+          Отправить на сборку — ${ready.length} ${pluralRu(ready.length, 'заказ', 'заказа', 'заказов')}
+        </button>
+        ${stuck > 0 ? `<span class="ord-meta ord-warn">${stuck} ${
+          pluralRu(stuck, 'заказ', 'заказа', 'заказов')} не сопоставлен с номенклатурой — они останутся здесь</span>` : ''}
+      </div>
+      <div class="ord-scroll">
+        <table class="ord-table">
+          <thead><tr>
+            <th>Заказ</th><th>Товар</th><th>Артикул МП</th><th>Штрихкод</th>
+            <th>Отправление</th><th class="num">Кол-во</th>
+          </tr></thead>
+          <tbody>
+            ${ordersRows.map(o => `
+              <tr class="${o.ready ? '' : 'not-ready'}">
+                <td class="ord-mono">${escapeHTML(o.number)}</td>
+                <td>${escapeHTML(o.name || '—')}<div class="ord-mono">${escapeHTML(o.sku || 'не сопоставлен')}</div></td>
+                <td class="ord-mono">${escapeHTML(o.article || '—')}</td>
+                <td class="ord-mono">${escapeHTML(o.barcode || '—')}</td>
+                <td class="ord-mono" title="${escapeHTML(o.rid || '')}">${
+                  o.rid ? escapeHTML(String(o.rid).slice(0, 14)) + '…' : '—'}</td>
+                <td class="num">${o.qty === null ? '—' : o.qty}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div class="ord-meta" style="margin-top:10px;">
+        Продавец: ${escapeHTML(partner ? partner.companyName : '')}. Заказы, ушедшие
+        в поставку, из этого списка исчезнут — они уже решены.
+      </div>
+    `;
+  }
+
+  // Одна кнопка: собрать поставку из всех готовых заказов продавца.
+  //
+  // Несопоставленные не берём молча — они остаются в списке, и об этом
+  // написано рядом с кнопкой. Иначе менеджер решит, что отправил всё,
+  // а часть заказов останется висеть незамеченной.
+  async function makeSupply(companyId){
+    const ready = ordersRows.filter(o => o.ready).map(o => o.id);
+    if(ready.length === 0){ showWhToast('Нет ни одного заказа, который можно собрать.'); return; }
+    const partner = ordersPartners.find(p => p.companyId === companyId);
+    if(!confirm(`Отправить на сборку ${ready.length} ${pluralRu(ready.length, 'заказ', 'заказа', 'заказов')}`
+      + ` продавца «${partner ? partner.companyName : ''}»?\n\nБудет создана поставка.`)) return;
+    try{
+      const supply = await apiFetch('/api/supplies', {
+        method: 'POST',
+        body: { invoiceIds: ready, marketplace: partner ? partner.marketplace : null },
+      });
+      showWhToast('Поставка ' + supply.number + ' собрана: ' + supply.orders
+        + ' ' + pluralRu(supply.orders, 'заказ', 'заказа', 'заказов') + '.');
+      await loadMpOrders();
+    } catch(e){
+      showWhToast('Не удалось собрать поставку: ' + e.message);
+    }
+  }
+  window.makeSupply = makeSupply;
 
   /* ===================== Инициализация ===================== */
 
