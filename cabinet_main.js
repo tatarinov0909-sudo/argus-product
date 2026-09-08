@@ -1,7 +1,12 @@
   const API_BASE = 'https://api.argus-ai.online';
   const TOKEN = localStorage.getItem('argus_token');
   const ROLE = localStorage.getItem('argus_role');
-  if(!TOKEN || ROLE !== 'owner'){
+  // Кабинет один на владельца и менеджера — по просьбе владельца: у него
+  // должны быть те же удобства, а у менеджера урезанные. Урезание делаем
+  // здесь ЛИШЬ визуально: то, чего ему нельзя, сервер всё равно не отдаст.
+  // Прятать в интерфейсе и не проверять на сервере — вот это было бы дырой.
+  const IS_MANAGER = ROLE === 'manager';
+  if(!TOKEN || (ROLE !== 'owner' && !IS_MANAGER)){
     window.location.href = 'login.html';
     throw new Error('not authenticated');
   }
@@ -3728,18 +3733,35 @@
   // Стартовая вкладка открывается тем же путём, что и любая другая, а не
   // классом "active" в разметке: иначе всё, что должно случаться при открытии
   // вкладки, на первой из них молча не случается.
-  switchView('chat');
+  // У менеджера нет доступов, склада как конструктора, 1С, денег и чата
+  // с агентами. Убираем эти пункты и не дёргаем их запросы: иначе кабинет
+  // при каждом открытии получал бы связку отказов и жаловался всплывашками
+  // на то, чего человеку и не положено.
+  if(IS_MANAGER){
+    ['nav-chat', 'nav-staff', 'nav-1c', 'nav-mp'].forEach(id => {
+      const el = document.getElementById(id);
+      if(el) el.remove();
+    });
+    document.querySelectorAll('.nav-item').forEach(el => {
+      if(el.textContent.trim() === 'Тариф') el.remove();
+    });
+  }
+
+  // Менеджер начинает с заказов — это его работа. Владелец с чата.
+  switchView(IS_MANAGER ? 'orders' : 'chat');
 
   addInvoiceItemRow();
   loadWarehouseInfo();
-  loadStaff();
   loadCompanies().then(loadInvoicesList);
   loadJournal(true).then(startJournalPolling);
-  refreshAlertBadge();
-  load1CKey();
-  load1CStatus();
-  loadMarketplaces();
   loadInventory();
+  if(!IS_MANAGER){
+    loadStaff();
+    refreshAlertBadge();
+    load1CKey();
+    load1CStatus();
+    loadMarketplaces();
+  }
 
   apiFetch('/api/cells/rows').then(rows => {
     if(rows.length > 0){

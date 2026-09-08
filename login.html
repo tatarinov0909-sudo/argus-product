@@ -227,7 +227,7 @@
   <!-- Экран выбора кабинета -->
   <div class="landing show" id="landing">
     <div class="landing-title">Какой у вас кабинет?</div>
-    <div class="landing-sub">Одна система. Три роли.</div>
+    <div class="landing-sub">Одна система. Четыре роли.</div>
     <div class="cabinet-grid">
 
       <div class="cabinet-card" onclick="goForm('worker')">
@@ -244,6 +244,14 @@
         </div>
         <div class="cabinet-name">Руководитель склада</div>
         <div class="cabinet-desc">Для владельцев fulfillment-центра — чат с агентами, журнал, склад и сотрудники.</div>
+      </div>
+
+      <div class="cabinet-card" onclick="goForm('worker')">
+        <div class="cabinet-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 7h18M3 12h18M3 17h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="18" cy="17" r="3" stroke="currentColor" stroke-width="1.6"/></svg>
+        </div>
+        <div class="cabinet-name">Менеджер</div>
+        <div class="cabinet-desc">Заказы с маркетплейсов, поставки и документы. Вход по тому же ключу — кабинет откроется сам, по виду ключа.</div>
       </div>
 
       <div class="cabinet-card" onclick="goForm('seller')">
@@ -410,9 +418,14 @@
       const data = await res.json();
       if(!res.ok){ errorEl.textContent = data.error || 'Не удалось войти.'; errorEl.classList.add('show'); return; }
       localStorage.setItem('argus_token', data.token);
-      localStorage.setItem('argus_role', 'worker');
+      // Роль — из ответа сервера, а не из нажатой карточки. Ключ менеджера
+      // и ключ работника вводятся в одном поле, и решать, куда пускать,
+      // должен ключ. Иначе менеджер, нажавший «работник», попал бы в лист
+      // приёмки, а не в свои заказы.
+      localStorage.setItem('argus_role', data.role || 'worker');
       hideAll();
-      document.getElementById('workerNameOut').textContent = data.name;
+      document.getElementById('workerNameOut').textContent = data.name
+        + (data.role === 'manager' ? ' · менеджер' : '');
       document.getElementById('workerKeyOut').textContent = key;
       document.getElementById('successWorker').classList.add('show');
     } catch(e){
@@ -509,7 +522,9 @@
   }
 
   function goToLoader(){
-    window.location.href = 'loader.html';
+    // Менеджеру лист приёмки не нужен — ему в кабинет с заказами.
+    const role = localStorage.getItem('argus_role');
+    window.location.href = role === 'manager' ? 'cabinet_main.html' : 'loader.html';
   }
 
   function copyText(text, message){
