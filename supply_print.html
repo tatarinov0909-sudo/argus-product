@@ -56,9 +56,21 @@
   .doc-num{font-family:var(--mono); font-size:22px; font-weight:700; text-align:right; white-space:nowrap;}
   .doc-num span{display:block; font-family:var(--sans); font-size:11px; font-weight:400; color:var(--ink-soft);}
 
-  .facts{display:flex; gap:26px; margin-bottom:9px; flex-wrap:wrap;}
-  .fact b{display:block; font-family:var(--mono); font-size:17px; line-height:1.2;}
-  .fact span{font-size:10.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.03em;}
+  /* Итоги — полосой во всю ширину, каждый по центру своей клетки.
+     Прижатые к левому краю, они висели кучкой у угла, а справа зияло поле;
+     при этом ниже идёт таблица во всю ширину, и шапка от неё отваливалась.
+     Та же разлиновка, что в таблице: шапка и таблица читаются одним
+     документом, а не двумя блоками, положенными рядом. */
+  .facts{
+    display:grid; grid-auto-flow:column; grid-auto-columns:1fr;
+    border-top:1.2px solid var(--line); border-bottom:1.2px solid var(--line);
+    margin-bottom:9px;
+  }
+  .fact{text-align:center; padding:7px 6px 6px;}
+  .fact + .fact{border-left:1px solid var(--rule-hair);}
+  .fact b{display:block; font-family:var(--mono); font-size:16px; line-height:1.15;}
+  .fact span{display:block; font-size:9px; color:var(--ink-soft); text-transform:uppercase;
+    letter-spacing:.07em; margin-top:2px;}
 
   /* Складская форма, а не таблица из интерфейса.
      Колонки «обособлены» ровно потому, что их ничто не связывало: одни
@@ -91,11 +103,6 @@
   .cellno{text-align:center; font-family:var(--mono); font-size:9px; color:var(--ink-soft);}
   .mid{text-align:center;}
   .mono{font-family:var(--mono);}
-  /* Номер заказа и номер отправления — длинные и переносятся. Мельче
-     остального текста нарочно: их не читают вслух, по ним сверяются
-     глазами со стикером, а лишняя страница бумаги стоит денег каждый
-     день. */
-  td.code{font-family:var(--mono); font-size:10px; line-height:1.3; word-break:break-all;}
 
   /* Полоса ряда. Адрес в каждой строке повторял «01-» столько раз, сколько
      позиций в ряду, — а это самая широкая колонка листа. Ряд выносится
@@ -167,10 +174,17 @@
   .goods-line{font-weight:600; font-size:10.5px; line-height:1.25;}
   td.goods{width:44%;}
 
+  /* Заказ и отправление — парой, в два яруса. Оба длинные, оба сверяют
+     глазами: номер заказа по списку, номер отправления по стикеру на
+     коробке. Двумя колонками они занимали пятую часть листа. */
+  .pair{font-family:var(--mono); text-align:center; line-height:1.2;}
+  .pair span{display:block; font-size:8.5px; color:var(--ink-soft);}
+  .pair b{display:block; font-size:10.5px; font-weight:700; word-break:break-all;}
+
   /* Клетка под факт. На бумаге всегда нужно место записать, сколько взяли
      на самом деле: «взял 3 из 4» — это то, ради чего лист и возвращается
      с полки. Заодно она забирает ширину, которую отдало название. */
-  .fact{border-left:1px solid var(--rule-hair);}
+  .fact-box{border-left:1px solid var(--rule-hair);}
 
   /* Смена ряда — линией, а не заголовком. */
   tr.aisle td{border-top:1.2px solid var(--line);}
@@ -181,8 +195,6 @@
   .addr{font-family:var(--mono); font-size:15px; font-weight:700; white-space:nowrap;}
   .addr-more{font-family:var(--mono); font-size:10.5px; color:var(--ink-soft); font-weight:400;}
   .qty{font-family:var(--mono); font-size:16px; font-weight:700;}
-  .goods-name{font-weight:600;}
-  .goods-codes{font-family:var(--mono); font-size:10.5px; color:var(--ink-soft); margin-top:2px;}
 
   /* Место под фото. Ключа с категорией «Контент» у нас нет, картинки взять
      негде — но рамка на бумаге нужна уже сейчас: по ней кладовщик сверяет
@@ -358,7 +370,11 @@
   // Меньше четырёх не берём (глазу не за что зацепиться), больше шести
   // незачем. Если не различают и шесть — крупную подсказку не рисуем вовсе.
   function tailLength(rows){
-    const codes = rows.map(r => String(r.barcode || '')).filter(Boolean);
+    // По РАЗНЫМ штрихкодам, а не по строкам. В упаковочном листе один и тот
+    // же товар стоит столько раз, сколько его посылок, — и одинаковые коды
+    // сравнивались между собой как разные. Хвост оказывался «неуникальным»
+    // всегда, и выделение молча отключалось на всём листе.
+    const codes = [...new Set(rows.map(r => String(r.barcode || '')).filter(Boolean))];
     for(const len of [4, 5, 6]){
       const seen = new Set();
       let clash = false;
@@ -490,7 +506,7 @@
           + '</td>'
           + '<td class="num" style="width:38px;"><span class="qty' + (notEnough ? ' short' : '') + '">'
           +   nf(r.qty) + '</span></td>'
-          + '<td class="fact" style="width:46px;"></td>'
+          + '<td class="fact-box" style="width:46px;"></td>'
           + '</tr>';
       }).join('');
       return band + lines;
@@ -529,32 +545,52 @@
   // одинаковые позиции значит отправить одну коробку вместо двух.
   function packingSheet(s, t, rows){
     if(!rows || rows.length === 0) return '';
-    const body = rows.map((r, i) => '<tr>'
-      + '<td class="num" style="width:26px; color:#888;">' + (i + 1) + '</td>'
-      + '<td style="width:30px;"><div class="tick"></div></td>'
-      + '<td class="code" style="width:92px;">' + esc(r.orderNumber) + '</td>'
-      + '<td style="width:112px;" class="code">'
-      +   (r.rid ? esc(r.rid) : '<span class="short">нет номера</span>') + '</td>'
-      + '<td>'
-      +   '<div class="goods-name">' + esc(r.name) + '</div>'
-      +   '<div class="goods-codes">' + esc(r.sku)
-      +     (r.article ? ' · арт. ' + esc(r.article) : '')
-      +     (r.barcode ? ' · ШК ' + esc(r.barcode) : '')
-      +   '</div>'
-      + '</td>'
-      + '<td class="num" style="width:56px;"><span class="qty">' + nf(r.qty) + '</span></td>'
-      + '</tr>').join('');
+    const tail = tailLength(rows);
+    // Два яруса и здесь, там же где у листа комплектации: заказ над номером
+    // отправления, артикул над нашим кодом, незначащая часть штрихкода над
+    // различающим хвостом. Заказ и отправление были двумя колонками из
+    // длинных кодов — вместе они занимают одну и читаются парой, потому что
+    // и сверяют их вместе: заказ по списку, отправление по стикеру.
+    const body = rows.map((r, i) => {
+      const bc = String(r.barcode || '');
+      return '<tr>'
+        + '<td class="cellno" style="width:20px;">' + (i + 1) + '</td>'
+        + '<td class="mid" style="width:22px;"><div class="tick"></div></td>'
+        + '<td class="pair" style="width:104px;">'
+        +   '<span>' + esc(r.orderNumber) + '</span>'
+        +   (r.rid ? '<b>' + esc(r.rid) + '</b>' : '<b class="short">нет отправления</b>')
+        + '</td>'
+        + '<td style="width:70px;">'
+        +   '<div class="goods-art">'
+        +     (r.article ? esc(r.article) : '<span class="short">нет арт.</span>')
+        +     '<i>' + esc(r.sku) + '</i>'
+        +   '</div>'
+        + '</td>'
+        + '<td class="goods"><div class="goods-line">' + esc(r.name) + '</div></td>'
+        + '<td class="bc" style="width:62px;">'
+        +   (bc
+              ? (tail
+                  ? esc(bc.slice(0, bc.length - tail)) + '<b>' + esc(bc.slice(-tail)) + '</b>'
+                  : '<b style="font-size:11px;">' + esc(bc) + '</b>')
+              : '')
+        + '</td>'
+        + '<td class="num" style="width:38px;"><span class="qty">' + nf(r.qty) + '</span></td>'
+        + '<td class="fact-box" style="width:46px;"></td>'
+        + '</tr>';
+    }).join('');
 
     return '<div class="sheet" data-doc="pack">'
       + head(s, 'Упаковочный лист', 'Разложить по посылкам. Одинаковые артикулы НЕ складываются: у каждой посылки свой номер отправления.')
       + '<div class="facts">'
-      +   '<div class="fact"><b>' + nf(rows.length) + '</b><span>строк</span></div>'
+      +   '<div class="fact"><b>' + nf(rows.length) + '</b><span>' + plural(rows.length, 'посылка', 'посылки', 'посылок') + '</span></div>'
       +   '<div class="fact"><b>' + nf(t.units) + '</b><span>штук всего</span></div>'
       +   '<div class="fact"><b>' + esc(s.destination || '—') + '</b><span>куда</span></div>'
       +   '<div class="fact"><b>' + esc((s.marketplace || '—').toUpperCase()) + '</b><span>площадка</span></div>'
       + '</div>'
       + '<table><thead><tr>'
-      +   '<th></th><th></th><th>Заказ</th><th>Отправление</th><th>Товар</th><th class="num">Кол-во</th>'
+      +   '<th></th><th></th><th class="mid">Заказ и отправление</th>'
+      +   '<th class="mid">Артикул</th><th>Товар</th>'
+      +   '<th class="bc">Штрихкод</th><th class="num">Кол-во</th><th class="mid">Факт</th>'
       + '</tr></thead><tbody>' + body + '</tbody></table>'
       + '<div class="sign">'
       +   '<div><div class="sign-line"></div><div class="sign-label">Упаковал — фамилия, подпись</div></div>'
