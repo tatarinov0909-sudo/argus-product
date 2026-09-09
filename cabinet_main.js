@@ -223,8 +223,8 @@
       const issued = new Date(s.issued_at).toLocaleDateString('ru-RU');
       return `
         <div class="staff-row ${s.active ? '' : 'revoked'}">
-          <div class="staff-name">${s.name}</div>
-          <div class="staff-key">${s.key_code}</div>
+          <div class="staff-name">${escapeHTML(s.name)}</div>
+          <div class="staff-key">${escapeHTML(s.key_code)}</div>
           <div class="staff-date">${issued}</div>
           <div><span class="staff-status ${s.active ? 'active' : 'revoked'}">${s.active ? 'активен' : 'отозван'}</span></div>
           <div class="staff-action ${s.active ? 'revoke' : 'restore'}" onclick="toggleStaffKey('${s.id}')">${s.active ? 'Отозвать' : 'Восстановить'}</div>
@@ -312,13 +312,13 @@
     }
     wrap.innerHTML = companies.map(c => `
       <div class="staff-row" style="grid-template-columns:1.4fr 1fr auto;">
-        <div class="staff-name">${c.name}</div>
-        <div class="staff-key">${c.keys.length === 0 ? '—' : c.keys.map(k => `${k.keyCode}${k.active ? '' : ' (отозван)'}`).join(', ')}</div>
+        <div class="staff-name">${escapeHTML(c.name)}</div>
+        <div class="staff-key">${c.keys.length === 0 ? '—' : c.keys.map(k => `${escapeHTML(k.keyCode)}${k.active ? '' : ' (отозван)'}`).join(', ')}</div>
         <div class="staff-action" onclick="issueSellerKey('${c.id}')">+ Ключ</div>
       </div>
       ${c.keys.map(k => `
         <div class="staff-row" style="grid-template-columns:1.4fr 1fr auto; opacity:0.85;">
-          <div class="staff-date" style="grid-column:1/3;">Ключ ${k.keyCode}, выдан ${new Date(k.issuedAt).toLocaleDateString('ru-RU')}</div>
+          <div class="staff-date" style="grid-column:1/3;">Ключ ${escapeHTML(k.keyCode)}, выдан ${new Date(k.issuedAt).toLocaleDateString('ru-RU')}</div>
           <div class="staff-action ${k.active ? 'revoke' : 'restore'}" onclick="toggleSellerKey('${k.id}')">${k.active ? 'Отозвать' : 'Восстановить'}</div>
         </div>
       `).join('')}
@@ -331,7 +331,7 @@
       select.innerHTML = '<option value="">Сначала добавьте компанию</option>';
       return;
     }
-    select.innerHTML = companies.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    select.innerHTML = companies.map(c => `<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('');
   }
 
   async function addCompany(){
@@ -430,8 +430,8 @@
     const statusLabel = {open:'не начата', in_progress:'в процессе', completed:'завершена'};
     wrap.innerHTML = invoices.map(inv => `
       <div class="staff-row" data-invoice-id="${inv.id}" style="grid-template-columns:1fr 1.2fr 1fr auto;">
-        <div class="staff-key">${inv.number}</div>
-        <div class="staff-name">${inv.company_name}</div>
+        <div class="staff-key">${escapeHTML(inv.number)}</div>
+        <div class="staff-name">${escapeHTML(inv.company_name)}</div>
         <div><span class="staff-status ${inv.status === 'completed' ? 'active' : ''}">${statusLabel[inv.status] || inv.status}</span></div>
         <div class="staff-action" data-history-invoice="${inv.id}" data-history-label="${escapeHTML(inv.number)}">История</div>
       </div>
@@ -1340,7 +1340,7 @@
       const hint = tall
         ? addr + ' — высокий отсек: ' + missing + ' ' + pluralRu(missing, 'балки', 'балок', 'балок') + ' не хватает'
         : addr;
-      cellsHtml += `<div class="wh-cell in-grid ${b.state}${mergedClass}${tall ? ' tall' : ''}${b.state === 'occupied' ? fillModeClass : ''}" data-row="${rowNum}" data-id="${b.r0}" data-tier="${b.t0}" data-addr="${addr}" data-state="${b.state}" data-block-id="${b.blockId}"${style} onclick="selectCell(this)" title="${hint}">${beams}</div>`;
+      cellsHtml += `<div class="wh-cell in-grid ${b.state}${mergedClass}${tall ? ' tall' : ''}${b.state === 'occupied' ? fillModeClass : ''}" data-row="${rowNum}" data-id="${b.r0}" data-tier="${b.t0}" data-addr="${escapeHTML(addr)}" data-state="${b.state}" data-block-id="${b.blockId}"${style} onclick="selectCell(this)" title="${escapeHTML(hint)}">${beams}</div>`;
     });
 
     let labelsHtml = '';
@@ -1472,7 +1472,7 @@
       const fillVars = block.state === 'occupied' ? cellPaintVars(block.fill) : '';
       return `<div class="wh-big-cell ${block.state}${isMerged ? ' merged' : ''}${block.state === 'occupied' ? fillModeClass : ''}"
         style="grid-column:${block.r0} / span ${wide}; grid-row:${gridRowOf(block.t1)} / span ${tall};${fillVars}"
-        title="${addr}">
+        title="${escapeHTML(addr)}">
         <span class="wh-big-cell-label">${addr}</span>
         ${isMerged ? `<span class="wh-big-cell-size">${wide}×${tall}</span>
           <button class="wh-big-cell-split" type="button" title="Расцепить обратно на ${wide * tall} ${pluralRu(wide * tall, 'место', 'места', 'мест')}"
@@ -2935,10 +2935,20 @@
     return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
   }
 
+  // Экранирование для разметки.
+  //
+  // Раньше здесь был приём с textContent: положить строку в узел и забрать
+  // innerHTML. Он превращает < > & в сущности — и НЕ трогает кавычки, потому
+  // что в тексте они безопасны. В атрибуте они не безопасны: кавычка закрывает
+  // атрибут, и дальше в теге можно дописать свой обработчик события. А имена
+  // ячеек, ряды и адреса подставляются как раз в атрибуты.
+  //
+  // Поэтому подмена явная и одинаковая для текста и атрибутов: одну функцию
+  // легче не забыть, чем две, и «эту строку я вставляю в атрибут» — не то,
+  // о чём стоит помнить в каждом месте.
+  const ESCAPE_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
   function escapeHTML(str){
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
+    return String(str == null ? '' : str).replace(/[&<>"']/g, (c) => ESCAPE_MAP[c]);
   }
 
   // Чат разговаривает с Оркестратором по-настоящему: вопрос уходит на
@@ -3350,6 +3360,7 @@
   // Поиск с задержкой: двенадцать тысяч товаров у одного продавца, и
   // спрашивать сервер на каждую нажатую букву незачем.
   const unmTimers = {};
+  const unmHits = {};
   function searchOurProduct(i){
     clearTimeout(unmTimers[i]);
     unmTimers[i] = setTimeout(() => doSearchOurProduct(i), 300);
@@ -3372,19 +3383,26 @@
       return;
     }
     if(rows.length === 0){
-      hits.innerHTML = '<div class="unm-meta">Ничего не нашлось. Если товара нет в 1С,'
+      unmHits[i] = [];
+    hits.innerHTML = '<div class="unm-meta">Ничего не нашлось. Если товара нет в 1С,'
         + ' связать заказ не с чем — сначала он должен появиться в номенклатуре.</div>';
       return;
     }
-    hits.innerHTML = rows.map(r => '<div class="unm-hit" onclick="linkOurProduct(' + i + ', \''
-      + String(r.sku).replace(/'/g, "\\'") + '\')"><b>' + escapeHTML(r.sku) + '</b> · '
+    // Найденное держим в памяти и передаём в обработчик номер строки:
+    // артикул из 1С может содержать кавычку, а она в аргументе обработчика
+    // ломает разметку — сущности в атрибуте раскрываются до JavaScript.
+    unmHits[i] = rows;
+    hits.innerHTML = rows.map((r, j) => '<div class="unm-hit" onclick="linkOurProduct('
+      + i + ', ' + j + ')"><b>' + escapeHTML(r.sku) + '</b> · '
       + escapeHTML(r.name || '') + (r.barcode ? ' · ШК ' + escapeHTML(r.barcode) : '')
       + '</div>').join('');
   }
 
-  async function linkOurProduct(i, sku){
+  async function linkOurProduct(i, j){
     const u = mpUnresolved[i];
-    if(!u) return;
+    const hit = (unmHits[i] || [])[j];
+    if(!u || !hit) return;
+    const sku = hit.sku;
     try{
       const r = await apiFetch('/api/marketplaces/mapping', {
         method: 'POST',
@@ -4038,16 +4056,20 @@
   // чего собирал. Пока поставка «собирается», её можно разобрать; после
   // отбора товар уже снят с полок, и разбирать её в базе значило бы
   // соврать про склад.
+  let supplyRows = [];
+
   async function loadSupplies(){
     const box = document.getElementById('suppliesList');
     if(!box) return;
     let rows;
     try{ rows = await apiFetch('/api/supplies'); }
     catch(e){
+      supplyRows = [];
       box.innerHTML = '<div class="staff-empty">Не удалось загрузить поставки: '
         + escapeHTML(e.message) + '</div>';
       return;
     }
+    supplyRows = rows;
     if(rows.length === 0){
       box.innerHTML = '<div class="staff-empty">Поставок пока нет.</div>';
       return;
@@ -4063,15 +4085,16 @@
         +   (s.destination ? ' · ' + escapeHTML(s.destination) : '') + '</div></div>'
         + '<div class="sup-state ' + s.status + '">' + escapeHTML(s.statusName || s.status) + '</div>'
         + '<div>' + (s.status === 'collecting'
-            ? '<span class="mp-act warn" onclick="disbandSupply(\'' + s.id + '\', \''
-              + escapeHTML(s.number) + '\')">Разобрать</span>'
+            ? '<span class="mp-act warn" onclick="disbandSupply(\'' + s.id + '\')">Разобрать</span>'
             : '') + '</div>'
         + '</div>';
     }).join('');
   }
   window.loadSupplies = loadSupplies;
 
-  async function disbandSupply(id, number){
+  async function disbandSupply(id){
+    const s = (supplyRows || []).find(x => x.id === id);
+    const number = s ? s.number : '';
     if(!confirm('Разобрать поставку «' + number + '»?\n\nЗаказы вернутся в очередь,'
       + ' и поставки с этим номером больше не будет.')) return;
     try{

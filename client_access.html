@@ -641,10 +641,12 @@
     renderTotalView();
   }
 
+  // Экранирование для разметки. textContent + innerHTML не трогает кавычки —
+  // в тексте они безопасны, в атрибуте закрывают его и позволяют дописать
+  // обработчик события. Подменяем явно, одинаково для текста и атрибутов.
+  const ESCAPE_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
   function escapeHtml(str){
-    const d = document.createElement('div');
-    d.textContent = str == null ? '' : String(str);
-    return d.innerHTML;
+    return String(str == null ? '' : str).replace(/[&<>"']/g, (c) => ESCAPE_MAP[c]);
   }
 
   function renderTotalView(){
@@ -803,7 +805,7 @@
     const list = document.getElementById('wsDatesList');
     list.innerHTML = acts.map((act, i) => {
       const hasWarn = act.items.some(it => it.accepted !== null && it.accepted !== it.declared);
-      return `<button class="ws-date-item ${i === 0 ? 'active' : ''} ${hasWarn ? 'warn' : ''}" id="date-${i}" onclick="renderAct(${i})">${act.date}<span class="num">Акт № ${act.number}</span></button>`;
+      return `<button class="ws-date-item ${i === 0 ? 'active' : ''} ${hasWarn ? 'warn' : ''}" id="date-${i}" onclick="renderAct(${i})">${escapeHtml(act.date)}<span class="num">Акт № ${escapeHtml(act.number)}</span></button>`;
     }).join('');
   }
 
@@ -826,8 +828,8 @@
       return `
         <div class="act-item ${hasDiff ? 'discrepancy' : ''}">
           <div class="act-item-top">
-            <span class="act-item-name">${it.name}</span>
-            <span class="act-item-sku">${it.sku}</span>
+            <span class="act-item-name">${escapeHtml(it.name)}</span>
+            <span class="act-item-sku">${escapeHtml(it.sku)}</span>
           </div>
           <div class="act-item-bars">
             <div class="act-item-row">
@@ -841,7 +843,7 @@
               <span class="act-item-num">${it.accepted !== null ? it.accepted : '—'}</span>
             </div>
           </div>
-          ${it.note ? `<div class="act-item-note">${it.note}</div>` : ''}
+          ${it.note ? `<div class="act-item-note">${escapeHtml(it.note)}</div>` : ''}
         </div>
       `;
     }).join('');
@@ -851,12 +853,12 @@
         <div class="act-card">
           <div class="act-head">
             <div>
-              <div class="act-head-title">Акт приёмки № ${act.number}</div>
-              <div class="act-head-sub">${currentAccountName}</div>
+              <div class="act-head-title">Акт приёмки № ${escapeHtml(act.number)}</div>
+              <div class="act-head-sub">${escapeHtml(currentAccountName)}</div>
             </div>
             <div class="act-head-right">
-              <div>Дата приёмки: ${act.date}</div>
-              <div>Время: ${act.time}</div>
+              <div>Дата приёмки: ${escapeHtml(act.date)}</div>
+              <div>Время: ${escapeHtml(act.time)}</div>
               <div>Принял: Кладовщик (ИИ-агент)</div>
             </div>
           </div>
@@ -881,7 +883,7 @@
 
           <div class="act-footer">
             <div class="act-footer-text">Акт сформирован автоматически по результатам сверки штрихкодов при приёмке.</div>
-            <div class="act-footer-badge">${currentKey || ''}</div>
+            <div class="act-footer-badge">${escapeHtml(currentKey || '')}</div>
           </div>
         </div>
       </div>
