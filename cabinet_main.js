@@ -3281,9 +3281,127 @@
     mpPending = pend || [];
     if(companies.length === 0) await loadCompanies();
     renderMarketplaces();
+    loadUnresolved();
   }
 
   let mpPending = [];
+  let mpUnresolved = [];
+
+  /* ============ Артикулы, ждущие сопоставления ============
+
+     Заказ приезжает с артикулом продавца. Склад живёт нашими артикулами,
+     и пока эти два не связаны, заказ виден, а собрать его нечем: кладовщик
+     пойдёт искать на полке код, которого на складе нет.
+
+     Таблица связей существовала с самого начала и заполнялась один раз,
+     файлом. Экрана к ней не было — то есть владелец смотрел на «не удалось
+     узнать товар у 36 заданий» и не мог сделать ровно ничего. */
+
+  async function loadUnresolved(){
+    const box = document.getElementById('mpUnresolved');
+    if(!box) return;
+    try{ mpUnresolved = await apiFetch('/api/marketplaces/mapping/unresolved'); }
+    catch(e){ mpUnresolved = []; }
+    if(mpUnresolved.length === 0){ box.innerHTML = ''; return; }
+    const orders = mpUnresolved.reduce((s, x) => s + x.orders, 0);
+    box.innerHTML = '<div class="unm-wrap">'
+      + '<div class="unm-head"><div class="unm-title">'
+      +   orders + ' ' + pluralRu(orders, 'заказ', 'заказа', 'заказов')
+      +   ' нельзя собрать</div>'
+      +   '<div class="unm-meta">' + mpUnresolved.length + ' '
+      +   pluralRu(mpUnresolved.length, 'артикул', 'артикула', 'артикулов') + '</div></div>'
+      + '<div class="unm-sub">Площадка присылает артикул продавца, а склад живёт своими.'
+      +   ' Пока они не связаны, заказ виден, но собрать его нечем. Свяжите артикул с товаром —'
+      +   ' лежащие заказы починятся сразу же.</div>'
+      + mpUnresolved.map((u, i) => '<div class="unm-row" id="unm-' + i + '">'
+        + '<div class="unm-top">'
+        +   '<div><div class="unm-art">' + escapeHTML(u.article || '—') + '</div>'
+        +     '<div class="unm-meta">' + escapeHTML(u.companyName)
+        +     (u.mpNmId ? ' · карточка ' + escapeHTML(u.mpNmId) : '')
+        +     (u.mpBarcode ? ' · ШК ' + escapeHTML(u.mpBarcode) : '') + '</div></div>'
+        +   '<div class="unm-meta">' + u.orders + ' '
+        +     pluralRu(u.orders, 'заказ', 'заказа', 'заказов')
+        +     (u.oldest ? ' · с ' + fmtDay(u.oldest) : '') + '</div>'
+        +   '<div class="mp-act" onclick="openUnresolved(' + i + ')">Сопоставить</div>'
+        + '</div>'
+        + '<div class="unm-box">'
+        +   '<input class="unm-input" id="unm-q-' + i + '" placeholder="Найдите наш товар — артикул, название или штрихкод"'
+        +     ' oninput="searchOurProduct(' + i + ')" autocomplete="off">'
+        +   '<div class="unm-hits" id="unm-hits-' + i + '"></div>'
+        + '</div>'
+        + '</div>').join('')
+      + '</div>';
+  }
+
+  function openUnresolved(i){
+    const row = document.getElementById('unm-' + i);
+    if(!row) return;
+    row.classList.toggle('open');
+    if(row.classList.contains('open')){
+      const input = document.getElementById('unm-q-' + i);
+      // Артикул площадки подставляем в поиск: у многих продавцов наш артикул
+      // и артикул площадки различаются приставкой, а не целиком.
+      if(input && !input.value) input.value = mpUnresolved[i].article || '';
+      if(input){ input.focus(); searchOurProduct(i); }
+    }
+  }
+  window.openUnresolved = openUnresolved;
+
+  // Поиск с задержкой: двенадцать тысяч товаров у одного продавца, и
+  // спрашивать сервер на каждую нажатую букву незачем.
+  const unmTimers = {};
+  function searchOurProduct(i){
+    clearTimeout(unmTimers[i]);
+    unmTimers[i] = setTimeout(() => doSearchOurProduct(i), 300);
+  }
+  window.searchOurProduct = searchOurProduct;
+
+  async function doSearchOurProduct(i){
+    const u = mpUnresolved[i];
+    const input = document.getElementById('unm-q-' + i);
+    const hits = document.getElementById('unm-hits-' + i);
+    if(!u || !input || !hits) return;
+    const q = input.value.trim();
+    if(q.length < 2){ hits.innerHTML = ''; return; }
+    let rows;
+    try{
+      rows = await apiFetch('/api/marketplaces/mapping/products?companyId='
+        + encodeURIComponent(u.companyId) + '&q=' + encodeURIComponent(q));
+    } catch(e){
+      hits.innerHTML = '<div class="unm-meta">Поиск не ответил: ' + escapeHTML(e.message) + '</div>';
+      return;
+    }
+    if(rows.length === 0){
+      hits.innerHTML = '<div class="unm-meta">Ничего не нашлось. Если товара нет в 1С,'
+        + ' связать заказ не с чем — сначала он должен появиться в номенклатуре.</div>';
+      return;
+    }
+    hits.innerHTML = rows.map(r => '<div class="unm-hit" onclick="linkOurProduct(' + i + ', \''
+      + String(r.sku).replace(/'/g, "\\'") + '\')"><b>' + escapeHTML(r.sku) + '</b> · '
+      + escapeHTML(r.name || '') + (r.barcode ? ' · ШК ' + escapeHTML(r.barcode) : '')
+      + '</div>').join('');
+  }
+
+  async function linkOurProduct(i, sku){
+    const u = mpUnresolved[i];
+    if(!u) return;
+    try{
+      const r = await apiFetch('/api/marketplaces/mapping', {
+        method: 'POST',
+        body: { companyId: u.companyId, marketplace: 'wb', sku,
+                mpArticle: u.article || null, mpSku: u.mpNmId || null,
+                mpBarcode: u.mpBarcode || null },
+      });
+      showWhToast('«' + (r.name || sku) + '» связан с артикулом ' + (u.article || '')
+        + '. Починено заказов: ' + r.fixedOrders + '.');
+      await loadMarketplaces();
+      // Очередь заказов тоже меняется: несобираемые стали собираемыми.
+      if(typeof loadMpOrders === 'function') loadMpOrders();
+    } catch(e){
+      showWhToast('Не удалось связать: ' + e.message);
+    }
+  }
+  window.linkOurProduct = linkOurProduct;
 
   // Связь считается живой по дате последнего ответа площадки, а не по факту
   // подключения: ключ мог протухнуть, и снаружи это выглядит как затишье.
@@ -3883,7 +4001,7 @@
           Отправить на сборку — ${ready.length} ${pluralRu(ready.length, 'заказ', 'заказа', 'заказов')}
         </button>
         ${stuck > 0 ? `<span class="ord-meta ord-warn">${stuck} ${
-          pluralRu(stuck, 'заказ', 'заказа', 'заказов')} не сопоставлен с номенклатурой — они останутся здесь</span>` : ''}
+          pluralRu(stuck, 'заказ', 'заказа', 'заказов')} не сопоставить с номенклатурой — свяжите артикул на экране «Площадки», и они починятся</span>` : ''}
       </div>
       <div class="ord-scroll">
         <table class="ord-table">
