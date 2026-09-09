@@ -20,6 +20,9 @@
     --ink-soft:#555;
     --line:#000;
     --line-soft:#bbb;
+    /* Волосяная линия сетки. Светлее рамки документа: она размечает, а не
+       делит — иначе лист превращается в клетку. */
+    --rule-hair:#c9c9c9;
     --warn:#a33;
     --sans:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --mono:'IBM Plex Mono', 'Consolas', monospace;
@@ -57,16 +60,27 @@
   .fact b{display:block; font-family:var(--mono); font-size:17px; line-height:1.2;}
   .fact span{font-size:10.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.03em;}
 
+  /* Складская форма, а не таблица из интерфейса.
+     Колонки «обособлены» ровно потому, что их ничто не связывало: одни
+     горизонтальные линии, и каждая ячейка стояла сама по себе. Волосяные
+     линии между колонками — то, чем размечены все складские бланки, и они
+     же держат строку целиком: в плохом свете и на ходу глаз не съезжает
+     на соседнюю. Это форма, которую заполняют карандашом, а не таблица,
+     на которую смотрят. */
   table{width:100%; border-collapse:collapse;}
   th{
-    text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.04em;
-    color:var(--ink-soft); border-bottom:1.5px solid var(--line); padding:0 6px 5px; font-weight:600;
+    text-align:left; font-size:9px; text-transform:uppercase; letter-spacing:.06em;
+    color:var(--ink-soft); border-bottom:1.2px solid var(--line); padding:0 5px 4px; font-weight:600;
   }
+  th + th, td + td{border-left:1px solid var(--rule-hair);}
+  /* Номер и клетка для галочки — одно поле, а не два: линия между двумя
+     узкими колонками не размечает ничего и только дробит левый край. */
+  th:first-child + th, td:first-child + td{border-left:0;}
   /* По центру строки, а не по верхнему краю.
      Название занимает две строки, а адрес, артикул и количество — одну;
      при выравнивании по верху они висели у потолка, и глаз собирал строку
      из кусков, стоящих на разной высоте. */
-  td{padding:5px 6px; border-bottom:1px solid var(--line-soft); vertical-align:middle;}
+  td{padding:4px 5px; border-bottom:1px solid var(--rule-hair); vertical-align:middle;}
   tr{break-inside:avoid;}
   .num{text-align:right; font-family:var(--mono);}
   /* Одна яркость на всю строку.
@@ -74,7 +88,7 @@
      что служебное: наш код номенклатуры и незначащая часть штрихкода.
      Разная яркость у равных по смыслу чисел читается как разная важность,
      и строка рассыпается. */
-  .cellno{text-align:center; font-family:var(--mono); font-size:10px; color:var(--ink);}
+  .cellno{text-align:center; font-family:var(--mono); font-size:9px; color:var(--ink-soft);}
   .mid{text-align:center;}
   .mono{font-family:var(--mono);}
   /* Номер заказа и номер отправления — длинные и переносятся. Мельче
@@ -91,11 +105,17 @@
      И один заголовок «не найдено в ячейках» вместо восемнадцати одинаковых
      красных надписей подряд. Восемнадцать повторов — уже не предупреждение,
      а фон, который перестают читать. */
+  /* Полоса ряда — без заливки.
+     Серый фон на складском принтере печатается точечным растром и выглядит
+     грязью, а тонера съедает как чёрный. Полосу держат линии и разрядка:
+     на бумаге это читается чище, чем плашка, и не зависит от того, сколько
+     тонера осталось в картридже. */
   .band td{
-    background:#f0f0f0; border-bottom:1.5px solid var(--line); border-top:1.5px solid var(--line);
-    padding:5px 6px; font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+    border-top:1.2px solid var(--line); border-bottom:0.8px solid var(--line);
+    border-left:0 !important;
+    padding:7px 5px 3px; font-size:10px; font-weight:700; letter-spacing:.12em; text-transform:uppercase;
   }
-  .band.miss td{background:#fbeceb; color:var(--warn); border-color:var(--warn);}
+  .band.miss td{color:var(--warn); border-color:var(--warn);}
   .band .band-count{font-weight:400; color:var(--ink-soft);}
   .band.miss .band-count{color:var(--warn);}
 
@@ -104,12 +124,22 @@
      показываем ровно столько знаков, сколько РАЗЛИЧАЮТ товар на этом листе.
      Четыре цифры уникальны на десяти позициях и совпадают на двухстах, и
      тогда крупная цифра уводит не к тому товару — хуже, чем её отсутствие. */
-  .bc{font-family:var(--mono); font-size:9px; color:var(--ink-soft); text-align:right; white-space:nowrap; line-height:1.2;}
-  /* Хвост в той же строке, а не под ней: два яруса в этом столбце задавали
-     высоту ВСЕЙ строки листа — 47 пикселей там, где хватает 32. */
-  .bc b{font-size:14px; color:var(--ink); letter-spacing:.02em; margin-left:2px;}
+  /* Штрихкод в два яруса: незначащая часть сверху мелко, различающий хвост
+     снизу крупно. Так же устроен и адрес ячейки — и от этого строка читается
+     двумя сплошными полосами через весь лист, а не семью островами. */
+  .bc{font-family:var(--mono); font-size:8.5px; color:var(--ink-soft); text-align:center;
+    white-space:nowrap; line-height:1.15;}
+  .bc b{display:block; font-size:13px; color:var(--ink); letter-spacing:.02em; font-weight:700;}
 
-  .row-addr{font-family:var(--mono); font-size:14px; font-weight:700; white-space:nowrap; text-align:center;}
+  /* Адрес ячейки в два яруса: стеллаж сверху, место снизу. Один ярус —
+     это «04-001» одной строкой, и колонка под него нужна вдвое шире; тем же
+     местом на листе оплачивалось название. Стеллаж мельче не потому, что
+     он менее важен, а потому что внутри ряда их немного и глаз находит его
+     сразу; место — то, что различает соседние строки. */
+  .row-addr{font-family:var(--mono); text-align:center; line-height:1.1; white-space:nowrap;}
+  .row-addr span{display:block; font-size:10px; color:var(--ink-soft);}
+  .row-addr b{display:block; font-size:15px; font-weight:700;}
+  .row-addr.one b{font-size:13px;}
   /* Артикул продавца — первым и крупно.
      Это то, чем товар подписан на коробке и чем его зовут на площадке;
      наш код номенклатуры (PB…) кладовщику ни о чём не говорит и стоит
@@ -118,24 +148,24 @@
   /* Артикул — свой столбец, как штрихкод и количество. Внутри строки он
      тянул на себя всю ширину; столбцом он занимает ровно то, что нужно
      цифрам, и его видно сверху вниз по всему листу. */
-  .goods-art{font-family:var(--mono); font-size:12px; font-weight:700; line-height:1.15; text-align:center;}
+  .goods-art{font-family:var(--mono); font-size:11.5px; font-weight:700; line-height:1.15; text-align:center;}
   /* Наш код номенклатуры — на той же строке, мелким. Отдельной строки он
      не стоит: три строки на позицию съедают ровно тот лист, который
      освободил убранный QR. */
-  .goods-art i{display:block; font-style:normal; font-weight:400; font-size:9px;
+  .goods-art i{display:block; font-style:normal; font-weight:400; font-size:8.5px;
     color:var(--ink-soft); letter-spacing:-0.02em;}
   /* Название мельче и в два яруса: одной строкой во всю ширину оно съедало
      место, которое нужно адресу, артикулу и штрихкоду. Не обрезаем: два
      «Батончика Грильяж» различаются как раз хвостом названия, и обрезка
      сделала бы разные строки одинаковыми. */
-  .goods-line{font-weight:600; font-size:11.5px; line-height:1.2;}
+  .goods-line{font-weight:600; font-size:10.5px; line-height:1.25;}
   td.tight{padding-top:4px; padding-bottom:4px;}
 
   /* Адрес ячейки — самое крупное в строке. Кладовщик ведёт по нему глазами
      вдоль стеллажа, всё остальное читается уже у полки. */
   .addr{font-family:var(--mono); font-size:15px; font-weight:700; white-space:nowrap;}
   .addr-more{font-family:var(--mono); font-size:10.5px; color:var(--ink-soft); font-weight:400;}
-  .qty{font-family:var(--mono); font-size:17px; font-weight:700;}
+  .qty{font-family:var(--mono); font-size:16px; font-weight:700;}
   .goods-name{font-weight:600;}
   .goods-codes{font-family:var(--mono); font-size:10.5px; color:var(--ink-soft); margin-top:2px;}
 
@@ -331,6 +361,16 @@
   // Отрезаем только настоящий префикс — «01-» у адреса «01-04-001». Чужой
   // формат (у ячейки может быть любое имя со стеллажа) оставляем целиком:
   // подрезать незнакомую строку значит однажды отрезать значащую часть.
+  // «04-001» → стеллаж и место, двумя ярусами. Имя ячейки задаёт владелец,
+  // и делиться оно обязано не всегда: неразделимое показываем целиком.
+  function addrTiers(label, groupKey){
+    const tail = shortAddr(label, groupKey);
+    const m = String(tail).match(/^([^-./ ]+)[-./ ](.+)$/);
+    return m
+      ? '<div class="row-addr"><span>' + esc(m[1]) + '</span><b>' + esc(m[2]) + '</b></div>'
+      : '<div class="row-addr one"><b>' + esc(tail) + '</b></div>';
+  }
+
   function shortAddr(label, groupKey){
     const s = String(label);
     for(const sep of ['-', '.', '/', ' ']){
@@ -382,11 +422,11 @@
     const body = groups.map((g) => {
       const count = g.rows.length;
       const band = g.key === null
-        ? '<tr class="band miss"><td colspan="' + (6 + (withPhoto ? 1 : 0)) + '">'
+        ? '<tr class="band miss"><td colspan="' + (7 + (withPhoto ? 1 : 0)) + '">'
           + 'Не найдено в ячейках <span class="band-count">· ' + count + ' '
           + plural(count, 'позиция', 'позиции', 'позиций')
           + ' · искать по складу или ждать приёмку</span></td></tr>'
-        : '<tr class="band"><td colspan="' + (6 + (withPhoto ? 1 : 0)) + '">'
+        : '<tr class="band"><td colspan="' + (7 + (withPhoto ? 1 : 0)) + '">'
           + 'Ряд ' + esc(String(g.key)) + ' <span class="band-count">· ' + count + ' '
           + plural(count, 'позиция', 'позиции', 'позиций') + '</span></td></tr>';
 
@@ -400,14 +440,14 @@
         return '<tr>'
           + '<td class="cellno" style="width:20px;">' + n + '</td>'
           + '<td class="mid" style="width:22px;"><div class="tick"></div></td>'
-          + '<td style="width:62px;">'
+          + '<td style="width:44px;">'
           +   (first
-                ? '<div class="row-addr">' + esc(shortAddr(first.label, g.key)) + '</div>'
+                ? addrTiers(first.label, g.key)
                   + (rest.length ? '<div class="addr-more">+' + rest.length + '</div>' : '')
-                : '<div class="row-addr short">—</div>')
+                : '<div class="row-addr one short"><b>—</b></div>')
           + '</td>'
           + (withPhoto ? '<td class="mid" style="width:40px;"><div class="photo">фото</div></td>' : '')
-          + '<td style="width:74px;">'
+          + '<td style="width:70px;">'
           +   '<div class="goods-art">'
           +     (r.article ? esc(r.article) : '<span class="short">нет арт.</span>')
           +     '<i>' + esc(r.sku) + '</i>'
@@ -419,7 +459,7 @@
                 ? '<div class="short-note">в ячейках только ' + nf(r.available) + '</div>'
                 : '')
           + '</td>'
-          + '<td class="bc" style="width:70px;">'
+          + '<td class="bc" style="width:62px;">'
           +   (bc
                 ? (tail
                     ? esc(bc.slice(0, bc.length - tail)) + '<b>' + esc(bc.slice(-tail)) + '</b>'
