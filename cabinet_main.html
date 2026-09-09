@@ -500,7 +500,10 @@
 
   /* Экран "Сотрудники" */
   .staff-wrap{flex:1; overflow-y:auto; padding:24px; display:flex; flex-direction:column; gap:20px;}
-  .staff-wrap > *{max-width:1080px; width:100%;}
+  .staff-wrap > *{max-width:1280px; width:100%; margin-left:auto; margin-right:auto;}
+  /* Прозу не растягиваем ни при какой ширине окна: строка длиннее ~90 знаков
+     читается хуже, чем короткая, сколько бы места ни было. */
+  .staff-sub{max-width:680px;}
 
   /* Экран "Подключение 1С" */
   .oc-wrap{flex:1; overflow-y:auto; padding:24px; max-width:640px;}
@@ -1366,6 +1369,14 @@
   .mp-act{font-size:12px; color:var(--accent-2); cursor:pointer;}
   .mp-act:hover{text-decoration:underline;}
   .mp-act.warn{color:var(--terracotta);}
+  .sup-row{display:grid; grid-template-columns:auto 1fr auto auto; gap:14px; align-items:center;
+    background:var(--panel-2); border:1px solid var(--line); border-radius:10px;
+    padding:12px 15px; margin-bottom:8px;}
+  .sup-num{font-family:var(--mono); font-size:13px; color:var(--accent-2);}
+  .sup-meta{font-size:12px; color:var(--muted);}
+  .sup-state{font-size:11px; padding:3px 9px; border-radius:20px; border:1px solid var(--line); color:var(--muted);}
+  .sup-state.collecting{border-color:var(--yellow); color:var(--yellow); background:var(--yellow-soft);}
+  .sup-state.ready{border-color:var(--green); color:var(--green); background:var(--green-soft);}
   .mp-fold{background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:0 16px;}
   .mp-fold summary{cursor:pointer; padding:14px 0; font-size:13px; font-weight:600; list-style:none;}
   .mp-fold summary::-webkit-details-marker{display:none;}
@@ -1949,6 +1960,14 @@
         </div>
         <div id="ordersProgress"></div>
         <div id="ordersContent"><div class="staff-empty">Загружаем…</div></div>
+
+        <div class="staff-head" style="margin-top:34px;">
+          <div>
+            <div class="staff-title">Собранные поставки</div>
+            <div class="staff-sub">Поставка — это решение «вот это уезжает сегодня». Пока она собирается, её можно разобрать: заказы вернутся в очередь.</div>
+          </div>
+        </div>
+        <div id="suppliesList"></div>
       </div>
     </div>
 
@@ -2095,6 +2114,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=65" defer></script>
+<script src="cabinet_main.js?v=66" defer></script>
 </body>
 </html>

@@ -3813,6 +3813,7 @@
       if(ordersPicked && !ordersPartners.some(p => p.companyId === ordersPicked)) ordersPicked = null;
       renderMpOrders();
       if(ordersPicked) loadPartnerOrders(ordersPicked);
+      loadSupplies();
     } catch(e){
       // Отрисовка внутри того же try, что и запрос. Раньше она была снаружи,
       // и её падение оставляло экран на «Загружаем…» навсегда: запрос-то
@@ -3912,6 +3913,60 @@
     `;
   }
 
+  // Собранные поставки.
+  //
+  // Нужны на этом же экране по одной причине: собрать поставку не туда —
+  // обычное дело, и человек должен видеть, что он собрал, рядом с тем, из
+  // чего собирал. Пока поставка «собирается», её можно разобрать; после
+  // отбора товар уже снят с полок, и разбирать её в базе значило бы
+  // соврать про склад.
+  async function loadSupplies(){
+    const box = document.getElementById('suppliesList');
+    if(!box) return;
+    let rows;
+    try{ rows = await apiFetch('/api/supplies'); }
+    catch(e){
+      box.innerHTML = '<div class="staff-empty">Не удалось загрузить поставки: '
+        + escapeHTML(e.message) + '</div>';
+      return;
+    }
+    if(rows.length === 0){
+      box.innerHTML = '<div class="staff-empty">Поставок пока нет.</div>';
+      return;
+    }
+    box.innerHTML = rows.map(s => {
+      const when = s.shipped_at || s.ready_at || s.created_at;
+      return '<div class="sup-row">'
+        + '<div class="sup-num">' + escapeHTML(s.number) + '</div>'
+        + '<div><b style="font-size:13px;">' + escapeHTML(s.company_name) + '</b>'
+        +   '<div class="sup-meta">' + s.orders + ' '
+        +   pluralRu(s.orders, 'заказ', 'заказа', 'заказов')
+        +   (when ? ' · ' + fmtDay(when) : '')
+        +   (s.destination ? ' · ' + escapeHTML(s.destination) : '') + '</div></div>'
+        + '<div class="sup-state ' + s.status + '">' + escapeHTML(s.statusName || s.status) + '</div>'
+        + '<div>' + (s.status === 'collecting'
+            ? '<span class="mp-act warn" onclick="disbandSupply(\'' + s.id + '\', \''
+              + escapeHTML(s.number) + '\')">Разобрать</span>'
+            : '') + '</div>'
+        + '</div>';
+    }).join('');
+  }
+  window.loadSupplies = loadSupplies;
+
+  async function disbandSupply(id, number){
+    if(!confirm('Разобрать поставку «' + number + '»?\n\nЗаказы вернутся в очередь,'
+      + ' и поставки с этим номером больше не будет.')) return;
+    try{
+      const r = await apiFetch('/api/supplies/' + id, { method: 'DELETE' });
+      showWhToast('Поставка ' + r.number + ' разобрана: ' + r.returned + ' '
+        + pluralRu(r.returned, 'заказ', 'заказа', 'заказов') + ' вернулись в очередь.');
+      await loadMpOrders();
+    } catch(e){
+      showWhToast('Не удалось разобрать: ' + e.message);
+    }
+  }
+  window.disbandSupply = disbandSupply;
+
   // Забрать заказы со всех подключённых площадок.
   //
   // Раньше за этим приходилось идти на другой экран и нажимать «Забрать
@@ -3984,6 +4039,9 @@
         + ' ' + pluralRu(supply.orders, 'заказ', 'заказа', 'заказов') + '.');
       await loadMpOrders();
     } catch(e){
+      // Отказ сервера показываем целиком: в нём назван номер заказа,
+      // из-за которого поставка не собралась, и это единственная подсказка,
+      // что делать дальше.
       showWhToast('Не удалось собрать поставку: ' + e.message);
     }
   }
