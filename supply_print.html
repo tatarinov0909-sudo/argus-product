@@ -47,13 +47,13 @@
   }
 
   .doc-head{display:flex; justify-content:space-between; align-items:flex-start; gap:20px;
-    border-bottom:2px solid var(--line); padding-bottom:9px; margin-bottom:12px;}
+    border-bottom:2px solid var(--line); padding-bottom:7px; margin-bottom:9px;}
   .doc-title{font-size:19px; font-weight:700; line-height:1.15;}
   .doc-sub{font-size:12px; color:var(--ink-soft); margin-top:3px;}
   .doc-num{font-family:var(--mono); font-size:22px; font-weight:700; text-align:right; white-space:nowrap;}
   .doc-num span{display:block; font-family:var(--sans); font-size:11px; font-weight:400; color:var(--ink-soft);}
 
-  .facts{display:flex; gap:26px; margin-bottom:12px; flex-wrap:wrap;}
+  .facts{display:flex; gap:26px; margin-bottom:9px; flex-wrap:wrap;}
   .fact b{display:block; font-family:var(--mono); font-size:17px; line-height:1.2;}
   .fact span{font-size:10.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.03em;}
 
@@ -62,9 +62,20 @@
     text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.04em;
     color:var(--ink-soft); border-bottom:1.5px solid var(--line); padding:0 6px 5px; font-weight:600;
   }
-  td{padding:6px 6px; border-bottom:1px solid var(--line-soft); vertical-align:top;}
+  /* По центру строки, а не по верхнему краю.
+     Название занимает две строки, а адрес, артикул и количество — одну;
+     при выравнивании по верху они висели у потолка, и глаз собирал строку
+     из кусков, стоящих на разной высоте. */
+  td{padding:5px 6px; border-bottom:1px solid var(--line-soft); vertical-align:middle;}
   tr{break-inside:avoid;}
   .num{text-align:right; font-family:var(--mono);}
+  /* Одна яркость на всю строку.
+     Данные — чёрные, различаются только размером. Серым остаётся ровно то,
+     что служебное: наш код номенклатуры и незначащая часть штрихкода.
+     Разная яркость у равных по смыслу чисел читается как разная важность,
+     и строка рассыпается. */
+  .cellno{text-align:center; font-family:var(--mono); font-size:10px; color:var(--ink);}
+  .mid{text-align:center;}
   .mono{font-family:var(--mono);}
   /* Номер заказа и номер отправления — длинные и переносятся. Мельче
      остального текста нарочно: их не читают вслух, по ним сверяются
@@ -93,22 +104,31 @@
      показываем ровно столько знаков, сколько РАЗЛИЧАЮТ товар на этом листе.
      Четыре цифры уникальны на десяти позициях и совпадают на двухстах, и
      тогда крупная цифра уводит не к тому товару — хуже, чем её отсутствие. */
-  .bc{font-family:var(--mono); font-size:9.5px; color:var(--ink-soft); text-align:right; white-space:nowrap;}
-  .bc b{display:block; font-size:15px; color:var(--ink); letter-spacing:.02em;}
+  .bc{font-family:var(--mono); font-size:9px; color:var(--ink-soft); text-align:right; white-space:nowrap; line-height:1.2;}
+  /* Хвост в той же строке, а не под ней: два яруса в этом столбце задавали
+     высоту ВСЕЙ строки листа — 47 пикселей там, где хватает 32. */
+  .bc b{font-size:14px; color:var(--ink); letter-spacing:.02em; margin-left:2px;}
 
-  .row-addr{font-family:var(--mono); font-size:15px; font-weight:700; white-space:nowrap;}
+  .row-addr{font-family:var(--mono); font-size:14px; font-weight:700; white-space:nowrap; text-align:center;}
   /* Артикул продавца — первым и крупно.
      Это то, чем товар подписан на коробке и чем его зовут на площадке;
      наш код номенклатуры (PB…) кладовщику ни о чём не говорит и стоит
      последним, мелким — он нужен, когда разбирают расхождение, а не когда
      снимают коробку с полки. */
-  .goods-art{font-family:var(--mono); font-size:13px; font-weight:700; line-height:1.2;}
+  /* Артикул — свой столбец, как штрихкод и количество. Внутри строки он
+     тянул на себя всю ширину; столбцом он занимает ровно то, что нужно
+     цифрам, и его видно сверху вниз по всему листу. */
+  .goods-art{font-family:var(--mono); font-size:12px; font-weight:700; line-height:1.15; text-align:center;}
   /* Наш код номенклатуры — на той же строке, мелким. Отдельной строки он
      не стоит: три строки на позицию съедают ровно тот лист, который
      освободил убранный QR. */
-  .goods-art i{font-style:normal; font-weight:400; font-size:9.5px; color:var(--ink-soft); margin-left:8px;}
-  .goods-line{font-weight:600; line-height:1.25;}
-  .goods-meta{font-family:var(--mono); font-size:9.5px; color:var(--ink-soft); margin-top:1px;}
+  .goods-art i{display:block; font-style:normal; font-weight:400; font-size:9px;
+    color:var(--ink-soft); letter-spacing:-0.02em;}
+  /* Название мельче и в два яруса: одной строкой во всю ширину оно съедало
+     место, которое нужно адресу, артикулу и штрихкоду. Не обрезаем: два
+     «Батончика Грильяж» различаются как раз хвостом названия, и обрезка
+     сделала бы разные строки одинаковыми. */
+  .goods-line{font-weight:600; font-size:11.5px; line-height:1.2;}
   td.tight{padding-top:4px; padding-bottom:4px;}
 
   /* Адрес ячейки — самое крупное в строке. Кладовщик ведёт по нему глазами
@@ -134,11 +154,11 @@
   .short{color:var(--warn); font-weight:600;}
   .short-note{font-size:10.5px; color:var(--warn);}
 
-  .doc-foot{margin-top:14px; padding-top:9px; border-top:1px solid var(--line-soft);
-    display:flex; justify-content:space-between; gap:20px; font-size:11px; color:var(--ink-soft);}
-  .sign{margin-top:18px; display:flex; gap:40px;}
+  .doc-foot{margin-top:10px; padding-top:7px; border-top:1px solid var(--line-soft);
+    display:flex; justify-content:space-between; gap:20px; font-size:10.5px; color:var(--ink-soft);}
+  .sign{margin-top:12px; display:flex; gap:40px;}
   .sign div{flex:1;}
-  .sign-line{border-bottom:1px solid var(--ink); height:26px;}
+  .sign-line{border-bottom:1px solid var(--ink); height:20px;}
   .sign-label{font-size:10px; color:var(--ink-soft); margin-top:3px;}
 
   .empty{padding:30px; text-align:center; color:var(--ink-soft);}
@@ -362,11 +382,11 @@
     const body = groups.map((g) => {
       const count = g.rows.length;
       const band = g.key === null
-        ? '<tr class="band miss"><td colspan="' + (5 + (withPhoto ? 1 : 0)) + '">'
+        ? '<tr class="band miss"><td colspan="' + (6 + (withPhoto ? 1 : 0)) + '">'
           + 'Не найдено в ячейках <span class="band-count">· ' + count + ' '
           + plural(count, 'позиция', 'позиции', 'позиций')
           + ' · искать по складу или ждать приёмку</span></td></tr>'
-        : '<tr class="band"><td colspan="' + (5 + (withPhoto ? 1 : 0)) + '">'
+        : '<tr class="band"><td colspan="' + (6 + (withPhoto ? 1 : 0)) + '">'
           + 'Ряд ' + esc(String(g.key)) + ' <span class="band-count">· ' + count + ' '
           + plural(count, 'позиция', 'позиции', 'позиций') + '</span></td></tr>';
 
@@ -378,38 +398,35 @@
         const notEnough = r.available < r.qty;
         const bc = String(r.barcode || '');
         return '<tr>'
-          + '<td class="num tight" style="width:24px; color:#888;">' + n + '</td>'
-          + '<td class="tight" style="width:26px;"><div class="tick"></div></td>'
-          + '<td class="tight" style="width:74px;">'
+          + '<td class="cellno" style="width:20px;">' + n + '</td>'
+          + '<td class="mid" style="width:22px;"><div class="tick"></div></td>'
+          + '<td style="width:62px;">'
           +   (first
                 ? '<div class="row-addr">' + esc(shortAddr(first.label, g.key)) + '</div>'
-                  + (rest.length
-                      ? '<div class="addr-more">+' + rest.length + '</div>'
-                      : '')
+                  + (rest.length ? '<div class="addr-more">+' + rest.length + '</div>' : '')
                 : '<div class="row-addr short">—</div>')
           + '</td>'
-          + (withPhoto ? '<td class="tight" style="width:46px;"><div class="photo">фото</div></td>' : '')
-
-          + '<td class="tight">'
+          + (withPhoto ? '<td class="mid" style="width:40px;"><div class="photo">фото</div></td>' : '')
+          + '<td style="width:74px;">'
           +   '<div class="goods-art">'
-          +     (r.article
-                  ? esc(r.article)
-                  : '<span class="short">без артикула площадки</span>')
+          +     (r.article ? esc(r.article) : '<span class="short">нет арт.</span>')
           +     '<i>' + esc(r.sku) + '</i>'
-          +     (notEnough && r.available > 0
-                  ? ' <span class="short">· в ячейках только ' + nf(r.available) + '</span>'
-                  : '')
           +   '</div>'
-          +   '<div class="goods-line">' + esc(r.name) + '</div>'
           + '</td>'
-          + '<td class="bc tight" style="width:78px;">'
+          + '<td>'
+          +   '<div class="goods-line">' + esc(r.name) + '</div>'
+          +   (notEnough && r.available > 0
+                ? '<div class="short-note">в ячейках только ' + nf(r.available) + '</div>'
+                : '')
+          + '</td>'
+          + '<td class="bc" style="width:70px;">'
           +   (bc
                 ? (tail
                     ? esc(bc.slice(0, bc.length - tail)) + '<b>' + esc(bc.slice(-tail)) + '</b>'
                     : '<b style="font-size:11px;">' + esc(bc) + '</b>')
                 : '')
           + '</td>'
-          + '<td class="num tight" style="width:52px;"><span class="qty' + (notEnough ? ' short' : '') + '">'
+          + '<td class="num" style="width:40px;"><span class="qty' + (notEnough ? ' short' : '') + '">'
           +   nf(r.qty) + '</span></td>'
           + '</tr>';
       }).join('');
@@ -430,8 +447,9 @@
             + ' в ячейках меньше, чем нужно, — они отмечены в списке и собраны в нижнюю группу.</div>'
           : '')
       + '<table><thead><tr>'
-      +   '<th></th><th></th><th>Ячейка</th>' + (withPhoto ? '<th></th>' : '')
-      +   '<th>Артикул и товар</th><th class="bc">Штрихкод</th><th class="num">Взять</th>'
+      +   '<th></th><th></th><th class="mid">Ячейка</th>' + (withPhoto ? '<th></th>' : '')
+      +   '<th class="mid">Артикул</th><th>Товар</th>'
+      +   '<th class="bc">Штрихкод</th><th class="num">Взять</th>'
       + '</tr></thead><tbody>' + body + '</tbody></table>'
       + '<div class="sign">'
       +   '<div><div class="sign-line"></div><div class="sign-label">Собрал — фамилия, подпись</div></div>'
