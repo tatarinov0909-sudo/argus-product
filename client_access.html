@@ -97,10 +97,30 @@
     display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;
     padding:16px 28px; border-bottom:1px solid var(--line); background:var(--panel);
   }
-  .ws-brand{display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--muted);}
+  /* Одна полоса вместо трёх.
+     Было: шапка, потом переключатель вида, потом строка дат — три уровня
+     хрома над содержимым, и ни один не про то, что человек пришёл смотреть.
+     Теперь наверху одна полоса: слева склад, по центру вид, справа сам
+     продавец и выход. Даты уехали в содержимое: это список документов,
+     из которых выбирают, а не часть окна. */
+  .ws-brand{display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--muted);
+    flex:0 0 auto; min-width:0;}
+  .ws-brand span{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .ws-right{display:flex; align-items:center; gap:14px; flex:0 0 auto;}
+  /* Выгрузка — действие над содержимым, а не пункт навигации: ссылкой,
+     чтобы не спорить весом с переключателем вида. */
+  .ws-link{
+    background:none; border:none; padding:0; cursor:pointer;
+    font-family:var(--sans); font-size:12px; color:var(--muted); text-decoration:underline;
+  }
+  .ws-link:hover{color:var(--accent);}
   .ws-brand-dot{width:20px; height:13px; flex-shrink:0;}
-  .ws-current-account{font-size:12.5px; color:var(--accent); font-weight:600; background:var(--accent-soft); padding:7px 13px; border-radius:8px;}
-  .ws-logout{font-size:12px; color:var(--muted); cursor:pointer; text-decoration:underline;}
+  /* Кто вошёл — справа, рядом с выходом: это одна мысль, «вы здесь как
+     Слим Тим, выйти можно тут же». По центру шапки эта плашка висела ни
+     к чему не привязанной. */
+  .ws-current-account{font-size:12px; color:var(--accent); font-weight:600;
+    background:var(--accent-soft); padding:5px 11px; border-radius:7px; white-space:nowrap;}
+  .ws-logout{font-size:12px; color:var(--muted); cursor:pointer; text-decoration:underline; white-space:nowrap;}
 
   /* Сверху вниз, а не слева направо.
      Боковая полоса держала сразу три разные вещи — переключатель вида,
@@ -109,24 +129,26 @@
      строкой под ним. */
   .ws-body{display:flex; flex-direction:column; flex:1; min-height:0;}
 
-  .ws-toolbar{
-    display:flex; align-items:center; justify-content:space-between; gap:16px;
-    padding:12px 20px; border-bottom:1px solid var(--line); background:var(--panel);
-    flex-wrap:wrap;
-  }
-  .ws-export{flex:0 0 auto;}
+
 
 
   /* Даты — строкой, с прокруткой по горизонтали. Их бывает много, и
      вертикальным списком они забирали ширину у самого документа. */
   .ws-dates{
     display:flex; align-items:center; gap:10px; flex-shrink:0;
-    background:var(--panel); padding:10px 20px; border-bottom:1px solid var(--line);
+    padding:0 0 14px; margin-bottom:4px; border-bottom:1px solid var(--line);
     min-width:0;
   }
   .ws-dates-title{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.4px;
     flex:0 0 auto; margin:0;}
-  #wsDatesList{display:flex; gap:6px; overflow-x:auto; flex:1; min-width:0; padding-bottom:2px;}
+  #wsDatesList{display:flex; gap:6px; overflow-x:auto; flex:1; min-width:0; padding-bottom:6px;}
+  /* Полоса прокрутки у дат — тонкая и в цвете темы. Системная светлая
+     на тёмном фоне читается как чужая деталь, наклеенная поверх. */
+  #wsDatesList::-webkit-scrollbar{height:4px;}
+  #wsDatesList::-webkit-scrollbar-track{background:transparent;}
+  #wsDatesList::-webkit-scrollbar-thumb{background:var(--line); border-radius:2px;}
+  #wsDatesList::-webkit-scrollbar-thumb:hover{background:var(--muted);}
+  #wsDatesList{scrollbar-width:thin; scrollbar-color:var(--line) transparent;}
   .ws-date-item{
     display:block; flex:0 0 auto; text-align:left; padding:7px 11px; border-radius:8px; border:none; background:none;
     color:var(--text); font-family:var(--sans); font-size:12.5px; cursor:pointer; white-space:nowrap;
@@ -174,7 +196,12 @@
   .cal-day.has-act:not(.warn)::after{content:''; position:absolute; bottom:2px; left:50%; transform:translateX(-50%); width:4px; height:4px; border-radius:50%; background:var(--accent);}
   .cal-day.selected{background:var(--accent-soft); color:var(--accent); font-weight:700;}
 
-  .ws-content{flex:1; overflow-y:auto; padding:32px; display:flex; justify-content:center;}
+  /* Содержимое — колонкой: строка дат сверху, вид под ней.
+     Контейнер центрировал единственного ребёнка строкой; когда детей
+     стало двое, они встали рядом, и карточка акта уехала за правый край.
+     Центрирование теперь на внутренней колонке, а не на контейнере. */
+  .ws-content{flex:1; overflow-y:auto; padding:24px 32px 32px; min-width:0;}
+  .ws-content > *{max-width:860px; margin-left:auto; margin-right:auto;}
 
   /* ---------- Карточка акта ---------- */
   .act-wrap{width:100%; max-width:640px;}
@@ -267,10 +294,10 @@
   .act-footer-badge{font-size:11px; color:var(--muted); font-family:var(--mono);}
 
   @media (max-width:640px){
-    .ws-dates{padding:10px 14px;}
+    .ws-mode-switch{order:3; width:100%;}
+    .ws-mode-btn{flex:1;}
 
     .ws-dates-title{display:none;}
-    .ws-toolbar{padding:10px 14px;}
     .ws-content{padding:20px;}
     .act-card{padding:24px 20px;}
     .act-summary{grid-template-columns:1fr;}
@@ -283,7 +310,7 @@
   .ws-logout{transition:color 0.2s var(--ease);}
   .ws-logout:hover{color:var(--text);}
 
-  .ws-dates{box-shadow:0 1px 0 rgba(0,0,0,0.15);}
+
   .ws-date-item{transition:background 0.2s var(--ease), color 0.2s var(--ease), transform 0.15s var(--ease);}
   .ws-date-item:hover{transform:translateY(-1px);}
   .ws-date-item.active{box-shadow:inset 0 0 0 1px rgba(95,175,166,0.16);}
@@ -331,35 +358,39 @@
 
   <div class="workspace" id="workspace">
     <div class="ws-header">
-      <div class="ws-brand">
+      <div class="ws-brand" id="wsBrand">
         <svg class="ws-brand-dot" viewBox="0 0 32 20" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M3 11C7 3 12 0.5 16 0.5S25 3 29 11" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round"/>
           <path d="M4 9C8 16 12 19 16 19S24 16 28 9" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round"/>
           <circle cx="16" cy="10" r="4" fill="var(--accent)"/>
           <circle cx="17.2" cy="8.8" r="1" fill="var(--bg)"/>
         </svg>
-        Аргус · Склад №1, Люберцы
+        <span id="wsWarehouse">Аргус</span>
       </div>
-      <div class="ws-current-account" id="wsCurrentAccount"></div>
-      <div class="ws-logout" onclick="logout()">Выйти по другому ключу</div>
+
+      <div class="ws-mode-switch">
+        <button class="ws-mode-btn active" id="modeByDate" onclick="setViewMode('dates')">По датам</button>
+        <button class="ws-mode-btn" id="modeTotal" onclick="setViewMode('total')">Остаток</button>
+        <button class="ws-mode-btn" id="modeMoves" onclick="setViewMode('moves')">Движение</button>
+      </div>
+
+      <div class="ws-right">
+        <button class="ws-link" onclick="exportActs()">Выгрузить в Excel</button>
+        <div class="ws-current-account" id="wsCurrentAccount"></div>
+        <div class="ws-logout" onclick="logout()">Выйти</div>
+      </div>
     </div>
     <div class="ws-body">
-      <div class="ws-toolbar">
-        <div class="ws-mode-switch">
-          <button class="ws-mode-btn active" id="modeByDate" onclick="setViewMode('dates')">По датам</button>
-          <button class="ws-mode-btn" id="modeTotal" onclick="setViewMode('total')">Остаток</button>
-          <button class="ws-mode-btn" id="modeMoves" onclick="setViewMode('moves')">Движение</button>
+      <div class="ws-content" id="wsContent">
+        <div class="ws-dates" id="wsDatesHead">
+          <div class="ws-dates-title">Даты приёмки</div>
+          <div id="wsDatesList"></div>
+          <button class="cal-btn" onclick="toggleCal(event)" title="Календарь" aria-label="Календарь">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M2 6.5h12M5 1.5v2M11 1.5v2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          </button>
         </div>
-        <button class="ws-mode-btn ws-export" onclick="exportActs()">Выгрузить в Excel</button>
+        <div id="wsView"></div>
       </div>
-      <div class="ws-dates" id="wsDatesHead">
-        <div class="ws-dates-title">Даты приёмки</div>
-        <div id="wsDatesList"></div>
-        <button class="cal-btn" onclick="toggleCal(event)" title="Календарь" aria-label="Календарь">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" stroke-width="1.3"/><path d="M2 6.5h12M5 1.5v2M11 1.5v2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
-        </button>
-      </div>
-      <div class="ws-content" id="wsContent"></div>
     </div>
   </div>
 
@@ -421,6 +452,11 @@
       });
       TOKEN = data.token;
       localStorage.setItem('argus_token', TOKEN);
+      // Название склада приходит от сервера. Раньше в шапке было вписано
+      // «Склад №1, Люберцы» — и клиент читал выдумку как факт.
+      if(data.warehouseName){
+        localStorage.setItem('argus_wh_name', data.warehouseName);
+      }
       localStorage.setItem('argus_role', 'seller');
       currentKey = val;
       currentAccountName = data.companyName;
@@ -475,15 +511,22 @@
       // на девять десятых чужим по смыслу.
       invoices = await apiFetch('/api/invoices?direction=in');
     } catch(e){
-      document.getElementById('wsContent').innerHTML = '<div style="color:var(--muted);">Не удалось загрузить акты: ' + e.message + '</div>';
+      document.getElementById('wsView').innerHTML = '<div style="color:var(--muted);">Не удалось загрузить акты: ' + e.message + '</div>';
       return;
     }
     if(!currentAccountName) currentAccountName = invoices[0]?.company_name || 'Продавец';
     document.getElementById('wsCurrentAccount').textContent = currentAccountName;
+    // Название склада — то, что сказал сервер при входе. Пока он его не
+    // говорил, в шапке стоит просто «Аргус»: лучше без названия, чем
+    // с выдуманным.
+    const whName = localStorage.getItem('argus_wh_name');
+    if(whName){
+      document.getElementById('wsWarehouse').textContent = 'Аргус · ' + whName;
+    }
     const started = invoices.filter(inv => inv.status !== 'open');
     if(started.length === 0){
       document.getElementById('wsDatesList').innerHTML = '';
-      document.getElementById('wsContent').innerHTML = '<div style="color:var(--muted); text-align:center; padding-top:40px;">Пока нет ни одного акта приёмки по вашим товарам.</div>';
+      document.getElementById('wsView').innerHTML = '<div style="color:var(--muted); text-align:center; padding-top:40px;">Пока нет ни одного акта приёмки по вашим товарам.</div>';
       return;
     }
     const details = await Promise.all(started.map(inv => apiFetch('/api/invoices/' + inv.id)));
@@ -553,12 +596,12 @@
   };
 
   async function loadMovements(){
-    document.getElementById('wsContent').innerHTML =
+    document.getElementById('wsView').innerHTML =
       '<div class="act-wrap"><div class="act-card">Загружаю…</div></div>';
     try{
       movements = await apiFetch('/api/sellers/movements');
     } catch(e){
-      document.getElementById('wsContent').innerHTML =
+      document.getElementById('wsView').innerHTML =
         '<div class="act-wrap"><div class="act-card">Не удалось загрузить: '
         + escapeHtml(e.message) + '</div></div>';
       return;
@@ -603,7 +646,7 @@
             </tr>`).join('')}</tbody>
         </table>`;
 
-    document.getElementById('wsContent').innerHTML = `
+    document.getElementById('wsView').innerHTML = `
       <div class="act-wrap">
         <div class="act-card">
           <div class="total-head">
@@ -635,7 +678,7 @@
       stockRows = await apiFetch('/api/sellers/stock');
     } catch(e){
       stockRows = null;
-      document.getElementById('wsContent').innerHTML =
+      document.getElementById('wsView').innerHTML =
         '<div class="act-wrap"><div class="act-card">Не удалось загрузить остаток: '
         + escapeHtml(e.message) + '</div></div>';
       return;
@@ -667,7 +710,7 @@
     if(stockRows === null){ loadSellerStock(); return; }
 
     if(stockRows.length === 0){
-      document.getElementById('wsContent').innerHTML = `
+      document.getElementById('wsView').innerHTML = `
         <div class="act-wrap"><div class="act-card">
           <div class="total-head">
             <div class="total-title">Остаток на складе</div>
@@ -728,7 +771,7 @@
         + Math.abs(total1c - totalCells).toLocaleString('ru-RU') + ' шт.';
     }
 
-    document.getElementById('wsContent').innerHTML = `
+    document.getElementById('wsView').innerHTML = `
       <div class="act-wrap">
         <div class="act-card">
           <div class="total-head">
@@ -898,7 +941,7 @@
       `;
     }).join('');
 
-    document.getElementById('wsContent').innerHTML = `
+    document.getElementById('wsView').innerHTML = `
       <div class="act-wrap">
         <div class="act-card">
           <div class="act-head">
