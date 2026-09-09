@@ -158,7 +158,22 @@
      место, которое нужно адресу, артикулу и штрихкоду. Не обрезаем: два
      «Батончика Грильяж» различаются как раз хвостом названия, и обрезка
      сделала бы разные строки одинаковыми. */
+  /* Название — не шире того, что ему нужно.
+     Колонка забирала весь остаток ширины листа, потому что все соседние
+     фиксированы; длинные названия шли одной строкой во всю страницу и
+     тянули на себя взгляд. Теперь колонка ограничена, длинное имя
+     переносится на второй ярус — как и всё остальное в этой строке.
+     Не обрезаем: два «Батончика Грильяж» различаются как раз хвостом. */
   .goods-line{font-weight:600; font-size:10.5px; line-height:1.25;}
+  td.goods{width:44%;}
+
+  /* Клетка под факт. На бумаге всегда нужно место записать, сколько взяли
+     на самом деле: «взял 3 из 4» — это то, ради чего лист и возвращается
+     с полки. Заодно она забирает ширину, которую отдало название. */
+  .fact{border-left:1px solid var(--rule-hair);}
+
+  /* Смена ряда — линией, а не заголовком. */
+  tr.aisle td{border-top:1.2px solid var(--line);}
   td.tight{padding-top:4px; padding-bottom:4px;}
 
   /* Адрес ячейки — самое крупное в строке. Кладовщик ведёт по нему глазами
@@ -361,22 +376,24 @@
   // Отрезаем только настоящий префикс — «01-» у адреса «01-04-001». Чужой
   // формат (у ячейки может быть любое имя со стеллажа) оставляем целиком:
   // подрезать незнакомую строку значит однажды отрезать значащую часть.
-  // «04-001» → стеллаж и место, двумя ярусами. Имя ячейки задаёт владелец,
-  // и делиться оно обязано не всегда: неразделимое показываем целиком.
-  function addrTiers(label, groupKey){
-    const tail = shortAddr(label, groupKey);
-    const m = String(tail).match(/^([^-./ ]+)[-./ ](.+)$/);
-    return m
-      ? '<div class="row-addr"><span>' + esc(m[1]) + '</span><b>' + esc(m[2]) + '</b></div>'
-      : '<div class="row-addr one"><b>' + esc(tail) + '</b></div>';
-  }
-
-  function shortAddr(label, groupKey){
+  // Адрес целиком, в одном месте.
+  //
+  // Ряд стоял заголовком полосы, а в строке оставался хвост — и адрес
+  // оказывался разорван на две части, разнесённые по листу. На бумаге это
+  // хуже, чем на экране: полоса может остаться на предыдущей странице, а
+  // человек в проходе не помнит, в каком он ряду. Адрес читается там же,
+  // где всё остальное про эту позицию.
+  //
+  // Два яруса при этом сохраняются: ряд со стеллажом сверху, место снизу.
+  // Делим по ПОСЛЕДНЕМУ разделителю — место всегда последнее, сколько бы
+  // частей ни было в имени ячейки. Неразделимое имя показываем целиком:
+  // резать незнакомую строку значит однажды отрезать значащее.
+  function addrTiers(label){
     const s = String(label);
-    for(const sep of ['-', '.', '/', ' ']){
-      if(groupKey && s.startsWith(groupKey + sep)) return s.slice(String(groupKey).length + sep.length);
-    }
-    return s;
+    const i = Math.max(s.lastIndexOf('-'), s.lastIndexOf('.'), s.lastIndexOf('/'), s.lastIndexOf(' '));
+    return i > 0
+      ? '<div class="row-addr"><span>' + esc(s.slice(0, i)) + '</span><b>' + esc(s.slice(i + 1)) + '</b></div>'
+      : '<div class="row-addr one"><b>' + esc(s) + '</b></div>';
   }
 
   // Чем считается «ряд» для полосы.
@@ -421,28 +438,33 @@
     let n = 0;
     const body = groups.map((g) => {
       const count = g.rows.length;
+      // Полоса осталась одна — та, что отделяет собираемое от несобираемого.
+      // Это не разрыв адреса, а граница между «идти и брать» и «искать».
+      // Смену ряда показывает линия потолще на первой строке ряда: обход
+      // виден, а адрес при этом не разъезжается по листу.
       const band = g.key === null
-        ? '<tr class="band miss"><td colspan="' + (7 + (withPhoto ? 1 : 0)) + '">'
+        ? '<tr class="band miss"><td colspan="' + (8 + (withPhoto ? 1 : 0)) + '">'
           + 'Не найдено в ячейках <span class="band-count">· ' + count + ' '
           + plural(count, 'позиция', 'позиции', 'позиций')
           + ' · искать по складу или ждать приёмку</span></td></tr>'
-        : '<tr class="band"><td colspan="' + (7 + (withPhoto ? 1 : 0)) + '">'
-          + 'Ряд ' + esc(String(g.key)) + ' <span class="band-count">· ' + count + ' '
-          + plural(count, 'позиция', 'позиции', 'позиций') + '</span></td></tr>';
+        : '';
 
-      const lines = g.rows.map((r) => {
+      const lines = g.rows.map((r, k) => {
         n += 1;
+        // Первая строка нового ряда — линия потолще: видно, где кончается
+        // один ряд и начинается следующий, без выноса номера из строки.
+        const newAisle = k === 0 && g.key !== null && groups.indexOf(g) > 0;
         const cells = r.cells || [];
         const first = cells[0];
         const rest = cells.slice(1);
         const notEnough = r.available < r.qty;
         const bc = String(r.barcode || '');
-        return '<tr>'
+        return '<tr' + (newAisle ? ' class="aisle"' : '') + '>'
           + '<td class="cellno" style="width:20px;">' + n + '</td>'
           + '<td class="mid" style="width:22px;"><div class="tick"></div></td>'
-          + '<td style="width:44px;">'
+          + '<td style="width:58px;">'
           +   (first
-                ? addrTiers(first.label, g.key)
+                ? addrTiers(first.label)
                   + (rest.length ? '<div class="addr-more">+' + rest.length + '</div>' : '')
                 : '<div class="row-addr one short"><b>—</b></div>')
           + '</td>'
@@ -453,7 +475,7 @@
           +     '<i>' + esc(r.sku) + '</i>'
           +   '</div>'
           + '</td>'
-          + '<td>'
+          + '<td class="goods">'
           +   '<div class="goods-line">' + esc(r.name) + '</div>'
           +   (notEnough && r.available > 0
                 ? '<div class="short-note">в ячейках только ' + nf(r.available) + '</div>'
@@ -466,8 +488,9 @@
                     : '<b style="font-size:11px;">' + esc(bc) + '</b>')
                 : '')
           + '</td>'
-          + '<td class="num" style="width:40px;"><span class="qty' + (notEnough ? ' short' : '') + '">'
+          + '<td class="num" style="width:38px;"><span class="qty' + (notEnough ? ' short' : '') + '">'
           +   nf(r.qty) + '</span></td>'
+          + '<td class="fact" style="width:46px;"></td>'
           + '</tr>';
       }).join('');
       return band + lines;
@@ -489,7 +512,7 @@
       + '<table><thead><tr>'
       +   '<th></th><th></th><th class="mid">Ячейка</th>' + (withPhoto ? '<th></th>' : '')
       +   '<th class="mid">Артикул</th><th>Товар</th>'
-      +   '<th class="bc">Штрихкод</th><th class="num">Взять</th>'
+      +   '<th class="bc">Штрихкод</th><th class="num">Взять</th><th class="mid">Факт</th>'
       + '</tr></thead><tbody>' + body + '</tbody></table>'
       + '<div class="sign">'
       +   '<div><div class="sign-line"></div><div class="sign-label">Собрал — фамилия, подпись</div></div>'
