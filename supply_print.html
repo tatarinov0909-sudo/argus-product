@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Документы поставки — Аргус</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+  /* Документ, а не кабинет.
+
+     Отдельная страница, а не окно поверх кабинета: печатается лист бумаги,
+     и всё, что не попадёт на эту бумагу, — помеха. Тёмная тема, боковое меню
+     и панель контекста здесь были бы ровно этим. Белый фон и чёрный текст
+     не ради красоты: чёрное на белом — единственное, что одинаково выходит
+     на любом складском принтере, включая тот, в котором заканчивается
+     тонер. */
+  *{margin:0; padding:0; box-sizing:border-box;}
+  :root{
+    --ink:#000;
+    --ink-soft:#555;
+    --line:#000;
+    --line-soft:#bbb;
+    --warn:#a33;
+    --sans:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono:'IBM Plex Mono', 'Consolas', monospace;
+  }
+  body{background:#e9e9e9; color:var(--ink); font-family:var(--sans); font-size:13px; line-height:1.45;}
+
+  /* Панель управления — только на экране. */
+  .bar{
+    position:sticky; top:0; z-index:10; background:#1D2023; color:#EDEBE6;
+    padding:12px 20px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;
+  }
+  .bar b{font-size:14px;}
+  .bar .grow{flex:1;}
+  .btn{
+    background:#5FAFA6; color:#182422; border:none; border-radius:8px;
+    padding:9px 15px; font-size:13px; font-weight:700; cursor:pointer; font-family:var(--sans);
+  }
+  .btn.ghost{background:transparent; color:#EDEBE6; border:1px solid #32363B;}
+  .btn:hover{opacity:.9;}
+  .hint{color:#8D9096; font-size:12px;}
+
+  .sheet{
+    background:#fff; width:210mm; min-height:297mm; margin:18px auto; padding:14mm 12mm;
+    box-shadow:0 2px 14px rgba(0,0,0,.18);
+  }
+
+  .doc-head{display:flex; justify-content:space-between; align-items:flex-start; gap:20px;
+    border-bottom:2px solid var(--line); padding-bottom:9px; margin-bottom:12px;}
+  .doc-title{font-size:19px; font-weight:700; line-height:1.15;}
+  .doc-sub{font-size:12px; color:var(--ink-soft); margin-top:3px;}
+  .doc-num{font-family:var(--mono); font-size:22px; font-weight:700; text-align:right; white-space:nowrap;}
+  .doc-num span{display:block; font-family:var(--sans); font-size:11px; font-weight:400; color:var(--ink-soft);}
+
+  .facts{display:flex; gap:26px; margin-bottom:12px; flex-wrap:wrap;}
+  .fact b{display:block; font-family:var(--mono); font-size:17px; line-height:1.2;}
+  .fact span{font-size:10.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.03em;}
+
+  table{width:100%; border-collapse:collapse;}
+  th{
+    text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.04em;
+    color:var(--ink-soft); border-bottom:1.5px solid var(--line); padding:0 6px 5px; font-weight:600;
+  }
+  td{padding:6px 6px; border-bottom:1px solid var(--line-soft); vertical-align:top;}
+  tr{break-inside:avoid;}
+  .num{text-align:right; font-family:var(--mono);}
+  .mono{font-family:var(--mono);}
+  /* Номер заказа и номер отправления — длинные и переносятся. Мельче
+     остального текста нарочно: их не читают вслух, по ним сверяются
+     глазами со стикером, а лишняя страница бумаги стоит денег каждый
+     день. */
+  td.code{font-family:var(--mono); font-size:10px; line-height:1.3; word-break:break-all;}
+
+  /* Адрес ячейки — самое крупное в строке. Кладовщик ведёт по нему глазами
+     вдоль стеллажа, всё остальное читается уже у полки. */
+  .addr{font-family:var(--mono); font-size:15px; font-weight:700; white-space:nowrap;}
+  .addr-more{font-family:var(--mono); font-size:10.5px; color:var(--ink-soft); font-weight:400;}
+  .qty{font-family:var(--mono); font-size:17px; font-weight:700;}
+  .goods-name{font-weight:600;}
+  .goods-codes{font-family:var(--mono); font-size:10.5px; color:var(--ink-soft); margin-top:2px;}
+
+  /* Место под фото. Ключа с категорией «Контент» у нас нет, картинки взять
+     негде — но рамка на бумаге нужна уже сейчас: по ней кладовщик сверяет
+     товар глазами, и её отсутствие меняет вёрстку листа. Пустая рамка честнее
+     подписи «фото будет позже». */
+  .photo{width:52px; height:52px; border:1px dashed var(--line-soft); border-radius:3px;
+    display:flex; align-items:center; justify-content:center; font-size:8px;
+    color:var(--line-soft); text-align:center; line-height:1.1;}
+
+  /* Клетка для галочки. Лист комплектации — рабочий документ: по нему идут
+     и отмечают карандашом, что взято. */
+  .tick{width:15px; height:15px; border:1.5px solid var(--ink); border-radius:2px;}
+
+  .short{color:var(--warn); font-weight:600;}
+  .short-note{font-size:10.5px; color:var(--warn);}
+
+  .doc-foot{margin-top:14px; padding-top:9px; border-top:1px solid var(--line-soft);
+    display:flex; justify-content:space-between; gap:20px; font-size:11px; color:var(--ink-soft);}
+  .sign{margin-top:18px; display:flex; gap:40px;}
+  .sign div{flex:1;}
+  .sign-line{border-bottom:1px solid var(--ink); height:26px;}
+  .sign-label{font-size:10px; color:var(--ink-soft); margin-top:3px;}
+
+  .empty{padding:30px; text-align:center; color:var(--ink-soft);}
+
+  @media print{
+    /* Печатаем только бумагу. */
+    body{background:#fff;}
+    .bar{display:none;}
+    .sheet{width:auto; min-height:0; margin:0; padding:0; box-shadow:none;}
+    /* Каждый документ — со своей страницы. */
+    .sheet + .sheet{break-before:page;}
+    .hide-on-print{display:none !important;}
+    @page{size:A4 portrait; margin:12mm;}
+    thead{display:table-header-group;} /* шапка таблицы повторяется на каждой странице */
+  }
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <b>Документы поставки</b>
+  <span class="hint" id="barStatus">Загружаем…</span>
+  <span class="grow"></span>
+  <button class="btn" type="button" onclick="printOnly('pick')">Печать листа комплектации</button>
+  <button class="btn ghost" type="button" onclick="printOnly('pack')">Печать упаковочного</button>
+  <button class="btn ghost" type="button" onclick="printOnly(null)">Печать обоих</button>
+  <button class="btn ghost" type="button" onclick="window.close()">Закрыть</button>
+</div>
+
+<div id="docs"></div>
+
+<script>
+(function(){
+  'use strict';
+
+  const API_BASE = 'https://api.argus-ai.online';
+  const TOKEN = localStorage.getItem('argus_token');
+  const supplyId = new URLSearchParams(location.search).get('id');
+
+  // Экранирование для разметки — то же правило, что в кабинетах: подменяем
+  // и кавычки, потому что значения попадают и в атрибуты тоже.
+  const ESCAPE_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  function esc(str){
+    return String(str == null ? '' : str).replace(/[&<>"']/g, (c) => ESCAPE_MAP[c]);
+  }
+
+  function plural(n, one, few, many){
+    const m100 = n % 100; const m10 = n % 10;
+    if(m100 >= 11 && m100 <= 14) return many;
+    if(m10 === 1) return one;
+    if(m10 >= 2 && m10 <= 4) return few;
+    return many;
+  }
+
+  const nf = (n) => Number(n).toLocaleString('ru-RU');
+
+  function when(iso){
+    if(!iso) return '—';
+    return new Date(iso).toLocaleString('ru-RU', {
+      day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
+  }
+
+  function fail(text){
+    document.getElementById('barStatus').textContent = '';
+    document.getElementById('docs').innerHTML =
+      '<div class="sheet"><div class="empty">' + esc(text) + '</div></div>';
+  }
+
+  async function load(){
+    if(!TOKEN){ fail('Нет входа. Откройте кабинет и войдите заново.'); return; }
+    if(!supplyId){ fail('Не указана поставка.'); return; }
+    let data;
+    try{
+      const res = await fetch(API_BASE + '/api/supplies/' + encodeURIComponent(supplyId), {
+        headers: { 'Authorization': 'Bearer ' + TOKEN },
+      });
+      if(res.status === 401){ fail('Сессия истекла. Откройте кабинет и войдите заново.'); return; }
+      data = await res.json();
+      if(!res.ok) throw new Error((data && data.error) || 'Ошибка запроса');
+    } catch(e){
+      fail('Не удалось загрузить поставку: ' + e.message);
+      return;
+    }
+    render(data);
+  }
+
+  function render(data){
+    const s = data.supply;
+    const t = data.totals;
+    document.title = 'Поставка ' + s.number + ' — документы';
+    document.getElementById('barStatus').textContent =
+      s.number + ' · ' + s.companyName + ' · ' + s.statusName;
+    document.getElementById('docs').innerHTML = pickingSheet(s, t, data.picking)
+      + packingSheet(s, t, data.packing);
+  }
+
+  function head(s, title, sub){
+    return '<div class="doc-head">'
+      + '<div><div class="doc-title">' + esc(title) + '</div>'
+      +   '<div class="doc-sub">' + esc(sub) + '</div></div>'
+      + '<div class="doc-num">' + esc(s.number)
+      +   '<span>' + esc(s.companyName) + '</span></div>'
+      + '</div>';
+  }
+
+  function foot(s, extra){
+    return '<div class="doc-foot"><div>' + esc(extra) + '</div>'
+      + '<div>Аргус · напечатано ' + when(new Date().toISOString()) + '</div></div>';
+  }
+
+  // ---------- Лист комплектации ----------
+  //
+  // Сводный: одинаковые артикулы из разных заказов сложены в одну строку.
+  // Иначе за одним и тем же товаром кладовщик идёт столько раз, сколько
+  // заказов, — а их бывает полторы сотни.
+  //
+  // Порядок строк задаёт сервер, по адресу ячейки: лист существует ради
+  // того, чтобы пройти склад один раз.
+  function pickingSheet(s, t, rows){
+    if(!rows || rows.length === 0){
+      return '<div class="sheet" data-doc="pick">' + head(s, 'Лист комплектации', '')
+        + '<div class="empty">В поставке нет позиций.</div></div>';
+    }
+    const short = rows.filter(r => r.available < r.qty).length;
+    const body = rows.map((r, i) => {
+      const cells = r.cells || [];
+      const first = cells[0];
+      const rest = cells.slice(1);
+      const notEnough = r.available < r.qty;
+      return '<tr>'
+        + '<td class="num" style="width:26px; color:#888;">' + (i + 1) + '</td>'
+        + '<td style="width:30px;"><div class="tick"></div></td>'
+        + '<td style="width:104px;">'
+        +   (first
+              ? '<div class="addr">' + esc(first.label) + '</div>'
+                + (rest.length
+                    ? '<div class="addr-more">ещё: ' + rest.map(c => esc(c.label)).join(', ') + '</div>'
+                    : '')
+              : '<div class="addr short">нет в ячейках</div>')
+        + '</td>'
+        + '<td style="width:60px;"><div class="photo">фото</div></td>'
+        + '<td>'
+        +   '<div class="goods-name">' + esc(r.name) + '</div>'
+        +   '<div class="goods-codes">' + esc(r.sku)
+        +     (r.article ? ' · арт. ' + esc(r.article) : '')
+        +     (r.barcode ? ' · ШК ' + esc(r.barcode) : '')
+        +   '</div>'
+        +   (notEnough
+              ? '<div class="short-note">в ячейках ' + nf(r.available)
+                + ' из ' + nf(r.qty) + ' — не хватает ' + nf(r.qty - r.available) + '</div>'
+              : '')
+        + '</td>'
+        + '<td class="num" style="width:64px;"><span class="qty' + (notEnough ? ' short' : '') + '">'
+        +   nf(r.qty) + '</span></td>'
+        + '</tr>';
+    }).join('');
+
+    return '<div class="sheet" data-doc="pick">'
+      + head(s, 'Лист комплектации', 'Собрать со склада. Одинаковые артикулы сложены — за товаром идём один раз.')
+      + '<div class="facts">'
+      +   '<div class="fact"><b>' + nf(t.uniqueSkus) + '</b><span>позиций</span></div>'
+      +   '<div class="fact"><b>' + nf(t.units) + '</b><span>штук всего</span></div>'
+      +   '<div class="fact"><b>' + nf(t.orders) + '</b><span>' + plural(t.orders, 'заказ', 'заказа', 'заказов') + '</span></div>'
+      +   '<div class="fact"><b>' + when(s.createdAt) + '</b><span>поставка собрана</span></div>'
+      + '</div>'
+      + (short > 0
+          ? '<div class="short-note" style="margin-bottom:10px;">Внимание: по ' + short + ' '
+            + plural(short, 'позиции', 'позициям', 'позициям')
+            + ' в ячейках меньше, чем нужно. Они отмечены в списке.</div>'
+          : '')
+      + '<table><thead><tr>'
+      +   '<th></th><th></th><th>Ячейка</th><th></th><th>Товар</th><th class="num">Взять</th>'
+      + '</tr></thead><tbody>' + body + '</tbody></table>'
+      + '<div class="sign">'
+      +   '<div><div class="sign-line"></div><div class="sign-label">Собрал — фамилия, подпись</div></div>'
+      +   '<div><div class="sign-line"></div><div class="sign-label">Дата и время</div></div>'
+      + '</div>'
+      + foot(s, 'Лист комплектации')
+      + '</div>';
+  }
+
+  // ---------- Упаковочный лист ----------
+  //
+  // Построчно, по заказам: здесь одинаковые артикулы НЕ складываются. У
+  // каждой посылки свой номер отправления и свой стикер, и сложить две
+  // одинаковые позиции значит отправить одну коробку вместо двух.
+  function packingSheet(s, t, rows){
+    if(!rows || rows.length === 0) return '';
+    const body = rows.map((r, i) => '<tr>'
+      + '<td class="num" style="width:26px; color:#888;">' + (i + 1) + '</td>'
+      + '<td style="width:30px;"><div class="tick"></div></td>'
+      + '<td class="code" style="width:92px;">' + esc(r.orderNumber) + '</td>'
+      + '<td style="width:112px;" class="code">'
+      +   (r.rid ? esc(r.rid) : '<span class="short">нет номера</span>') + '</td>'
+      + '<td>'
+      +   '<div class="goods-name">' + esc(r.name) + '</div>'
+      +   '<div class="goods-codes">' + esc(r.sku)
+      +     (r.article ? ' · арт. ' + esc(r.article) : '')
+      +     (r.barcode ? ' · ШК ' + esc(r.barcode) : '')
+      +   '</div>'
+      + '</td>'
+      + '<td class="num" style="width:56px;"><span class="qty">' + nf(r.qty) + '</span></td>'
+      + '</tr>').join('');
+
+    return '<div class="sheet" data-doc="pack">'
+      + head(s, 'Упаковочный лист', 'Разложить по посылкам. Одинаковые артикулы НЕ складываются: у каждой посылки свой номер отправления.')
+      + '<div class="facts">'
+      +   '<div class="fact"><b>' + nf(rows.length) + '</b><span>строк</span></div>'
+      +   '<div class="fact"><b>' + nf(t.units) + '</b><span>штук всего</span></div>'
+      +   '<div class="fact"><b>' + esc(s.destination || '—') + '</b><span>куда</span></div>'
+      +   '<div class="fact"><b>' + esc((s.marketplace || '—').toUpperCase()) + '</b><span>площадка</span></div>'
+      + '</div>'
+      + '<table><thead><tr>'
+      +   '<th></th><th></th><th>Заказ</th><th>Отправление</th><th>Товар</th><th class="num">Кол-во</th>'
+      + '</tr></thead><tbody>' + body + '</tbody></table>'
+      + '<div class="sign">'
+      +   '<div><div class="sign-line"></div><div class="sign-label">Упаковал — фамилия, подпись</div></div>'
+      +   '<div><div class="sign-line"></div><div class="sign-label">Передал водителю — подпись</div></div>'
+      + '</div>'
+      + foot(s, 'Упаковочный лист')
+      + '</div>';
+  }
+
+  // Печать одного из двух документов: класс снимается сразу после печати,
+  // чтобы страница не осталась наполовину спрятанной, если человек нажал
+  // «отмена» в окне принтера.
+  function printOnly(doc){
+    const sheets = document.querySelectorAll('.sheet');
+    sheets.forEach((el) => {
+      el.classList.toggle('hide-on-print', Boolean(doc) && el.dataset.doc !== doc);
+    });
+    window.print();
+    setTimeout(() => sheets.forEach((el) => el.classList.remove('hide-on-print')), 500);
+  }
+  window.printOnly = printOnly;
+
+  load();
+})();
+</script>
+</body>
+</html>

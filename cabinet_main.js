@@ -4084,13 +4084,26 @@
         +   (when ? ' · ' + fmtDay(when) : '')
         +   (s.destination ? ' · ' + escapeHTML(s.destination) : '') + '</div></div>'
         + '<div class="sup-state ' + s.status + '">' + escapeHTML(s.statusName || s.status) + '</div>'
-        + '<div>' + (s.status === 'collecting'
-            ? '<span class="mp-act warn" onclick="disbandSupply(\'' + s.id + '\')">Разобрать</span>'
-            : '') + '</div>'
+        + '<div style="display:flex; gap:14px;">'
+        +   '<span class="mp-act" onclick="printSupply(\'' + s.id + '\')">Документы</span>'
+        +   (s.status === 'collecting'
+              ? '<span class="mp-act warn" onclick="disbandSupply(\'' + s.id + '\')">Разобрать</span>'
+              : '')
+        + '</div>'
         + '</div>';
     }).join('');
   }
   window.loadSupplies = loadSupplies;
+
+  // Лист комплектации и упаковочный — отдельной страницей.
+  //
+  // Новая вкладка, а не окно поверх кабинета: печатается лист бумаги, и всё
+  // остальное на нём лишнее. Заодно страницу можно оставить открытой на
+  // складском компьютере и печатать оттуда, не заходя в кабинет каждый раз.
+  function printSupply(id){
+    window.open('supply_print.html?id=' + encodeURIComponent(id), '_blank');
+  }
+  window.printSupply = printSupply;
 
   async function disbandSupply(id){
     const s = (supplyRows || []).find(x => x.id === id);
