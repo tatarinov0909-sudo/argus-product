@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Документы поставки — Аргус</title>
 <link rel="stylesheet" href="fonts.css">
-<script src="qrcode.min.js"></script>
 <style>
   /* Документ, а не кабинет.
 
@@ -97,15 +96,17 @@
   .bc{font-family:var(--mono); font-size:9.5px; color:var(--ink-soft); text-align:right; white-space:nowrap;}
   .bc b{display:block; font-size:15px; color:var(--ink); letter-spacing:.02em;}
 
-  /* QR печатается в миллиметрах, а не в пикселях.
-     Сканеру нужен модуль не мельче ~0.5 мм, иначе код не читается — а на
-     экране «сорок пикселей» превращаются в разный физический размер на
-     разных принтерах. Двенадцать миллиметров на 21 модуль дают 0.57 мм. */
-  .qr{width:13mm; height:13mm; display:block;}
-  .qr svg{width:100%; height:100%; shape-rendering:crispEdges;}
-  .qr-miss{width:13mm; height:13mm; border:1px dashed var(--line-soft); border-radius:2px;}
-
   .row-addr{font-family:var(--mono); font-size:15px; font-weight:700; white-space:nowrap;}
+  /* Артикул продавца — первым и крупно.
+     Это то, чем товар подписан на коробке и чем его зовут на площадке;
+     наш код номенклатуры (PB…) кладовщику ни о чём не говорит и стоит
+     последним, мелким — он нужен, когда разбирают расхождение, а не когда
+     снимают коробку с полки. */
+  .goods-art{font-family:var(--mono); font-size:13px; font-weight:700; line-height:1.2;}
+  /* Наш код номенклатуры — на той же строке, мелким. Отдельной строки он
+     не стоит: три строки на позицию съедают ровно тот лист, который
+     освободил убранный QR. */
+  .goods-art i{font-style:normal; font-weight:400; font-size:9.5px; color:var(--ink-soft); margin-left:8px;}
   .goods-line{font-weight:600; line-height:1.25;}
   .goods-meta{font-family:var(--mono); font-size:9.5px; color:var(--ink-soft); margin-top:1px;}
   td.tight{padding-top:4px; padding-bottom:4px;}
@@ -162,8 +163,7 @@
   <span class="hint" id="barStatus">Загружаем…</span>
   <span class="grow"></span>
   <button class="btn ghost" type="button" id="modeDense" onclick="setMode('dense')">Компактный</button>
-  <button class="btn ghost" type="button" id="modeQr" onclick="setMode('qr')">С QR</button>
-  <button class="btn ghost" type="button" id="modePhoto" onclick="setMode('photo')">С QR и фото</button>
+  <button class="btn ghost" type="button" id="modePhoto" onclick="setMode('photo')">С фото</button>
   <span style="width:12px;"></span>
   <button class="btn" type="button" onclick="printOnly('pick')">Печать листа комплектации</button>
   <button class="btn ghost" type="button" onclick="printOnly('pack')">Печать упаковочного</button>
@@ -185,11 +185,7 @@
   // задавала высоту каждой строки — треть листа уходила на прямоугольники,
   // в которых ничего нет. Режим «с фото» оставлен готовым: появится ключ
   // с категорией «Контент» — включится он.
-  // По умолчанию с QR: код сканируется быстрее, чем набирается руками.
-  // Но он занимает место — двенадцать миллиметров задают высоту строки, и
-  // восемнадцать позиций перестают умещаться на один лист. Поэтому режим
-  // «компактный» оставлен рядом: когда важнее один лист, а не сканер.
-  let MODE = localStorage.getItem('argus_pick_mode') || 'qr';
+  let MODE = localStorage.getItem('argus_pick_mode') === 'photo' ? 'photo' : 'dense';
   let LAST = null;
 
   // Экранирование для разметки — то же правило, что в кабинетах: подменяем
@@ -253,9 +249,7 @@
     const dense = document.getElementById('modeDense');
     const photo = document.getElementById('modePhoto');
     if(!dense || !photo) return;
-    const qr = document.getElementById('modeQr');
     dense.classList.toggle('ghost', MODE !== 'dense');
-    if(qr) qr.classList.toggle('ghost', MODE !== 'qr');
     photo.classList.toggle('ghost', MODE !== 'photo');
   }
 
@@ -294,46 +288,6 @@
   // в полосы по рядам: лист существует ради того, чтобы пройти склад один
   // раз, и структура обхода должна быть видна глазами, а не собираться
   // в голове из повторяющихся префиксов.
-
-  // QR с кодом товара.
-  //
-  // Внутри — только наш код номенклатуры, ничего больше. Причина
-  // арифметическая: чем длиннее строка, тем больше модулей в коде, а размер
-  // на бумаге ограничен высотой строки. Одиннадцать знаков умещаются в самую
-  // маленькую версию (21 модуль), и при 12 мм это 0.57 мм на модуль — сканер
-  // читает уверенно. Добавь сюда номер поставки и артикул — станет 29
-  // модулей и 0.41 мм, то есть код, который иногда не читается. Номер
-  // поставки к тому же напечатан на каждой странице.
-  //
-  // Кириллицу в код не кладём вовсе: проверка round-trip показала, что
-  // библиотека по умолчанию кодирует байты однобайтно и «ПС» возвращается
-  // как «!». UTF-8 включаем явно — на случай, если однажды в коде
-  // номенклатуры окажется русская буква.
-  const QR_READY = typeof qrcode === 'function';
-  if(QR_READY && qrcode.stringToBytesFuncs && qrcode.stringToBytesFuncs['UTF-8']){
-    qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
-  }
-
-  const qrCache = new Map();
-  function qrTag(text){
-    if(!QR_READY || !text) return '<div class="qr-miss"></div>';
-    const key = String(text);
-    if(qrCache.has(key)) return qrCache.get(key);
-    let html;
-    try{
-      // Уровень L — самый экономный по месту. Лист не мнётся в кармане и не
-      // пачкается маслом, как наклейка на коробке; запас на повреждения тут
-      // нужен меньше, чем лишний миллиметр на модуль.
-      const qr = qrcode(0, 'L');
-      qr.addData(key, 'Byte');
-      qr.make();
-      html = '<div class="qr">' + qr.createSvgTag({ cellSize: 1, margin: 2, scalable: true }) + '</div>';
-    } catch(e){
-      html = '<div class="qr-miss"></div>';
-    }
-    qrCache.set(key, html);
-    return html;
-  }
 
   // Сколько последних знаков штрихкода различают товар на ЭТОМ листе.
   // Меньше четырёх не берём (глазу не за что зацепиться), больше шести
@@ -387,7 +341,6 @@
         + '<div class="empty">В поставке нет позиций.</div></div>';
     }
     const withPhoto = MODE === 'photo';
-    const withQr = MODE !== 'dense';
     const tail = tailLength(rows);
     const short = rows.filter(r => r.available < r.qty).length;
 
@@ -409,11 +362,11 @@
     const body = groups.map((g) => {
       const count = g.rows.length;
       const band = g.key === null
-        ? '<tr class="band miss"><td colspan="' + (5 + (withPhoto ? 1 : 0) + (withQr ? 1 : 0)) + '">'
+        ? '<tr class="band miss"><td colspan="' + (5 + (withPhoto ? 1 : 0)) + '">'
           + 'Не найдено в ячейках <span class="band-count">· ' + count + ' '
           + plural(count, 'позиция', 'позиции', 'позиций')
           + ' · искать по складу или ждать приёмку</span></td></tr>'
-        : '<tr class="band"><td colspan="' + (5 + (withPhoto ? 1 : 0) + (withQr ? 1 : 0)) + '">'
+        : '<tr class="band"><td colspan="' + (5 + (withPhoto ? 1 : 0)) + '">'
           + 'Ряд ' + esc(String(g.key)) + ' <span class="band-count">· ' + count + ' '
           + plural(count, 'позиция', 'позиции', 'позиций') + '</span></td></tr>';
 
@@ -436,16 +389,18 @@
                 : '<div class="row-addr short">—</div>')
           + '</td>'
           + (withPhoto ? '<td class="tight" style="width:46px;"><div class="photo">фото</div></td>' : '')
-          + (withQr ? '<td class="tight" style="width:14mm;">' + qrTag(r.sku) + '</td>' : '')
+
           + '<td class="tight">'
-          +   '<div class="goods-line">' + esc(r.name) + '</div>'
-          +   '<div class="goods-meta">'
-          +     (r.article ? 'арт. ' + esc(r.article) + ' · ' : '')
-          +     'код ' + esc(r.sku)
+          +   '<div class="goods-art">'
+          +     (r.article
+                  ? esc(r.article)
+                  : '<span class="short">без артикула площадки</span>')
+          +     '<i>' + esc(r.sku) + '</i>'
           +     (notEnough && r.available > 0
-                  ? ' · <span class="short">в ячейках только ' + nf(r.available) + '</span>'
+                  ? ' <span class="short">· в ячейках только ' + nf(r.available) + '</span>'
                   : '')
           +   '</div>'
+          +   '<div class="goods-line">' + esc(r.name) + '</div>'
           + '</td>'
           + '<td class="bc tight" style="width:78px;">'
           +   (bc
@@ -476,7 +431,7 @@
           : '')
       + '<table><thead><tr>'
       +   '<th></th><th></th><th>Ячейка</th>' + (withPhoto ? '<th></th>' : '')
-      +   (withQr ? '<th>Код</th>' : '') + '<th>Товар</th><th class="bc">Штрихкод</th><th class="num">Взять</th>'
+      +   '<th>Артикул и товар</th><th class="bc">Штрихкод</th><th class="num">Взять</th>'
       + '</tr></thead><tbody>' + body + '</tbody></table>'
       + '<div class="sign">'
       +   '<div><div class="sign-line"></div><div class="sign-label">Собрал — фамилия, подпись</div></div>'
