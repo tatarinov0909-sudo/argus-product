@@ -72,6 +72,35 @@
      день. */
   td.code{font-family:var(--mono); font-size:10px; line-height:1.3; word-break:break-all;}
 
+  /* Полоса ряда. Адрес в каждой строке повторял «01-» столько раз, сколько
+     позиций в ряду, — а это самая широкая колонка листа. Ряд выносится
+     заголовком, в строках остаётся хвост: «04-001». Заодно видно структуру
+     обхода: сколько позиций в каждом ряду и куда идти дальше.
+
+     И один заголовок «не найдено в ячейках» вместо восемнадцати одинаковых
+     красных надписей подряд. Восемнадцать повторов — уже не предупреждение,
+     а фон, который перестают читать. */
+  .band td{
+    background:#f0f0f0; border-bottom:1.5px solid var(--line); border-top:1.5px solid var(--line);
+    padding:5px 6px; font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+  }
+  .band.miss td{background:#fbeceb; color:var(--warn); border-color:var(--warn);}
+  .band .band-count{font-weight:400; color:var(--ink-soft);}
+  .band.miss .band-count{color:var(--warn);}
+
+  /* Хвост штрихкода крупно — приём подсмотрен у чужого листа и он верный:
+     сверяют по последним цифрам, а не по всем тринадцати. Но крупными
+     показываем ровно столько знаков, сколько РАЗЛИЧАЮТ товар на этом листе.
+     Четыре цифры уникальны на десяти позициях и совпадают на двухстах, и
+     тогда крупная цифра уводит не к тому товару — хуже, чем её отсутствие. */
+  .bc{font-family:var(--mono); font-size:9.5px; color:var(--ink-soft); text-align:right; white-space:nowrap;}
+  .bc b{display:block; font-size:15px; color:var(--ink); letter-spacing:.02em;}
+
+  .row-addr{font-family:var(--mono); font-size:15px; font-weight:700; white-space:nowrap;}
+  .goods-line{font-weight:600; line-height:1.25;}
+  .goods-meta{font-family:var(--mono); font-size:9.5px; color:var(--ink-soft); margin-top:1px;}
+  td.tight{padding-top:4px; padding-bottom:4px;}
+
   /* Адрес ячейки — самое крупное в строке. Кладовщик ведёт по нему глазами
      вдоль стеллажа, всё остальное читается уже у полки. */
   .addr{font-family:var(--mono); font-size:15px; font-weight:700; white-space:nowrap;}
@@ -123,6 +152,9 @@
   <b>Документы поставки</b>
   <span class="hint" id="barStatus">Загружаем…</span>
   <span class="grow"></span>
+  <button class="btn ghost" type="button" id="modeDense" onclick="setMode('dense')">Плотный</button>
+  <button class="btn ghost" type="button" id="modePhoto" onclick="setMode('photo')">С фото</button>
+  <span style="width:12px;"></span>
   <button class="btn" type="button" onclick="printOnly('pick')">Печать листа комплектации</button>
   <button class="btn ghost" type="button" onclick="printOnly('pack')">Печать упаковочного</button>
   <button class="btn ghost" type="button" onclick="printOnly(null)">Печать обоих</button>
@@ -138,6 +170,13 @@
   const API_BASE = 'https://api.argus-ai.online';
   const TOKEN = localStorage.getItem('argus_token');
   const supplyId = new URLSearchParams(location.search).get('id');
+
+  // Плотный по умолчанию: фотографий у нас пока нет, и пустая рамка под них
+  // задавала высоту каждой строки — треть листа уходила на прямоугольники,
+  // в которых ничего нет. Режим «с фото» оставлен готовым: появится ключ
+  // с категорией «Контент» — включится он.
+  let MODE = localStorage.getItem('argus_pick_mode') || 'dense';
+  let LAST = null;
 
   // Экранирование для разметки — то же правило, что в кабинетах: подменяем
   // и кавычки, потому что значения попадают и в атрибуты тоже.
@@ -184,7 +223,24 @@
       fail('Не удалось загрузить поставку: ' + e.message);
       return;
     }
+    LAST = data;
     render(data);
+  }
+
+  function setMode(mode){
+    MODE = mode;
+    try{ localStorage.setItem('argus_pick_mode', mode); } catch(e){ /* приватное окно */ }
+    paintModeButtons();
+    if(LAST) render(LAST);
+  }
+  window.setMode = setMode;
+
+  function paintModeButtons(){
+    const dense = document.getElementById('modeDense');
+    const photo = document.getElementById('modePhoto');
+    if(!dense || !photo) return;
+    dense.classList.toggle('ghost', MODE !== 'dense');
+    photo.classList.toggle('ghost', MODE !== 'photo');
   }
 
   function render(data){
@@ -195,6 +251,7 @@
       s.number + ' · ' + s.companyName + ' · ' + s.statusName;
     document.getElementById('docs').innerHTML = pickingSheet(s, t, data.picking)
       + packingSheet(s, t, data.packing);
+    paintModeButtons();
   }
 
   function head(s, title, sub){
@@ -217,49 +274,136 @@
   // Иначе за одним и тем же товаром кладовщик идёт столько раз, сколько
   // заказов, — а их бывает полторы сотни.
   //
-  // Порядок строк задаёт сервер, по адресу ячейки: лист существует ради
-  // того, чтобы пройти склад один раз.
+  // Порядок строк задаёт сервер, по адресу ячейки. Здесь он превращается
+  // в полосы по рядам: лист существует ради того, чтобы пройти склад один
+  // раз, и структура обхода должна быть видна глазами, а не собираться
+  // в голове из повторяющихся префиксов.
+
+  // Сколько последних знаков штрихкода различают товар на ЭТОМ листе.
+  // Меньше четырёх не берём (глазу не за что зацепиться), больше шести
+  // незачем. Если не различают и шесть — крупную подсказку не рисуем вовсе.
+  function tailLength(rows){
+    const codes = rows.map(r => String(r.barcode || '')).filter(Boolean);
+    for(const len of [4, 5, 6]){
+      const seen = new Set();
+      let clash = false;
+      for(const c of codes){
+        const tail = c.slice(-len);
+        if(seen.has(tail)){ clash = true; break; }
+        seen.add(tail);
+      }
+      if(!clash) return len;
+    }
+    return 0;
+  }
+
+  // Внутри полосы ряда номер ряда из адреса убираем: он написан в заголовке.
+  // Отрезаем только настоящий префикс — «01-» у адреса «01-04-001». Чужой
+  // формат (у ячейки может быть любое имя со стеллажа) оставляем целиком:
+  // подрезать незнакомую строку значит однажды отрезать значащую часть.
+  function shortAddr(label, groupKey){
+    const s = String(label);
+    for(const sep of ['-', '.', '/', ' ']){
+      if(groupKey && s.startsWith(groupKey + sep)) return s.slice(String(groupKey).length + sep.length);
+    }
+    return s;
+  }
+
+  // Чем считается «ряд» для полосы.
+  //
+  // Именем ячейки, а не нашим номером ряда. На стеллаже висит «01-04-001»,
+  // и первое число в этом имени — то, что кладовщик считает рядом. Наш
+  // `row_num` — внутренняя нумерация, и совпасть с наклейкой она не обязана:
+  // ячейки приезжают из 1С с готовыми именами, а порядок строк мы всё равно
+  // берём от сервера. Полоса, назвавшая «ряд 07» над адресами «01-…», хуже
+  // отсутствия полосы: она уводит человека не туда.
+  function groupOf(cell){
+    if(!cell) return null;
+    const label = String(cell.label || '');
+    const m = label.match(/^([0-9A-Za-zА-Яа-я]+)[-./ ]/);
+    if(m) return m[1];
+    return cell.rowNum == null ? label : String(cell.rowNum).padStart(2, '0');
+  }
+
   function pickingSheet(s, t, rows){
     if(!rows || rows.length === 0){
       return '<div class="sheet" data-doc="pick">' + head(s, 'Лист комплектации', '')
         + '<div class="empty">В поставке нет позиций.</div></div>';
     }
+    const withPhoto = MODE === 'photo';
+    const tail = tailLength(rows);
     const short = rows.filter(r => r.available < r.qty).length;
-    const body = rows.map((r, i) => {
-      const cells = r.cells || [];
-      const first = cells[0];
-      const rest = cells.slice(1);
-      const notEnough = r.available < r.qty;
-      return '<tr>'
-        + '<td class="num" style="width:26px; color:#888;">' + (i + 1) + '</td>'
-        + '<td style="width:30px;"><div class="tick"></div></td>'
-        + '<td style="width:104px;">'
-        +   (first
-              ? '<div class="addr">' + esc(first.label) + '</div>'
-                + (rest.length
-                    ? '<div class="addr-more">ещё: ' + rest.map(c => esc(c.label)).join(', ') + '</div>'
-                    : '')
-              : '<div class="addr short">нет в ячейках</div>')
-        + '</td>'
-        + '<td style="width:60px;"><div class="photo">фото</div></td>'
-        + '<td>'
-        +   '<div class="goods-name">' + esc(r.name) + '</div>'
-        +   '<div class="goods-codes">' + esc(r.sku)
-        +     (r.article ? ' · арт. ' + esc(r.article) : '')
-        +     (r.barcode ? ' · ШК ' + esc(r.barcode) : '')
-        +   '</div>'
-        +   (notEnough
-              ? '<div class="short-note">в ячейках ' + nf(r.available)
-                + ' из ' + nf(r.qty) + ' — не хватает ' + nf(r.qty - r.available) + '</div>'
-              : '')
-        + '</td>'
-        + '<td class="num" style="width:64px;"><span class="qty' + (notEnough ? ' short' : '') + '">'
-        +   nf(r.qty) + '</span></td>'
-        + '</tr>';
+
+    // Полосы: по рядам в порядке обхода, ненайденное — отдельной группой
+    // в конце. Порядок строк внутри уже задан сервером, здесь только режем
+    // на группы, не пересортировывая.
+    const groups = [];
+    let current = null;
+    for(const r of rows){
+      const key = groupOf(r.cells && r.cells[0]);
+      if(!current || current.key !== key){
+        current = { key, rows: [] };
+        groups.push(current);
+      }
+      current.rows.push(r);
+    }
+
+    let n = 0;
+    const body = groups.map((g) => {
+      const count = g.rows.length;
+      const band = g.key === null
+        ? '<tr class="band miss"><td colspan="' + (withPhoto ? 6 : 5) + '">'
+          + 'Не найдено в ячейках <span class="band-count">· ' + count + ' '
+          + plural(count, 'позиция', 'позиции', 'позиций')
+          + ' · искать по складу или ждать приёмку</span></td></tr>'
+        : '<tr class="band"><td colspan="' + (withPhoto ? 6 : 5) + '">'
+          + 'Ряд ' + esc(String(g.key)) + ' <span class="band-count">· ' + count + ' '
+          + plural(count, 'позиция', 'позиции', 'позиций') + '</span></td></tr>';
+
+      const lines = g.rows.map((r) => {
+        n += 1;
+        const cells = r.cells || [];
+        const first = cells[0];
+        const rest = cells.slice(1);
+        const notEnough = r.available < r.qty;
+        const bc = String(r.barcode || '');
+        return '<tr>'
+          + '<td class="num tight" style="width:24px; color:#888;">' + n + '</td>'
+          + '<td class="tight" style="width:26px;"><div class="tick"></div></td>'
+          + '<td class="tight" style="width:74px;">'
+          +   (first
+                ? '<div class="row-addr">' + esc(shortAddr(first.label, g.key)) + '</div>'
+                  + (rest.length
+                      ? '<div class="addr-more">+' + rest.length + '</div>'
+                      : '')
+                : '<div class="row-addr short">—</div>')
+          + '</td>'
+          + (withPhoto ? '<td class="tight" style="width:46px;"><div class="photo">фото</div></td>' : '')
+          + '<td class="tight">'
+          +   '<div class="goods-line">' + esc(r.name) + '</div>'
+          +   '<div class="goods-meta">' + esc(r.sku)
+          +     (r.article ? ' · ' + esc(r.article) : '')
+          +     (notEnough && r.available > 0
+                  ? ' · <span class="short">в ячейках только ' + nf(r.available) + '</span>'
+                  : '')
+          +   '</div>'
+          + '</td>'
+          + '<td class="bc tight" style="width:78px;">'
+          +   (bc
+                ? (tail
+                    ? esc(bc.slice(0, bc.length - tail)) + '<b>' + esc(bc.slice(-tail)) + '</b>'
+                    : '<b style="font-size:11px;">' + esc(bc) + '</b>')
+                : '')
+          + '</td>'
+          + '<td class="num tight" style="width:52px;"><span class="qty' + (notEnough ? ' short' : '') + '">'
+          +   nf(r.qty) + '</span></td>'
+          + '</tr>';
+      }).join('');
+      return band + lines;
     }).join('');
 
     return '<div class="sheet" data-doc="pick">'
-      + head(s, 'Лист комплектации', 'Собрать со склада. Одинаковые артикулы сложены — за товаром идём один раз.')
+      + head(s, 'Лист комплектации', 'Собрать со склада. Одинаковые артикулы сложены — за товаром идём один раз, по рядам.')
       + '<div class="facts">'
       +   '<div class="fact"><b>' + nf(t.uniqueSkus) + '</b><span>позиций</span></div>'
       +   '<div class="fact"><b>' + nf(t.units) + '</b><span>штук всего</span></div>'
@@ -267,12 +411,13 @@
       +   '<div class="fact"><b>' + when(s.createdAt) + '</b><span>поставка собрана</span></div>'
       + '</div>'
       + (short > 0
-          ? '<div class="short-note" style="margin-bottom:10px;">Внимание: по ' + short + ' '
+          ? '<div class="short-note" style="margin-bottom:8px;">По ' + short + ' '
             + plural(short, 'позиции', 'позициям', 'позициям')
-            + ' в ячейках меньше, чем нужно. Они отмечены в списке.</div>'
+            + ' в ячейках меньше, чем нужно, — они отмечены в списке и собраны в нижнюю группу.</div>'
           : '')
       + '<table><thead><tr>'
-      +   '<th></th><th></th><th>Ячейка</th><th></th><th>Товар</th><th class="num">Взять</th>'
+      +   '<th></th><th></th><th>Ячейка</th>' + (withPhoto ? '<th></th>' : '')
+      +   '<th>Товар</th><th class="bc">Штрихкод</th><th class="num">Взять</th>'
       + '</tr></thead><tbody>' + body + '</tbody></table>'
       + '<div class="sign">'
       +   '<div><div class="sign-line"></div><div class="sign-label">Собрал — фамилия, подпись</div></div>'
