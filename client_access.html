@@ -169,6 +169,32 @@
   .total-head{margin-bottom:24px;}
   .total-title{font-size:19px; font-weight:700; margin-bottom:4px;}
   .total-sub{font-size:12.5px; color:var(--muted);}
+  /* Три числа рядом — то, ради чего продавец и звонит на склад.
+     Одно большое число («можно продавать») не отвечает на его вопрос:
+     он видит, что стало меньше, и не знает, продано это или обещано.
+     Поэтому три равных клетки, а не одна цифра и мелкая сноска. */
+  .trio{
+    display:grid; grid-template-columns:repeat(3,1fr); gap:1px;
+    background:var(--line); border:1px solid var(--line); border-radius:12px;
+    overflow:hidden; margin-bottom:16px;
+  }
+  .trio-cell{background:var(--panel-2); padding:16px 18px;}
+  .trio-cell b{
+    display:block; font-family:var(--mono); font-size:26px; font-weight:700;
+    line-height:1.1; font-variant-numeric:tabular-nums;
+  }
+  .trio-cell span{display:block; font-size:12px; color:var(--muted); margin-top:5px;}
+  .trio-cell i{display:block; font-style:normal; font-size:11px; color:var(--muted); margin-top:3px;}
+  /* Доступное — единственное число, по которому продавец принимает решение.
+     Ему и акцент; остальные два объясняют, из чего оно получилось. */
+  .trio-cell.free b{color:var(--accent);}
+  .trio-cell.busy b{color:var(--yellow, #C9A66B);}
+  @media (max-width:640px){ .trio{grid-template-columns:1fr;} }
+  .trio-sign{
+    font-family:var(--mono); font-size:12px; color:var(--muted); margin-bottom:16px;
+    display:flex; gap:8px; flex-wrap:wrap;
+  }
+
   .total-current{
     background:var(--accent-soft); border:1px solid var(--accent); border-radius:12px; padding:18px 20px;
     margin-bottom:26px; display:flex; justify-content:space-between; align-items:center;
@@ -645,6 +671,18 @@
   // в тексте они безопасны, в атрибуте закрывают его и позволяют дописать
   // обработчик события. Подменяем явно, одинаково для текста и атрибутов.
   const ESCAPE_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  // Склонение по числу. В кабинете владельца эта функция есть, здесь её
+  // не было — а вызов уже стоял. Ровно так неделю не работал экран
+  // заказов: обращение к несуществующей функции падает ПОСЛЕ отрисовки,
+  // и экран остаётся на «Загружаем…» без единой жалобы.
+  function plural(n, one, few, many){
+    const m100 = n % 100; const m10 = n % 10;
+    if(m100 >= 11 && m100 <= 14) return many;
+    if(m10 === 1) return one;
+    if(m10 >= 2 && m10 <= 4) return few;
+    return many;
+  }
+
   function escapeHtml(str){
     return String(str == null ? '' : str).replace(/[&<>"']/g, (c) => ESCAPE_MAP[c]);
   }
@@ -678,11 +716,27 @@
       (m, r) => (r.stockAt && (!m || r.stockAt > m) ? r.stockAt : m), null);
     const notForSale = stockRows.reduce((s, r) => s + r.notForSale, 0);
 
+    // Три числа считает сервер по каждому товару, здесь только суммы.
+    // Складывать «доступно» из разностей построчно, а не вычитать сумму из
+    // суммы: если по одному товару заказов больше, чем товара, минус по нему
+    // не должен гаситься излишком по другому.
+    const sumOnHand = stockRows.reduce((s, r) => s + (r.onHand || 0), 0);
+    const sumOrdered = stockRows.reduce((s, r) => s + (r.ordered || 0), 0);
+    const sumFree = stockRows.reduce((s, r) => s + (r.available || 0), 0);
+    const sumShort = stockRows.reduce((s, r) => s + (r.short || 0), 0);
+    const orderedRows = stockRows.filter(r => (r.ordered || 0) > 0).length;
+    const pickedRows = stockRows.filter(r => (r.orderedPicked || 0) > 0).length;
+
     const rowsHtml = stockRows.map(r => `
       <tr>
         <td>${escapeHtml(r.name)}<span class="total-sku">${escapeHtml(r.sku)}</span></td>
-        ${has1c ? `<td class="num running">${(r.qtyIn1c ?? 0).toLocaleString('ru-RU')}</td>` : ''}
-        <td class="num ${has1c ? '' : 'running'}">${r.qty > 0 ? r.qty.toLocaleString('ru-RU') : '—'}</td>
+        <td class="num">${(r.onHand || 0).toLocaleString('ru-RU')}</td>
+        <td class="num ${(r.ordered || 0) > 0 ? 'delta' : ''}">${
+          (r.ordered || 0) > 0 ? r.ordered.toLocaleString('ru-RU') : '—'}</td>
+        <td class="num running">${(r.available || 0).toLocaleString('ru-RU')}${
+          (r.short || 0) > 0
+            ? `<span class="total-sku">не хватает ${r.short.toLocaleString('ru-RU')}</span>`
+            : ''}</td>
         <td class="num ${r.notForSale > 0 ? 'delta' : ''}">${r.notForSale > 0 ? r.notForSale : '—'}</td>
         <td class="num">${r.cells > 0 ? r.cells : '—'}</td>
       </tr>
@@ -707,15 +761,35 @@
               ? ' · по учёту склада на ' + fmtWhen(lastSync)
               : ' · на эту минуту, с учётом отгрузок'}</div>
           </div>
-          <div class="total-current">
-            <span class="total-current-label">${has1c ? 'Числится на складе' : 'Можно продавать'}</span>
-            <span class="total-current-num">${(has1c ? total1c : totalCells).toLocaleString('ru-RU')} шт</span>
+          <div class="trio">
+            <div class="trio-cell">
+              <b>${sumOnHand.toLocaleString('ru-RU')}</b>
+              <span>на складе</span>
+              <i>${has1c ? 'по учёту склада' : 'по ячейкам Аргуса'}</i>
+            </div>
+            <div class="trio-cell busy">
+              <b>${sumOrdered.toLocaleString('ru-RU')}</b>
+              <span>в заказах</span>
+              <i>${orderedRows === 0 ? 'заказов нет' : 'по ' + orderedRows + ' '
+                  + plural(orderedRows, 'товару', 'товарам', 'товарам')
+                  + (pickedRows > 0 ? ', часть уже собрана' : '')}</i>
+            </div>
+            <div class="trio-cell free">
+              <b>${sumFree.toLocaleString('ru-RU')}</b>
+              <span>доступно к продаже</span>
+              <i>на складе минус заказы</i>
+            </div>
           </div>
+          ${sumShort > 0 ? `<div class="total-note">По ${
+            stockRows.filter(r => (r.short || 0) > 0).length} ${
+            plural(stockRows.filter(r => (r.short || 0) > 0).length, 'товару', 'товарам', 'товарам')
+            } заказов больше, чем товара на складе — не хватает ${
+            sumShort.toLocaleString('ru-RU')} шт. Такие строки помечены в таблице.</div>` : ''}
           ${note ? `<div class="total-note">${note}</div>` : ''}
           ${notForSale > 0 ? `<div class="total-note">Ещё ${notForSale.toLocaleString('ru-RU')} шт лежат на складе, но продавать их нельзя: брак или повреждённая упаковка. Решение по ним за вами.</div>` : ''}
           <table class="total-table">
             <thead>
-              <tr><th>Товар</th>${has1c ? '<th class="num">Числится</th>' : ''}<th class="num">Разложено у нас</th><th class="num">Не в продаже</th><th class="num">Ячеек</th></tr>
+              <tr><th>Товар</th><th class="num">На складе</th><th class="num">В заказах</th><th class="num">Доступно</th><th class="num">Не в продаже</th><th class="num">Ячеек</th></tr>
             </thead>
             <tbody>${rowsHtml}</tbody>
           </table>
