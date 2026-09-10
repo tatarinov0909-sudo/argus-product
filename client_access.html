@@ -2,7 +2,8 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Аргус — Акты приёмки</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Аргус — Кабинет продавца</title>
 <link rel="stylesheet" href="fonts.css">
 <style>
   :root{
@@ -335,6 +336,62 @@
 
   .total-table tr{transition:background 0.15s var(--ease);}
   .total-table tbody tr:hover{background:rgba(255,255,255,0.015);}
+  /* Seller workspace: full-width operational tables, one quiet toolbar. */
+  .ws-header{display:grid; grid-template-columns:1fr auto 1fr; padding:16px 28px;}
+  .ws-right{justify-self:end;}
+  .ws-brand{max-width:260px;}
+  .ws-content{padding:30px 32px;}
+  .ws-content > *, .act-wrap{max-width:none;}
+  .act-card{padding:26px; border-radius:10px; box-shadow:none; background:var(--panel);}
+  .stock-heading{display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:28px;}
+  .stock-heading h1{font-size:28px; margin-bottom:8px; font-weight:600;}
+  .trio{border-radius:10px; margin-bottom:12px;}
+  .trio-cell{padding:22px 26px; background:var(--panel);}
+  .trio-cell b{font-size:clamp(28px,3vw,44px); margin:14px 0 12px; font-weight:500;}
+  .trio-cell span{font-size:14px; color:var(--text);}
+  .trio-cell.free{background:var(--accent-soft);}
+  .trio-cell.busy b{color:var(--text);}
+  .stock-reconcile{font-size:12px; color:#A8ACB2; line-height:1.65; margin:10px 0 20px;}
+  .stock-tools{display:flex; align-items:center; gap:20px; flex-wrap:wrap; margin:28px 0 18px;}
+  #stockSearch{min-width:220px; flex:1; max-width:480px; border:1px solid var(--line); background:var(--panel); color:var(--text); font:inherit; font-size:13px; padding:12px 14px; border-radius:7px;}
+  #stockCount{margin-left:auto;}
+  .short-filter{display:flex; align-items:center; gap:9px; font-size:13px; cursor:pointer;}
+  .short-filter input{accent-color:var(--accent); width:16px; height:16px;}
+  .short-warning{padding:12px 16px; border-left:3px solid #F28F8F; color:#F4A2A2; background:#332326; font-size:13px; margin-bottom:16px;}
+  .table-scroll{overflow-x:auto;}
+  .stock-table{min-width:700px;}
+  .total-table th{font-size:12px; text-transform:none; letter-spacing:normal; padding:12px 16px;}
+  .total-table td{padding:18px 16px; font-variant-numeric:tabular-nums;}
+  .total-table .product-name{width:40%; font-family:var(--sans);}
+  .stock-table .product-name{min-width:260px;}
+  .stock-table th.num,.stock-table td.num{min-width:110px;}
+  .stock-table .total-sku{white-space:nowrap;}
+  .stock-table tbody tr{cursor:pointer;}
+  .stock-table tbody tr:hover{background:var(--panel);}
+  .product-link{border:0; background:none; color:var(--text); text-align:left; padding:0; font:inherit; font-size:15px; cursor:pointer;}
+  .quality-button{border:0; background:none; color:#F4A2A2; font:inherit; text-decoration:underline; padding:4px; cursor:pointer;}
+  .short-label{display:block; margin-top:4px; font-size:11px; color:#F4A2A2; white-space:nowrap;}
+  .empty-state{padding:30px 10px; color:var(--muted); font-size:14px; line-height:1.7;}
+  button:disabled{opacity:.45; cursor:default;}
+  :focus-visible{outline:2px solid var(--accent-2); outline-offset:3px;}
+  #productHistory{margin:auto; width:min(860px,94vw); max-height:85vh; padding:26px; border:1px solid var(--line); border-radius:12px; background:var(--panel); color:var(--text);}
+  #productHistory::backdrop{background:rgba(0,0,0,.7);}
+  .history-head{display:flex; justify-content:space-between; gap:20px; align-items:start;}
+  .history-head h2{font-size:21px;}
+  .history-event{display:grid; grid-template-columns:145px 1fr auto; gap:20px; padding:16px 0; border-bottom:1px solid var(--line); font-size:13px; line-height:1.6;}
+  .history-event time{color:var(--muted); font-size:12px;}
+  .history-event b{font-family:var(--mono); font-weight:500; white-space:nowrap;}
+  @media(max-width:1100px){.ws-header{grid-template-columns:1fr auto;}.ws-mode-switch{grid-row:2;grid-column:1 / -1;}.ws-brand{max-width:100%;}}
+  @media(max-width:640px){
+    .ws-header{padding:14px 16px; gap:14px;}.ws-content{padding:22px 16px;}
+    .ws-right{gap:10px;}.ws-current-account{max-width:100px; overflow:hidden; text-overflow:ellipsis;}
+    #exportButton{font-size:11px; max-width:85px; text-align:left;}
+    .trio{grid-template-columns:repeat(3,minmax(0,1fr));}.trio-cell{padding:14px 10px;}
+    .trio-cell span{font-size:11px; min-height:28px;}.trio-cell b{font-size:23px;}.trio-cell i{font-size:10px;}
+    .stock-heading h1{font-size:24px;}.stock-tools{gap:14px;}#stockSearch{max-width:none;width:100%;flex-basis:100%;}
+    .history-event{grid-template-columns:1fr auto;gap:8px;}.history-event time{grid-column:1 / -1;}
+  }
+  @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;}}
 </style>
 </head>
 <body>
@@ -347,12 +404,12 @@
           <path d="M12.7 12.7L20 20M16 16l3-3" stroke="#5FAFA6" stroke-width="1.6" stroke-linecap="round"/>
         </svg>
       </div>
-      <div class="key-title">Доступ к актам приёмки</div>
-      <div class="key-sub">Введите ключ, который вам передал склад — и вы увидите историю приёмки по датам, без звонков.</div>
+      <div class="key-title">Кабинет продавца</div>
+      <div class="key-sub">Ваш товар на складе: остатки, движения и акты приёмки. Войдите по ключу, который вам передал склад.</div>
       <input type="text" class="key-input" id="keyNameInput" placeholder="Ваше имя или компания" style="font-family:var(--sans); letter-spacing:normal; text-align:left;" maxlength="60">
       <input type="text" class="key-input" id="keyInput" placeholder="Например: RM-4821-K" maxlength="20">
       <div class="key-error" id="keyError">Такой ключ не найден. Проверьте, всё ли скопировано верно.</div>
-      <button class="key-btn" onclick="checkKey()">Показать акты</button>
+      <button class="key-btn" onclick="checkKey()">Войти в кабинет</button>
     </div>
   </div>
 
@@ -369,15 +426,15 @@
       </div>
 
       <div class="ws-mode-switch">
-        <button class="ws-mode-btn active" id="modeByDate" onclick="setViewMode('dates')">По датам</button>
-        <button class="ws-mode-btn" id="modeTotal" onclick="setViewMode('total')">Остаток</button>
-        <button class="ws-mode-btn" id="modeMoves" onclick="setViewMode('moves')">Движение</button>
+        <button class="ws-mode-btn active" id="modeTotal" onclick="setViewMode('total')">Остаток</button>
+        <button class="ws-mode-btn" id="modeMoves" onclick="setViewMode('moves')">Движения</button>
+        <button class="ws-mode-btn" id="modeByDate" onclick="setViewMode('dates')">Акты приёмки</button>
       </div>
 
       <div class="ws-right">
-        <button class="ws-link" onclick="exportActs()">Выгрузить в Excel</button>
+        <button class="ws-link" id="exportButton" onclick="exportCurrentView()">Выгрузить в Excel</button>
         <div class="ws-current-account" id="wsCurrentAccount"></div>
-        <div class="ws-logout" onclick="logout()">Выйти</div>
+        <button class="ws-link ws-logout" onclick="logout()">Выйти</button>
       </div>
     </div>
     <div class="ws-body">
@@ -403,6 +460,11 @@
     <div class="cal-grid" id="calGrid"></div>
   </div>
 
+<dialog id="productHistory" aria-labelledby="historyTitle">
+  <div class="history-head"><div><h2 id="historyTitle"></h2><p class="total-sku" id="historySku"></p></div>
+  <button class="ws-mode-btn" onclick="document.getElementById('productHistory').close()">Закрыть</button></div>
+  <p class="stock-reconcile" id="historySummary"></p><div id="historyEvents" aria-live="polite"></div>
+</dialog>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
   const API_BASE = 'https://api.argus-ai.online';
@@ -421,6 +483,8 @@
       localStorage.removeItem('argus_token');
       localStorage.removeItem('argus_role');
       TOKEN = null;
+      document.getElementById('workspace').classList.remove('show');
+      document.getElementById('keyScreen').style.display = 'flex';
       throw new Error('сессия истекла');
     }
     const data = await res.json().catch(() => null);
@@ -462,7 +526,9 @@
       currentAccountName = data.companyName;
       document.getElementById('keyScreen').style.display = 'none';
       document.getElementById('workspace').classList.add('show');
-      await loadActs();
+      localStorage.setItem('argus_seller_name', name);
+      localStorage.setItem('argus_company_name', data.companyName || '');
+      startWorkspace();
     } catch(e){
       error.textContent = e.message || 'Такой ключ не найден. Проверьте, всё ли скопировано верно.';
       error.classList.add('show');
@@ -473,34 +539,6 @@
     if(e.key === 'Enter') checkKey();
   });
 
-  /* ---------- Выгрузка в Excel ----------
-     Продавцу файл нужен чаще, чем экран: свести у себя, отправить бухгалтеру,
-     сверить с поставщиком. Собирается из уже загруженных актов, второго
-     похода на сервер нет. */
-  function exportActs(){
-    if(typeof XLSX === 'undefined'){ alert('Выгрузка ещё грузится, повторите через секунду.'); return; }
-    if(!acts.length){ alert('Пока нечего выгружать — актов нет.'); return; }
-    const rows = [];
-    acts.forEach(function(act){
-      act.items.forEach(function(it){
-        rows.push({
-          'Дата': act.date,
-          'Акт': act.number,
-          'Товар': it.name,
-          'Артикул': it.sku,
-          'Заявлено': it.declared,
-          'Принято': it.accepted === null ? '' : it.accepted,
-          'Расхождение': it.accepted === null ? '' : (it.accepted - it.declared),
-        });
-      });
-    });
-    const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [{wch:12},{wch:16},{wch:34},{wch:16},{wch:11},{wch:10},{wch:13}].map(function(c){ return c; });
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Приёмки');
-    const stamp = new Date().toLocaleDateString('ru-RU').replace(/\./g, '-');
-    XLSX.writeFile(wb, 'Приёмки ' + (currentAccountName || 'продавец') + ' ' + stamp + '.xlsx');
-  }
 
   async function loadActs(){
     let invoices;
@@ -511,11 +549,11 @@
       // на девять десятых чужим по смыслу.
       invoices = await apiFetch('/api/invoices?direction=in');
     } catch(e){
-      document.getElementById('wsView').innerHTML = '<div style="color:var(--muted);">Не удалось загрузить акты: ' + e.message + '</div>';
+      if(currentViewMode === 'dates') document.getElementById('wsView').innerHTML = '<div style="color:var(--muted);">Не удалось загрузить акты: ' + escapeHtml(e.message) + '</div>';
       return;
     }
     if(!currentAccountName) currentAccountName = invoices[0]?.company_name || 'Продавец';
-    document.getElementById('wsCurrentAccount').textContent = currentAccountName;
+    document.getElementById('wsCurrentAccount').textContent = localStorage.getItem('argus_seller_name') || currentAccountName;
     // Название склада — то, что сказал сервер при входе. Пока он его не
     // говорил, в шапке стоит просто «Аргус»: лучше без названия, чем
     // с выдуманным.
@@ -526,10 +564,12 @@
     const started = invoices.filter(inv => inv.status !== 'open');
     if(started.length === 0){
       document.getElementById('wsDatesList').innerHTML = '';
-      document.getElementById('wsView').innerHTML = '<div style="color:var(--muted); text-align:center; padding-top:40px;">Пока нет ни одного акта приёмки по вашим товарам.</div>';
+      if(currentViewMode === 'dates') document.getElementById('wsView').innerHTML = '<p class="empty-state">Пока нет ни одного акта приёмки по вашим товарам.</p>';
       return;
     }
-    const details = await Promise.all(started.map(inv => apiFetch('/api/invoices/' + inv.id)));
+    let details;
+    try { details = await Promise.all(started.map(inv => apiFetch('/api/invoices/' + inv.id))); }
+    catch(e){ if(currentViewMode === 'dates') document.getElementById('wsView').textContent = 'Не удалось загрузить акт: ' + e.message; return; }
     acts = details.map(inv => ({
       date: formatActDate(inv.created_at),
       number: inv.number,
@@ -546,7 +586,7 @@
     })).sort((a, b) => parseActDateObj(b.date) - parseActDateObj(a.date));
 
     renderDates();
-    setViewMode(currentViewMode);
+    if(currentViewMode === 'dates') renderAct(currentActIndex || 0);
   }
 
   function parseActDateObj(str){
@@ -561,13 +601,12 @@
   }
 
 
-  let currentViewMode = 'dates';
+  let currentViewMode = 'total';
 
   function setViewMode(mode){
     // Остаток существует независимо от того, были ли приёмки в Аргусе: товар
     // мог приехать в систему выгрузкой из 1С. Раньше пустой список актов
     // блокировал и остаток тоже.
-    if(acts.length === 0 && mode === 'dates') return;
     currentViewMode = mode;
     document.getElementById('modeByDate').classList.toggle('active', mode === 'dates');
     document.getElementById('modeTotal').classList.toggle('active', mode === 'total');
@@ -575,8 +614,10 @@
     // Строка дат — содержимое вида «по датам», а не постоянная часть окна:
     // в остатке и движении ей нечего показывать.
     document.getElementById('wsDatesHead').style.display = mode === 'dates' ? 'flex' : 'none';
+    document.getElementById('exportButton').disabled = true;
     if(mode === 'dates'){
-      renderAct(currentActIndex || 0);
+      if(acts.length) renderAct(currentActIndex || 0);
+      else loadActs();
     } else if(mode === 'moves'){
       loadMovements();
     } else {
@@ -601,12 +642,13 @@
     try{
       movements = await apiFetch('/api/sellers/movements');
     } catch(e){
+      if(currentViewMode !== 'moves') return;
       document.getElementById('wsView').innerHTML =
         '<div class="act-wrap"><div class="act-card">Не удалось загрузить: '
         + escapeHtml(e.message) + '</div></div>';
       return;
     }
-    renderMovements();
+    if(currentViewMode === 'moves') renderMovements();
   }
 
   function fmtWhen(iso){
@@ -616,13 +658,14 @@
   }
 
   function renderMovements(){
+    document.getElementById('exportButton').disabled = false;
     const sh = movements.shipped;
     const rt = movements.returned;
 
     const shipHtml = sh.length === 0
       ? '<div style="color:var(--muted); padding:18px 0;">Отгрузок пока не было.</div>'
       : `<table class="total-table">
-          <thead><tr><th>Когда</th><th>Товар</th><th>Заказ</th><th class="num">Шт</th></tr></thead>
+          <thead><tr><th>Время сборки</th><th>Товар</th><th>Заказ</th><th class="num">Шт</th></tr></thead>
           <tbody>${sh.map(r => `
             <tr>
               <td>${escapeHtml(fmtWhen(r.at))}</td>
@@ -651,7 +694,7 @@
         <div class="act-card">
           <div class="total-head">
             <div class="total-title">Отгрузки</div>
-            <div class="total-sub">${escapeHtml(currentAccountName)} · что уехало с вашего товара</div>
+            <div class="total-sub">${escapeHtml(currentAccountName)} · отгруженные заказы; указано время подбора товара</div>
           </div>
           ${shipHtml}
         </div>
@@ -674,16 +717,20 @@
   let stockRows = null;
 
   async function loadSellerStock(){
+    document.getElementById('exportButton').disabled = true;
+    document.getElementById('wsView').innerHTML = '<p class="empty-state" role="status">Обновляем остаток…</p>';
     try{
       stockRows = await apiFetch('/api/sellers/stock');
+      stockLoadedAt = Date.now();
     } catch(e){
       stockRows = null;
+      if(currentViewMode !== 'total') return;
       document.getElementById('wsView').innerHTML =
         '<div class="act-wrap"><div class="act-card">Не удалось загрузить остаток: '
-        + escapeHtml(e.message) + '</div></div>';
+        + escapeHtml(e.message) + '<p><button class="ws-mode-btn" onclick="loadSellerStock()">Повторить</button></p></div></div>';
       return;
     }
-    renderTotalView();
+    if(currentViewMode === 'total') renderTotalView();
   }
 
   // Экранирование для разметки. textContent + innerHTML не трогает кавычки —
@@ -706,115 +753,152 @@
     return String(str == null ? '' : str).replace(/[&<>"']/g, (c) => ESCAPE_MAP[c]);
   }
 
+  let stockSearch = '';
+  let stockOnlyShort = false;
+  let stockLoadedAt = null;
+
+  function startWorkspace(){
+    currentAccountName = localStorage.getItem('argus_company_name') || currentAccountName || 'Продавец';
+    document.getElementById('wsCurrentAccount').textContent =
+      localStorage.getItem('argus_seller_name') || currentAccountName;
+    document.getElementById('wsWarehouse').textContent =
+      localStorage.getItem('argus_wh_name') || 'Аргус';
+    setViewMode('total');
+  }
+
+  function filteredStock(){
+    const q = stockSearch.trim().toLocaleLowerCase('ru-RU');
+    return (stockRows || []).filter(r => (!stockOnlyShort || r.short > 0) &&
+      (!q || [r.name, r.sku, r.barcode].some(v => String(v || '').toLocaleLowerCase('ru-RU').includes(q))));
+  }
+  function num(value){ return Number(value || 0).toLocaleString('ru-RU'); }
+
+  function renderStockTable(){
+    const rows = filteredStock();
+    document.getElementById('stockCount').textContent = 'Показано товаров: ' + rows.length;
+    document.getElementById('stockTableBody').innerHTML = rows.length ? rows.map(r => {
+      const index = stockRows.indexOf(r);
+      return `<tr data-stock-index="${index}" tabindex="0" aria-label="История товара: ${escapeHtml(r.name)}">
+        <td class="product-name"><button class="product-link" onclick="openStockHistory(${index})">${escapeHtml(r.name)}</button><span class="total-sku">${escapeHtml(r.sku)}</span></td>
+        <td class="num">${num(r.onHand)}${r.staged > 0 ? `<span class="total-sku">в сборке ${num(r.staged)}</span>` : ''}</td>
+        <td class="num">${num(r.ordered)}</td>
+        <td class="num running">${num(r.available)}${r.short > 0 ? `<span class="short-label">не хватает ${num(r.short)}</span>` : ''}</td>
+        <td class="num">${r.notForSale > 0 ? `<button class="quality-button" onclick="openStockHistory(${index}, true)">${num(r.notForSale)}</button>` : '—'}</td>
+        <td class="num">${num(r.cells)}</td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="6" class="empty-state">Нет товаров по этому фильтру. Измените поиск или отключите «Только нехватка».</td></tr>';
+    document.getElementById('exportButton').disabled = rows.length === 0;
+  }
+
   function renderTotalView(){
-    if(stockRows === null){ loadSellerStock(); return; }
-
-    if(stockRows.length === 0){
-      document.getElementById('wsView').innerHTML = `
-        <div class="act-wrap"><div class="act-card">
-          <div class="total-head">
-            <div class="total-title">Остаток на складе</div>
-            <div class="total-sub">${escapeHtml(currentAccountName)}</div>
-          </div>
-          <div style="color:var(--muted); padding:24px 0; text-align:center;">
-            Вашего товара на складе сейчас нет.
-          </div>
-        </div></div>`;
-      return;
-    }
-
-    // Две разные цифры об одном товаре, и путать их нельзя.
-    // «В 1С» — сколько числится в учёте склада. «Разложено у нас» — сколько
-    // Аргус физически принял и положил в ячейки. Пока приёмка через Аргус
-    // не ведётся, вторая цифра — ноль по всему складу, и показывать её
-    // как остаток продавца значило бы соврать ему в обратную сторону.
-    const totalCells = stockRows.reduce((s, r) => s + r.qty, 0);
-    const total1c = stockRows.reduce((s, r) => s + (r.qtyIn1c || 0), 0);
-    const has1c = stockRows.some(r => r.qtyIn1c !== null && r.qtyIn1c !== undefined);
-    const lastSync = stockRows.reduce(
-      (m, r) => (r.stockAt && (!m || r.stockAt > m) ? r.stockAt : m), null);
-    const notForSale = stockRows.reduce((s, r) => s + r.notForSale, 0);
-
-    // Три числа считает сервер по каждому товару, здесь только суммы.
-    // Складывать «доступно» из разностей построчно, а не вычитать сумму из
-    // суммы: если по одному товару заказов больше, чем товара, минус по нему
-    // не должен гаситься излишком по другому.
-    const sumOnHand = stockRows.reduce((s, r) => s + (r.onHand || 0), 0);
-    const sumOrdered = stockRows.reduce((s, r) => s + (r.ordered || 0), 0);
-    const sumFree = stockRows.reduce((s, r) => s + (r.available || 0), 0);
-    const sumShort = stockRows.reduce((s, r) => s + (r.short || 0), 0);
-    const orderedRows = stockRows.filter(r => (r.ordered || 0) > 0).length;
-    const pickedRows = stockRows.filter(r => (r.orderedPicked || 0) > 0).length;
-
-    const rowsHtml = stockRows.map(r => `
-      <tr>
-        <td>${escapeHtml(r.name)}<span class="total-sku">${escapeHtml(r.sku)}</span></td>
-        <td class="num">${(r.onHand || 0).toLocaleString('ru-RU')}</td>
-        <td class="num ${(r.ordered || 0) > 0 ? 'delta' : ''}">${
-          (r.ordered || 0) > 0 ? r.ordered.toLocaleString('ru-RU') : '—'}</td>
-        <td class="num running">${(r.available || 0).toLocaleString('ru-RU')}${
-          (r.short || 0) > 0
-            ? `<span class="total-sku">не хватает ${r.short.toLocaleString('ru-RU')}</span>`
-            : ''}</td>
-        <td class="num ${r.notForSale > 0 ? 'delta' : ''}">${r.notForSale > 0 ? r.notForSale : '—'}</td>
-        <td class="num">${r.cells > 0 ? r.cells : '—'}</td>
-      </tr>
-    `).join('');
-
-    let note = '';
-    if (has1c && totalCells === 0) {
-      note = 'Цифра выше — из учёта склада. По ячейкам Аргуса ваш товар пока'
-        + ' не разложен: приёмка через него ещё не велась.';
-    } else if (has1c && totalCells !== total1c) {
-      note = 'По ячейкам Аргуса разложено ' + totalCells.toLocaleString('ru-RU')
-        + ' шт — расхождение с учётом склада на '
-        + Math.abs(total1c - totalCells).toLocaleString('ru-RU') + ' шт.';
-    }
-
+    if(stockRows === null) return;
+    const sum = field => stockRows.reduce((n,r) => n + Number(r[field] || 0), 0);
+    const compared = stockRows.filter(r => r.qtyIn1c !== null && r.qtyIn1c !== undefined);
+    const mismatches = compared.filter(r => Number(r.qtyIn1c) !== r.onHand);
+    const discrepancy = mismatches.reduce((n,r) => n + Math.abs(Number(r.qtyIn1c) - r.onHand), 0);
+    const total1c = compared.reduce((n,r) => n + Number(r.qtyIn1c), 0);
+    const shortRows = stockRows.filter(r => r.short > 0);
+    const staged = sum('staged');
     document.getElementById('wsView').innerHTML = `
-      <div class="act-wrap">
-        <div class="act-card">
-          <div class="total-head">
-            <div class="total-title">Остаток на складе</div>
-            <div class="total-sub">${escapeHtml(currentAccountName)}${has1c
-              ? ' · по учёту склада на ' + fmtWhen(lastSync)
-              : ' · на эту минуту, с учётом отгрузок'}</div>
-          </div>
-          <div class="trio">
-            <div class="trio-cell">
-              <b>${sumOnHand.toLocaleString('ru-RU')}</b>
-              <span>на складе</span>
-              <i>${has1c ? 'по учёту склада' : 'по ячейкам Аргуса'}</i>
-            </div>
-            <div class="trio-cell busy">
-              <b>${sumOrdered.toLocaleString('ru-RU')}</b>
-              <span>в заказах</span>
-              <i>${orderedRows === 0 ? 'заказов нет' : 'по ' + orderedRows + ' '
-                  + plural(orderedRows, 'товару', 'товарам', 'товарам')
-                  + (pickedRows > 0 ? ', часть уже собрана' : '')}</i>
-            </div>
-            <div class="trio-cell free">
-              <b>${sumFree.toLocaleString('ru-RU')}</b>
-              <span>доступно к продаже</span>
-              <i>на складе минус заказы</i>
-            </div>
-          </div>
-          ${sumShort > 0 ? `<div class="total-note">По ${
-            stockRows.filter(r => (r.short || 0) > 0).length} ${
-            plural(stockRows.filter(r => (r.short || 0) > 0).length, 'товару', 'товарам', 'товарам')
-            } заказов больше, чем товара на складе — не хватает ${
-            sumShort.toLocaleString('ru-RU')} шт. Такие строки помечены в таблице.</div>` : ''}
-          ${note ? `<div class="total-note">${note}</div>` : ''}
-          ${notForSale > 0 ? `<div class="total-note">Ещё ${notForSale.toLocaleString('ru-RU')} шт лежат на складе, но продавать их нельзя: брак или повреждённая упаковка. Решение по ним за вами.</div>` : ''}
-          <table class="total-table">
-            <thead>
-              <tr><th>Товар</th><th class="num">На складе</th><th class="num">В заказах</th><th class="num">Доступно</th><th class="num">Не в продаже</th><th class="num">Ячеек</th></tr>
-            </thead>
-            <tbody>${rowsHtml}</tbody>
-          </table>
+      <section class="stock-page">
+        <div class="stock-heading">
+          <div><h1>Остаток</h1><p class="total-sub">${escapeHtml(currentAccountName)} · обновлено ${escapeHtml(new Date(stockLoadedAt).toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit', second:'2-digit'}))}</p></div>
+          <button class="ws-mode-btn" onclick="loadSellerStock()">Обновить</button>
         </div>
-      </div>
-    `;
+        <div class="trio">
+          <div class="trio-cell"><span>На складе</span><b>${num(sum('onHand'))}</b><i>годный товар, включая собранное</i></div>
+          <div class="trio-cell busy"><span>В заказах</span><b>${num(sum('ordered'))}</b><i>ещё не отгружено</i></div>
+          <div class="trio-cell free"><span>Доступно к продаже</span><b>${num(sum('available'))}</b><i>можно продать сейчас</i></div>
+        </div>
+        ${mismatches.length ? `<p class="stock-reconcile">По учёту 1С: ${num(total1c)} · расхождения по ${mismatches.length} товарам, всего ${num(discrepancy)} шт${compared.length < stockRows.length ? ' · сверка доступна не по всем товарам' : ''}</p>` : ''}
+        ${staged > 0 ? `<p class="stock-reconcile">${num(staged)} шт уже сняты с полок для заказов и ещё находятся на складе.</p>` : ''}
+        <div class="stock-tools">
+          <input id="stockSearch" type="search" placeholder="Найти товар, артикул или штрихкод" aria-label="Поиск товара" value="${escapeHtml(stockSearch)}">
+          <label class="short-filter"><input id="stockOnlyShort" type="checkbox" ${stockOnlyShort ? 'checked' : ''}> Только нехватка</label>
+          <span id="stockCount" class="total-sub"></span>
+        </div>
+        ${shortRows.length ? `<div class="short-warning" role="status">По ${shortRows.length} ${plural(shortRows.length, 'товару', 'товарам', 'товарам')} заказов больше, чем товара — не хватает ${num(sum('short'))} шт.</div>` : ''}
+        ${!stockRows.length ? '<p class="empty-state">На складе пока нет вашего товара. Остатки появятся после приёмки.</p>' : ''}
+        <div class="table-scroll"><table class="total-table stock-table">
+          <thead><tr><th>Товар</th><th class="num">На складе</th><th class="num">В заказах</th><th class="num">Доступно</th><th class="num">Не в продаже</th><th class="num">Ячеек</th></tr></thead>
+          <tbody id="stockTableBody"></tbody>
+        </table></div>
+        <p class="stock-reconcile">Нажмите на товар, чтобы посмотреть его историю. Доступное считается по каждому товару: излишек одного не покрывает нехватку другого.</p>
+      </section>`;
+    renderStockTable();
+    document.getElementById('stockSearch').addEventListener('input', e => { stockSearch = e.target.value; renderStockTable(); });
+    document.getElementById('stockOnlyShort').addEventListener('change', e => { stockOnlyShort = e.target.checked; renderStockTable(); });
+    const body = document.getElementById('stockTableBody');
+    body.addEventListener('click', e => {
+      if(e.target.closest('button')) return;
+      const row = e.target.closest('[data-stock-index]');
+      if(row) openStockHistory(Number(row.dataset.stockIndex));
+    });
+    body.addEventListener('keydown', e => {
+      if(e.target.tagName === 'TR' && (e.key === 'Enter' || e.key === ' ')){
+        e.preventDefault(); openStockHistory(Number(e.target.dataset.stockIndex));
+      }
+    });
+  }
+
+  let historyRequest = 0;
+  async function openStockHistory(index, qualityOnly = false){
+    const r = stockRows[index];
+    const dialog = document.getElementById('productHistory');
+    document.getElementById('historyTitle').textContent = r.name;
+    document.getElementById('historySku').textContent = r.sku;
+    document.getElementById('historySummary').textContent = qualityOnly
+      ? 'Не в продаже: ' + num(r.notForSale) + ' шт. Брак: ' + num(r.defective) + ', повреждена упаковка: ' + num(r.packagingDefect) + '.'
+      : 'На складе: ' + num(r.onHand) + ' · В заказах: ' + num(r.ordered) + ' · Доступно: ' + num(r.available);
+    const target = document.getElementById('historyEvents');
+    target.textContent = 'Загружаем историю…';
+    if(!dialog.open) dialog.showModal();
+    const request = ++historyRequest;
+    try {
+      const data = await apiFetch('/api/sellers/history?sku=' + encodeURIComponent(r.sku));
+      if(request !== historyRequest) return;
+      const names = {received:'Приехало', picked:'Собрано для заказа', returned:'Вернулось', move:'Перемещено', repack:'Перепаковано', kit_assemble:'Собран набор'};
+      const events = qualityOnly ? data.events.filter(e => e.kind === 'returned' && e.quality !== 'good') : data.events;
+      target.innerHTML = '<p class="stock-reconcile">Операции по документам и складские операции. Для сборки указано время подбора, не отъезда машины.</p>' +
+        (events.length ? events.map(e => `<div class="history-event">
+          <time>${escapeHtml(fmtWhen(e.at))}</time>
+          <div>${escapeHtml(names[e.kind] || e.kind)}${e.document ? ' · ' + escapeHtml(e.document) : ''}
+            ${e.quality ? '<span class="total-sku">' + escapeHtml(BUCKET_NAME[e.quality] || e.quality) + '</span>' : ''}
+            ${e.note ? '<p>' + escapeHtml(e.note) + '</p>' : ''}
+            ${e.kind === 'picked' ? '<span class="total-sku">' + (e.status === 'shipped' ? 'Заказ отгружен' : 'Заказ ещё на складе') + '</span>' : ''}</div>
+          <b>${e.kind === 'received' || e.kind === 'returned' ? '+' : ''}${num(e.qty)} шт</b>
+        </div>`).join('') : '<p class="empty-state">Зафиксированных операций пока нет.</p>') +
+        (data.hasMore ? '<p class="stock-reconcile">Показаны последние 200 операций. Более ранние записи в эту ленту не вошли.</p>' : '');
+    } catch(e) { if(request === historyRequest) target.textContent = 'Не удалось загрузить историю: ' + e.message; }
+  }
+
+  function exportCurrentView(){
+    if(typeof XLSX === 'undefined'){ alert('Выгрузка ещё загружается. Повторите через секунду.'); return; }
+    let rows, name;
+    if(currentViewMode === 'total'){
+      name = 'Остаток';
+      rows = filteredStock().map(r => ({'Товар':r.name, 'Артикул':r.sku, 'На складе':r.onHand, 'В заказах':r.ordered,
+        'Доступно':r.available, 'Не в продаже':r.notForSale, 'Ячеек':r.cells}));
+    } else if(currentViewMode === 'dates'){
+      name = 'Акт приёмки';
+      const act = acts[currentActIndex];
+      rows = act ? act.items.map(it => ({'Товар':it.name, 'Артикул':it.sku, 'Заявлено':it.declared,
+        'Принято':it.accepted, 'Расхождение':it.accepted === null ? '' : it.accepted - it.declared})) : [];
+    } else {
+      name = 'Движения';
+      const book = XLSX.utils.book_new();
+      for(const [sheet, data] of [
+        ['Уехало', (movements?.shipped || []).map(r => ({'Время сборки':fmtWhen(r.at),'Товар':r.name,'Артикул':r.sku,'Заказ':r.order,'Площадка':r.source,'Шт':r.qty}))],
+        ['Вернулось', (movements?.returned || []).map(r => ({'Когда':fmtWhen(r.at),'Товар':r.name,'Артикул':r.sku,'Признано':BUCKET_NAME[r.bucket] || r.bucket,'Описание':r.note || '', 'Шт':r.qty}))]
+      ]) XLSX.utils.book_append_sheet(book, XLSX.utils.json_to_sheet(data), sheet);
+      XLSX.writeFile(book, name + '.xlsx'); return;
+    }
+    if(!rows.length) return;
+    const book = XLSX.utils.book_new();
+    const sheet = XLSX.utils.json_to_sheet(rows);
+    sheet['!cols'] = Object.keys(rows[0]).map((_,i) => ({wch:i === 0 ? 45 : 20}));
+    XLSX.utils.book_append_sheet(book, sheet, name);
+    XLSX.writeFile(book, name + '.xlsx');
   }
 
   const MONTH_NAMES = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
@@ -905,6 +989,7 @@
   let currentActIndex = 0;
   function renderAct(index){
     if(acts.length === 0) return;
+    document.getElementById('exportButton').disabled = false;
     currentActIndex = index;
     document.querySelectorAll('.ws-date-item').forEach(d => d.classList.remove('active'));
     const dateBtn = document.getElementById('date-' + index);
@@ -952,7 +1037,7 @@
             <div class="act-head-right">
               <div>Дата приёмки: ${escapeHtml(act.date)}</div>
               <div>Время: ${escapeHtml(act.time)}</div>
-              <div>Принял: Кладовщик (ИИ-агент)</div>
+              <div>Исполнитель не указан в данных акта</div>
             </div>
           </div>
 
@@ -975,8 +1060,7 @@
           ${itemsHtml}
 
           <div class="act-footer">
-            <div class="act-footer-text">Акт сформирован автоматически по результатам сверки штрихкодов при приёмке.</div>
-            <div class="act-footer-badge">${escapeHtml(currentKey || '')}</div>
+            <div class="act-footer-text">Акт сформирован по записанным результатам приёмки.</div>
           </div>
         </div>
       </div>
@@ -986,7 +1070,7 @@
   if(TOKEN && localStorage.getItem('argus_role') === 'seller'){
     document.getElementById('keyScreen').style.display = 'none';
     document.getElementById('workspace').classList.add('show');
-    loadActs();
+    startWorkspace();
   }
 </script>
 
