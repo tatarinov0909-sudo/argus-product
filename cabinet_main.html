@@ -957,6 +957,7 @@
     background:var(--panel-2); border:1px solid var(--line); color:var(--text);
   }
   .wh-onboarding-btn:hover{border-color:var(--accent);}
+  .wh-onboarding-btn-link{display:inline-flex; align-items:center; text-decoration:none; width:max-content;}
   .wh-onboarding-btn.primary{background:var(--accent); color:#182422; border-color:var(--accent);}
   .wh-onboarding-btn.primary:hover{opacity:0.9;}
 
@@ -2104,8 +2105,8 @@
               <div class="oc-step-num">1</div>
               <div class="oc-step-body">
                 <div class="oc-step-title">Скачайте модуль для 1С</div>
-                <div class="oc-step-text">Файл внешней обработки — передайте его тому, у кого есть доступ к вашей базе 1С.</div>
-                <button class="wh-onboarding-btn" type="button" onclick="showWhToast('В демо-версии здесь будет скачиваться файл модуля (.epf)')">Скачать модуль (.epf)</button>
+                <div class="oc-step-text">Исходник для УТ 10.3 обновляет существующую внешнюю обработку. Он только читает базу и передаёт данные в Аргус.</div>
+                <a class="wh-onboarding-btn wh-onboarding-btn-link" href="argus-sync-1c-10.3.bsl" download>Скачать исходник (.bsl)</a>
               </div>
             </div>
             <div class="oc-step">
@@ -2161,8 +2162,10 @@
             </div>
           </div>
           <div class="oc-note" id="ocLastSeen">Последняя связь с 1С: —</div>
+          <div class="oc-note">Для распределения товаров по продавцам нужен модуль <b>2026-09-10 #11</b>. Обновите существующую обработку, дождитесь обмена, затем свяжите компанию с контрагентом 1С в разделе «Сотрудники».</div>
           <div style="display:flex; gap:10px; margin-top:16px;">
             <button class="wh-onboarding-btn" type="button" onclick="load1CStatus(true)">Обновить</button>
+            <a class="wh-onboarding-btn wh-onboarding-btn-link" href="argus-sync-1c-10.3.bsl" download>Скачать модуль #11</a>
           </div>
         </div>
 
