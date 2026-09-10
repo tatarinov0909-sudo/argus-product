@@ -569,9 +569,7 @@
     return typeof n === 'number' ? n.toLocaleString('ru-RU') : '—';
   }
 
-  // "Последняя связь" — единственный честный признак живой синхронизации:
-  // модуль в 1С отмечается на сервере при каждом запуске, и тихая смерть
-  // расписания видна только по тому, что эта отметка перестала обновляться.
+  // Time of contact is useful, but does not prove that a full exchange finished.
   function formatLastSeen(iso){
     if(!iso) return null;
     const then = new Date(iso);
@@ -651,6 +649,29 @@
     showWhToast('Сбой в кабинете: ' + msg);
   });
 
+  function render1CBatches(stages){
+    const latest = new Map();
+    for(const row of stages || []){
+      const old = latest.get(row.stage);
+      if(!old || new Date(row.received_at) > new Date(old.received_at)) latest.set(row.stage,row);
+    }
+    const labels = {counterparties:'Контрагенты',companies:'Компании',products:'Номенклатура',invoices:'Документы',stock:'Учётные остатки',cells:'Адреса хранения','cell-catalog':'Справочник ячеек'};
+    const resultLabels = {created:'Создано',adopted:'Связано',updated:'Обновлено',updated_unparsed:'Ячейки без разбора адреса',skipped_unmapped_company:'Ждут связи с продавцом',skipped_in_progress:'Сохранены складские операции',ownership_conflict:'Конфликт владельца',error:'Ошибки',warnings:'Предупреждения'};
+    const rows = [...latest.values()].sort((a,b)=>(Object.keys(labels).indexOf(a.stage)+1||99)-(Object.keys(labels).indexOf(b.stage)+1||99));
+    const formatDate = value => value ? new Date(value).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : 'Нет сведений';
+    document.getElementById('ocPushBatches').innerHTML = rows.length
+      ? `<table class="oc-batches-table"><thead><tr><th>Данные</th><th>Последняя порция</th><th class="oc-batch-num">Строк</th><th>Результат этой порции</th></tr></thead><tbody>${rows.map(row=>{
+        const mode = row.run_mode === 'automatic' ? 'Автоматический запуск' : row.run_mode === 'manual' ? 'Ручной запуск' : 'Режим запуска не передан';
+        const results = Object.entries(row.summary || {}).filter(([,v])=>Number.isFinite(Number(v))&&Number(v)>0).map(([key,value])=>`<span${['error','ownership_conflict','warnings','updated_unparsed','skipped_unmapped_company'].includes(key)?' class="oc-batch-attention"':''}>${escapeHTML(resultLabels[key]||'Другой результат')}: ${formatQty(value)}</span>`).join('');
+        return `<tr data-sync-stage="${escapeHTML(row.stage)}"><td data-label="Данные">${escapeHTML(labels[row.stage]||'Другие данные')}</td><td data-label="Последняя порция">${escapeHTML(formatDate(row.received_at))}<small>${escapeHTML(mode)}</small><small>${row.module_version?'Модуль '+escapeHTML(row.module_version):'Версия модуля не передана'}</small></td><td data-label="Строк" class="oc-batch-num">${formatQty(row.record_count)}</td><td data-label="Результат этой порции" class="oc-batch-results">${results||'Результат не передан'}</td></tr>`;
+      }).join('')}</tbody></table>`
+      : '<p class="oc-batches-empty">Подробности обмена появятся после следующей отправки из 1С. Версия модуля и режим запуска передаются начиная с модуля #12.</p>';
+    const stock = latest.get('stock');
+    document.getElementById('ocStockBatch').textContent = stock ? formatDate(stock.received_at) : 'Нет сведений';
+    document.getElementById('ocStockBatchSub').textContent = stock ? formatQty(stock.record_count)+' строк в последней порции' : 'Ожидаем новую отправку остатков';
+    return rows;
+  }
+
   async function load1CStatus(manual){
     try{
       const s = await apiFetch('/api/sync/status');
@@ -670,20 +691,20 @@
 
       document.getElementById('ocDisconnected').style.display = 'none';
       document.getElementById('ocConnected').style.display = 'block';
-      document.getElementById('ocStatusDot').classList.add('connected');
-      document.getElementById('ocStatusTitle').textContent = 'Подключено';
-      document.getElementById('ocStatusSub').textContent = 'Номенклатура и накладные приходят из 1С';
+      document.getElementById('ocStatusDot').classList.remove('connected');
+      document.getElementById('ocStatusTitle').textContent = 'Обмен с 1С';
+      document.getElementById('ocStatusSub').textContent = 'Последняя связь: '+lastSeen+'. Получение данных показано отдельно по каждому этапу.';
 
       document.getElementById('ocNumProducts').textContent = formatQty(s.synced_products);
       document.getElementById('ocNumInvoices').textContent = formatQty(s.synced_invoices);
-      document.getElementById('ocNumPending').textContent = formatQty(s.pendingEvents);
+      render1CBatches(s.pushStages);
       document.getElementById('ocNumUnassigned').textContent = formatQty(s.unassigned_products);
       document.getElementById('ocUnassignedSub').textContent = Number(s.unmapped_counterparties || 0) > 0
         ? formatQty(s.unmapped_counterparties) + ' контрагентов ещё не связаны'
         : Number(s.unassigned_products || 0) > 0
           ? 'товаров требуют распределения'
           : 'все распределены по продавцам';
-      document.getElementById('ocLastSeen').textContent = 'Последняя связь с 1С: ' + lastSeen;
+      document.getElementById('ocLastSeen').textContent = 'Аргус только получает данные из 1С. Обратная запись в 1С не подключена.';
 
       if(manual) showWhToast('Данные обновлены');
     } catch(e){
