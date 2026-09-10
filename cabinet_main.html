@@ -534,7 +534,7 @@
   }
   .oc-code-copy{font-size:11.5px; color:var(--muted); cursor:pointer; text-decoration:underline; font-weight:400; font-family:var(--sans);}
 
-  .oc-sync-grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; margin-bottom:16px;}
+  .oc-sync-grid{display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; margin-bottom:16px;}
   .oc-sync-card{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px;}
   .oc-sync-label{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:8px;}
   .oc-sync-num{font-size:20px; font-weight:700; font-family:var(--mono); margin-bottom:2px;}
@@ -717,6 +717,44 @@
   .staff-action{font-size:12px; font-weight:600; cursor:pointer; text-decoration:underline; text-align:right;}
   .staff-action.revoke{color:var(--terracotta);}
   .staff-action.restore{color:var(--accent);}
+
+  .company-row{grid-template-columns:minmax(180px,1.25fr) minmax(220px,1fr) minmax(240px,1fr) 76px;}
+  .company-1c-link{
+    display:flex; align-items:center; gap:9px; min-width:0; width:100%; padding:0;
+    border:0; background:none; color:var(--muted); font:inherit; text-align:left; cursor:pointer;
+  }
+  .company-1c-link:hover .company-1c-name{color:var(--text);}
+  .company-1c-link:focus-visible{outline:2px solid var(--accent); outline-offset:4px; border-radius:4px;}
+  .company-1c-dot{width:7px; height:7px; flex:0 0 7px; border-radius:50%; background:var(--terracotta);}
+  .company-1c-link.linked .company-1c-dot{background:var(--accent);}
+  .company-1c-name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; transition:color .15s var(--ease);}
+
+  .one-c-map-modal{max-width:620px;}
+  .one-c-map-intro{font-size:14px; line-height:1.55; color:var(--muted); margin-bottom:18px;}
+  .one-c-map-current{
+    display:flex; justify-content:space-between; align-items:center; gap:16px;
+    padding:13px 14px; margin-bottom:14px; border:1px solid var(--line); border-radius:10px;
+    background:var(--panel-2); font-size:13px;
+  }
+  .one-c-map-current strong{display:block; margin-top:3px; color:var(--text); font-size:14px;}
+  .one-c-map-unlink{border:0; background:none; color:var(--terracotta); font:inherit; cursor:pointer;}
+  .one-c-map-search{
+    width:100%; box-sizing:border-box; padding:11px 13px; border:1px solid var(--line);
+    border-radius:9px; background:var(--bg); color:var(--text); font:inherit; font-size:14px;
+  }
+  .one-c-map-search:focus{outline:none; border-color:var(--accent);}
+  .one-c-map-results{margin-top:10px; border:1px solid var(--line); border-radius:10px; overflow:hidden;}
+  .one-c-map-result{
+    display:flex; justify-content:space-between; align-items:center; gap:18px; width:100%;
+    padding:12px 14px; border:0; border-bottom:1px solid var(--line); background:var(--panel);
+    color:var(--text); font:inherit; text-align:left; cursor:pointer;
+  }
+  .one-c-map-result:last-child{border-bottom:0;}
+  .one-c-map-result:hover{background:var(--panel-2);}
+  .one-c-map-result:disabled{cursor:not-allowed; opacity:.5;}
+  .one-c-map-result-name{font-size:14px; font-weight:600;}
+  .one-c-map-result-state{font-size:12px; color:var(--muted); text-align:right;}
+  .one-c-map-empty{padding:24px 16px; color:var(--muted); font-size:13px; line-height:1.5; text-align:center;}
 
   .staff-empty{padding:30px; text-align:center; font-size:13px; color:var(--muted);}
 
@@ -1849,6 +1887,21 @@
           </div>
         </div>
       </div>
+
+      <div class="wh-modal-overlay" id="oneCMapModal" onclick="if(event.target===this) closeOneCMapping()">
+        <div class="wh-modal one-c-map-modal" role="dialog" aria-modal="true" aria-labelledby="oneCMapTitle">
+          <div class="wh-modal-head">
+            <div class="wh-modal-title" id="oneCMapTitle">Связать компанию с 1С</div>
+            <button class="panel-close-btn" onclick="closeOneCMapping()" aria-label="Закрыть">✕</button>
+          </div>
+          <div class="wh-modal-body">
+            <div class="one-c-map-intro">Выберите контрагента, под которым товары этой компании оформлены в 1С. Следующая синхронизация сама распределит её товары, остатки и поставки.</div>
+            <div id="oneCMapCurrent"></div>
+            <input class="one-c-map-search" id="oneCMapSearch" type="search" autocomplete="off" placeholder="Найти контрагента по названию">
+            <div class="one-c-map-results" id="oneCMapResults"></div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="view" id="view-staff">
@@ -2115,6 +2168,11 @@
               <div class="oc-sync-num" id="ocNumPending">—</div>
               <div class="oc-sync-sub">событий в очереди</div>
             </div>
+            <div class="oc-sync-card">
+              <div class="oc-sync-label">Без продавца</div>
+              <div class="oc-sync-num" id="ocNumUnassigned">—</div>
+              <div class="oc-sync-sub" id="ocUnassignedSub">ждут связи с компанией</div>
+            </div>
           </div>
           <div class="oc-note" id="ocLastSeen">Последняя связь с 1С: —</div>
           <div style="display:flex; gap:10px; margin-top:16px;">
@@ -2137,6 +2195,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=68" defer></script>
+<script src="cabinet_main.js?v=69" defer></script>
 </body>
 </html>

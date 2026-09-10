@@ -275,6 +275,9 @@
   /* ===================== Продавцы / компании ===================== */
 
   let companies = [];
+  let oneCMappingCompanyId = null;
+  let oneCSearchTimer = null;
+  let oneCSearchRequest = 0;
 
   function companyNameById(id){
     const c = companies.find(c => c.id === id);
@@ -310,20 +313,136 @@
       wrap.innerHTML = '<div class="staff-empty">Компаний пока нет — добавьте первую выше.</div>';
       return;
     }
-    wrap.innerHTML = companies.map(c => `
-      <div class="staff-row" style="grid-template-columns:1.4fr 1fr auto;">
+    wrap.innerHTML = companies.map(c => {
+      const oneCName = c.one_c_counterparty_name || '';
+      return `
+      <div class="staff-row company-row">
         <div class="staff-name">${escapeHTML(c.name)}</div>
         <div class="staff-key">${c.keys.length === 0 ? '—' : c.keys.map(k => `${escapeHTML(k.keyCode)}${k.active ? '' : ' (отозван)'}`).join(', ')}</div>
+        <button type="button" class="company-1c-link ${c.one_c_external_id ? 'linked' : ''}" onclick="openOneCMapping('${c.id}')">
+          <span class="company-1c-dot" aria-hidden="true"></span>
+          <span class="company-1c-name">${oneCName ? '1С: ' + escapeHTML(oneCName) : 'Связать с контрагентом 1С'}</span>
+        </button>
         <div class="staff-action" onclick="issueSellerKey('${c.id}')">+ Ключ</div>
       </div>
       ${c.keys.map(k => `
-        <div class="staff-row" style="grid-template-columns:1.4fr 1fr auto; opacity:0.85;">
-          <div class="staff-date" style="grid-column:1/3;">Ключ ${escapeHTML(k.keyCode)}, выдан ${new Date(k.issuedAt).toLocaleDateString('ru-RU')}</div>
+        <div class="staff-row company-row" style="opacity:0.85;">
+          <div class="staff-date" style="grid-column:1/4;">Ключ ${escapeHTML(k.keyCode)}, выдан ${new Date(k.issuedAt).toLocaleDateString('ru-RU')}</div>
           <div class="staff-action ${k.active ? 'revoke' : 'restore'}" onclick="toggleSellerKey('${k.id}')">${k.active ? 'Отозвать' : 'Восстановить'}</div>
         </div>
       `).join('')}
-    `).join('');
+    `;
+    }).join('');
   }
+
+  function renderOneCMappingCurrent(){
+    const host = document.getElementById('oneCMapCurrent');
+    const company = companies.find(c => c.id === oneCMappingCompanyId);
+    if(!host || !company) return;
+    document.getElementById('oneCMapTitle').textContent = '1С и «' + company.name + '»';
+    host.innerHTML = company.one_c_external_id ? `
+      <div class="one-c-map-current">
+        <div><span>Сейчас связано</span><strong>${escapeHTML(company.one_c_counterparty_name || 'Контрагент 1С')}</strong></div>
+        <button type="button" class="one-c-map-unlink" onclick="unlinkOneCCompany()">Отвязать</button>
+      </div>` : '';
+  }
+
+  async function searchOneCCounterparties(){
+    const companyId = oneCMappingCompanyId;
+    if(!companyId) return;
+    const host = document.getElementById('oneCMapResults');
+    const q = document.getElementById('oneCMapSearch').value.trim();
+    const requestId = ++oneCSearchRequest;
+    host.innerHTML = '<div class="one-c-map-empty">Ищем в последней выгрузке 1С…</div>';
+    try{
+      const data = await apiFetch('/api/sellers/1c-counterparties?q=' + encodeURIComponent(q) + '&limit=30');
+      if(requestId !== oneCSearchRequest || companyId !== oneCMappingCompanyId) return;
+      const rows = data.rows || [];
+      if(rows.length === 0){
+        host.innerHTML = '<div class="one-c-map-empty">Ничего не найдено. Если список пуст целиком, запустите обновлённый модуль 1С один раз.</div>';
+        return;
+      }
+      host.innerHTML = rows.map(row => {
+        const own = row.mapped_company_id === companyId;
+        const occupied = row.mapped_company_id && !own;
+        const state = own ? 'Связано с этой компанией'
+          : occupied ? 'Уже связано: ' + row.mapped_company_name : 'Выбрать';
+        return `<button type="button" class="one-c-map-result" data-external-id="${escapeHTML(row.external_id)}" ${occupied ? 'disabled' : ''}>
+          <span class="one-c-map-result-name">${escapeHTML(row.name)}</span>
+          <span class="one-c-map-result-state">${escapeHTML(state)}</span>
+        </button>`;
+      }).join('');
+      host.querySelectorAll('.one-c-map-result:not(:disabled)').forEach(btn => {
+        btn.addEventListener('click', () => mapOneCCompany(btn.dataset.externalId));
+      });
+    } catch(e){
+      if(requestId === oneCSearchRequest){
+        host.innerHTML = '<div class="one-c-map-empty">Не удалось загрузить контрагентов: ' + escapeHTML(e.message) + '</div>';
+      }
+    }
+  }
+
+  function openOneCMapping(companyId){
+    oneCMappingCompanyId = companyId;
+    const modal = document.getElementById('oneCMapModal');
+    const input = document.getElementById('oneCMapSearch');
+    const company = companies.find(c => c.id === companyId);
+    renderOneCMappingCurrent();
+    // Название компании — полезная первая подсказка, но пользователь может
+    // сразу заменить его любым фрагментом имени из справочника 1С.
+    input.value = company ? company.name : '';
+    input.oninput = () => {
+      clearTimeout(oneCSearchTimer);
+      oneCSearchTimer = setTimeout(searchOneCCounterparties, 220);
+    };
+    modal.classList.add('open');
+    searchOneCCounterparties();
+    setTimeout(() => input.focus(), 0);
+  }
+  window.openOneCMapping = openOneCMapping;
+
+  function closeOneCMapping(){
+    clearTimeout(oneCSearchTimer);
+    oneCMappingCompanyId = null;
+    oneCSearchRequest += 1;
+    document.getElementById('oneCMapModal').classList.remove('open');
+  }
+  window.closeOneCMapping = closeOneCMapping;
+
+  async function mapOneCCompany(externalId){
+    if(!oneCMappingCompanyId) return;
+    try{
+      await apiFetch('/api/sellers/companies/' + oneCMappingCompanyId + '/1c-counterparty', {
+        method:'PUT', body:{externalId},
+      });
+      await loadCompanies();
+      toggleCompaniesList(true);
+      closeOneCMapping();
+      showWhToast('Компания связана с 1С. Данные распределятся при следующей синхронизации.');
+    } catch(e){
+      showWhToast('Не удалось связать компанию: ' + e.message);
+    }
+  }
+
+  async function unlinkOneCCompany(){
+    if(!oneCMappingCompanyId) return;
+    try{
+      await apiFetch('/api/sellers/companies/' + oneCMappingCompanyId + '/1c-counterparty', {
+        method:'PUT', body:{externalId:null},
+      });
+      await loadCompanies();
+      toggleCompaniesList(true);
+      closeOneCMapping();
+      showWhToast('Связь с контрагентом 1С удалена.');
+    } catch(e){
+      showWhToast('Не удалось удалить связь: ' + e.message);
+    }
+  }
+  window.unlinkOneCCompany = unlinkOneCCompany;
+
+  window.addEventListener('keydown', (event) => {
+    if(event.key === 'Escape' && oneCMappingCompanyId) closeOneCMapping();
+  });
 
   function renderInvoiceCompanySelect(){
     const select = document.getElementById('invoiceCompanySelect');
@@ -558,6 +677,10 @@
       document.getElementById('ocNumProducts').textContent = formatQty(s.synced_products);
       document.getElementById('ocNumInvoices').textContent = formatQty(s.synced_invoices);
       document.getElementById('ocNumPending').textContent = formatQty(s.pendingEvents);
+      document.getElementById('ocNumUnassigned').textContent = formatQty(s.unassigned_products);
+      document.getElementById('ocUnassignedSub').textContent = Number(s.unmapped_counterparties || 0) > 0
+        ? formatQty(s.unmapped_counterparties) + ' контрагентов ещё не связаны'
+        : 'все распределены по продавцам';
       document.getElementById('ocLastSeen').textContent = 'Последняя связь с 1С: ' + lastSeen;
 
       if(manual) showWhToast('Данные обновлены');
