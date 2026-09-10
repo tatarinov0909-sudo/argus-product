@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="ru"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#111517">
-<title>Аргус · Кабинет продавца</title><link rel="stylesheet" href="fonts.css"><link rel="stylesheet" href="seller-cabinet.css?v=20260910-2">
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script><script defer src="seller-cabinet.js?v=20260910-2"></script>
+<title>Аргус · Кабинет продавца</title><link rel="stylesheet" href="fonts.css"><link rel="stylesheet" href="seller-cabinet.css?v=20260910-3">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script><script defer src="seller-cabinet.js?v=20260910-3"></script>
 </head><body>
 <a class="skip-link" href="#main">К содержимому</a>
 <section id="loginScreen" class="login-screen" hidden>
@@ -15,11 +15,10 @@
 </section>
 <div id="app" class="app" hidden>
  <aside class="sidebar"><a class="wordmark" href="#products" aria-label="Аргус — товары"><span class="brand-icon" aria-hidden="true"></span>аргус<span class="brand-period">.</span></a>
- <div class="company-block"><div id="companyAvatar" class="avatar">С</div><div><strong id="companyName">Ваш магазин</strong><span>Кабинет продавца</span></div></div>
  <nav aria-label="Основная навигация"><a href="#products" data-nav="products"><span data-icon="box"></span><span>Товары</span></a><a href="#orders" data-nav="orders"><span data-icon="orders"></span><span>Заказы</span><span id="orderBadge" class="nav-count" hidden></span></a><a href="#documents" data-nav="documents"><span data-icon="document"></span><span>Поставки и документы</span></a></nav>
- <div class="sidebar-bottom"><span class="small muted">Ваш фулфилмент</span><div class="warehouse-name"><span data-icon="warehouse"></span><strong id="warehouseName">Склад</strong></div><button class="text-button" id="logoutButton"><span data-icon="logout"></span>Выйти из кабинета</button></div></aside>
+ <div class="sidebar-bottom"><div class="company-block"><div id="companyAvatar" class="avatar">С</div><div><strong id="companyName">Ваш магазин</strong><span>Кабинет продавца</span></div></div><span class="small muted">Ваш фулфилмент</span><div class="warehouse-name"><span data-icon="warehouse"></span><strong id="warehouseName">Склад</strong></div><button class="text-button" id="logoutButton"><span data-icon="logout"></span>Выйти из кабинета</button></div></aside>
  <div class="main-wrap"><header class="topbar"><div><span class="connection-dot"></span><span id="topCompany">Ваш магазин</span><span class="top-divider">/</span><span id="breadcrumb">Товары</span></div><div class="top-actions"><span id="updateTime" class="small muted" role="status"></span><button class="icon-button" id="refreshButton" aria-label="Обновить данные"><span data-icon="refresh"></span></button><button class="icon-button mobile-logout" id="mobileLogout" aria-label="Выйти"><span data-icon="logout"></span></button></div></header>
- <div class="owner-preview" id="ownerPreview" hidden><span>Просмотр владельца</span><label>Компания <select id="companySelect"></select></label><a href="cabinet_main.html">Вернуться к складу</a><p>Общая компания обмена может содержать товары разных продавцов. Этот просмотр не выдаёт доступ продавцам.</p></div>
+ <div class="owner-preview" id="ownerPreview" hidden><span>Просмотр владельца</span><label>Компания <select id="companySelect"></select></label><a href="cabinet_main.html">Вернуться к складу</a><a href="?source=1c#documents">Открыть накладные 1С склада</a><p>Общая компания обмена может содержать товары разных продавцов. Этот просмотр не выдаёт доступ продавцам.</p></div>
  <main id="main" tabindex="-1"><div class="page-heading"><div><p class="eyebrow" id="pageEyebrow">Всё о вашем товаре</p><h1 id="pageTitle">Товары</h1><p id="pageSubtitle" class="muted">Остатки и сборка в штуках.</p></div><div class="heading-actions"><button class="button" id="excelButton" disabled><span data-icon="download"></span>Excel</button><button class="button primary" id="oneCButton"><span data-icon="transfer"></span>Выгрузка в 1С</button></div></div><div id="view" aria-busy="false"></div></main></div>
 </div>
 <dialog id="drawer" class="drawer" aria-labelledby="drawerTitle"><div class="drawer-head"><div><p class="eyebrow" id="drawerEyebrow">Товар</p><h2 id="drawerTitle"></h2></div><button class="icon-button" id="closeDrawer" aria-label="Закрыть подробности"><span data-icon="close"></span></button></div><div id="drawerBody" class="drawer-body"></div></dialog>
