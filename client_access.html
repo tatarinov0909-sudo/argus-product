@@ -393,6 +393,17 @@
   }
   @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;}}
 </style>
+<style>
+  .owner-preview{padding:16px 28px;border-bottom:1px solid var(--line);line-height:1.6;background:var(--bg);}
+  .owner-preview strong{display:inline-block;margin-right:12px;}
+  .owner-preview select{max-width:100%;padding:8px;margin:0 12px;background:var(--bg);color:var(--text);border:1px solid var(--line);}
+  .owner-preview p{margin:8px 0 0;color:var(--muted);font-size:13px;}
+  .source-tools{display:flex;flex-wrap:wrap;gap:12px;margin:20px 0;}
+  .source-tools input{padding:10px;background:var(--bg);color:var(--text);border:1px solid var(--line);width: min(420px,100%);}
+  #sourceDocument{width:min(1000px,94vw);max-height:85vh;margin:auto;background:var(--bg);color:var(--text);border:1px solid var(--line);padding:24px;}
+  #sourceDocument::backdrop{background:#0009;}
+  .ws-mode-switch{flex-wrap:wrap;}
+</style>
 </head>
 <body>
 
@@ -410,6 +421,7 @@
       <input type="text" class="key-input" id="keyInput" placeholder="Например: RM-4821-K" maxlength="20">
       <div class="key-error" id="keyError">Такой ключ не найден. Проверьте, всё ли скопировано верно.</div>
       <button class="key-btn" onclick="checkKey()">Войти в кабинет</button>
+      <p class="key-sub" style="margin-top:20px"><a class="ws-link" href="login.html" target="_blank" rel="noopener">Я владелец — войти в аккаунт склада</a><br>После входа вернитесь сюда и обновите страницу.</p>
     </div>
   </div>
 
@@ -429,6 +441,7 @@
         <button class="ws-mode-btn active" id="modeTotal" onclick="setViewMode('total')">Остаток</button>
         <button class="ws-mode-btn" id="modeMoves" onclick="setViewMode('moves')">Движения</button>
         <button class="ws-mode-btn" id="modeByDate" onclick="setViewMode('dates')">Акты приёмки</button>
+        <button class="ws-mode-btn" id="modeSource" onclick="setViewMode('source')">Данные 1С</button>
       </div>
 
       <div class="ws-right">
@@ -436,6 +449,12 @@
         <div class="ws-current-account" id="wsCurrentAccount"></div>
         <button class="ws-link ws-logout" onclick="logout()">Выйти</button>
       </div>
+    </div>
+    <div class="owner-preview" id="ownerPreview" hidden>
+      <strong>Просмотр владельца</strong>
+      <label>Компания <select id="previewCompany" aria-label="Компания для просмотра"></select></label>
+      <a class="ws-link" href="cabinet_main.html">В кабинет склада</a>
+      <p>Данные показаны в привязке, полученной при обмене. Общая компания склада может объединять товары разных продавцов. Этот просмотр не выдаёт доступ продавцам.</p>
     </div>
     <div class="ws-body">
       <div class="ws-content" id="wsContent">
@@ -465,15 +484,28 @@
   <button class="ws-mode-btn" onclick="document.getElementById('productHistory').close()">Закрыть</button></div>
   <p class="stock-reconcile" id="historySummary"></p><div id="historyEvents" aria-live="polite"></div>
 </dialog>
+<dialog id="sourceDocument" aria-labelledby="sourceDocumentTitle">
+  <div class="history-head"><h2 id="sourceDocumentTitle">Накладная из 1С</h2><button class="ws-mode-btn" onclick="document.getElementById('sourceDocument').close()">Закрыть документ</button></div>
+  <div id="sourceDocumentBody"></div>
+</dialog>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
   const API_BASE = 'https://api.argus-ai.online';
   let TOKEN = localStorage.getItem('argus_token');
   let currentKey = null;
   let currentAccountName = null;
+  let ownerPreview = localStorage.getItem('argus_role') === 'owner';
+  let previewCompanyId = null;
+  let sourceInvoices = [];
+  let sourceView = 'invoices';
+  let sourceSearch = '';
+  let sourceExportRows = [];
   let acts = []; // built from fetched invoices, shape: {date, number, time, items:[{name,sku,declared,accepted,note}]}
 
   async function apiFetch(path, options = {}){
+    if(ownerPreview && path.startsWith('/api/sellers/') && previewCompanyId){
+      path += (path.includes('?') ? '&' : '?') + 'companyId=' + encodeURIComponent(previewCompanyId);
+    }
     const res = await fetch(API_BASE + path, {
       method: options.method || 'GET',
       headers: { 'Content-Type': 'application/json', 'Authorization': TOKEN ? ('Bearer ' + TOKEN) : '' },
@@ -515,6 +547,13 @@
         method:'POST', body: {keyCode: val, name},
       });
       TOKEN = data.token;
+      ownerPreview = false;
+      previewCompanyId = null;
+      acts = []; sourceInvoices = []; stockRows = null; movements = null;
+      currentActIndex = 0; sourceSearch = ''; stockSearch = ''; stockOnlyShort = false;
+      document.getElementById('ownerPreview').hidden = true;
+      document.getElementById('sourceDocument').close();
+      document.getElementById('productHistory').close();
       localStorage.setItem('argus_token', TOKEN);
       // Название склада приходит от сервера. Раньше в шапке было вписано
       // «Склад №1, Люберцы» — и клиент читал выдумку как факт.
@@ -548,12 +587,13 @@
       // пустой колонкой «принято». С заказами маркетплейса этот список стал бы
       // на девять десятых чужим по смыслу.
       invoices = await apiFetch('/api/invoices?direction=in');
+      if(ownerPreview) invoices = invoices.filter(inv => inv.company_id === previewCompanyId);
     } catch(e){
       if(currentViewMode === 'dates') document.getElementById('wsView').innerHTML = '<div style="color:var(--muted);">Не удалось загрузить акты: ' + escapeHtml(e.message) + '</div>';
       return;
     }
     if(!currentAccountName) currentAccountName = invoices[0]?.company_name || 'Продавец';
-    document.getElementById('wsCurrentAccount').textContent = localStorage.getItem('argus_seller_name') || currentAccountName;
+    document.getElementById('wsCurrentAccount').textContent = ownerPreview ? currentAccountName : (localStorage.getItem('argus_seller_name') || currentAccountName);
     // Название склада — то, что сказал сервер при входе. Пока он его не
     // говорил, в шапке стоит просто «Аргус»: лучше без названия, чем
     // с выдуманным.
@@ -611,6 +651,7 @@
     document.getElementById('modeByDate').classList.toggle('active', mode === 'dates');
     document.getElementById('modeTotal').classList.toggle('active', mode === 'total');
     document.getElementById('modeMoves').classList.toggle('active', mode === 'moves');
+    document.getElementById('modeSource').classList.toggle('active', mode === 'source');
     // Строка дат — содержимое вида «по датам», а не постоянная часть окна:
     // в остатке и движении ей нечего показывать.
     document.getElementById('wsDatesHead').style.display = mode === 'dates' ? 'flex' : 'none';
@@ -618,6 +659,8 @@
     if(mode === 'dates'){
       if(acts.length) renderAct(currentActIndex || 0);
       else loadActs();
+    } else if(mode === 'source'){
+      loadSourceData();
     } else if(mode === 'moves'){
       loadMovements();
     } else {
@@ -758,12 +801,103 @@
   let stockLoadedAt = null;
 
   function startWorkspace(){
-    currentAccountName = localStorage.getItem('argus_company_name') || currentAccountName || 'Продавец';
+    currentAccountName = (ownerPreview ? currentAccountName : localStorage.getItem('argus_company_name')) || currentAccountName || 'Продавец';
     document.getElementById('wsCurrentAccount').textContent =
-      localStorage.getItem('argus_seller_name') || currentAccountName;
+      ownerPreview ? currentAccountName : (localStorage.getItem('argus_seller_name') || currentAccountName);
     document.getElementById('wsWarehouse').textContent =
       localStorage.getItem('argus_wh_name') || 'Аргус';
-    setViewMode('total');
+    setViewMode(ownerPreview ? 'source' : 'total');
+  }
+
+  async function startOwnerPreview(){
+    document.getElementById('keyScreen').style.display = 'none';
+    document.getElementById('workspace').classList.add('show');
+    document.getElementById('exportButton').disabled = true;
+    document.getElementById('wsView').textContent = 'Загружаем компании склада…';
+    try{
+      // Owner's existing invoice endpoint is warehouse-scoped on the server.
+      // Company filtering here selects a view, never grants access to a seller.
+      const invoices = await apiFetch('/api/invoices');
+      const companies = new Map();
+      for(const inv of invoices){
+        if(!companies.has(inv.company_id)) companies.set(inv.company_id, {id:inv.company_id,name:inv.company_name,count:0});
+        if(inv.source === '1c') companies.get(inv.company_id).count++;
+      }
+      const choices = [...companies.values()].sort((a,b) => b.count-a.count);
+      if(!choices.length){ document.getElementById('wsView').textContent = 'В этом складе ещё нет накладных для просмотра.'; return; }
+      const requested = new URLSearchParams(location.search).get('companyId');
+      const selected = choices.find(c => c.id === requested) || choices[0];
+      previewCompanyId = selected.id;
+      currentAccountName = selected.name;
+      document.getElementById('ownerPreview').hidden = false;
+      const select = document.getElementById('previewCompany');
+      select.replaceChildren(...choices.map(c => new Option(c.name, c.id, false, c.id === selected.id)));
+      select.onchange = () => {
+        const url = new URL(location.href); url.searchParams.set('companyId', select.value); location.href = url.href;
+      };
+      startWorkspace();
+    } catch(e){ document.getElementById('wsView').textContent = 'Не удалось открыть просмотр: ' + e.message; }
+  }
+
+  async function loadSourceData(){
+    document.getElementById('wsView').textContent = 'Загружаем данные 1С…';
+    try{
+      const [invoices, stock] = await Promise.all([apiFetch('/api/invoices?direction=in'), apiFetch('/api/sellers/stock')]);
+      sourceInvoices = invoices.filter(inv => inv.source === '1c' && (!ownerPreview || inv.company_id === previewCompanyId));
+      stockRows = stock;
+      if(currentViewMode === 'source') renderSourceData();
+    } catch(e){
+      if(currentViewMode === 'source') document.getElementById('wsView').innerHTML = '<p class="empty-state">Не удалось загрузить данные: ' + escapeHtml(e.message) + '</p><button class="ws-mode-btn" onclick="loadSourceData()">Повторить</button>';
+    }
+  }
+
+  function sourceStatus(status){
+    return ({open:'Ожидает приёмки в Аргусе',in_progress:'Принимается в Аргусе',completed:'Приёмка завершена'})[status] || status;
+  }
+  function renderSourceData(){
+    document.getElementById('wsView').innerHTML = `<section class="stock-page">
+      <div class="stock-heading"><div><h1>Данные из 1С</h1><p class="total-sub">${escapeHtml(currentAccountName)}</p></div><button class="ws-mode-btn" onclick="loadSourceData()">Обновить</button></div>
+      <p class="stock-reconcile">Накладная из 1С ещё не означает приёмку в Аргусе. Учётные остатки показаны отдельно: они не подтверждают количество в ячейках и доступность к продаже.</p>
+      <div class="source-tools">
+        <button class="ws-mode-btn ${sourceView === 'invoices' ? 'active' : ''}" onclick="sourceView='invoices';sourceSearch='';renderSourceData()">Накладные · ${sourceInvoices.length}</button>
+        <button class="ws-mode-btn ${sourceView === 'stock' ? 'active' : ''}" onclick="sourceView='stock';sourceSearch='';renderSourceData()">Остатки по 1С · ${stockRows.filter(r=>r.qtyIn1c != null).length} товаров</button>
+        <input id="sourceSearch" type="search" aria-label="Поиск в данных 1С" placeholder="${sourceView === 'invoices' ? 'Номер накладной' : 'Товар, артикул или штрихкод'}" value="${escapeHtml(sourceSearch)}">
+      </div><div id="sourceTable" class="table-scroll"></div></section>`;
+    document.getElementById('sourceSearch').oninput = e => {sourceSearch=e.target.value;renderSourceTable();};
+    renderSourceTable();
+  }
+  function renderSourceTable(){
+    const q = sourceSearch.trim().toLocaleLowerCase('ru-RU');
+    let head, body;
+    if(sourceView === 'invoices'){
+      const rows = sourceInvoices.filter(inv => inv.number.toLocaleLowerCase('ru-RU').includes(q));
+      sourceExportRows = rows.map(inv => ({'Накладная':inv.number,'Загружено в Аргус':fmtWhen(inv.created_at),'Статус в Аргусе':sourceStatus(inv.status)}));
+      head = '<th>Накладная</th><th>Загружено в Аргус</th><th>Статус в Аргусе</th>';
+      body = rows.map(inv => `<tr><td><button class="product-link" data-invoice-id="${escapeHtml(inv.id)}">${escapeHtml(inv.number)}</button></td><td>${escapeHtml(fmtWhen(inv.created_at))}</td><td>${escapeHtml(sourceStatus(inv.status))}</td></tr>`).join('');
+    } else {
+      const rows = stockRows.filter(r => r.qtyIn1c != null && (!q || [r.name,r.sku,r.barcode].some(v=>String(v||'').toLocaleLowerCase('ru-RU').includes(q))));
+      sourceExportRows = rows.map(r => ({'Товар':r.name,'Артикул':r.sku,'Штрихкод':r.barcode||'','По учёту 1С':r.qtyIn1c,'Получено из 1С':fmtWhen(r.stockAt)}));
+      head = '<th>Товар</th><th>Штрихкод</th><th class="num">По учёту 1С</th><th>Получено из 1С</th>';
+      body = rows.map(r=>`<tr><td>${escapeHtml(r.name)}<span class="total-sku">${escapeHtml(r.sku)}</span></td><td>${escapeHtml(r.barcode||'—')}</td><td class="num">${num(r.qtyIn1c)}</td><td>${escapeHtml(fmtWhen(r.stockAt))}</td></tr>`).join('');
+    }
+    document.getElementById('sourceTable').innerHTML = body ? `<table class="total-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>` : '<p class="empty-state">Нет данных по этому фильтру.</p>';
+    document.getElementById('sourceTable').onclick = e => {const button=e.target.closest('[data-invoice-id]');if(button) openSourceDocument(button.dataset.invoiceId);};
+    document.getElementById('exportButton').disabled = sourceExportRows.length === 0;
+  }
+  async function openSourceDocument(id){
+    if(!sourceInvoices.some(inv=>inv.id===id)) return;
+    const dialog = document.getElementById('sourceDocument');
+    const body = document.getElementById('sourceDocumentBody');
+    document.getElementById('sourceDocumentTitle').textContent = 'Накладная из 1С';
+    body.textContent = 'Загружаем позиции…'; dialog.showModal();
+    try{
+      const inv = await apiFetch('/api/invoices/' + encodeURIComponent(id));
+      if(ownerPreview && inv.company_id !== previewCompanyId) throw new Error('Документ относится к другой компании');
+      document.getElementById('sourceDocumentTitle').textContent = 'Накладная № ' + inv.number;
+      body.innerHTML = `<p class="stock-reconcile">${escapeHtml(sourceStatus(inv.status))}. Количество ниже заявлено в документе и не является подтверждением приёмки.</p>
+        <p>Позиций: ${inv.items.length} · Заявлено: ${num(inv.items.reduce((sum,it)=>sum+Number(it.declared_qty),0))} шт</p>
+        <div class="table-scroll"><table class="total-table"><thead><tr><th>Товар</th><th>Артикул</th><th class="num">Заявлено</th></tr></thead><tbody>${inv.items.map(it=>`<tr><td>${escapeHtml(it.name)}</td><td>${escapeHtml(it.sku)}</td><td class="num">${num(it.declared_qty)}</td></tr>`).join('')}</tbody></table></div>`;
+    }catch(e){body.textContent='Не удалось загрузить документ: '+e.message;}
   }
 
   function filteredStock(){
@@ -879,6 +1013,9 @@
       name = 'Остаток';
       rows = filteredStock().map(r => ({'Товар':r.name, 'Артикул':r.sku, 'На складе':r.onHand, 'В заказах':r.ordered,
         'Доступно':r.available, 'Не в продаже':r.notForSale, 'Ячеек':r.cells}));
+    } else if(currentViewMode === 'source'){
+      name = sourceView === 'invoices' ? 'Накладные из 1С' : 'Остатки по 1С';
+      rows = sourceExportRows;
     } else if(currentViewMode === 'dates'){
       name = 'Акт приёмки';
       const act = acts[currentActIndex];
@@ -1067,7 +1204,9 @@
     `;
   }
 
-  if(TOKEN && localStorage.getItem('argus_role') === 'seller'){
+  if(TOKEN && ownerPreview){
+    startOwnerPreview();
+  } else if(TOKEN && localStorage.getItem('argus_role') === 'seller'){
     document.getElementById('keyScreen').style.display = 'none';
     document.getElementById('workspace').classList.add('show');
     startWorkspace();
