@@ -439,6 +439,7 @@
 
       <div class="ws-mode-switch">
         <button class="ws-mode-btn active" id="modeTotal" onclick="setViewMode('total')">Остаток</button>
+        <button class="ws-mode-btn" id="modeOrders" onclick="setViewMode('orders')">Заказы</button>
         <button class="ws-mode-btn" id="modeMoves" onclick="setViewMode('moves')">Движения</button>
         <button class="ws-mode-btn" id="modeByDate" onclick="setViewMode('dates')">Акты приёмки</button>
         <button class="ws-mode-btn" id="modeSource" onclick="setViewMode('source')">Данные 1С</button>
@@ -652,6 +653,7 @@
     document.getElementById('modeTotal').classList.toggle('active', mode === 'total');
     document.getElementById('modeMoves').classList.toggle('active', mode === 'moves');
     document.getElementById('modeSource').classList.toggle('active', mode === 'source');
+    document.getElementById('modeOrders').classList.toggle('active', mode === 'orders');
     // Строка дат — содержимое вида «по датам», а не постоянная часть окна:
     // в остатке и движении ей нечего показывать.
     document.getElementById('wsDatesHead').style.display = mode === 'dates' ? 'flex' : 'none';
@@ -659,6 +661,8 @@
     if(mode === 'dates'){
       if(acts.length) renderAct(currentActIndex || 0);
       else loadActs();
+    } else if(mode === 'orders'){
+      loadSellerOrders();
     } else if(mode === 'source'){
       loadSourceData();
     } else if(mode === 'moves'){
@@ -672,6 +676,41 @@
      Остаток отвечает на «сколько лежит», но не на «куда делось». Именно из-за
      второго вопроса продавец и звонит на склад. */
   let movements = null;
+  let orderRows = [];
+  const ORDER_STATUSES = {open:'Принят складом',in_progress:'Собирается',ready:'Собран, ждёт машину',shipped:'Отгружен'};
+  function orderWait(row){
+    if(row.status === 'shipped') return '—';
+    const hours = Math.max(0, Math.floor((Date.now() - new Date(row.created_at).getTime()) / 3600000));
+    const days = Math.floor(hours / 24);
+    return days ? `${days} ${plural(days,'день','дня','дней')} ${hours % 24} ч` : `${hours} ч`;
+  }
+  async function loadSellerOrders(){
+    orderRows = [];
+    document.getElementById('wsView').textContent = 'Загружаем заказы…';
+    try{
+      const data = await apiFetch('/api/sellers/orders');
+      if(currentViewMode !== 'orders') return;
+      orderRows = data.rows;
+      const groups = Object.keys(ORDER_STATUSES);
+      for(const row of orderRows) if(!groups.includes(row.status)) groups.push(row.status);
+      document.getElementById('wsView').innerHTML = `<section class="stock-page">
+        <div class="stock-heading"><div><h1>Заказы</h1><p class="total-sub">${escapeHtml(currentAccountName)}</p></div><button class="ws-mode-btn" onclick="loadSellerOrders()">Обновить</button></div>
+        <p class="stock-reconcile">Ожидание считается с момента загрузки заказа в Аргус. Статусы показывают работу склада в Аргусе.</p>
+        ${data.hasMore ? '<p class="short-warning">Показаны первые 1 000 позиций. Выгрузка содержит только показанные строки.</p>' : ''}
+        ${orderRows.some(r=>r.status !== 'shipped') ? '<h2 style="margin:24px 0 12px;font-size:18px">Ещё не реализовано</h2>' : ''}
+        ${!orderRows.length ? '<p class="empty-state">Заказов пока нет.</p>' : ''}
+        ${groups.map(status => {
+          const rows = orderRows.filter(r => r.status === status); if(!rows.length) return '';
+          const count = new Set(rows.map(r=>r.id)).size;
+          return `<h2 style="margin:24px 0 12px;font-size:18px">${escapeHtml(ORDER_STATUSES[status] || status)} · ${count} ${plural(count,'заказ','заказа','заказов')} · ${num(rows.reduce((n,r)=>n+Number(r.qty),0))} шт</h2>
+            <div class="table-scroll"><table class="total-table"><thead><tr><th>№ заказа</th><th>Товар</th><th class="num">Кол-во</th><th>Загружен в Аргус</th><th>Сколько ждёт</th><th>Статус</th></tr></thead><tbody>${rows.map(r=>`<tr>
+              <td>${escapeHtml(r.number)}${r.mp_rid ? `<span class="total-sku">Отправление ${escapeHtml(r.mp_rid)}</span>` : ''}</td>
+              <td>${escapeHtml(r.name)}<span class="total-sku">${escapeHtml(r.sku)}</span></td><td class="num">${num(r.qty)}</td>
+              <td>${escapeHtml(fmtWhen(r.created_at))}</td><td>${escapeHtml(orderWait(r))}</td><td>${escapeHtml(ORDER_STATUSES[r.status] || r.status)}</td></tr>`).join('')}</tbody></table></div>`;
+        }).join('')}</section>`;
+      document.getElementById('exportButton').disabled = !orderRows.length;
+    }catch(e){if(currentViewMode === 'orders') document.getElementById('wsView').innerHTML='<p class="empty-state">Не удалось загрузить заказы: '+escapeHtml(e.message)+'</p><button class="ws-mode-btn" onclick="loadSellerOrders()">Повторить</button>';}
+  }
 
   const BUCKET_NAME = {
     good: 'годный',
@@ -1013,6 +1052,9 @@
       name = 'Остаток';
       rows = filteredStock().map(r => ({'Товар':r.name, 'Артикул':r.sku, 'На складе':r.onHand, 'В заказах':r.ordered,
         'Доступно':r.available, 'Не в продаже':r.notForSale, 'Ячеек':r.cells}));
+    } else if(currentViewMode === 'orders'){
+      name = 'Заказы';
+      rows = orderRows.map(r=>({'№ заказа':r.number,'№ отправления':r.mp_rid || '', 'Товар':r.name,'Артикул':r.sku,'Кол-во':Number(r.qty),'Загружен в Аргус':fmtWhen(r.created_at),'Сколько ждёт':orderWait(r),'Статус':ORDER_STATUSES[r.status] || r.status}));
     } else if(currentViewMode === 'source'){
       name = sourceView === 'invoices' ? 'Накладные из 1С' : 'Остатки по 1С';
       rows = sourceExportRows;
