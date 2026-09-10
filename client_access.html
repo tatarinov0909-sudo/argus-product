@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="ru"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#111517">
-<title>Аргус · Кабинет продавца</title><link rel="stylesheet" href="fonts.css"><link rel="stylesheet" href="seller-cabinet.css?v=20260910-3">
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script><script defer src="seller-cabinet.js?v=20260910-login-fix"></script>
+<title>Аргус · Кабинет продавца</title><link rel="stylesheet" href="fonts.css"><link rel="stylesheet" href="seller-cabinet.css?v=20260910-density">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script><script defer src="seller-cabinet.js?v=20260910-density"></script>
 </head><body>
 <a class="skip-link" href="#main">К содержимому</a>
 <section id="loginScreen" class="login-screen" hidden>
@@ -22,6 +22,6 @@
  <main id="main" tabindex="-1"><div class="page-heading"><div><p class="eyebrow" id="pageEyebrow">Всё о вашем товаре</p><h1 id="pageTitle">Товары</h1><p id="pageSubtitle" class="muted">Остатки и сборка в штуках.</p></div><div class="heading-actions"><button class="button" id="excelButton" disabled><span data-icon="download"></span>Excel</button><button class="button primary" id="oneCButton"><span data-icon="transfer"></span>Выгрузка в 1С</button></div></div><div id="view" aria-busy="false"></div></main></div>
 </div>
 <dialog id="drawer" class="drawer" aria-labelledby="drawerTitle"><div class="drawer-head"><div><p class="eyebrow" id="drawerEyebrow">Товар</p><h2 id="drawerTitle"></h2></div><button class="icon-button" id="closeDrawer" aria-label="Закрыть подробности"><span data-icon="close"></span></button></div><div id="drawerBody" class="drawer-body"></div></dialog>
-<dialog id="exportDialog" class="export-dialog" aria-labelledby="exportTitle"><div class="drawer-head"><div><p class="eyebrow">Без перепечатывания</p><h2 id="exportTitle">Передача остатков в 1С</h2></div><button class="icon-button" id="closeExport" aria-label="Закрыть выгрузку"><span data-icon="close"></span></button></div><div id="exportBody" class="drawer-body"></div></dialog>
+<dialog id="exportDialog" class="export-dialog" aria-labelledby="exportTitle"><div class="drawer-head"><h2 id="exportTitle">Выгрузка остатков в 1С</h2><button class="icon-button" id="closeExport" aria-label="Закрыть выгрузку"><span data-icon="close"></span></button></div><div id="exportBody" class="drawer-body"></div></dialog>
 <div id="toast" class="toast" role="status" hidden></div>
 </body></html>
