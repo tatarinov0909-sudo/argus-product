@@ -6,6 +6,7 @@
   const n = v => Number(v || 0).toLocaleString('ru-RU');
   const when = v => v ? new Date(v).toLocaleString('ru-RU',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
   const paths = {
+    more:'M5 12h.01M12 12h.01M19 12h.01',user:'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 9v-2a7 7 0 0 1 14 0v2',settings:'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm-2-6h4l1 3 3 1 3-1 2 4-2 2v3l2 2-2 4-3-1-3 1-1 3h-4l-1-3-3-1-3 1-2-4 2-2v-3L1 9l2-4 3 1 3-1 1-3',
     photo:'M3 3h18v18H3V3Zm0 13 6-6 5 5 3-3 4 4M15 7h.01',
     box:'M12 3 3 8v9l9 5 9-5V8l-9-5Zm0 9v10M3 8l9 4 9-4M7.5 5.5l9 5V15',
     orders:'M8 4h12v17H4V4h4m0-2h8v4H8V2Zm0 9h8m-8 5h6',
@@ -22,7 +23,7 @@
   const icon = name => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name] || paths.box}"/></svg>`;
   document.querySelectorAll('[data-icon]').forEach(el => el.innerHTML = icon(el.dataset.icon));
   const state = {token:localStorage.getItem('argus_token'),owner:localStorage.getItem('argus_role')==='owner',companyId:null,profile:null,catalog:{},orderPage:1,sourceMode:false,sourceDocuments:null,
-    view:'products',stock:null,orders:null,documents:null,fetchedAt:{},search:'',filter:'all',page:1,orderSearch:'',orderFilter:'all',docSearch:'',docFilter:'all',viewRun:0,drawerRun:0,exportRows:[]};
+    pageSize:30,textSize:'normal',examples:null,view:'products',stock:null,orders:null,documents:null,fetchedAt:{},search:'',filter:'all',page:1,orderSearch:'',orderFilter:'all',docSearch:'',docFilter:'all',viewRun:0,drawerRun:0,exportRows:[]};
   const statusNames = {open:'Принят складом',in_progress:'Собирается',ready:'Собран, ждёт машину',shipped:'Отгружен'};
   const statusClass = {open:'waiting',in_progress:'working',ready:'ready',shipped:''};
   const badge = (text,style='') => `<span class="badge ${style}">${h(text)}</span>`;
@@ -40,7 +41,7 @@
     if(state.owner && state.companyId && path.startsWith('/api/sellers/')) path+=(path.includes('?')?'&':'?')+'companyId='+encodeURIComponent(state.companyId);
     const response = await fetch('https://api.argus-ai.online'+path,{method:options.method||'GET',headers:{'Content-Type':'application/json',...(state.token?{Authorization:'Bearer '+state.token}:{})},body:options.body?JSON.stringify(options.body):undefined,cache:'no-store'});
     const data=await response.json().catch(()=>null);
-    if(response.status===401 && !path.includes('/auth/')) {state.viewRun++;state.drawerRun++;state.token=null;localStorage.removeItem('argus_token');localStorage.removeItem('argus_role');$('drawer').close();$('exportDialog').close();$('app').hidden=true;$('loginScreen').hidden=false;$('loginError').textContent='Сессия завершилась. Войдите ещё раз.';}
+    if(response.status===401 && !path.includes('/auth/')) {state.viewRun++;state.drawerRun++;state.token=null;localStorage.removeItem('argus_token');localStorage.removeItem('argus_role');$('drawer').close();$('exportDialog').close();$('settingsDialog').close();$('accountMenu').hidePopover();$('app').hidden=true;$('loginScreen').hidden=false;$('loginError').textContent='Сессия завершилась. Войдите ещё раз.';}
     if(!response.ok) throw new Error(data?.error || 'Не удалось получить данные. Попробуйте ещё раз.');
     return data;
   }
@@ -58,7 +59,7 @@
         $('ownerPreview').hidden=false;
         $('companySelect').onchange=()=>{const url=new URL(location.href);url.searchParams.set('companyId',$('companySelect').value);location.href=url.href;};
       }
-      state.profile=await api('/api/sellers/profile');state.sourceMode=state.owner&&new URLSearchParams(location.search).get('source')==='1c';
+      state.profile=await api('/api/sellers/profile');loadPreferences();state.sourceMode=state.owner&&new URLSearchParams(location.search).get('source')==='1c';
       try{const catalog=await api('/api/sellers/catalog');state.catalog=Object.fromEntries(catalog.products.map(r=>[r.sku,r]));}catch{toast('Не удалось загрузить артикулы WB. Обновите страницу.');}
       $('companyName').textContent=$('topCompany').textContent=state.profile.name;
       $('companyAvatar').textContent=state.profile.name.trim().slice(0,2).toUpperCase();
@@ -78,7 +79,25 @@
       location.reload();
     }catch(error){$('loginError').textContent=error.message;$('loginSubmit').disabled=false;}
   });
-  $('logoutButton').onclick=$('mobileLogout').onclick=logout;
+  $('logoutButton').onclick=logout;
+  let accountTrigger=$('accountButton');
+  function showAccount(e){
+    const menu=$('accountMenu');accountTrigger=e.currentTarget;
+    if(menu.matches(':popover-open')){menu.hidePopover();return;}
+    menu.showPopover();const rect=accountTrigger.getBoundingClientRect();
+    menu.style.left=Math.max(10,Math.min(innerWidth-menu.offsetWidth-10,rect.left))+'px';
+    menu.style.top=(rect.top>menu.offsetHeight+20?rect.top-menu.offsetHeight-8:rect.bottom+8)+'px';
+  }
+  $('accountButton').onclick=$('mobileAccount').onclick=showAccount;
+  $('accountMenu').addEventListener('toggle',e=>{for(const id of ['accountButton','mobileAccount'])$(id).setAttribute('aria-expanded',String(e.newState==='open'&&$(id)===accountTrigger));});
+  function loadPreferences(){
+    let prefs={};try{prefs=JSON.parse(localStorage.getItem('argus_seller_preferences:'+state.profile.id)||'{}')||{};}catch{}
+    state.pageSize=[15,30,50].includes(prefs.pageSize)?prefs.pageSize:30;
+    state.textSize=prefs.textSize==='large'?'large':'normal';document.body.classList.toggle('larger-table-text',state.textSize==='large');
+  }
+  $('accountSettings').onclick=()=>{$('accountMenu').hidePopover();$('settingsCompany').textContent=state.profile.name+' · '+$('warehouseName').textContent;$('rowsPerPage').value=state.pageSize;$('textSize').value=state.textSize;$('settingsDialog').showModal();};
+  $('closeSettings').onclick=()=>$('settingsDialog').close();
+  $('settingsForm').onsubmit=e=>{e.preventDefault();const prefs={pageSize:Number($('rowsPerPage').value),textSize:$('textSize').value};localStorage.setItem('argus_seller_preferences:'+state.profile.id,JSON.stringify(prefs));loadPreferences();state.page=state.orderPage=1;$('settingsDialog').close();navigate();toast('Настройки сохранены');};
   const pageInfo={products:['Всё о вашем товаре','Товары','Остатки и сборка в штуках.'],orders:['От заказа до отгрузки','Заказы','Следите за тем, как склад готовит ваши заказы.'],documents:['От поставки до приёмки','Поставки и документы','Накладные, результаты приёмки и возвраты.']};
   async function navigate(refresh=false){
     if(!state.profile||!state.token)return;
@@ -91,6 +110,7 @@
       const key=state.view==='products'?'stock':state.view==='documents'&&state.sourceMode?'sourceDocuments':state.view;
       if(refresh){try{const catalog=await api('/api/sellers/catalog');if(run!==state.viewRun)return;state.catalog=Object.fromEntries(catalog.products.map(r=>[r.sku,r]));}catch{toast('Каталог пока не обновился. Показаны последние данные.');}}
       if(refresh || !state[key]){state[key]=await api('/api/sellers/'+(key==='sourceDocuments'?'source-documents':key));state.fetchedAt[key]=new Date();}
+      if(state.view==='documents'&&!state.sourceMode&&(refresh||!state.examples))state.examples=await api('/api/sellers/document-examples');
       if(run!==state.viewRun)return;
       if(state.view==='products')renderProducts();else if(state.view==='orders')renderOrders();else renderDocuments();
       if(state.view==='documents'){const requested=new URLSearchParams(location.search).get('document');if(requested&&!state.deepLinkOpened){state.deepLinkOpened=true;openDocument(requested);}}
@@ -138,8 +158,8 @@
   function filteredProducts(){const q=state.search.trim().toLocaleLowerCase('ru-RU');return state.stock.filter(r=>(!q||[r.name,r.sku,r.barcode,meta(r.sku).category,...wbIds(r.sku),...meta(r.sku).cards.map(c=>c.vendorCode)].some(v=>String(v||'').toLocaleLowerCase('ru-RU').includes(q)))&&(state.filter!=='assembly'||r.ordered>0)&&(state.filter!=='attention'||!r.stockKnown||r.short>0||r.notForSale>0));}
   function productTable(rows){return `<div class="table-scroll" tabindex="0" aria-label="Таблица товаров"><table class="data-table inventory-table"><colgroup><col class="photo-col"><col class="name-col"><col class="identifier-col"><col span="4" class="quantity-col"></colgroup><thead><tr><th>Фото</th><th>Товар</th><th>Артикул WB</th><th class="num">На складе<span class="column-unit">шт.</span></th><th class="num">В сборке<span class="column-unit">шт.</span></th><th class="num">Доступно к продаже<span class="column-unit">шт.</span></th><th class="num">Не в продаже<span class="column-unit">шт.</span></th></tr></thead><tbody>${rows.map(r=>`<tr data-product="${h(r.sku)}"><td>${photo(r)}</td><td class="product-cell"><button class="product-link" data-open-product="${h(r.sku)}">${h(productName(r))}</button></td><td class="identifier-cell">${identifiers(r)}</td><td class="num">${quantity(r.onHand)}</td><td class="num">${n(r.ordered)}</td><td class="num available-number">${quantity(r.available)}${r.short>0?`<span class="row-note negative">Не хватает ${n(r.short)} шт.</span>`:''}</td><td class="num">${r.stockKnown?(r.notForSale>0?badge(n(r.notForSale)+' шт.','issue'):'—'):'—'}</td></tr>`).join('')}</tbody></table></div>`;}
   function renderProductRows(){
-    const rows=filteredProducts(),pages=Math.max(1,Math.ceil(rows.length/30));state.page=Math.min(state.page,pages);
-    $('productGroups').innerHTML=(rows.length?productTable(paginate(rows,state.page,30)):empty('Товары не найдены','Измените поиск или выберите «Все товары».'))+pager('product',state.page,pages,`${counted(rows.length,'товар','товара','товаров')} · Excel сохраняет весь результат фильтра`);
+    const rows=filteredProducts(),pages=Math.max(1,Math.ceil(rows.length/state.pageSize));state.page=Math.min(state.page,pages);
+    $('productGroups').innerHTML=(rows.length?productTable(paginate(rows,state.page,state.pageSize)):empty('Товары не найдены','Измените поиск или выберите «Все товары».'))+pager('product',state.page,pages,`${counted(rows.length,'товар','товара','товаров')} · Excel сохраняет весь результат фильтра`);
     $('productGroups').querySelectorAll('[data-open-product]').forEach(b=>b.onclick=()=>openProduct(b.dataset.openProduct));
     $('productGroups').querySelectorAll('[data-product]').forEach(tr=>tr.onclick=e=>{if(!e.target.closest('button'))openProduct(tr.dataset.product);});
     wirePhotos($('productGroups'));
@@ -154,25 +174,25 @@
   function orderTable(rows){return `<div class="table-scroll" tabindex="0" aria-label="Таблица заказов"><table class="data-table orders-table"><colgroup><col class="photo-col"><col class="name-col"><col class="order-number-col"><col class="order-article-col"><col class="order-qty-col"><col class="order-date-col"><col class="order-status-col"></colgroup><thead><tr><th>Фото</th><th>Товар</th><th>Заказ / отправление</th><th>Артикул WB</th><th class="num">Кол-во<span class="column-unit">шт.</span></th><th>Загружен в Аргус</th><th>Статус</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${photo(r)}</td><td class="order-product">${h(productName(r))}</td><td class="order-id"><button class="product-link" data-order-id="${h(r.id)}">${h(r.number)}</button>${r.mp_rid?`<small title="${h(r.mp_rid)}">${h(r.mp_rid)}</small>`:''}</td><td class="identifier-cell"><span class="wb-article">${h(r.mp_nm_id||wbIds(r.sku).join(', ')||'Не передан')}</span></td><td class="num">${n(r.qty)}</td><td class="order-date">${h(when(r.created_at))}</td><td>${badge(statusNames[r.status]||r.status,statusClass[r.status])}</td></tr>`).join('')}</tbody></table></div>`;}
   function renderOrderRows(){
     const q=state.orderSearch.trim().toLocaleLowerCase('ru-RU');const rows=state.orders.rows.filter(r=>(!q||[r.number,r.name,r.sku,r.mp_rid,r.mp_nm_id,r.mp_article,...wbIds(r.sku)].some(v=>String(v||'').toLocaleLowerCase('ru-RU').includes(q)))&&(state.orderFilter!=='active'||r.status!=='shipped')&&(state.orderFilter!=='shipped'||r.status==='shipped'));
-    const pages=Math.max(1,Math.ceil(rows.length/30));state.orderPage=Math.min(state.orderPage,pages);
-    $('orderGroups').innerHTML=(rows.length?orderTable(paginate(rows,state.orderPage,30)):empty('Заказы не найдены',q?'Попробуйте другой номер или артикул.':'Новые заказы появятся после загрузки с маркетплейса.','orders'))+pager('order',state.orderPage,pages,`${counted(new Set(rows.map(r=>r.id)).size,'заказ','заказа','заказов')} · Excel сохраняет весь результат фильтра`);
+    const pages=Math.max(1,Math.ceil(rows.length/state.pageSize));state.orderPage=Math.min(state.orderPage,pages);
+    $('orderGroups').innerHTML=(rows.length?orderTable(paginate(rows,state.orderPage,state.pageSize)):empty('Заказы не найдены',q?'Попробуйте другой номер или артикул.':'Новые заказы появятся после загрузки с маркетплейса.','orders'))+pager('order',state.orderPage,pages,`${counted(new Set(rows.map(r=>r.id)).size,'заказ','заказа','заказов')} · Excel сохраняет весь результат фильтра`);
     $('orderGroups').querySelectorAll('[data-order-id]').forEach(b=>b.onclick=()=>openDocument(b.dataset.orderId,true));wirePhotos($('orderGroups'));
     $('orderPrev').onclick=()=>{state.orderPage--;renderOrderRows();};$('orderNext').onclick=()=>{state.orderPage++;renderOrderRows();};
     const active=new Set(state.orders.rows.filter(r=>r.status!=='shipped').map(r=>r.id)).size;$('orderBadge').textContent=n(active);$('orderBadge').hidden=!active;
     state.exportRows=rows.map(r=>({'Заказ':r.number,'Отправление':r.mp_rid||'','Товар':productName(r),'Артикул WB':r.mp_nm_id||wbIds(r.sku).join(', '),'Кол-во, шт.':Number(r.qty),'Загружен в Аргус':when(r.created_at),'Статус':statusNames[r.status]||r.status}));$('excelButton').disabled=!rows.length;
   }
-  const documentStatus=r=>r.status==='open'?'Ожидает приёмки':r.status==='in_progress'?'Принимается':r.status==='completed'?'Приёмка завершена':r.status;
-  function documentData(){return state.sourceMode?state.sourceDocuments:state.documents;}
+  const documentStatus=r=>r.preview?'Образец из 1С':r.status==='open'?'Ожидает приёмки':r.status==='in_progress'?'Принимается':r.status==='completed'?'Приёмка завершена':r.status;
+  function documentData(){return state.sourceMode?state.sourceDocuments:{...state.documents,rows:[...(state.examples?.rows||[]),...state.documents.rows]};}
   function renderDocuments(){
-    $('view').innerHTML=`${!state.owner&&new URLSearchParams(location.search).get('source')==='1c'?notice('Просмотр накладных 1С доступен владельцу склада','Вы вошли как продавец. Для просмотра исходных документов войдите через «Вход для владельца склада», затем вернитесь по этой ссылке.')+'<a class="button" href="login.html" target="_blank" rel="noopener" style="margin-bottom:20px">Вход для владельца склада</a>':''}${state.owner?`<div class="document-mode"><button class="chip" data-document-mode="seller" aria-pressed="${!state.sourceMode}">Документы продавца</button><button class="chip" data-document-mode="source" aria-pressed="${state.sourceMode}">Накладные 1С склада</button></div>`:''}${state.sourceMode?notice('Исходные накладные 1С склада','Общий просмотр для владельца. Компания из обмена указана под номером документа; это не назначение документов выбранному продавцу.'):''}<section class="table-panel"><div class="table-toolbar">${searchBox('documentSearch',state.docSearch,'Номер документа')}${chips([['all','Все'],['in','Поступления'],['return','Возвраты']],state.docFilter,'data-doc-filter')}</div><div class="table-scroll"><table class="data-table"><thead><tr><th>Документ</th><th>Тип</th><th>Загружен в Аргус</th><th class="num">Заявлено, шт.</th><th>Статус</th></tr></thead><tbody id="documentsBody"></tbody></table></div><div class="table-footer">Накладная становится актом приёмки после фиксации результатов складом.${documentData().hasMore?' Показаны первые 1 000 документов.':''}</div></section>`;
+    $('view').innerHTML=`${!state.owner&&new URLSearchParams(location.search).get('source')==='1c'?notice('Просмотр накладных 1С доступен владельцу склада','Вы вошли как продавец. Для просмотра исходных документов войдите через «Вход для владельца склада», затем вернитесь по этой ссылке.')+'<a class="button" href="login.html" target="_blank" rel="noopener" style="margin-bottom:20px">Вход для владельца склада</a>':''}${state.owner?`<div class="document-mode"><button class="chip" data-document-mode="seller" aria-pressed="${!state.sourceMode}">Документы продавца</button><button class="chip" data-document-mode="source" aria-pressed="${state.sourceMode}">Накладные 1С склада</button></div>`:''}${!state.sourceMode&&state.examples?.rows?.length?notice('Образец документа из 1С','Склад открыл копию настоящей накладной для ознакомления. Это не поставка вашей компании; её количества не входят в остатки и приёмку.'):''}${state.sourceMode?notice('Исходные накладные 1С склада','Общий просмотр для владельца. Компания из обмена указана под номером документа; это не назначение документов выбранному продавцу.'):''}<section class="table-panel"><div class="table-toolbar">${searchBox('documentSearch',state.docSearch,'Номер документа')}${chips([['all','Все'],['in','Поступления'],['return','Возвраты']],state.docFilter,'data-doc-filter')}</div><div class="table-scroll"><table class="data-table documents-table"><thead><tr><th>Документ</th><th>Тип</th><th>Загружен в Аргус</th><th class="num">Заявлено, шт.</th><th>Статус</th></tr></thead><tbody id="documentsBody"></tbody></table></div><div class="table-footer">Накладная становится актом приёмки после фиксации результатов складом.${documentData().hasMore?' Показаны первые 1 000 документов.':''}</div></section>`;
     document.querySelectorAll('[data-document-mode]').forEach(b=>b.onclick=()=>{state.sourceMode=b.dataset.documentMode==='source';state.docSearch='';state.docFilter='all';navigate();});
     $('documentSearch').oninput=e=>{state.docSearch=e.target.value;renderDocumentRows();};document.querySelectorAll('[data-doc-filter]').forEach(b=>b.onclick=()=>{state.docFilter=b.dataset.docFilter;renderDocuments();});renderDocumentRows();
   }
   function renderDocumentRows(){
     const q=state.docSearch.trim().toLocaleLowerCase('ru-RU');const rows=documentData().rows.filter(r=>[r.number,r.company_name].some(v=>String(v||'').toLocaleLowerCase('ru-RU').includes(q))&&(state.docFilter==='all'||r.direction===state.docFilter));
-    $('documentsBody').innerHTML=rows.map(r=>`<tr><td><button class="product-link" data-document="${h(r.id)}">${h(r.number)}</button><span class="product-meta">${r.source==='1c'?'Из 1С':'Документ склада'} · ${n(r.item_count)} позиций${state.sourceMode?' · '+h(r.company_name):''}</span></td><td>${r.direction==='return'?'Возврат':'Поступление'}</td><td class="small muted">${h(when(r.created_at))}</td><td class="num">${n(r.declared_qty)}</td><td>${badge(documentStatus(r),r.status==='completed'?'ready':r.status==='open'?'waiting':'working')}</td></tr>`).join('')||`<tr><td colspan="5">${empty('Документов пока нет','Здесь появятся ваши накладные и результаты приёмки после передачи данных складом.','document')}</td></tr>`;
+    $('documentsBody').innerHTML=rows.map(r=>`<tr><td><button class="product-link" data-document="${h(r.id)}">${h(r.number)}</button><span class="product-meta">${r.preview?'Образец из 1С':r.source==='1c'?'Из 1С':'Документ склада'} · ${n(r.item_count)} позиций${state.sourceMode?' · '+h(r.company_name):''}</span></td><td>${r.direction==='return'?'Возврат':'Поступление'}</td><td class="small muted">${h(when(r.created_at))}</td><td class="num">${n(r.declared_qty)}</td><td>${badge(documentStatus(r),r.status==='completed'?'ready':r.status==='open'?'waiting':'working')}</td></tr>`).join('')||`<tr><td colspan="5">${empty('Документов пока нет','Здесь появятся ваши накладные и результаты приёмки после передачи данных складом.','document')}</td></tr>`;
     $('documentsBody').querySelectorAll('[data-document]').forEach(b=>b.onclick=()=>openDocument(b.dataset.document));
-    state.exportRows=rows.map(r=>({'Документ':r.number,...(state.sourceMode?{'Компания в 1С':r.company_name}:{}),'Источник':r.source==='1c'?'1С':'Склад','Тип':r.direction==='return'?'Возврат':'Поступление','Загружен в Аргус':when(r.created_at),'Заявлено, шт.':Number(r.declared_qty),'Статус':documentStatus(r)}));$('excelButton').disabled=!rows.length;
+    state.exportRows=rows.map(r=>({'Документ':r.number,...(state.sourceMode?{'Компания в 1С':r.company_name}:{}),'Источник':r.preview?'Образец из 1С (не поставка компании)':r.source==='1c'?'1С':'Склад','Тип':r.direction==='return'?'Возврат':'Поступление','Загружен в Аргус':when(r.created_at),'Заявлено, шт.':Number(r.declared_qty),'Статус':documentStatus(r)}));$('excelButton').disabled=!rows.length;
   }
   function openDrawer(title,eyebrow){state.drawerRun++;$('drawerTitle').textContent=title;$('drawerEyebrow').textContent=eyebrow;$('drawerBody').innerHTML=loading;if(!$('drawer').open)$('drawer').showModal();return state.drawerRun;}
   $('closeDrawer').onclick=()=>$('drawer').close();$('drawer').addEventListener('close',()=>state.drawerRun++);
@@ -195,17 +215,21 @@
     }catch(e){if(run===state.drawerRun)$('productHistory').textContent=e.message;}
   }
   async function openDocument(id,order=false){
-    const list=order?state.orders.rows:documentData().rows;const selected=list.find(r=>r.id===id);if(!selected)return;const run=openDrawer(selected.number,order?'Заказ':selected.direction==='return'?'Возврат':'Поставка и приёмка');
-    try{const data=await api('/api/invoices/'+encodeURIComponent(id));if(run!==state.drawerRun)return;
+    const list=order?state.orders.rows:documentData().rows;const selected=list.find(r=>r.id===id);if(!selected)return;const run=openDrawer(selected.number,order?'Заказ':selected.preview?'Образец из 1С':selected.direction==='return'?'Возврат':'Поставка и приёмка');
+    try{const data=await api((selected.preview?'/api/sellers/document-examples/':'/api/invoices/')+encodeURIComponent(id));if(run!==state.drawerRun)return;
       const items=data.items.map(r=>({...r,finalized:data.direction==='return'?data.status==='completed':data.direction==='out'?r.closed:r.accepted_qty!=null,accepted:data.direction==='return'?(r.buckets?.length||data.status==='completed'?Number(r.returned_qty):null):data.direction==='out'?Number(r.picked_qty):r.accepted_qty==null?null:Number(r.accepted_qty)}));
       const total=items.reduce((s,r)=>s+Number(r.declared_qty),0),complete=items.every(r=>r.finalized),accepted=items.reduce((s,r)=>s+Number(r.accepted||0),0);
       items.sort((a,b)=>Number(b.finalized&&b.accepted!==Number(b.declared_qty))-Number(a.finalized&&a.accepted!==Number(a.declared_qty)));
-      $('drawerBody').innerHTML=`<div class="drawer-meta"><span>Загружено ${h(when(data.created_at))}</span>${badge(order?statusNames[data.status]||data.status:documentStatus(data),statusClass[data.status])}</div>
+      $('drawerBody').innerHTML=`${selected.preview?notice('Образец настоящей накладной из 1С','Компания в источнике: '+data.source_company_name+'. Копия для ознакомления, без изменения остатков и приёмки вашего магазина.'):''}<div class="drawer-meta"><span>Загружено ${h(when(data.created_at))}</span>${badge(order?statusNames[data.status]||data.status:documentStatus(data),statusClass[data.status])}</div>
         <div class="mini-metrics">${mini('Заявлено',total)}${mini(order?'Собрано':'Принято',items.some(r=>r.accepted!==null)?accepted:null)}${mini('Расхождение',complete?accepted-total:null)}</div>
         ${!complete?'<p class="export-description">Обработка ещё не завершена. Показано уже обработанное количество; расхождение появится после завершения.</p>':''}
         <section class="detail-section"><h3>Позиции документа · ${items.length}</h3><div class="receipt-lines">${items.map(r=>{const declared=Number(r.declared_qty),different=r.finalized&&r.accepted!==declared,scale=Math.max(1,declared,r.accepted||0);return `<article class="receipt-item ${different?'issue':''}"><h3>${h(r.name)}</h3><span class="product-meta">${h(order?articleText(r.sku,state.orders.rows.find(x=>x.id===id&&x.item_id===r.id)?.mp_nm_id):(selected.source==='1c'?'Код 1С: ':'Код склада: ')+r.sku)}</span>${different?`<span class="row-note negative">Расхождение: ${n(r.accepted-declared)} шт.</span>`:''}<div class="receipt-bars"><div class="receipt-bar"><span>Заявлено</span><div class="track"><i style="width:${Math.max(0,declared/scale*100)}%"></i></div><span class="num">${n(declared)}</span></div><div class="receipt-bar"><span>${order?'Собрано':'Принято'}</span><div class="track accepted"><i style="width:${Math.max(0,(r.accepted||0)/scale*100)}%"></i></div><span class="num">${r.accepted==null?'—':n(r.accepted)}</span></div></div>${(r.buckets||[]).map(b=>`<p class="row-note">${h(({good:'Годное',defective:'Брак',packaging_defect:'Повреждена упаковка'})[b.qualityBucket]||b.qualityBucket)}: ${n(b.qty)} шт. ${h(b.defectNote||'')}</p>`).join('')}</article>`;}).join('')}</div></section>
-        <button class="button" id="exportDocument" style="margin-top:24px">${icon('download')}Выгрузить этот документ</button>`;
-      $('exportDocument').onclick=()=>saveExcel(items.map(r=>({'Товар':r.name,[order?'Артикул WB':'Код склада']:order?(state.orders.rows.find(x=>x.id===id&&x.item_id===r.id)?.mp_nm_id||wbIds(r.sku).join(', ')):r.sku,'Заявлено, шт.':Number(r.declared_qty),[order?'Собрано, шт.':'Принято, шт.']:r.accepted??'Не завершено','Расхождение, шт.':!r.finalized?'Не завершено':r.accepted-Number(r.declared_qty)})),'Документ');
+        <button class="button" id="exportDocument" style="margin-top:24px">${icon('download')}${selected.preview?'Скачать образец накладной':'Выгрузить этот документ'}</button>
+        ${state.owner&&state.sourceMode&&!order?`<button class="button" id="publishExample" style="margin-top:12px">Показать образец продавцу «${h(state.profile.name)}»</button>`:''}
+        ${state.owner&&selected.preview?'<button class="button" id="removeExample" style="margin-top:12px">Убрать образец из кабинета</button>':''}`;
+      if($('publishExample'))$('publishExample').onclick=async()=>{const button=$('publishExample');button.disabled=true;try{await api('/api/sellers/document-examples',{method:'POST',body:{companyId:state.companyId,invoiceId:id}});state.examples=null;toast('Образец доступен в кабинете продавца');}catch(e){toast(e.message);}finally{button.disabled=false;}};
+      if($('removeExample'))$('removeExample').onclick=async()=>{try{await api('/api/sellers/document-examples/'+id,{method:'DELETE'});state.examples=null;$('drawer').close();navigate(true);}catch(e){toast(e.message);}};
+      $('exportDocument').onclick=()=>saveExcel(items.map(r=>({'Товар':r.name,[order?'Артикул WB':'Код склада']:order?(state.orders.rows.find(x=>x.id===id&&x.item_id===r.id)?.mp_nm_id||wbIds(r.sku).join(', ')):r.sku,'Заявлено, шт.':Number(r.declared_qty),[order?'Собрано, шт.':'Принято, шт.']:r.accepted??'Не завершено','Расхождение, шт.':!r.finalized?'Не завершено':r.accepted-Number(r.declared_qty)})),selected.preview?'Образец '+selected.number:'Документ');
     }catch(e){if(run===state.drawerRun)$('drawerBody').innerHTML=empty('Не удалось открыть документ',e.message);}
   }
   function saveExcel(rows,name){

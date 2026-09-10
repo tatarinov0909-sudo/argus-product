@@ -62,7 +62,8 @@ const expectBug = process.argv.includes('--expect-bug');
       assert.equal(logins, 2); // One rejected attempt, one successful attempt.
       assert.equal(new URL(page.url()).hash, '#products');
       if (!expectBug) {
-        await page.locator('#logoutButton').click();
+      await page.locator('#accountButton').click();
+      await page.locator('#logoutButton').click();
         await page.locator('#loginScreen').waitFor();
         assert.equal(await page.evaluate(() => localStorage.getItem('argus_token')), null);
         assert.equal(await page.locator('#app').isVisible(), false);

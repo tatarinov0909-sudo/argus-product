@@ -154,3 +154,28 @@ h1, .page-heading h1 { font-size:34px; font-weight:600; letter-spacing:0; }
   .table-footer { align-items:flex-start; gap:14px; }
   .table-footer > span { max-width:60%; }
 }
+
+/* The seller identity is the account control, anchored at the bottom of the sidebar. */
+.sidebar-bottom .account-button { margin:18px -6px 0; padding:14px 8px; width:calc(100% + 12px); border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--text); text-align:left; }
+.account-button .company-identity { min-width:0; flex:1; }
+.account-button .company-identity > span { margin-top:3px; }
+.account-button .avatar { display:none; }
+.account-button .company-identity strong { color:var(--text); }
+.account-button .company-identity > span { font-size:12px; white-space:nowrap; }
+.account-button { gap:8px; }
+.account-button > [data-icon] { flex:none; margin:0; }
+.sidebar-bottom .warehouse-name { margin-bottom:0; }
+.account-menu { margin:0; padding:6px; width:252px; border:1px solid var(--line); border-radius:9px; background:var(--surface); color:var(--text); box-shadow:0 12px 35px #0005; }
+.account-menu button { display:flex; align-items:center; gap:10px; width:100%; min-height:48px; padding:10px 12px; border:0; border-radius:5px; background:transparent; text-align:left; font-size:15px; }
+.account-menu button:hover { background:var(--hover); }
+.account-menu #logoutButton { border-top:1px solid var(--line); border-radius:0; }
+.mobile-account { display:none; }
+.settings-form label { display:block; margin:20px 0 8px; font-size:16px; }
+.settings-form select { width:100%; font-size:17px; }
+.settings-form .export-description { margin:20px 0; }
+.larger-table-text .data-table td, .larger-table-text .product-link, .larger-table-text .data-table .order-product { font-size:21px; }
+.receipt-item h3 { font-size:17px; line-height:1.5; }
+.receipt-bar { font-size:14px; grid-template-columns:80px 1fr 65px; }
+.receipt-item .product-meta { font-size:14px; }
+.documents-table { min-width:880px; }
+@media(max-width:760px){ .mobile-account { display:inline-flex; } }
