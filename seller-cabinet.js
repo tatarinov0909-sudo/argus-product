@@ -30,7 +30,11 @@
   function empty(title,description,kind='box') { return `<div class="empty">${icon(kind)}<h2>${h(title)}</h2><p>${h(description)}</p></div>`; }
   let toastTimer;
   function toast(message){ $('toast').textContent=message;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,6000); }
-  function logout(){for(const k of ['argus_token','argus_role','argus_company_name','argus_seller_name'])localStorage.removeItem(k);location.href='client_access.html';}
+  function logout(){
+    for(const k of ['argus_token','argus_role','argus_company_name','argus_seller_name','argus_wh_name'])localStorage.removeItem(k);
+    history.replaceState(null,'','client_access.html');
+    location.reload();
+  }
   async function api(path,options={}){
     if(state.owner && state.companyId && path.startsWith('/api/sellers/')) path+=(path.includes('?')?'&':'?')+'companyId='+encodeURIComponent(state.companyId);
     const response = await fetch('https://api.argus-ai.online'+path,{method:options.method||'GET',headers:{'Content-Type':'application/json',...(state.token?{Authorization:'Bearer '+state.token}:{})},body:options.body?JSON.stringify(options.body):undefined,cache:'no-store'});
@@ -67,7 +71,10 @@
     try{
       const data=await api('/api/auth/seller/login',{method:'POST',body:{name:$('loginName').value.trim(),keyCode:$('loginKey').value.trim()}});
       localStorage.setItem('argus_token',data.token);localStorage.setItem('argus_role','seller');localStorage.setItem('argus_company_name',data.companyName||'');localStorage.setItem('argus_wh_name',data.warehouseName||'');
-      location.href='client_access.html#products';
+      // A fragment-only redirect does not restart the app with the saved session.
+      // Reload explicitly so authentication and all company caches start afresh.
+      history.replaceState(null,'','client_access.html#products');
+      location.reload();
     }catch(error){$('loginError').textContent=error.message;$('loginSubmit').disabled=false;}
   });
   $('logoutButton').onclick=$('mobileLogout').onclick=logout;
