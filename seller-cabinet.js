@@ -6,6 +6,7 @@
   const n = v => Number(v || 0).toLocaleString('ru-RU');
   const when = v => v ? new Date(v).toLocaleString('ru-RU',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
   const paths = {
+    photo:'M3 3h18v18H3V3Zm0 13 6-6 5 5 3-3 4 4M15 7h.01',
     box:'M12 3 3 8v9l9 5 9-5V8l-9-5Zm0 9v10M3 8l9 4 9-4M7.5 5.5l9 5V15',
     orders:'M8 4h12v17H4V4h4m0-2h8v4H8V2Zm0 9h8m-8 5h6',
     document:'M14 2H5v20h14V7l-5-5Zm0 0v6h5M8 12h8m-8 4h6',
@@ -20,7 +21,7 @@
   };
   const icon = name => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name] || paths.box}"/></svg>`;
   document.querySelectorAll('[data-icon]').forEach(el => el.innerHTML = icon(el.dataset.icon));
-  const state = {token:localStorage.getItem('argus_token'),owner:localStorage.getItem('argus_role')==='owner',companyId:null,profile:null,catalog:{},productGrouping:'name',orderGrouping:'product',orderPage:1,sourceMode:false,sourceDocuments:null,
+  const state = {token:localStorage.getItem('argus_token'),owner:localStorage.getItem('argus_role')==='owner',companyId:null,profile:null,catalog:{},orderPage:1,sourceMode:false,sourceDocuments:null,
     view:'products',stock:null,orders:null,documents:null,fetchedAt:{},search:'',filter:'all',page:1,orderSearch:'',orderFilter:'all',docSearch:'',docFilter:'all',viewRun:0,drawerRun:0,exportRows:[]};
   const statusNames = {open:'Принят складом',in_progress:'Собирается',ready:'Собран, ждёт машину',shipped:'Отгружен'};
   const statusClass = {open:'waiting',in_progress:'working',ready:'ready',shipped:''};
@@ -88,6 +89,7 @@
     $('view').innerHTML='<div class="skeleton skeleton-metrics"></div>'+Array.from({length:4},()=>'<div class="skeleton skeleton-row"></div>').join('');
     try{
       const key=state.view==='products'?'stock':state.view==='documents'&&state.sourceMode?'sourceDocuments':state.view;
+      if(refresh){try{const catalog=await api('/api/sellers/catalog');if(run!==state.viewRun)return;state.catalog=Object.fromEntries(catalog.products.map(r=>[r.sku,r]));}catch{toast('Каталог пока не обновился. Показаны последние данные.');}}
       if(refresh || !state[key]){state[key]=await api('/api/sellers/'+(key==='sourceDocuments'?'source-documents':key));state.fetchedAt[key]=new Date();}
       if(run!==state.viewRun)return;
       if(state.view==='products')renderProducts();else if(state.view==='orders')renderOrders();else renderDocuments();
@@ -103,22 +105,20 @@
   function chips(options,current,attribute){return `<div class="chips">${options.map(([key,label])=>`<button class="chip" ${attribute}="${key}" aria-pressed="${key===current}">${label}</button>`).join('')}</div>`;}
   const plural=new Intl.PluralRules('ru');
   const counted=(value,one,few,many)=>n(value)+' '+({one,few,many,other:many}[plural.select(Number(value))]);
-  const groupOpen = new Set();
-  const groupLimits = new Map();
   const meta = sku => state.catalog[sku] || {category:'Без категории',cards:[]};
   function wbIds(sku){return [...new Set(meta(sku).cards.map(c=>c.nmId))];}
   function articleText(sku,nmId){const ids=nmId?[nmId]:wbIds(sku);return ids.length?'Артикул WB: '+ids.join(', '):'Артикул WB не передан';}
   function productName(row){return row.name?.startsWith('Не сопоставлен с номенклатурой:')?'Товар WB '+(row.mp_nm_id||wbIds(row.sku)[0]||'без названия'):row.name;}
-  function grouping(id,value,options){return `<label class="grouping-control">Группировка<select id="${id}">${options.map(([v,t])=>`<option value="${v}" ${v===value?'selected':''}>${t}</option>`).join('')}</select></label>`;}
   function paginate(rows,page,size){return rows.slice((page-1)*size,page*size);}
-  function groupRows(rows,keyOf){const groups=new Map();for(const row of rows){const key=keyOf(row);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(row);}return [...groups];}
-  function wireGroups(container){
-    container.querySelectorAll('details[data-group]').forEach(d=>d.ontoggle=()=>{if(d.open)groupOpen.add(d.dataset.group);else groupOpen.delete(d.dataset.group);});
-    container.querySelectorAll('[data-more-group]').forEach(b=>b.onclick=()=>{const key=b.dataset.moreGroup;groupOpen.add(key);groupLimits.set(key,(groupLimits.get(key)||20)+20);state.view==='products'?renderProductRows():renderOrderRows();});
+  function photo(row){
+    const cards=meta(row.sku).cards,card=row.mp_nm_id?cards.find(c=>String(c.nmId)===String(row.mp_nm_id)):cards.length===1?cards[0]:null;
+    const url=card?.photoUrl;
+    let safe=false;try{const u=new URL(url);safe=u.protocol==='https:'&&!u.username&&!u.password&&['wbbasket.ru','wbstatic.net','wildberries.ru'].some(d=>u.hostname===d||u.hostname.endsWith('.'+d));}catch{}
+    return `<span class="product-photo" role="img" aria-label="${safe?'Фото товара':'Фото пока нет'}">${icon('photo')}${safe?`<img src="${h(url)}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`:''}</span>`;
   }
-  function groupShell(key,title,summary,body,forceOpen=false){return `<details class="data-group" data-group="${h(key)}" ${forceOpen||groupOpen.has(key)?'open':''}><summary><span class="group-chevron">${icon('right')}</span><span class="group-label">${title}</span><span class="group-summary">${summary}</span></summary>${body}</details>`;}
+  function wirePhotos(container){container.querySelectorAll('.product-photo img').forEach(img=>{img.onerror=()=>{img.parentElement.setAttribute('aria-label','Фото пока нет');img.remove();};if(img.complete&&!img.naturalWidth)img.onerror();});}
+  function identifiers(row){const ids=row.mp_nm_id?[row.mp_nm_id]:wbIds(row.sku);return `<span class="wb-article">${ids.length?h(ids.join(', ')):'Не передан'}</span><span class="barcode-label">Штрихкод</span><span class="product-barcode">${h(row.barcode||row.mp_barcode||'Не передан')}</span>`;}
   function pager(id,page,pages,countLabel){return `<div class="table-footer"><span>${countLabel}</span><div class="pagination"><button class="icon-button" id="${id}Prev" aria-label="Предыдущая страница" ${page<=1?'disabled':''}>${icon('left')}</button><span>${page} / ${pages}</span><button class="icon-button" id="${id}Next" aria-label="Следующая страница" ${page>=pages?'disabled':''}>${icon('right')}</button></div></div>`;}
-  function moreButton(key,count,limit){return count>limit?`<button class="button group-more" data-more-group="${h(key)}">Показать ещё ${Math.min(20,count-limit)} из ${count-limit}</button>`:'';}
   function renderProducts(){
     const rows=state.stock;const unknown=rows.filter(r=>!r.stockKnown);const sum=k=>rows.reduce((a,r)=>a+Number(r[k]||0),0);const short=rows.filter(r=>r.stockKnown&&r.short>0);
     const knownNote=unknown.length?`Подтверждено ${n(sum('onHand'))} шт.; ${n(unknown.length)} артикулов уточняются`:'Весь годный товар, включая собранное';
@@ -130,49 +130,33 @@
       ${unknown.length?notice('Остатки ещё не подтверждены',`Склад ещё не передал подтверждённые количества по ${n(unknown.length)} артикулам. Заказы показаны; неизвестный остаток не считается нулём.`):''}
       ${short.length?notice('Есть нехватка для сборки',`Товаров с нехваткой: ${n(short.length)}. Всего не хватает ${n(sum('short'))} шт. Откройте товар, чтобы посмотреть подробности.`,true):''}
       ${mismatch.length?`<p class="reconcile">Сверка с 1С: товаров с расхождением — ${n(mismatch.length)}; разница — ${n(mismatch.reduce((s,r)=>s+Math.abs(r.qtyIn1c-r.onHand),0))} шт. Подробности — в карточке товара.</p>`:''}
-      <section aria-label="Товары"><div class="table-toolbar product-toolbar">${searchBox('productSearch',state.search,'Товар, артикул WB или штрихкод')}${grouping('productGrouping',state.productGrouping,[['name','По названию'],['assembly','По сборке'],...(Object.values(state.catalog).some(r=>r.category!=='Без категории')?[['category','По категориям']]:[]),['none','Без группировки']])}${chips([['all','Все товары'],['assembly','В сборке'],['attention','Требуют внимания']],state.filter,'data-product-filter')}</div><div id="productGroups"></div></section>`;
+      <section aria-label="Товары"><div class="table-toolbar product-toolbar">${searchBox('productSearch',state.search,'Поиск по товарам')}${chips([['all','Все товары'],['assembly','В сборке'],['attention','Требуют внимания']],state.filter,'data-product-filter')}</div><div id="productGroups"></div></section>`;
     $('productSearch').oninput=e=>{state.search=e.target.value;state.page=1;renderProductRows();};
-    $('productGrouping').onchange=e=>{state.productGrouping=e.target.value;state.page=1;renderProductRows();};
     document.querySelectorAll('[data-product-filter]').forEach(b=>b.onclick=()=>{state.filter=b.dataset.productFilter;state.page=1;renderProducts();});
     renderProductRows();
   }
   function filteredProducts(){const q=state.search.trim().toLocaleLowerCase('ru-RU');return state.stock.filter(r=>(!q||[r.name,r.sku,r.barcode,meta(r.sku).category,...wbIds(r.sku),...meta(r.sku).cards.map(c=>c.vendorCode)].some(v=>String(v||'').toLocaleLowerCase('ru-RU').includes(q)))&&(state.filter!=='assembly'||r.ordered>0)&&(state.filter!=='attention'||!r.stockKnown||r.short>0||r.notForSale>0));}
-  function productTable(rows){return `<div class="table-scroll"><table class="data-table"><thead><tr><th>Товар</th><th class="num">На складе, шт.</th><th class="num">В сборке, шт.</th><th class="num">Доступно, шт.</th><th class="num">Не в продаже</th></tr></thead><tbody>${rows.map(r=>`<tr data-product="${h(r.sku)}"><td class="product-cell"><button class="product-link" data-open-product="${h(r.sku)}">${h(productName(r))}</button><span class="product-meta">${h(articleText(r.sku))}</span></td><td class="num">${quantity(r.onHand)}</td><td class="num">${n(r.ordered)}</td><td class="num available-number">${quantity(r.available)}${r.short>0?`<span class="row-note negative">Не хватает ${n(r.short)} шт.</span>`:''}</td><td class="num">${r.stockKnown?(r.notForSale>0?badge(n(r.notForSale)+' шт.','issue'):'—'):'—'}</td></tr>`).join('')}</tbody></table></div>`;}
+  function productTable(rows){return `<div class="table-scroll" tabindex="0" aria-label="Таблица товаров"><table class="data-table inventory-table"><colgroup><col class="photo-col"><col class="name-col"><col class="identifier-col"><col span="4" class="quantity-col"></colgroup><thead><tr><th>Фото</th><th>Товар</th><th>Артикул WB</th><th class="num">На складе<span class="column-unit">шт.</span></th><th class="num">В сборке<span class="column-unit">шт.</span></th><th class="num">Доступно к продаже<span class="column-unit">шт.</span></th><th class="num">Не в продаже<span class="column-unit">шт.</span></th></tr></thead><tbody>${rows.map(r=>`<tr data-product="${h(r.sku)}"><td>${photo(r)}</td><td class="product-cell"><button class="product-link" data-open-product="${h(r.sku)}">${h(productName(r))}</button></td><td class="identifier-cell">${identifiers(r)}</td><td class="num">${quantity(r.onHand)}</td><td class="num">${n(r.ordered)}</td><td class="num available-number">${quantity(r.available)}${r.short>0?`<span class="row-note negative">Не хватает ${n(r.short)} шт.</span>`:''}</td><td class="num">${r.stockKnown?(r.notForSale>0?badge(n(r.notForSale)+' шт.','issue'):'—'):'—'}</td></tr>`).join('')}</tbody></table></div>`;}
   function renderProductRows(){
-    const rows=filteredProducts(),grouped=state.productGrouping!=='none';
-    const groups=grouped?groupRows(rows,r=>state.productGrouping==='category'?meta(r.sku).category:state.productGrouping==='assembly'?(r.ordered>0?'В сборке':'Без активных заказов'):(productName(r).trim().split(/\s+/)[0]||'Без названия')).sort((a,b)=>a[0].localeCompare(b[0],'ru')):[];
-    const pages=Math.max(1,Math.ceil((grouped?groups.length:rows.length)/(grouped?12:30)));state.page=Math.min(state.page,pages);
-    let content='';
-    if(grouped)content=paginate(groups,state.page,12).map(([category,items])=>{const key='p:'+category,limit=groupLimits.get(key)||20;const total=items.every(r=>r.stockKnown)?n(items.reduce((s,r)=>s+r.onHand,0))+' шт. на складе':'Остаток уточняется';return groupShell(key,h(category),`${counted(items.length,'товар','товара','товаров')} <span>${n(items.reduce((s,r)=>s+r.ordered,0))} шт. в сборке · ${total}</span>`,productTable(items.slice(0,limit))+moreButton(key,items.length,limit),Boolean(state.search));}).join('');
-    else if(rows.length)content='<div class="table-panel">'+productTable(paginate(rows,state.page,30))+'</div>';
-    $('productGroups').innerHTML=(content||empty('Товары не найдены','Измените поиск или выберите «Все товары».'))+pager('product',state.page,pages,`${counted(rows.length,'товар','товара','товаров')}${grouped?' в '+counted(groups.length,'группе','группах','группах'):''} · Excel сохраняет весь результат фильтра`);
+    const rows=filteredProducts(),pages=Math.max(1,Math.ceil(rows.length/30));state.page=Math.min(state.page,pages);
+    $('productGroups').innerHTML=(rows.length?productTable(paginate(rows,state.page,30)):empty('Товары не найдены','Измените поиск или выберите «Все товары».'))+pager('product',state.page,pages,`${counted(rows.length,'товар','товара','товаров')} · Excel сохраняет весь результат фильтра`);
     $('productGroups').querySelectorAll('[data-open-product]').forEach(b=>b.onclick=()=>openProduct(b.dataset.openProduct));
     $('productGroups').querySelectorAll('[data-product]').forEach(tr=>tr.onclick=e=>{if(!e.target.closest('button'))openProduct(tr.dataset.product);});
-    wireGroups($('productGroups'));
+    wirePhotos($('productGroups'));
     $('productPrev').onclick=()=>{state.page--;renderProductRows();};$('productNext').onclick=()=>{state.page++;renderProductRows();};
-    state.exportRows=rows.map(r=>({'Товар':productName(r),'Артикул WB':wbIds(r.sku).join(', '),'На складе, шт.':r.onHand??'Уточняется','В сборке, шт.':r.ordered,'Доступно к продаже, шт.':r.available??'Уточняется','Не в продаже, шт.':r.stockKnown?r.notForSale:'Уточняется'}));$('excelButton').disabled=!rows.length;
+    state.exportRows=rows.map(r=>({'Товар':productName(r),'Артикул WB':wbIds(r.sku).join(', '),'Штрихкод':r.barcode||'','На складе, шт.':r.onHand??'Уточняется','В сборке, шт.':r.ordered,'Доступно к продаже, шт.':r.available??'Уточняется','Не в продаже, шт.':r.stockKnown?r.notForSale:'Уточняется'}));$('excelButton').disabled=!rows.length;
   }
   function renderOrders(){
-    $('view').innerHTML=`<div class="table-toolbar product-toolbar">${searchBox('orderSearch',state.orderSearch,'Номер заказа, товар или артикул WB')}${grouping('orderGrouping',state.orderGrouping,[['product','По товарам'],['status','По статусам'],['date','По дням']])}${chips([['all','Все'],['active','В работе'],['shipped','Отгружены']],state.orderFilter,'data-order-filter')}</div>${state.orders.hasMore?notice('Показана часть заказов','Доступны первые 1 000 позиций. Выгрузка содержит этот набор с учётом фильтра.',true):''}<div id="orderGroups"></div>`;
+    $('view').innerHTML=`<div class="table-toolbar product-toolbar">${searchBox('orderSearch',state.orderSearch,'Поиск по заказам и товарам')}${chips([['all','Все'],['active','В работе'],['shipped','Отгружены']],state.orderFilter,'data-order-filter')}</div>${state.orders.hasMore?notice('Показана часть заказов','Доступны первые 1 000 позиций. Выгрузка содержит этот набор с учётом фильтра.',true):''}<div id="orderGroups"></div>`;
     $('orderSearch').oninput=e=>{state.orderSearch=e.target.value;state.orderPage=1;renderOrderRows();};
-    $('orderGrouping').onchange=e=>{state.orderGrouping=e.target.value;state.orderPage=1;renderOrderRows();};
     document.querySelectorAll('[data-order-filter]').forEach(b=>b.onclick=()=>{state.orderFilter=b.dataset.orderFilter;state.orderPage=1;renderOrders();});renderOrderRows();
   }
-  function orderTable(rows,withProduct){return `<div class="table-scroll"><table class="data-table"><thead><tr><th>Заказ / отправление</th>${withProduct?'<th>Товар</th>':''}<th class="num">Шт.</th><th>Загружен в Аргус</th><th>Статус</th></tr></thead><tbody>${rows.map(r=>`<tr><td class="order-id"><button class="product-link" data-order-id="${h(r.id)}">${h(r.number)}</button>${r.mp_rid?`<small title="${h(r.mp_rid)}">${h(r.mp_rid)}</small>`:''}</td>${withProduct?`<td class="order-product">${h(productName(r))}<span class="product-meta">${h(articleText(r.sku,r.mp_nm_id))}</span></td>`:''}<td class="num">${n(r.qty)}</td><td class="small muted">${h(when(r.created_at))}</td><td>${badge(statusNames[r.status]||r.status,statusClass[r.status])}</td></tr>`).join('')}</tbody></table></div>`;}
+  function orderTable(rows){return `<div class="table-scroll" tabindex="0" aria-label="Таблица заказов"><table class="data-table orders-table"><colgroup><col class="photo-col"><col class="name-col"><col class="order-number-col"><col class="order-article-col"><col class="order-qty-col"><col class="order-date-col"><col class="order-status-col"></colgroup><thead><tr><th>Фото</th><th>Товар</th><th>Заказ / отправление</th><th>Артикул WB</th><th class="num">Кол-во<span class="column-unit">шт.</span></th><th>Загружен в Аргус</th><th>Статус</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${photo(r)}</td><td class="order-product">${h(productName(r))}</td><td class="order-id"><button class="product-link" data-order-id="${h(r.id)}">${h(r.number)}</button>${r.mp_rid?`<small title="${h(r.mp_rid)}">${h(r.mp_rid)}</small>`:''}</td><td class="identifier-cell"><span class="wb-article">${h(r.mp_nm_id||wbIds(r.sku).join(', ')||'Не передан')}</span></td><td class="num">${n(r.qty)}</td><td class="order-date">${h(when(r.created_at))}</td><td>${badge(statusNames[r.status]||r.status,statusClass[r.status])}</td></tr>`).join('')}</tbody></table></div>`;}
   function renderOrderRows(){
     const q=state.orderSearch.trim().toLocaleLowerCase('ru-RU');const rows=state.orders.rows.filter(r=>(!q||[r.number,r.name,r.sku,r.mp_rid,r.mp_nm_id,r.mp_article,...wbIds(r.sku)].some(v=>String(v||'').toLocaleLowerCase('ru-RU').includes(q)))&&(state.orderFilter!=='active'||r.status!=='shipped')&&(state.orderFilter!=='shipped'||r.status==='shipped'));
-    const mode=state.orderGrouping,keyOf=r=>mode==='product'?r.sku+'|'+(r.mp_nm_id||''):mode==='status'?r.status:new Date(r.created_at).toLocaleDateString('ru-RU');
-    const groups=groupRows(rows,keyOf);
-    if(mode==='status')groups.sort((a,b)=>Object.keys(statusNames).indexOf(a[0])-Object.keys(statusNames).indexOf(b[0]));
-    const pages=Math.max(1,Math.ceil(groups.length/12));state.orderPage=Math.min(state.orderPage,pages);
-    $('orderGroups').innerHTML=paginate(groups,state.orderPage,12).map(([key,items])=>{
-      const groupKey='o:'+mode+':'+key,limit=groupLimits.get(groupKey)||20;
-      const title=mode==='product'?`${h(productName(items[0]))}<span class="product-meta">${h(articleText(items[0].sku,items[0].mp_nm_id))}</span>`:h(mode==='status'?statusNames[key]||key:key);
-      const statuses=mode==='product'?[...new Set(items.map(r=>r.status))].map(s=>badge(statusNames[s]||s,statusClass[s])).join(' '):'';
-      return groupShell(groupKey,title,`${counted(new Set(items.map(r=>r.id)).size,'заказ','заказа','заказов')} · ${n(items.reduce((s,r)=>s+Number(r.qty),0))} шт.<span>${statuses}</span>`,orderTable(items.slice(0,limit),mode!=='product')+moreButton(groupKey,items.length,limit),Boolean(q));
-    }).join('')||empty('Заказы не найдены',q?'Попробуйте другой номер или артикул.':'Новые заказы появятся после загрузки с маркетплейса.','orders');
-    $('orderGroups').insertAdjacentHTML('beforeend',pager('order',state.orderPage,pages,`${counted(new Set(rows.map(r=>r.id)).size,'заказ','заказа','заказов')} в ${counted(groups.length,'группе','группах','группах')} · Excel сохраняет весь результат фильтра`));
-    $('orderGroups').querySelectorAll('[data-order-id]').forEach(b=>b.onclick=()=>openDocument(b.dataset.orderId,true));wireGroups($('orderGroups'));
+    const pages=Math.max(1,Math.ceil(rows.length/30));state.orderPage=Math.min(state.orderPage,pages);
+    $('orderGroups').innerHTML=(rows.length?orderTable(paginate(rows,state.orderPage,30)):empty('Заказы не найдены',q?'Попробуйте другой номер или артикул.':'Новые заказы появятся после загрузки с маркетплейса.','orders'))+pager('order',state.orderPage,pages,`${counted(new Set(rows.map(r=>r.id)).size,'заказ','заказа','заказов')} · Excel сохраняет весь результат фильтра`);
+    $('orderGroups').querySelectorAll('[data-order-id]').forEach(b=>b.onclick=()=>openDocument(b.dataset.orderId,true));wirePhotos($('orderGroups'));
     $('orderPrev').onclick=()=>{state.orderPage--;renderOrderRows();};$('orderNext').onclick=()=>{state.orderPage++;renderOrderRows();};
     const active=new Set(state.orders.rows.filter(r=>r.status!=='shipped').map(r=>r.id)).size;$('orderBadge').textContent=n(active);$('orderBadge').hidden=!active;
     state.exportRows=rows.map(r=>({'Заказ':r.number,'Отправление':r.mp_rid||'','Товар':productName(r),'Артикул WB':r.mp_nm_id||wbIds(r.sku).join(', '),'Кол-во, шт.':Number(r.qty),'Загружен в Аргус':when(r.created_at),'Статус':statusNames[r.status]||r.status}));$('excelButton').disabled=!rows.length;
