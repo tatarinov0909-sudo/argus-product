@@ -680,7 +680,9 @@
       document.getElementById('ocNumUnassigned').textContent = formatQty(s.unassigned_products);
       document.getElementById('ocUnassignedSub').textContent = Number(s.unmapped_counterparties || 0) > 0
         ? formatQty(s.unmapped_counterparties) + ' контрагентов ещё не связаны'
-        : 'все распределены по продавцам';
+        : Number(s.unassigned_products || 0) > 0
+          ? 'товаров требуют распределения'
+          : 'все распределены по продавцам';
       document.getElementById('ocLastSeen').textContent = 'Последняя связь с 1С: ' + lastSeen;
 
       if(manual) showWhToast('Данные обновлены');
