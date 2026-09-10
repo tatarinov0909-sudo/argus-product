@@ -1888,20 +1888,6 @@
         </div>
       </div>
 
-      <div class="wh-modal-overlay" id="oneCMapModal" onclick="if(event.target===this) closeOneCMapping()">
-        <div class="wh-modal one-c-map-modal" role="dialog" aria-modal="true" aria-labelledby="oneCMapTitle">
-          <div class="wh-modal-head">
-            <div class="wh-modal-title" id="oneCMapTitle">Связать компанию с 1С</div>
-            <button class="panel-close-btn" onclick="closeOneCMapping()" aria-label="Закрыть">✕</button>
-          </div>
-          <div class="wh-modal-body">
-            <div class="one-c-map-intro">Выберите контрагента, под которым товары этой компании оформлены в 1С. Следующая синхронизация сама распределит её товары, остатки и поставки.</div>
-            <div id="oneCMapCurrent"></div>
-            <input class="one-c-map-search" id="oneCMapSearch" type="search" autocomplete="off" placeholder="Найти контрагента по названию">
-            <div class="one-c-map-results" id="oneCMapResults"></div>
-          </div>
-        </div>
-      </div>
     </div>
 
     <div class="view" id="view-staff">
@@ -2183,6 +2169,21 @@
       </div>
     </div>
 
+  </div>
+
+  <div class="wh-modal-overlay" id="oneCMapModal" onclick="if(event.target===this) closeOneCMapping()">
+    <div class="wh-modal one-c-map-modal" role="dialog" aria-modal="true" aria-labelledby="oneCMapTitle">
+      <div class="wh-modal-head">
+        <div class="wh-modal-title" id="oneCMapTitle">Связать компанию с 1С</div>
+        <button class="panel-close-btn" onclick="closeOneCMapping()" aria-label="Закрыть">✕</button>
+      </div>
+      <div class="wh-modal-body">
+        <div class="one-c-map-intro">Выберите контрагента, под которым товары этой компании оформлены в 1С. Следующая синхронизация сама распределит её товары, остатки и поставки.</div>
+        <div id="oneCMapCurrent"></div>
+        <input class="one-c-map-search" id="oneCMapSearch" type="search" autocomplete="off" placeholder="Найти контрагента по названию">
+        <div class="one-c-map-results" id="oneCMapResults"></div>
+      </div>
+    </div>
   </div>
 
   <div class="wh-toast" id="whToast"></div>
