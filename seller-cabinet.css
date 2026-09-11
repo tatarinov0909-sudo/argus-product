@@ -178,6 +178,15 @@ h1, .page-heading h1 { font-size:34px; font-weight:600; letter-spacing:0; }
 .receipt-bar { font-size:14px; grid-template-columns:80px 1fr 65px; }
 .receipt-item .product-meta { font-size:14px; }
 .documents-table { min-width:880px; }
+
+/* Accounting and physical stock are separate facts, so both stay visible. */
+.metrics { grid-template-columns:repeat(4,minmax(0,1fr)); }
+.mini-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
+@media (max-width:1150px) {
+  .metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .metric:nth-child(odd) { border-left:0; }
+  .metric:nth-child(n+3) { border-top:1px solid var(--line); }
+}
 @media(max-width:760px){ .mobile-account { display:inline-flex; } }
 
 .history-pagination { margin-top:24px; }
