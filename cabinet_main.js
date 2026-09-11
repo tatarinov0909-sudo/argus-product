@@ -47,6 +47,9 @@
   }
 
   const authPayload = decodeJwtPayload(TOKEN);
+  if (!IS_MANAGER) fetch(API_BASE + '/api/leads/manage/access', {
+    headers: { Authorization: 'Bearer ' + TOKEN }, cache: 'no-store'
+  }).then(r => { if (r.ok) document.getElementById('leadAdminLink').style.display = 'block'; }).catch(() => {});
 
   let warehouseName = '';
 
@@ -1169,44 +1172,11 @@
     let rects = '', aisles = '';
     for(let i = 0; i < rowOrder.length; i++){
       const n = rowOrder[i];
-      // Заполненность ряда прямо на схеме: столбик подрастает снизу вверх, как
-      // наполняется стеллаж, и красится той же шкалой, что и ячейки — зелёный
-      // внизу, оранжевый под потолок. Схема — первое, что видит владелец, и
-      // она должна отвечать на главный вопрос «где ещё есть место» тем же
-      // языком, что и сетка ряда.
-      //
-      // Считаем среднюю заполненность мест, а не долю занятых. Ряд из
-      // девяноста шести ячеек, в каждой по пять штук, «занят» на сто процентов
-      // и при этом почти пуст — по такой мерке владелец решил бы, что везти
-      // товар некуда.
+      // Known occupied addresses do not measure volume or remaining capacity.
       const blocks = cellBlocks[n] || [];
       const taken = blocks.filter(b => b.state === 'occupied').length;
-      const fullness = blocks.length
-        ? blocks.reduce((sum, b) => sum + (b.state === 'occupied' ? Number(b.fill) || 0 : 0), 0) / blocks.length
-        : 0;
-
-      // Пока приёмка через Аргус не пошла, количеств в ячейках нет ни одного,
-      // и мерка «средняя заполненность мест» даёт ноль по всему складу:
-      // владелец видит семь одинаковых пустых столбиков, хотя товар лежит
-      // в двухстах девяти ячейках. Тогда меряем тем, что знаем достоверно, —
-      // долей занятых мест. Это ДРУГАЯ величина, поэтому и выглядит иначе:
-      // столбик в полоску, и в подсказке сказано прямо, что считается.
-      const noQty = taken > 0 && fullness === 0;
-      const shown = noQty ? (taken / blocks.length * 100) : fullness;
-      const pct = shown / 100;
-      const fillH = Math.round(rowH * pct);
-      const paint = cellPaint(shown);
-      const meter = fillH > 0
-        ? `<rect class="wh-row-rect-fill${noQty ? ' by-places' : ''}" x="${xs[i]}" y="${topY + rowH - fillH}" width="${rowW}" height="${fillH}" rx="4" style="fill:${paint.edge};"/>`
-        : '';
-      const titleText = !blocks.length
-        ? `Ряд ${rowLabel(n)}`
-        : noQty
-          ? `Ряд ${rowLabel(n)}: занято мест ${taken} из ${blocks.length}`
-            + ` (${Math.round(shown)}%). Сколько товара в каждой — учёт не хранит,`
-            + ` появится после первой приёмки через Аргус.`
-          : `Ряд ${rowLabel(n)}: заполнен на ${Math.round(fullness)}%, занято мест ${taken} из ${blocks.length}`;
-      rects += `<g onclick="focusRow(${n})"><title>${titleText}</title><rect class="wh-row-rect" id="row-rect-${n}" x="${xs[i]}" y="${topY}" width="${rowW}" height="${rowH}" rx="4"/>${meter}<text class="wh-row-num" x="${xs[i] + rowW/2}" y="${topY - 10}">${escapeHTML(String(rowLabel(n)))}</text></g>`;
+      const titleText = `Ряд ${rowLabel(n)}: занято ячеек ${taken} из ${blocks.length}. Вместимость не задана.`;
+      rects += `<g onclick="focusRow(${n})"><title>${titleText}</title><rect class="wh-row-rect" id="row-rect-${n}" x="${xs[i]}" y="${topY}" width="${rowW}" height="${rowH}" rx="4"/><text class="wh-row-num" x="${xs[i] + rowW/2}" y="${topY - 10}">${escapeHTML(String(rowLabel(n)))}</text></g>`;
       if(aisleAfter[i] && i < rowOrder.length - 1){
         const cx = xs[i] + rowW + gapAisle/2;
         const cy = topY + rowH/2;
@@ -1216,7 +1186,7 @@
     return `<svg width="${totalW}" height="${totalH}" viewBox="0 0 ${totalW} ${totalH}" style="max-width:100%;">${zones}${rects}${aisles}</svg>`;
   }
 
-  let cellBlocks = {};   // cellBlocks[rowNum] = [{r0,r1,t0,t1,state,fill,blockId,stock}, ...] — из /api/cells/rows
+  let cellBlocks = {};   // cellBlocks[rowNum] = [{r0,r1,t0,t1,state,blockId,stock}, ...] — из /api/cells/rows
   let rowMeta = {};      // rowMeta[rowNum] = {rackCount, tierCount}
   let blockById = {};    // blockId -> {block, rowNum} — чтобы по клику найти ячейку целиком
 
@@ -1229,7 +1199,7 @@
       cellBlocks[row.row_num] = row.blocks.map(b => {
         const block = {
           r0: b.rack_start, r1: b.rack_end, t0: b.tier_start, t1: b.tier_end,
-          state: b.state, fill: b.fill_pct, blockId: b.id, stock: b.stock || [],
+          state: b.state, blockId: b.id, stock: b.stock || [],
           label: b.label || null, stock1c: b.stock_1c || [],
         };
         blockById[b.id] = {block, rowNum: row.row_num};
@@ -1238,65 +1208,11 @@
     });
   }
 
-  function hslToRgb(h, s, l){
-    s /= 100; l /= 100;
-    const k = n => (n + h / 30) % 12;
-    const a = s * Math.min(l, 1 - l);
-    const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
-    return [Math.round(255 * f(0)), Math.round(255 * f(8)), Math.round(255 * f(4))];
+  // One uniform tone means that goods are present. It carries no percentage.
+  function cellPaintVars(){
+    return ' --edge:var(--accent);';
   }
-  const lerp = (a, b, t) => a + (b - a) * t;
-
-  // Цвет ячейки по заполненности.
-  //
-  // Внутри ячейки идёт переход: слева бледно, справа насыщенно — и чем полнее
-  // ячейка, тем ярче её правый край. Пустая почти прозрачная, полная звонкая.
-  //
-  // Оттенок держится зелёным до 70%, дальше быстро уходит в оранжевый. Это не
-  // произвол: между зелёным и оранжевым по кругу цветов всегда лежит жёлтый, и
-  // единственный способ не получить грязный жёлто-оливковый на половине карты —
-  // проскочить его узкой полосой у самого верха шкалы. Прежняя формула мешала
-  // бирюзовый с терракотовым напрямую по RGB и давала ровно посередине серое.
-  function cellPaint(pct){
-    const t = Math.min(100, Math.max(0, pct)) / 100;
-    const hue = t < 0.7 ? lerp(140, 128, t / 0.7) : lerp(128, 26, (t - 0.7) / 0.3);
-    const [er, eg, eb] = hslToRgb(hue, lerp(32, 80, t), lerp(60, 52, t));
-    const [sr, sg, sb] = hslToRgb(hue, lerp(26, 46, t), lerp(64, 60, t));
-    const endA = lerp(0.18, 0.62, t), startA = lerp(0.06, 0.16, t);
-    return {
-      start: `rgba(${sr},${sg},${sb},${startA})`,
-      end:   `rgba(${er},${eg},${eb},${endA})`,
-      edge:  `rgba(${er},${eg},${eb},${Math.min(0.9, endA + 0.3)})`,
-    };
-  }
-
-  // Шкала заполненности включена. Процент приходит с сервера в fill_pct и
-  // считается от УСЛОВНОЙ вместимости ячейки в 500 штук — габаритов у товара
-  // нет ни у одной позиции, измерить настоящую вместимость нечем.
-  //
-  // Это соглашение, а не измерение, и путать одно с другим нельзя: как только
-  // в 1С появятся размеры и вес, процент надо считать от них, а 500 убрать.
-  // До тех пор цвет честно показывает «сколько штук относительно 500», и это
-  // ровно то, что видно в карточке ячейки рядом.
-  //
-  // Вернуть один ровный тон вместо шкалы — поставить true.
-  const FULLNESS_IS_BINARY = false;
-  const OCCUPIED_TONE_PCT = 42;
-
-  // Инлайновые переменные для ячейки — сам градиент собирается в CSS.
-  function cellPaintVars(pct){
-    const tone = FULLNESS_IS_BINARY ? OCCUPIED_TONE_PCT : pct;
-    const p = cellPaint(tone);
-    return ` --fill:${FULLNESS_IS_BINARY ? 100 : pct}%; --c-start:${p.start}; --c-end:${p.end}; --edge:${p.edge};`;
-  }
-
-  // Класс, который переключает ячейку между «полоса заполнения» и «просто
-  // занята». Полоса слева направо читается как процент — и пока настоящего
-  // процента нет, она врёт: зелёный цвет говорит «место есть», а полоса во всю
-  // ширину — «забита». Поэтому в бинарном режиме заливка ровная, без
-  // направления, и никакой доли не обещает.
-  const fillModeClass = FULLNESS_IS_BINARY ? ' fill-unknown' : '';
-
+  const fillModeClass = ' fill-unknown';
   // Имя ряда, если владелец его задал, иначе номер. Оно же становится первой
   // частью адреса ячейки, поэтому берётся здесь, в одном месте: адрес должен
   // читаться одинаково и на карте, и в поиске, и в подсказке при приёмке.
@@ -1328,27 +1244,20 @@
     return many;
   }
 
-  // Сводная статистика по складу — площадь считается в физических местах (стеллаж × ярус),
-  // а не в блоках, поэтому объединение ячеек не искажает проценты заполнения.
+  // Count existing addresses, not every slot in the enclosing rectangle:
+  // imported layouts can have gaps, and a merged address remains one cell.
   function warehouseStats(){
-    const rows = Object.keys(rowMeta).map(Number).sort((a,b) => a - b);
-    let rackTotal = 0, cellTotal = 0, occupiedUnits = 0;
-    const perRow = rows.map(rowNum => {
-      const meta = rowMeta[rowNum];
-      const total = meta.rackCount * meta.tierCount;
-      let occ = 0;
-      (cellBlocks[rowNum] || []).forEach(b => {
-        if(b.state === 'occupied') occ += (b.r1 - b.r0 + 1) * (b.t1 - b.t0 + 1);
-      });
-      rackTotal += meta.rackCount;
-      cellTotal += total;
-      occupiedUnits += occ;
-      return {rowNum, total, occ, free: total - occ, pct: total ? Math.round(occ / total * 100) : 0};
+    const rows = Object.keys(rowMeta).map(Number).filter(n => (cellBlocks[n] || []).length).sort((a,b) => a-b);
+    let rackTotal=0,cellTotal=0,occupiedUnits=0;
+    const perRow=rows.map(rowNum=>{
+      const blocks=cellBlocks[rowNum],total=blocks.length;
+      const occ=blocks.filter(b=>b.state==='occupied').length;
+      const racks=new Set();blocks.forEach(b=>{for(let r=b.r0;r<=b.r1;r++)racks.add(r);});
+      rackTotal+=racks.size;cellTotal+=total;occupiedUnits+=occ;
+      return {rowNum,total,occ,free:total-occ};
     });
-    const pct = cellTotal ? Math.round(occupiedUnits / cellTotal * 100) : 0;
-    return {rows, rackTotal, cellTotal, occupiedUnits, pct, perRow};
+    return {rows,rackTotal,cellTotal,occupiedUnits,perRow};
   }
-
   function renderWhStatusLine(){
     const el = document.getElementById('whStatusLine');
     if(!el) return;
@@ -1358,7 +1267,7 @@
       `${s.rows.length} ${pluralRu(s.rows.length, 'ряд', 'ряда', 'рядов')}`,
       `${s.rackTotal} ${pluralRu(s.rackTotal, 'стеллаж', 'стеллажа', 'стеллажей')}`,
       `${s.cellTotal} ${pluralRu(s.cellTotal, 'ячейка', 'ячейки', 'ячеек')}`,
-      `занято ${s.pct}%`,
+      `занято ${s.occupiedUnits} ячеек`,
     ].join(' · ');
   }
 
@@ -1376,11 +1285,11 @@
   function renderRackRowHtml(rowNum){
     const meta = rowMeta[rowNum];
     const rackCount = meta.rackCount, tierCount = meta.tierCount;
-    let occ = 0, tot = 0, fillSum = 0;
+    let occ = 0, tot = 0;
 
     cellBlocks[rowNum].forEach(b => {
       tot++;
-      if(b.state === 'occupied'){ occ++; fillSum += Number(b.fill) || 0; }
+      if(b.state === 'occupied') occ++;
     });
 
     // Какие стеллажи вообще показывать. Свёрнуто — только те, где что-то
@@ -1469,7 +1378,7 @@
       const gridRowSpan = tTop - b.t0 + 1;
       const c0 = colOf.get(b.r0), c1 = colOf.get(b.r1) || c0;
       const style = b.state === 'occupied'
-        ? ` style="grid-column:${c0} / span ${c1 - c0 + 1}; grid-row:${gridRowStart} / span ${gridRowSpan};${cellPaintVars(b.fill)}"`
+        ? ` style="grid-column:${c0} / span ${c1 - c0 + 1}; grid-row:${gridRowStart} / span ${gridRowSpan};${cellPaintVars()}"`
         : ` style="grid-column:${c0} / span ${c1 - c0 + 1}; grid-row:${gridRowStart} / span ${gridRowSpan};"`;
       // Балок рисуем ровно столько, сколько ярусов ячейка проглотила: одна
       // граница — одна недостающая балка. Повторяющийся фон этого не умел
@@ -1504,28 +1413,8 @@
         + ` title="Здесь пусто: ${what}. Нажмите «Показать весь ряд», чтобы увидеть."></div>`;
     });
 
-    const pct = tot ? Math.round(occ / tot * 100) : 0;
-    // Полоса растёт и красится по средней заполненности, а цифры рядом считают
-    // места. Это разные вещи: ряд, где заняты все ячейки, но в каждой по пять
-    // штук, забит на 100% мест и почти пуст по товару. Цвет везде — на схеме,
-    // в этой полосе и в самих ячейках — означает одно и то же.
-    const fullness = tot ? Math.round(fillSum / tot) : 0;
-    // Та же развилка, что и на схеме сверху: пока приёмки через Аргус не было,
-    // количеств нет ни одного, и «заполнен на 0%» при шестидесяти шести
-    // занятых ячейках — не информация, а недоразумение. Тогда меряем долей
-    // занятых мест и говорим, что считаем именно её.
-    const noQty = occ > 0 && fullness === 0;
-    const shownPct = noQty ? Math.round(occ / tot * 100) : fullness;
-    const rowPaint = cellPaint(shownPct);
-    const statsText = !tot
-      ? 'ячеек нет'
-      : noQty
-        ? `занято мест ${occ} из ${tot} · ${shownPct}%`
-        : `заполнен на ${fullness}% · занято мест ${occ} из ${tot}`;
-    const statsTitle = noQty
-      ? 'Считаем занятые места: сколько товара в каждой ячейке, учёт склада'
-        + ' не хранит. Появится после первой приёмки через Аргус.'
-      : `Заполнен на ${fullness}%`;
+    const statsText = !tot ? 'ячеек нет' : `занято ячеек ${occ} из ${tot}`;
+    const statsTitle = 'Вместимость ячеек не задана. Количество товара доступно в карточке ячейки.';
     const editing = editingRowNum === rowNum;
 
     // Правка ячеек живёт здесь же, в панели ряда, а не в отдельном окне
@@ -1544,7 +1433,6 @@
       <div class="wh-row-group-head">
         <button class="wh-row-group-title wh-renamable" type="button" onclick="startRename('row', ${rowNum})"
                 title="Нажмите, чтобы переименовать ряд">Ряд ${escapeHTML(String(rowLabel(rowNum)))}</button>
-        <span class="wh-row-group-meter" title="${statsTitle}"><span class="wh-row-group-meter-fill${noQty ? ' by-places' : ''}" style="width:${shownPct}%; background:${rowPaint.edge};"></span></span>
         <span class="wh-row-group-stats" title="${statsTitle}">${statsText}</span>
         <button class="wh-row-edit-btn${editing ? ' active' : ''}" type="button"
                 onclick="toggleRowEdit(${rowNum})"
@@ -1615,7 +1503,7 @@
       const wide = block.r1 - block.r0 + 1, tall = block.t1 - block.t0 + 1;
       const isMerged = wide > 1 || tall > 1;
       const addr = blockAddr(rowNum, block);
-      const fillVars = block.state === 'occupied' ? cellPaintVars(block.fill) : '';
+      const fillVars = block.state === 'occupied' ? cellPaintVars() : '';
       return `<div class="wh-big-cell ${block.state}${isMerged ? ' merged' : ''}${block.state === 'occupied' ? fillModeClass : ''}"
         style="grid-column:${block.r0} / span ${wide}; grid-row:${gridRowOf(block.t1)} / span ${tall};${fillVars}"
         title="${escapeHTML(addr)}">
@@ -2142,7 +2030,7 @@
     const panel = document.getElementById('whSummary');
     if(!panel) return;
     const s = warehouseStats();
-    const top = [...s.perRow].sort((a,b) => b.pct - a.pct).slice(0,3);
+    const top = [...s.perRow].sort((a,b) => b.occ - a.occ).slice(0,3);
     const freeRow = [...s.perRow].sort((a,b) => b.free - a.free)[0];
     const pending = journalEntries.filter(e => e.status === 'pending');
 
@@ -2150,8 +2038,7 @@
       ? top.map(r => `
           <div class="wh-summary-row-item">
             <span>Ряд ${escapeHTML(String(rowLabel(r.rowNum)))}</span>
-            <span class="wh-summary-row-bar"><span style="width:${r.pct}%"></span></span>
-            <span class="wh-summary-row-pct">${r.pct}%</span>
+            <span class="wh-summary-row-pct">занято ${r.occ} из ${r.total}</span>
           </div>
         `).join('')
       : '<div class="wh-summary-attn-empty">Пока нет данных.</div>';
@@ -2169,15 +2056,15 @@
         <div class="wh-summary-stat"><div class="num">${s.cellTotal}</div><div class="lbl">всего мест</div></div>
         <div class="wh-summary-stat"><div class="num">${s.occupiedUnits}</div><div class="lbl">занято</div></div>
         <div class="wh-summary-stat"><div class="num">${s.cellTotal - s.occupiedUnits}</div><div class="lbl">свободно</div></div>
-        <div class="wh-summary-stat"><div class="num">${s.pct}%</div><div class="lbl">заполнение</div></div>
+        <div class="wh-summary-stat"><div class="num">—</div><div class="lbl">вместимость не задана</div></div>
       </div>
       <div class="wh-summary-cols">
         <div class="wh-summary-col">
-          <div class="wh-summary-col-title">Самые заполненные ряды</div>
+          <div class="wh-summary-col-title">Больше всего занятых ячеек</div>
           ${topHtml}
         </div>
         <div class="wh-summary-col">
-          <div class="wh-summary-col-title">Больше всего свободного места</div>
+          <div class="wh-summary-col-title">Больше всего незанятых ячеек</div>
           ${freeHtml}
         </div>
       </div>
@@ -3870,7 +3757,10 @@
       const rows = invDiffRows(t).map(function(d){
         return '<div class="inv-diff-row">'
           + '<div><b>' + escapeHTML(d.name || d.sku) + '</b>'
-          + '<span class="inv-diff-sku">' + escapeHTML(d.sku) + '</span></div>'
+          + '<span class="inv-diff-sku">' + escapeHTML(d.sku)
+          + ' · ' + escapeHTML(d.companyName || 'Продавец не указан')
+          + ' · ' + escapeHTML({ good: 'годный', defective: 'брак', packaging_defect: 'брак упаковки' }[d.quality] || d.quality)
+          + '</span></div>'
           + '<div class="inv-diff-nums">числилось ' + d.expectedQty
           + ' · насчитали ' + d.countedQty
           + ' <span class="' + (d.diff > 0 ? 'up' : 'down') + '">'
@@ -3891,6 +3781,7 @@
         + note
         + '<div class="inv-card-actions">'
         +   '<button class="inv-btn danger" onclick="resolveInv(\'' + t.id + '\', \'reject\')">Отклонить</button>'
+        +   '<button class="inv-btn" onclick="resolveInv(\'' + t.id + '\', \'recount\')">Посчитать заново</button>'
         +   '<button class="inv-btn" onclick="resolveInv(\'' + t.id + '\', \'apply\')">Принять пересчёт</button>'
         + '</div>'
         + '</div>';
@@ -3908,13 +3799,15 @@
     was.forEach(function(l, k){
       const c = now.has(k) ? Number(now.get(k).qty) : 0;
       if(Number(l.qty) !== c){
-        out.push({ sku: l.sku, name: l.name, expectedQty: Number(l.qty), countedQty: c,
+        out.push({ sku: l.sku, name: l.name, companyName: l.companyName, quality: l.quality,
+          expectedQty: Number(l.qty), countedQty: c,
           diff: c - Number(l.qty) });
       }
     });
     now.forEach(function(l, k){
       if(was.has(k)) return;
-      out.push({ sku: l.sku, name: l.name, expectedQty: 0, countedQty: Number(l.qty),
+      out.push({ sku: l.sku, name: l.name, companyName: l.companyName, quality: l.quality,
+        expectedQty: 0, countedQty: Number(l.qty),
         diff: Number(l.qty) });
     });
     return out;
@@ -3980,7 +3873,8 @@
       await apiFetch('/api/inventory/tasks/' + taskId + '/resolve', {
         method: 'POST', body: { decision },
       });
-      showWhToast(decision === 'apply' ? 'Остаток исправлен.' : 'Пересчёт отклонён.');
+      showWhToast(decision === 'apply' ? 'Остаток исправлен.'
+        : decision === 'recount' ? 'Ячейка снова назначена работнику для пересчёта.' : 'Пересчёт отклонён.');
       loadInventory();
     } catch(e){
       showWhToast(e.message);

@@ -347,6 +347,27 @@
     font-size:12px; color:var(--yellow); margin-top:1px;
   }
   .inv-extra.on .inv-extra-box{border-color:var(--yellow);}
+  #invScreen{font-family:Arial,sans-serif;}
+  #invScreen .inv-line-name{font-size:18px;line-height:1.4;overflow-wrap:anywhere;}
+  #invScreen .inv-line-sku,#invScreen .inv-line-company{font-size:14px;line-height:1.4;color:var(--muted);}
+  #invScreen .inv-line-company{display:block;margin-top:5px;font-weight:400;}
+  #invScreen .inv-hint,#invScreen .inv-extra{font-size:16px;}
+  #invScreen .inv-extra span{font-size:14px;line-height:1.4;}
+  .inv-found{border-top:1px solid var(--line);padding:18px 0;margin:8px 0;}
+  .inv-found h3{font-size:18px;margin:0 0 8px;}
+  .inv-found p{font-size:14px;line-height:1.5;color:var(--muted);margin:0 0 12px;}
+  .inv-search{display:flex;gap:8px;}
+  .inv-search input,.inv-quality{min-width:0;flex:1;width:100%;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);font:16px Arial,sans-serif;}
+  .inv-search button,.inv-remove{padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text);font:16px Arial,sans-serif;cursor:pointer;}
+  .inv-search-result{display:block;width:100%;padding:12px 0;text-align:left;border:0;border-bottom:1px solid var(--line);background:none;color:var(--text);font:16px/1.4 Arial,sans-serif;cursor:pointer;overflow-wrap:anywhere;}
+  .inv-search-result span{display:block;color:var(--muted);font-size:14px;margin-top:4px;}
+  .inv-search-result:focus-visible,.inv-search input:focus-visible,.inv-quality:focus-visible,.inv-remove:focus-visible{outline:2px solid var(--accent);outline-offset:3px;}
+  .inv-search-status{font-size:14px;line-height:1.4;color:var(--muted);margin-top:10px;}
+  .inv-quality-label{display:block;font-size:14px;margin-top:12px;}
+  .inv-quality{display:block;margin-top:6px;}
+  .inv-remove{display:block;margin:12px 0 0 auto;}
+  .inv-count-status{font-size:14px;line-height:1.4;color:var(--muted);margin:8px 0 12px;}
+  #invScreen input[aria-invalid="true"]{outline:2px solid var(--terracotta);}
 
   .pick-kit-btn{
     margin-top:9px; padding:8px 12px; border-radius:8px; text-align:center;
@@ -1860,16 +1881,18 @@
 
   /* ---------- Пересчёт ячейки ----------
      Работник инвентаризацию не начинает: он видит только те ячейки, которые
-     назначил владелец. Поэтому здесь нет ни выбора ячейки, ни поиска — есть
-     список заданий, и он либо пуст, либо нет.
+     назначил владелец. Каталог позволяет указать реально найденный товар,
+     а не добавляет новые задания или товары автоматически.
 
      Считает работник, а решает владелец: расхождение отсюда уходит наверх и
      остаток не трогает. Так и написано на экране, чтобы работник не думал,
      что «поправил цифру». */
   let invTasks = [];
   let invState = null;
+  let invSearchVersion = 0;
 
   async function openInventory(){
+    if(invState && invState.saving) return;
     openJob('invScreen');
     invState = null;
     document.getElementById('invSub').textContent = 'Смотрю задания…';
@@ -1911,6 +1934,7 @@
   }
 
   async function openInvTask(id){
+    if(invState && invState.saving) return;
     document.getElementById('invSub').textContent = 'Открываю ячейку…';
     try{
       const t = await apiFetch('/api/inventory/tasks/' + id + '/open', { method: 'POST' });
@@ -1918,10 +1942,12 @@
       // пойдёт работа, счёт не примут, и это правильно.
       invState = {
         id: t.id,
+        snapshotId: t.snapshotId,
         label: t.label,
         reason: t.reason,
-        lines: (t.expected || []).map(function(l){ return Object.assign({}, l, { counted: l.qty }); }),
+        lines: (t.expected || []).map(function(l){ return Object.assign({}, l, { counted: '', added: false }); }),
         extra: false,
+        products: [], query: '', searchStatus: '', saving: false,
       };
       renderInvTask();
     } catch(e){
@@ -1931,40 +1957,129 @@
   }
 
   function stepInvQty(i, delta){
-    if(!invState) return;
+    if(!invState || invState.saving) return;
     const line = invState.lines[i];
-    line.counted = Math.max(0, Number(line.counted) + delta);
+    if(!validInvQty(line.counted) && delta < 0) return;
+    line.counted = String(Math.max(0, (validInvQty(line.counted) ? Number(line.counted) : 0) + delta));
     renderInvTask();
   }
 
   function invQtyTyped(i, raw){
-    if(!invState) return;
-    const digits = String(raw).replace(/[^0-9]/g, '');
-    if(digits === '') return;
-    invState.lines[i].counted = Number(digits);
+    if(!invState || invState.saving) return;
+    invState.lines[i].counted = String(raw);
+    const input = document.getElementById('invQty-' + i);
+    if(input) input.setAttribute('aria-invalid', raw !== '' && !validInvQty(raw) ? 'true' : 'false');
+    const diff = document.getElementById('invDiff-' + i);
+    if(diff) diff.textContent = invDifference(invState.lines[i]);
     updateInvConfirm();
   }
 
   function toggleInvExtra(){
-    if(!invState) return;
+    if(!invState || invState.saving) return;
     invState.extra = !invState.extra;
     renderInvTask();
   }
 
   const INV_QUALITY = { good: 'годный', defective: 'брак', packaging_defect: 'брак упаковки' };
 
+  function validInvQty(value){
+    return /^\d+$/.test(String(value)) && Number.isSafeInteger(Number(value));
+  }
+
+  function invComplete(){
+    return invState && invState.lines.every(function(l){
+      return validInvQty(l.counted) && Object.prototype.hasOwnProperty.call(INV_QUALITY, l.quality);
+    });
+  }
+
+  function invDifference(line){
+    if(!validInvQty(line.counted)) return '';
+    const diff = Number(line.counted) - Number(line.qty);
+    return diff ? (diff > 0 ? '+' : '') + diff + ' к тому, что числится' : '';
+  }
+
+  async function searchInvProducts(event){
+    event.preventDefault();
+    if(!invState || invState.saving) return;
+    const state = invState, request = ++invSearchVersion;
+    state.query = document.getElementById('invProductSearch').value.trim();
+    state.products = [];
+    const validQuery = state.query.length >= 2 && state.query.length <= 120;
+    state.searchStatus = validQuery ? 'Ищу в каталоге…' : 'Введите от 2 до 120 символов названия или артикула.';
+    renderInvProducts();
+    if(!validQuery) return;
+    try{
+      const products = await apiFetch('/api/inventory/products?q=' + encodeURIComponent(state.query));
+      if(invState !== state || request !== invSearchVersion) return;
+      state.products = products;
+      state.searchStatus = products.length === 0
+        ? 'Товар не найден. Уточните запрос или отметьте ниже, что товар не удалось определить.'
+        : products.length >= 30 ? 'Показаны первые 30 товаров. Уточните запрос, если нужного нет.' : 'Выберите товар нужного продавца.';
+    } catch(e){
+      if(invState !== state || request !== invSearchVersion) return;
+      state.searchStatus = e.message;
+    }
+    renderInvProducts();
+  }
+
+  function renderInvProducts(){
+    const target = document.getElementById('invProducts');
+    if(!target || !invState) return;
+    target.innerHTML = '<div class="inv-search-status" role="status">' + escapeHTML(invState.searchStatus) + '</div>'
+      + invState.products.map(function(p, i){
+        return '<button type="button" class="inv-search-result" onclick="addInvProduct(' + i + ')">'
+          + escapeHTML(p.name) + '<span>Артикул: ' + escapeHTML(p.sku)
+          + '</span><span>Продавец: ' + escapeHTML(p.companyName || 'Название не передано') + '</span></button>';
+      }).join('');
+  }
+
+  function addInvProduct(i){
+    if(!invState || invState.saving) return;
+    const product = invState.products[i];
+    if(!product || !product.companyId || !product.sku) return;
+    invState.lines.push({sku:product.sku,name:product.name,companyId:product.companyId,
+      companyName:product.companyName,quality:'',qty:0,counted:'',added:true});
+    invState.products = []; invState.searchStatus = ''; invState.query = '';
+    ++invSearchVersion;
+    renderInvTask();
+    document.getElementById('invQuality-' + (invState.lines.length - 1)).focus();
+  }
+
+  function invQualitySelected(i, quality){
+    if(!invState || invState.saving || !invState.lines[i].added) return;
+    const line = invState.lines[i];
+    const duplicate = quality && invState.lines.some(function(other, index){
+      return index !== i && other.sku === line.sku && other.companyId === line.companyId && other.quality === quality;
+    });
+    if(duplicate){
+      showToast('Этот товар и состояние уже есть в списке. Укажите количество в существующей строке.');
+      document.getElementById('invQuality-' + i).value = '';
+      line.quality = '';
+    } else line.quality = Object.prototype.hasOwnProperty.call(INV_QUALITY, quality) ? quality : '';
+    updateInvConfirm();
+  }
+
+  function removeInvProduct(i){
+    if(!invState || invState.saving || !invState.lines[i].added) return;
+    invState.lines.splice(i,1);
+    renderInvTask();
+  }
+
   function invChanged(){
     if(!invState) return false;
     if(invState.extra) return true;
-    return invState.lines.some(function(l){ return Number(l.counted) !== Number(l.qty); });
+    return invState.lines.some(function(l){ return l.added || Number(l.counted) !== Number(l.qty); });
   }
 
   function updateInvConfirm(){
     const btn = document.getElementById('invConfirm');
     if(!btn) return;
-    btn.textContent = invChanged()
+    btn.disabled = !invComplete() || invState.saving;
+    btn.textContent = invState.saving ? 'Сохраняю…' : invChanged()
       ? 'Отправить расхождение руководителю'
-      : 'Всё сошлось — закрыть ячейку';
+      : invState.lines.length ? 'Всё сошлось — закрыть ячейку' : 'Ячейка пуста — подтвердить';
+    const status = document.getElementById('invCountStatus');
+    if(status) status.textContent = invComplete() ? '' : 'Укажите фактическое количество в каждой строке, включая 0. Для найденного товара выберите состояние.';
   }
 
   function renderInvTask(){
@@ -1975,25 +2090,29 @@
     const lines = invState.lines.length === 0
       ? '<div class="job-empty">По данным Аргуса ячейка пуста. Если это так — так и отметьте.</div>'
       : invState.lines.map(function(l, i){
-        const diff = Number(l.counted) - Number(l.qty);
         return '<div class="inv-line">'
           + '<div class="inv-line-head">'
           +   '<div class="inv-line-name">' + escapeHTML(l.name)
           +     '<span class="inv-line-sku">' + escapeHTML(l.sku)
-          +     (l.quality && l.quality !== 'good'
-                ? ' · ' + (INV_QUALITY[l.quality] || l.quality) : '') + '</span></div>'
+          +     (l.quality
+                ? ' · ' + escapeHTML(INV_QUALITY[l.quality] || l.quality) : '') + '</span>'
+          +     '<span class="inv-line-company">Продавец: ' + escapeHTML(l.companyName || 'Название не передано') + '</span></div>'
           +   '<div class="inv-line-was">числится<b>' + l.qty + '</b></div>'
           + '</div>'
+          + (l.added ? '<label class="inv-quality-label" for="invQuality-' + i + '">Состояние найденного товара</label>'
+            + '<select class="inv-quality" id="invQuality-' + i + '" onchange="invQualitySelected(' + i + ', this.value)">'
+            + '<option value="">Выберите состояние</option>'
+            + Object.keys(INV_QUALITY).map(function(q){return '<option value="' + q + '"' + (l.quality === q ? ' selected' : '') + '>' + INV_QUALITY[q] + '</option>';}).join('')
+            + '</select>' : '')
           + '<div class="qty-stepper" style="margin-top:10px;">'
           +   '<button class="qty-btn" onclick="stepInvQty(' + i + ', -1)" aria-label="Меньше">−</button>'
-          +   '<input class="qty-value" type="text" inputmode="numeric" pattern="[0-9]*" '
-          +     'value="' + l.counted + '" aria-label="Сколько насчитали" '
+          +   '<input class="qty-value" id="invQty-' + i + '" type="text" inputmode="numeric" pattern="[0-9]*" '
+          +     'value="' + escapeHTML(l.counted) + '" placeholder="Факт" aria-label="Сколько насчитали" '
           +     'oninput="invQtyTyped(' + i + ', this.value)" onfocus="this.select()">'
           +   '<button class="qty-btn" onclick="stepInvQty(' + i + ', 1)" aria-label="Больше">+</button>'
           + '</div>'
-          + (diff !== 0
-            ? '<div class="inv-line-diff">' + (diff > 0 ? '+' : '') + diff + ' к тому, что числится</div>'
-            : '')
+          + '<div class="inv-line-diff" id="invDiff-' + i + '">' + invDifference(l) + '</div>'
+          + (l.added ? '<button type="button" class="inv-remove" onclick="removeInvProduct(' + i + ')">Убрать добавленную строку</button>' : '')
           + '</div>';
       }).join('');
 
@@ -2002,17 +2121,25 @@
       + '<div class="inv-hint">Считайте то, что видите на полке. Исправлять остаток '
       +   'вы не будете — расхождение уйдёт руководителю, решает он.</div>'
       + lines
-      + '<div class="inv-extra' + (invState.extra ? ' on' : '') + '" onclick="toggleInvExtra()">'
-      +   '<div class="inv-extra-box">' + (invState.extra ? '✓' : '') + '</div>'
-      +   '<div>В ячейке есть товар, которого нет в списке'
-      +     '<span>отметьте, если нашли что-то лишнее — артикул укажет руководитель</span></div>'
-      + '</div>'
+      + '<section class="inv-found"><h3>Нашли другой товар?</h3>'
+      + '<p>Найдите его в каталоге. Проверьте продавца, затем укажите состояние и количество.</p>'
+      + '<form class="inv-search" onsubmit="searchInvProducts(event)">'
+      + '<input id="invProductSearch" aria-label="Название или артикул найденного товара" placeholder="Название или артикул" maxlength="120" value="' + escapeHTML(invState.query) + '">'
+      + '<button type="submit">Найти</button></form><div id="invProducts"></div></section>'
+      + '<label class="inv-extra' + (invState.extra ? ' on' : '') + '">'
+      +   '<input type="checkbox" class="inv-extra-box" onchange="toggleInvExtra()"' + (invState.extra ? ' checked' : '') + '>'
+      +   '<div>Есть товар, который не удалось определить'
+      +     '<span>Руководителю потребуется проверка. Такой пересчёт не изменит остаток, пока товар не определён.</span></div>'
+      + '</label>'
+      + '<div class="inv-count-status" id="invCountStatus" role="status"></div>'
       + '<button class="confirm-btn" id="invConfirm" onclick="confirmInvCount()"></button>';
+    renderInvProducts();
     updateInvConfirm();
   }
 
   async function confirmInvCount(){
-    if(!invState) return;
+    if(!invState || invState.saving || !invComplete()) return;
+    invState.saving = true;
     const btn = document.getElementById('invConfirm');
     btn.disabled = true;
     btn.textContent = 'Сохраняю…';
@@ -2020,8 +2147,9 @@
       const res = await apiFetch('/api/inventory/tasks/' + invState.id + '/count', {
         method: 'POST',
         body: {
+          snapshotId: invState.snapshotId,
           lines: invState.lines.map(function(l){
-            return { sku: l.sku, companyId: l.companyId, quality: l.quality, qty: l.counted };
+            return { sku: l.sku, companyId: l.companyId, quality: l.quality, qty: Number(l.counted) };
           }),
           note: invState.extra ? 'Работник отметил: в ячейке есть товар не из списка' : null,
         },
@@ -2034,6 +2162,7 @@
     } catch(e){
       // Чаще всего это «в ячейке была работа, пока вы считали»: сервер не
       // принимает устаревший счёт, и пересчитать надо заново.
+      invState.saving = false;
       btn.disabled = false;
       showToast(e.message);
       openInventory();

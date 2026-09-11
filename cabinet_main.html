@@ -1047,7 +1047,7 @@
   .wh-legend-item{display:flex; align-items:center; gap:7px; font-size:12px; color:var(--muted);}
   .wh-legend-swatch{width:12px; height:12px; border-radius:4px; flex-shrink:0;}
   .wh-legend-swatch.empty{background:var(--bg); border:1px solid rgba(232,230,225,0.11);}
-  .wh-legend-swatch.occupied{background:linear-gradient(to right, rgba(133,196,150,0.10), rgba(126,186,105,0.38));}
+  .wh-legend-swatch.occupied{background:var(--accent-soft); border:1px solid var(--accent);}
   .wh-legend-swatch.merged{background:rgba(232,230,225,0.06); box-shadow:inset 0 0 0 1.5px rgba(232,230,225,0.5);}
 
   .wh-panel-back{
@@ -1106,16 +1106,15 @@
      «свободна», но свободу и так видно по отсутствию заливки, а рябь из
      штрихов на сотне ячеек читалась хуже ровной линии. */
   .wh-cell.empty{background:var(--bg); border:1px solid rgba(232,230,225,0.11);}
-  /* Переход внутри ячейки: слева бледно, справа насыщенно, обрыв на проценте
-     заполнения. Цвета считает cellPaint() — здесь только форма. */
+  /* Занятая ячейка отмечается ровной заливкой: её вместимость неизвестна. */
   .wh-cell.occupied{
-    background:linear-gradient(to right, var(--c-start) 0%, var(--c-end) var(--fill, 60%), transparent var(--fill, 60%)), var(--panel-2);
+    background:var(--accent-soft);
     border:1.5px solid var(--edge);
   }
   /* Заполненность неизвестна: заливка ровная, сверху вниз, без направления
      слева направо — чтобы её нельзя было прочитать как «полоса на 100%». */
   .wh-cell.occupied.fill-unknown{
-    background:linear-gradient(to bottom, var(--c-end) 0%, var(--c-start) 100%), var(--panel-2);
+    background:var(--accent-soft);
   }
   /* Объединённая — та же ячейка, только больше. Никакого отдельного канта:
      светлая рамка вокруг неё была самым ярким пятном на карте, хотя объединение
@@ -1186,11 +1185,11 @@
   }
   .wh-big-cell.empty{background:var(--bg); border:1.5px solid rgba(232,230,225,0.11);}
   .wh-big-cell.occupied{
-    background:linear-gradient(to right, var(--c-start) 0%, var(--c-end) var(--fill, 60%), transparent var(--fill, 60%)), var(--panel);
+    background:var(--accent-soft);
     border:1.5px solid var(--edge);
   }
   .wh-big-cell.occupied.fill-unknown{
-    background:linear-gradient(to bottom, var(--c-end) 0%, var(--c-start) 100%), var(--panel);
+    background:var(--accent-soft);
   }
   .wh-big-cell-label{font-size:12px; color:var(--text); font-family:var(--mono); font-weight:700; text-align:center;}
 
@@ -1666,6 +1665,7 @@
 
     <div class="sidebar-footer">
       <div class="account-menu" id="accountMenu">
+        <a class="account-menu-item" id="leadAdminLink" href="leads.html" style="display:none">Заявки с лендинга</a>
         <div class="account-menu-item">Профиль</div>
         <div class="account-menu-item">Настройки аккаунта</div>
         <div class="account-menu-sep"></div>
@@ -2057,7 +2057,7 @@
             <div class="staff-title">Клиенты и площадки</div>
             <div class="staff-sub">Все ваши клиенты и то, что у каждого с маркетплейсом. Аргус сам забирает сборочные задания и заводит их заказами склада; в кабинете продавца при этом не меняется ничего — Аргус только читает.</div>
           </div>
-          <button class="wh-onboarding-btn" type="button" onclick="pullAllMarketplaces()">Забрать заказы у всех</button>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center"><a id="wbReconciliationLink" href="marketplace-reconciliation.html" style="color:var(--accent)">Сверка заказов WB</a><button class="wh-onboarding-btn" type="button" onclick="pullAllMarketplaces()">Забрать заказы у всех</button></div>
         </div>
 
         <div class="oc-status-bar" id="mpStatusBar">
@@ -2220,6 +2220,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=71" defer></script>
+<script src="cabinet_main.js?v=72" defer></script>
 </body>
 </html>

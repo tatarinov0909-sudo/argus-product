@@ -26,6 +26,9 @@
     pageSize:30,textSize:'normal',examples:null,view:'products',stock:null,orders:null,documents:null,fetchedAt:{},search:'',filter:'all',page:1,orderSearch:'',orderFilter:'all',docSearch:'',docFilter:'all',viewRun:0,drawerRun:0,exportRows:[]};
   const statusNames = {open:'Принят складом',in_progress:'Собирается',ready:'Собран, ждёт машину',shipped:'Отгружен'};
   const statusClass = {open:'waiting',in_progress:'working',ready:'ready',shipped:''};
+  const orderActive = r => r.status!=='shipped'&&!r.mp_closed_at;
+  const orderStatus = r => r.status==='shipped'?'Отгружен':r.mp_closed_at?(r.mp_close_reason==='canceled'?'Отменён на WB':'Завершён на WB'):(statusNames[r.status]||r.status);
+  const orderStyle = r => r.stock_conflict?'issue':r.mp_closed_at?'':statusClass[r.status];
   const badge = (text,style='') => `<span class="badge ${style}">${h(text)}</span>`;
   const quantity = value => value == null ? '<span class="unknown-number">Уточняется</span>' : n(value);
   const loading = '<div class="loading-inline" role="status"><span class="spinner"></span>Загружаем данные…</div>';
@@ -147,6 +150,7 @@
       ${metric('На складе',unknown.length?null:sum('onHand'),knownNote,'warehouse')}
       ${metric('В сборке',sum('ordered'),'Выделено под ещё не отгруженные заказы','orders')}
       ${metric('Доступно к продаже',unknown.length?null:sum('available'),unknown.length?'Рассчитаем после подтверждения остатков':'Сумма доступного по каждому товару','box','available')}</section>
+      ${sum('blockedOrdered')>0?notice('Склад проверяет закрытые заказы WB',`В сборке остаётся ${n(sum('blockedOrdered'))} шт. по заказам, уже закрытым на Wildberries. Склад должен сверить эти заказы и подтвердить отгрузку или возврат товара в ячейки.`,true):''}
       ${unknown.length?notice('Остатки ещё не подтверждены',`Склад ещё не передал подтверждённые количества по ${n(unknown.length)} артикулам. Заказы показаны; неизвестный остаток не считается нулём.`):''}
       ${short.length?notice('Есть нехватка для сборки',`Товаров с нехваткой: ${n(short.length)}. Всего не хватает ${n(sum('short'))} шт. Откройте товар, чтобы посмотреть подробности.`,true):''}
       ${mismatch.length?`<p class="reconcile">Сверка с 1С: товаров с расхождением — ${n(mismatch.length)}; разница — ${n(mismatch.reduce((s,r)=>s+Math.abs(r.qtyIn1c-r.onHand),0))} шт. Подробности — в карточке товара.</p>`:''}
@@ -167,19 +171,19 @@
     state.exportRows=rows.map(r=>({'Товар':productName(r),'Артикул WB':wbIds(r.sku).join(', '),'Штрихкод':r.barcode||'','На складе, шт.':r.onHand??'Уточняется','В сборке, шт.':r.ordered,'Доступно к продаже, шт.':r.available??'Уточняется','Не в продаже, шт.':r.stockKnown?r.notForSale:'Уточняется'}));$('excelButton').disabled=!rows.length;
   }
   function renderOrders(){
-    $('view').innerHTML=`<div class="table-toolbar product-toolbar">${searchBox('orderSearch',state.orderSearch,'Поиск по заказам и товарам')}${chips([['all','Все'],['active','В работе'],['shipped','Отгружены']],state.orderFilter,'data-order-filter')}</div>${state.orders.hasMore?notice('Показана часть заказов','Доступны первые 1 000 позиций. Выгрузка содержит этот набор с учётом фильтра.',true):''}<div id="orderGroups"></div>`;
+    $('view').innerHTML=`<div class="table-toolbar product-toolbar">${searchBox('orderSearch',state.orderSearch,'Поиск по заказам и товарам')}${chips([['all','Все'],['active','В работе'],['shipped','Отгружены'],['closed','Закрыты на WB']],state.orderFilter,'data-order-filter')}</div>${state.orders.hasMore?notice('Показана часть заказов','Доступны первые 1 000 позиций. Выгрузка содержит этот набор с учётом фильтра.',true):''}<div id="orderGroups"></div>`;
     $('orderSearch').oninput=e=>{state.orderSearch=e.target.value;state.orderPage=1;renderOrderRows();};
     document.querySelectorAll('[data-order-filter]').forEach(b=>b.onclick=()=>{state.orderFilter=b.dataset.orderFilter;state.orderPage=1;renderOrders();});renderOrderRows();
   }
-  function orderTable(rows){return `<div class="table-scroll" tabindex="0" aria-label="Таблица заказов"><table class="data-table orders-table"><colgroup><col class="photo-col"><col class="name-col"><col class="order-number-col"><col class="order-article-col"><col class="order-qty-col"><col class="order-date-col"><col class="order-status-col"></colgroup><thead><tr><th>Фото</th><th>Товар</th><th>Заказ / отправление</th><th>Артикул WB</th><th class="num">Кол-во<span class="column-unit">шт.</span></th><th>Загружен в Аргус</th><th>Статус</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${photo(r)}</td><td class="order-product">${h(productName(r))}</td><td class="order-id"><button class="product-link" data-order-id="${h(r.id)}">${h(r.number)}</button>${r.mp_rid?`<small title="${h(r.mp_rid)}">${h(r.mp_rid)}</small>`:''}</td><td class="identifier-cell"><span class="wb-article">${h(r.mp_nm_id||wbIds(r.sku).join(', ')||'Не передан')}</span></td><td class="num">${n(r.qty)}</td><td class="order-date">${h(when(r.created_at))}</td><td>${badge(statusNames[r.status]||r.status,statusClass[r.status])}</td></tr>`).join('')}</tbody></table></div>`;}
+  function orderTable(rows){return `<div class="table-scroll" tabindex="0" aria-label="Таблица заказов"><table class="data-table orders-table"><colgroup><col class="photo-col"><col class="name-col"><col class="order-number-col"><col class="order-article-col"><col class="order-qty-col"><col class="order-date-col"><col class="order-status-col"></colgroup><thead><tr><th>Фото</th><th>Товар</th><th>Заказ / отправление</th><th>Артикул WB</th><th class="num">Кол-во<span class="column-unit">шт.</span></th><th>Загружен в Аргус</th><th>Статус</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${photo(r)}</td><td class="order-product">${h(productName(r))}</td><td class="order-id"><button class="product-link" data-order-id="${h(r.id)}">${h(r.number)}</button>${r.mp_rid?`<small title="${h(r.mp_rid)}">${h(r.mp_rid)}</small>`:''}</td><td class="identifier-cell"><span class="wb-article">${h(r.mp_nm_id||wbIds(r.sku).join(', ')||'Не передан')}</span></td><td class="num">${n(r.qty)}</td><td class="order-date">${h(when(r.created_at))}</td><td>${badge(orderStatus(r),orderStyle(r))}${r.stock_conflict?'<span class="row-note negative">Склад сверяет заказ</span>':''}</td></tr>`).join('')}</tbody></table></div>`;}
   function renderOrderRows(){
-    const q=state.orderSearch.trim().toLocaleLowerCase('ru-RU');const rows=state.orders.rows.filter(r=>(!q||[r.number,r.name,r.sku,r.mp_rid,r.mp_nm_id,r.mp_article,...wbIds(r.sku)].some(v=>String(v||'').toLocaleLowerCase('ru-RU').includes(q)))&&(state.orderFilter!=='active'||r.status!=='shipped')&&(state.orderFilter!=='shipped'||r.status==='shipped'));
+    const q=state.orderSearch.trim().toLocaleLowerCase('ru-RU');const rows=state.orders.rows.filter(r=>(!q||[r.number,r.name,r.sku,r.mp_rid,r.mp_nm_id,r.mp_article,...wbIds(r.sku)].some(v=>String(v||'').toLocaleLowerCase('ru-RU').includes(q)))&&(state.orderFilter!=='active'||orderActive(r))&&(state.orderFilter!=='shipped'||r.status==='shipped')&&(state.orderFilter!=='closed'||!!r.mp_closed_at));
     const pages=Math.max(1,Math.ceil(rows.length/state.pageSize));state.orderPage=Math.min(state.orderPage,pages);
     $('orderGroups').innerHTML=(rows.length?orderTable(paginate(rows,state.orderPage,state.pageSize)):empty('Заказы не найдены',q?'Попробуйте другой номер или артикул.':'Новые заказы появятся после загрузки с маркетплейса.','orders'))+pager('order',state.orderPage,pages,`${counted(new Set(rows.map(r=>r.id)).size,'заказ','заказа','заказов')} · Excel сохраняет весь результат фильтра`);
     $('orderGroups').querySelectorAll('[data-order-id]').forEach(b=>b.onclick=()=>openDocument(b.dataset.orderId,true));wirePhotos($('orderGroups'));
     $('orderPrev').onclick=()=>{state.orderPage--;renderOrderRows();};$('orderNext').onclick=()=>{state.orderPage++;renderOrderRows();};
-    const active=new Set(state.orders.rows.filter(r=>r.status!=='shipped').map(r=>r.id)).size;$('orderBadge').textContent=n(active);$('orderBadge').hidden=!active;
-    state.exportRows=rows.map(r=>({'Заказ':r.number,'Отправление':r.mp_rid||'','Товар':productName(r),'Артикул WB':r.mp_nm_id||wbIds(r.sku).join(', '),'Кол-во, шт.':Number(r.qty),'Загружен в Аргус':when(r.created_at),'Статус':statusNames[r.status]||r.status}));$('excelButton').disabled=!rows.length;
+    const active=new Set(state.orders.rows.filter(orderActive).map(r=>r.id)).size;$('orderBadge').textContent=n(active);$('orderBadge').hidden=!active;
+    state.exportRows=rows.map(r=>({'Заказ':r.number,'Отправление':r.mp_rid||'','Товар':productName(r),'Артикул WB':r.mp_nm_id||wbIds(r.sku).join(', '),'Кол-во, шт.':Number(r.qty),'Загружен в Аргус':when(r.created_at),'Статус':orderStatus(r),'Проверка складом':r.stock_conflict?'Склад сверяет заказ':''}));$('excelButton').disabled=!rows.length;
   }
   const documentType=r=>r.direction==='return'?'Возврат':r.source==='1c'?(r.source_document_type==='supplier_order'?'Заказ поставщику':'Документ 1С'):'Поступление';
   const documentStatus=r=>r.preview?'Образец из 1С':r.status==='open'?(r.source==='1c'?(r.source_document_type==='supplier_order'?'План поставки':'Приёмка не подтверждена'):'Ожидает приёмки'):r.status==='in_progress'?'Принимается':r.status==='completed'?'Приёмка завершена':r.status;
@@ -217,19 +221,50 @@
       <section class="detail-section"><h3>Движение товара</h3><div id="productHistory">${loading}</div></section>
       <details><summary>Сверка с учётом 1С</summary><p>${r.qtyIn1c==null?'Данные 1С для этого товара ещё не переданы.':`По учёту 1С: ${n(r.qtyIn1c)} шт. Получено ${h(when(r.stockAt))}. Учёт 1С не заменяет подтверждение количества в ячейках.`}</p></details>`;
     $('productOrders').onclick=()=>{state.orderSearch=r.sku;state.orderFilter='all';$('drawer').close();location.hash='orders';};
-    try{const data=await api('/api/sellers/history?sku='+encodeURIComponent(sku));if(run!==state.drawerRun)return;
-      const labels={received:'Принято на склад',picked:'Собрано для заказа',returned:'Возврат',add:'Добавлено',remove:'Списано',move:'Перемещение',adjust:'Корректировка',set:'Пересчёт'};
-      const quality={good:'Годное',defective:'Брак',packaging_defect:'Повреждена упаковка'};
-      $('productHistory').innerHTML=data.events.length?`<ol class="timeline">${data.events.map(e=>`<li><div class="timeline-line"><strong>${h(labels[e.kind]||'Операция склада')}</strong><span class="quantity">${['received','returned'].includes(e.kind)?'+':''}${n(e.qty)} шт.</span></div><time>${h(when(e.at))}</time>${e.document?`<p>${h(e.document)}</p>`:''}${e.quality?`<p>${h(quality[e.quality]||e.quality)}</p>`:''}${e.note?`<p>${h(e.note)}</p>`:''}</li>`).join('')}</ol>${data.hasMore?'<p class="small muted">Показаны последние 200 операций.</p>':''}`:'<p class="export-description">Склад ещё не зафиксировал операции по этому товару. Заказы можно посмотреть выше.</p>';
-    }catch(e){if(run===state.drawerRun)$('productHistory').textContent=e.message;}
+    const events=[];
+    let nextCursor=null,busy=false;
+    async function loadMoreHistory(){
+      if(busy||run!==state.drawerRun)return;busy=true;
+      const button=$('historyMore');if(button){button.disabled=true;button.textContent='Загружаем…';}
+      if($('historyError'))$('historyError').textContent='';
+      try{
+        const data=await api('/api/sellers/history?sku='+encodeURIComponent(sku)+(nextCursor?'&cursor='+encodeURIComponent(nextCursor):''));
+        if(run!==state.drawerRun)return;
+        events.push(...data.events);nextCursor=data.nextCursor||null;
+        $('productHistory').innerHTML=events.length?`<ol class="timeline">${events.map(historyEvent).join('')}</ol><div class="history-pagination"><p class="small muted" role="status">Показано операций: ${n(events.length)}</p>${nextCursor?'<button class="button" id="historyMore">Показать ещё</button>':''}<p id="historyError" class="error-text" role="alert"></p></div>`:'<p class="export-description">Склад ещё не зафиксировал операции по этому товару. Заказы можно посмотреть выше.</p>';
+        if($('historyMore'))$('historyMore').onclick=loadMoreHistory;
+      }catch(e){
+        if(run!==state.drawerRun)return;
+        if(!events.length)$('productHistory').innerHTML='<p id="historyError" class="error-text" role="alert"></p><button class="button" id="historyMore">Повторить загрузку</button>';
+        $('historyError').textContent=e.message;
+        if($('historyMore')){$('historyMore').disabled=false;$('historyMore').textContent=events.length?'Показать ещё':'Повторить загрузку';$('historyMore').onclick=loadMoreHistory;}
+      }finally{busy=false;}
+    }
+    await loadMoreHistory();
   }
-  async function openDocument(id,order=false){
+  function cellAddress(cell){
+    if(!cell)return '';
+    if(cell.label)return cell.label;
+    const range=(a,b)=>a===b?String(a):a+'–'+b;
+    if(cell.rowNum==null)return '';
+    return 'Ряд '+cell.rowNum+', стеллаж '+range(cell.rackStart,cell.rackEnd)+', ярус '+range(cell.tierStart,cell.tierEnd);
+  }
+  function historyEvent(e){
+    const labels={received:'Принято на склад',picked:'Собрано для заказа',shipped:'Отгружено со склада',returned:'Возврат',add:'Добавлено',remove:'Списано',move:'Перемещение',adjust:'Корректировка',set:'Пересчёт',inventory_adjust:'Пересчёт',inventory:'Пересчёт',kit_assemble:'Собран набор',repack:'Перепаковка',canceled_pick_return:'Возвращено в ячейку после отмены WB'};
+    const quality={good:'Годное',defective:'Брак',packaging_defect:'Повреждена упаковка'};
+    const sign=['received','returned'].includes(e.kind)?'+':e.kind==='shipped'?'−':'';
+    const from=cellAddress(e.fromCell),to=cellAddress(e.toCell);
+    return `<li><div class="timeline-line"><strong>${h(labels[e.kind]||'Операция склада')}</strong><span class="quantity">${sign}${n(e.qty)} шт.</span></div><time>${e.at?h(when(e.at)):'Время операции не сохранено'}</time>${e.document?`<p>${h(e.document)}</p>`:''}${e.supplyNumber?`<p>Поставка ${h(e.supplyNumber)}</p>`:''}${from?`<p>Из ячейки: ${h(from)}</p>`:''}${to?`<p>В ячейку: ${h(to)}</p>`:''}${e.quality?`<p>${h(quality[e.quality]||e.quality)}</p>`:''}${e.note?`<p>${h(e.note)}</p>`:''}</li>`;
+  }  async function openDocument(id,order=false){
     const list=order?state.orders.rows:documentData().rows;const selected=list.find(r=>r.id===id);if(!selected)return;const run=openDrawer(selected.number,order?'Заказ':selected.preview?'Образец из 1С':documentType(selected));
     try{const data=await api((selected.preview?'/api/sellers/document-examples/':'/api/invoices/')+encodeURIComponent(id));if(run!==state.drawerRun)return;
       const items=data.items.map(r=>({...r,finalized:data.direction==='return'?data.status==='completed':data.direction==='out'?r.closed:r.accepted_qty!=null,accepted:data.direction==='return'?(r.buckets?.length||data.status==='completed'?Number(r.returned_qty):null):data.direction==='out'?Number(r.picked_qty):r.accepted_qty==null?null:Number(r.accepted_qty)}));
+      const detailOrder={...selected,...data};
+      detailOrder.stock_conflict=!!(detailOrder.mp_closed_at&&!detailOrder.mp_stock_returned_at&&detailOrder.status!=='shipped'&&(detailOrder.mp_close_reason==='fulfilled'||items.some(r=>Number(r.picked_qty)>0)));
       const total=items.reduce((s,r)=>s+Number(r.declared_qty),0),complete=items.every(r=>r.finalized),accepted=items.reduce((s,r)=>s+Number(r.accepted||0),0);
       items.sort((a,b)=>Number(b.finalized&&b.accepted!==Number(b.declared_qty))-Number(a.finalized&&a.accepted!==Number(a.declared_qty)));
-      $('drawerBody').innerHTML=`${selected.preview?notice('Образец документа из 1С','Компания в источнике: '+data.source_company_name+'. Копия для ознакомления, без изменения остатков и приёмки вашего магазина.'):''}<div class="drawer-meta">${selected.source==='1c'?`<span>Дата в 1С: ${h(sourceDocumentDate(selected.source_document_date))}</span>`:''}<span>Загружено ${h(when(data.created_at))}</span>${badge(order?statusNames[data.status]||data.status:documentStatus({...selected,status:data.status}),statusClass[data.status])}</div>
+      $('drawerBody').innerHTML=`${selected.preview?notice('Образец документа из 1С','Компания в источнике: '+data.source_company_name+'. Копия для ознакомления, без изменения остатков и приёмки вашего магазина.'):''}<div class="drawer-meta">${selected.source==='1c'?`<span>Дата в 1С: ${h(sourceDocumentDate(selected.source_document_date))}</span>`:''}<span>Загружено ${h(when(data.created_at))}</span>${badge(order?orderStatus(detailOrder):documentStatus({...selected,status:data.status}),order?orderStyle(detailOrder):statusClass[data.status])}</div>
+        ${order&&detailOrder.stock_conflict?notice('Заказ закрыт на Wildberries',detailOrder.mp_close_reason==='fulfilled'?'Wildberries сообщил о завершении заказа, а отгрузка в Аргусе ещё не подтверждена. До сверки количество остаётся в сборке.':'Товар уже был собран. Склад проверяет его размещение; до завершения проверки он остаётся учтён в сборке.',true):''}
         ${!selected.preview&&selected.source==='1c'?notice(selected.source_document_type==='supplier_order'?'План поставки из 1С':'Документ из 1С',selected.source_document_type==='supplier_order'?'Заказ поставщику показывает запланированное количество. Фактически принятое количество появится после фиксации приёмки складом.':'Тип исходного документа ещё не передан. Заявленное количество само по себе не подтверждает, что товар принят на склад.'):''}
         <div class="mini-metrics">${mini('Заявлено',total)}${mini(order?'Собрано':'Принято',items.some(r=>r.accepted!==null)?accepted:null)}${mini('Расхождение',complete?accepted-total:null)}</div>
         ${!complete?'<p class="export-description">Обработка ещё не завершена. Показано уже обработанное количество; расхождение появится после завершения.</p>':''}

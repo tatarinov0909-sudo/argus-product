@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer">
+  <title>Заявки · Аргус</title>
+  <link rel="stylesheet" href="leads.css?v=1">
+  <script src="leads.js?v=1" defer></script>
+</head>
+<body>
+<header><a href="cabinet_main.html" class="brand">аргус.</a><span>Заявки с лендинга</span><a href="cabinet_main.html">Вернуться в кабинет</a></header>
+<main>
+  <p id="pageMessage" role="status" aria-live="polite">Проверяем доступ…</p>
+  <div id="content" hidden>
+    <div class="page-heading"><div><p class="muted">Управление Аргусом</p><h1>Заявки</h1><p id="count" class="muted"></p></div><button id="refresh">Обновить</button></div>
+    <section aria-labelledby="telegramTitle" class="connection">
+      <div><h2 id="telegramTitle">Уведомления в Telegram</h2><p id="telegramStatus" role="status"></p></div>
+      <div class="connection-actions"><button id="configure">Подключить Telegram</button><button id="disconnect" hidden>Отключить</button></div>
+      <div id="setup" hidden>
+        <p>Создайте отдельного бота через <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer">BotFather</a> командой <code>/newbot</code>. Вставьте полученный токен сюда. После сохранения он больше не отображается.</p>
+        <form id="connectForm"><label for="botToken">Токен бота</label><div class="token-row"><input id="botToken" type="password" autocomplete="off" spellcheck="false" required maxlength="130"><button type="submit">Сохранить и подключить</button></div></form>
+        <div id="confirmStep" hidden><p>Откройте бота по этой ссылке и нажмите <strong>«Старт»</strong>. Ссылка действует 15 минут и предназначена только для вас.</p><div class="connection-actions"><a id="startBot" class="button primary" target="_blank" rel="noopener noreferrer">Открыть бота</a><button id="confirm">Я нажал «Старт»</button></div></div>
+        <p id="setupMessage" role="status" aria-live="polite"></p>
+      </div>
+      <p class="muted note">После подключения новые заявки приходят автоматически. Старую недоставленную заявку можно отправить кнопкой в её строке. Все заявки сохраняются здесь.</p>
+    </section>
+    <div class="toolbar"><label for="status">Статус заявки</label><select id="status"><option value="all">Все</option><option value="new">Новые</option><option value="contacted">Связались</option><option value="closed">Закрытые</option></select></div>
+    <table><thead><tr><th>Когда</th><th>Имя и контакт</th><th>Сообщение</th><th>Статус</th><th>Telegram</th></tr></thead><tbody id="rows"></tbody></table>
+    <p id="empty" hidden>Заявок пока нет. Новые обращения с лендинга появятся здесь.</p>
+    <nav class="pagination" aria-label="Страницы заявок"><button id="previous">Назад</button><span id="page"></span><button id="next">Дальше</button></nav>
+  </div>
+</main>
+</body></html>

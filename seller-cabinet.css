@@ -179,3 +179,9 @@ h1, .page-heading h1 { font-size:34px; font-weight:600; letter-spacing:0; }
 .receipt-item .product-meta { font-size:14px; }
 .documents-table { min-width:880px; }
 @media(max-width:760px){ .mobile-account { display:inline-flex; } }
+
+.history-pagination { margin-top:24px; }
+.history-pagination .button { margin-top:12px; }
+.timeline-line { font-size:17px; line-height:1.5; }
+.timeline time,.timeline p { font-size:15px; line-height:1.6; }
+.timeline .quantity { font:16px var(--mono); }
