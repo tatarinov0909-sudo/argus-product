@@ -2397,7 +2397,7 @@
     return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
   }
 
-  const STATUS_LABEL = {auto:'применено автоматически', pending:'требует внимания', confirmed:'подтверждено вами', rolled_back:'откат выполнен'};
+  const STATUS_LABEL = {auto:'закрыто автоматически', pending:'требует внимания', confirmed:'принято вами', rolled_back:'отклонено вами'};
 
   function journalDayKey(iso){
     const d = new Date(iso);
@@ -2545,6 +2545,7 @@
     return (function(){
       const agentClass = AGENT_LABEL[entry.agent] || 'warehouse';
       const canResolve = entry.status === 'pending';
+      const isWb = entry.agent === 'Обмен с WB';
       return `
         <div class="j-entry ${agentClass}${isNew ? ' j-new' : ''}" data-client="" data-risk="${entry.status === 'pending' ? 'high' : 'low'}" data-order="0" data-day="${dayKey}" data-entry-id="${entry.id}">
           <input type="checkbox" class="j-check" onclick="event.stopPropagation(); updateBulk()" ${canResolve ? '' : 'style=\"visibility:hidden;\"'}>
@@ -2560,7 +2561,10 @@
             ${journalLinksHtml(entry)}
             <div class="j-meta">
               <span class="j-status ${entry.status === 'auto' ? 'auto' : entry.status === 'confirmed' ? 'applied' : entry.status === 'rolled_back' ? 'pending' : 'pending'}">${STATUS_LABEL[entry.status] || entry.status}</span>
-              ${canResolve ? `<span class="staff-action" style="display:inline-block; margin-left:8px;" onclick="resolveJournalEntry('${entry.id}', 'confirm')">Подтвердить</span><span class="staff-action revoke" style="display:inline-block; margin-left:8px;" onclick="resolveJournalEntry('${entry.id}', 'rollback')">Откатить</span>` : ''}
+              ${canResolve ? (isWb
+                ? '<a class="staff-action restore" style="display:inline-block; margin-left:8px;" href="marketplace-reconciliation.html">Открыть сверку WB</a>'
+                : `<span class="staff-action" style="display:inline-block; margin-left:8px;" onclick="resolveJournalEntry('${entry.id}', 'confirm')">Принять</span><span class="staff-action revoke" style="display:inline-block; margin-left:8px;" onclick="resolveJournalEntry('${entry.id}', 'rollback')">Отклонить</span>`)
+                : ''}
             </div>
           </div>
         </div>
@@ -2701,11 +2705,13 @@
     const pending = journalEntries.filter(e => e.status === 'pending');
     if(pending.length === 0){
       host.innerHTML = '<div class="ctx-card"><div class="ctx-empty">'
-        + 'Ничего не ждёт решения. Здесь появятся расхождения, которые агенты нашли, '
-        + 'но не стали проводить в 1С без вашего слова.</div></div>';
+        + 'Ничего не ждёт решения. Здесь появятся найденные агентами расхождения, '
+        + 'которые требуют проверки владельца склада.</div></div>';
       return;
     }
-    host.innerHTML = pending.map(e => `
+    host.innerHTML = pending.map(e => {
+      const isWb = e.agent === 'Обмен с WB';
+      return `
       <div class="ctx-card">
         <div class="ctx-entry-head">
           <span class="ctx-entry-agent">${escapeHTML(String(e.agent || 'Агент'))}</span>
@@ -2713,17 +2719,21 @@
         </div>
         <div class="ctx-entry-text">${escapeHTML(String(e.action_text || ''))}</div>
         <div class="ctx-actions">
-          <div class="ctx-btn confirm" onclick="resolveJournalEntry('${e.id}', 'confirm')">Подтвердить</div>
-          <div class="ctx-btn reject" onclick="resolveJournalEntry('${e.id}', 'rollback')">Откатить</div>
+          ${isWb
+            ? '<a class="ctx-btn confirm" href="marketplace-reconciliation.html">Открыть сверку WB</a>'
+            : `<div class="ctx-btn confirm" onclick="resolveJournalEntry('${e.id}', 'confirm')">Принять</div>
+               <div class="ctx-btn reject" onclick="resolveJournalEntry('${e.id}', 'rollback')">Отклонить</div>`}
         </div>
-        <div class="ctx-note">До подтверждения запись в 1С не изменится. Решение попадёт в журнал вместе с вашим именем.</div>
+        <div class="ctx-note">${isWb
+          ? 'Проверьте записанный отбор и фактическое движение товара в сверке. Данные 1С автоматически не изменяются.'
+          : 'Решение сохранится в журнале вместе с вашим именем. Данные 1С не изменяются.'}</div>
       </div>
-    `).join('');
+    `;}).join('');
   }
 
   async function resolveJournalEntry(id, resolution){
-    if(resolution === 'confirm' && !confirm('Подтвердить эту запись? Правка будет проведена в 1С.')) return;
-    if(resolution === 'rollback' && !confirm('Откатить эту запись? Действие будет проведено обратной компенсирующей проводкой в 1С.')) return;
+    if(resolution === 'confirm' && !confirm('Принять рекомендацию и сохранить решение в журнале?')) return;
+    if(resolution === 'rollback' && !confirm('Отклонить рекомендацию и сохранить решение в журнале?')) return;
     try{
       await apiFetch('/api/journal/' + id + '/resolve', {method:'POST', body:{resolution}});
       await loadJournal();
