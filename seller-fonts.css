@@ -1,0 +1,7 @@
+@font-face {
+  font-family: 'Golos Text';
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url('fonts/golos-text.ttf?v=20260912-ink') format('truetype');
+}

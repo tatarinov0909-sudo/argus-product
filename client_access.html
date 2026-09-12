@@ -1,17 +1,24 @@
 <!doctype html>
 <html lang="ru"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#111517">
-<title>Аргус · Кабинет продавца</title><link rel="stylesheet" href="fonts.css"><link rel="stylesheet" href="seller-cabinet.css?v=20260911-real-stock">
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script><script defer src="seller-cabinet.js?v=20260911-real-stock"></script>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#151a24">
+<title>Аргус · Кабинет продавца</title><link rel="stylesheet" href="fonts.css"><link rel="stylesheet" href="seller-fonts.css?v=20260912-ink"><link rel="stylesheet" href="seller-cabinet.css?v=20260912-ink">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script><script defer src="seller-cabinet.js?v=20260912-ink"></script>
 </head><body>
 <a class="skip-link" href="#main">К содержимому</a>
 <section id="loginScreen" class="login-screen" hidden>
- <div class="login-intro"><div class="wordmark"><span class="brand-icon" aria-hidden="true"></span>аргус<span class="brand-period">.</span></div><h1>Ваш товар.<br>Всё на виду.</h1><p>Остатки, сборка и поставки вашего магазина — в одном кабинете.</p><div class="login-caption">Кабинет продавца</div></div>
- <form id="loginForm" class="login-form"><p class="eyebrow">Добро пожаловать</p><h2>Войти в кабинет</h2><p class="muted">Используйте ключ, который выдал ваш склад.</p>
- <label for="loginName">Ваше имя</label><input id="loginName" name="name" autocomplete="name" maxlength="60" required placeholder="Как к вам обращаться">
- <label for="loginKey">Ключ доступа</label><input id="loginKey" name="key" autocomplete="off" spellcheck="false" maxlength="40" required placeholder="Ключ от склада">
- <p id="loginError" class="error-text" role="alert"></p><button class="button primary full" type="submit" id="loginSubmit">Войти</button>
- <a class="login-owner" href="login.html" target="_blank" rel="noopener">Вход для владельца склада</a><p class="small muted">После входа владельца вернитесь на эту страницу и обновите её.</p></form>
+ <header class="login-head"><div class="wordmark"><span class="brand-icon" aria-hidden="true"></span>аргус<span class="brand-period">.</span></div><a class="login-owner" href="login.html" target="_blank" rel="noopener" aria-label="Вход для владельца склада — в новой вкладке">Вход для владельца склада <span aria-hidden="true">→</span></a></header>
+ <div class="login-main">
+  <div class="login-intro"><p class="login-caption">Кабинет продавца</p><h1>Ваши товары <span>под рукой</span></h1><p class="login-subtitle">Остатки по данным 1С, заказы и документы вашего фулфилмента — в одном кабинете.</p></div>
+  <form id="loginForm" class="login-form" aria-labelledby="loginFormTitle"><h2 id="loginFormTitle">Войти в кабинет</h2><p class="form-note muted">Используйте ключ доступа, который выдал ваш склад.</p>
+   <div class="form-fields">
+    <label class="field" for="loginName"><span>Ваше имя</span><input id="loginName" name="name" autocomplete="name" maxlength="60" required placeholder="Как к вам обращаться"></label>
+    <label class="field" for="loginKey"><span>Ключ доступа</span><input id="loginKey" name="key" autocomplete="off" spellcheck="false" maxlength="40" required placeholder="Ключ от склада" aria-describedby="loginError"></label>
+    <button class="button primary" type="submit" id="loginSubmit">Войти <span aria-hidden="true">→</span></button>
+   </div>
+   <p id="loginError" class="error-text" role="alert"></p>
+   <p class="access-help"><strong>Ещё нет доступа?</strong> Запросите ключ у менеджера вашего склада.</p>
+  </form>
+ </div>
 </section>
 <div id="app" class="app" hidden>
  <aside class="sidebar"><a class="wordmark" href="#products" aria-label="Аргус — товары"><span class="brand-icon" aria-hidden="true"></span>аргус<span class="brand-period">.</span></a>
