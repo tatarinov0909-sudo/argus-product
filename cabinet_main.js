@@ -652,6 +652,47 @@
     showWhToast('Сбой в кабинете: ' + msg);
   });
 
+  function render1CStockCalculation(stock){
+    const host = document.getElementById('ocStockCalculationBody');
+    if(!host) return;
+    const calculation = stock?.stock_calculation;
+    if(stock?.stock_calculation_status === 'invalid'){
+      host.textContent = 'Сведения об условиях расчёта отклонены: модуль передал некорректный формат. Результат приёма самих остатков показан отдельно в таблице выше.';
+      return;
+    }
+    if(stock?.stock_calculation_status !== 'accepted' || !calculation || typeof calculation !== 'object'){
+      host.textContent = stock
+        ? 'Модуль ещё не передал условия расчёта остатков. Это не означает, что передача остатков завершилась ошибкой; её результат показан в таблице выше.'
+        : 'Условия расчёта появятся, когда модуль передаст их вместе с остатками.';
+      return;
+    }
+    // 1С передаёт местное время без часового пояса. Date здесь сдвинул бы его
+    // по часовому поясу браузера и превратил неподтверждённое время в точное.
+    const localTime = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(value)
+      ? value.slice(8,10)+'.'+value.slice(5,7)+'.'+value.slice(0,4)+' '+value.slice(11)
+      : 'Не передано';
+    const sourceText = value => typeof value === 'string' && value ? value : 'Не передано';
+    const count = value => Number.isSafeInteger(value) && value > 0 ? formatQty(value) : 'Не передано';
+    const fields = [
+      ['Начало расчёта', localTime(calculation.calculatedStartedAt)],
+      ['Конец расчёта', localTime(calculation.calculatedFinishedAt)],
+      ['Регистр 1С', sourceText(calculation.registerName)],
+      ['Период остатков', calculation.balanceMode === 'current_totals' ? 'Текущие итоги регистра' : 'Не передан'],
+      ['Склады', calculation.warehouseScope === 'all_in_register' ? 'Все склады выбранного регистра, без отбора отдельного склада' : 'Условие не передано'],
+      ['Отбор товаров', 'Начало кода: '+sourceText(calculation.productCodePrefix)+'; '
+        +(calculation.excludeDeleted === true ? 'помеченные на удаление исключены' : 'отбор по удалению не передан')+'; '
+        +(calculation.excludeGroups === true ? 'группы исключены' : 'отбор групп не передан')],
+      ['Количество', sourceText(calculation.quantityField)+'; '
+        +(calculation.quantityUnit === 'register_unit' ? 'в единицах регистра' : 'единица не передана')+'; '
+        +(calculation.quantityConversion === 'none' ? 'без пересчёта единиц' : 'сведения о пересчёте не переданы')],
+      ['Объём по данным модуля', count(calculation.totalRecords)+' записей; порция '+count(calculation.batchIndex)+' из '+count(calculation.batchCount)],
+      ['Идентификатор расчёта', sourceText(calculation.snapshotId)],
+    ];
+    host.innerHTML = '<p class="oc-calculation-note">Время указано по часам 1С; часовой пояс не передан.</p>'
+      +'<dl>'+fields.map(([label,value])=>'<dt>'+escapeHTML(label)+'</dt><dd>'+escapeHTML(value)+'</dd>').join('')+'</dl>'
+      +'<p class="oc-calculation-note">Это условия, сообщённые модулем для последней порции остатков. Число записей и номер порции не подтверждают, что весь обмен получен полностью.</p>';
+  }
+
   function render1CBatches(stages){
     const latest = new Map();
     for(const row of stages || []){
@@ -672,6 +713,7 @@
     const stock = latest.get('stock');
     document.getElementById('ocStockBatch').textContent = stock ? formatDate(stock.received_at) : 'Нет сведений';
     document.getElementById('ocStockBatchSub').textContent = stock ? formatQty(stock.record_count)+' строк в последней порции' : 'Ожидаем новую отправку остатков';
+    render1CStockCalculation(stock);
     return rows;
   }
 

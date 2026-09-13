@@ -147,7 +147,7 @@
     const knownNote=unknown.length?`Подтверждено ${n(sum('onHand'))} шт.; ${n(unknown.length)} артикулов уточняются`:'Весь годный товар, включая собранное';
     const compared=rows.filter(r=>r.stockKnown&&r.qtyIn1c!=null);const mismatch=compared.filter(r=>r.qtyIn1c!==r.onHand);
     $('view').innerHTML=`<section aria-label="Общее количество товара" class="metrics">
-      ${metric('По данным 1С',accounting.length?sum('qtyIn1c'):null,accounting.length?`${counted(accounting.length,'товар','товара','товаров')} · снимок ${when(accountingAt)}`:'Остатки из 1С ещё не переданы','document')}
+      ${metric('По данным 1С',accounting.length?sum('qtyIn1c'):null,accounting.length?`${counted(accounting.length,'товар','товара','товаров')} · последнее получение ${when(accountingAt)}`:'Остатки из 1С ещё не переданы','document')}
       ${metric('На складе',unknown.length?null:sum('onHand'),knownNote,'warehouse')}
       ${metric('В сборке',sum('ordered'),'Выделено под ещё не отгруженные заказы','orders')}
       ${metric('Доступно к продаже',unknown.length?null:sum('available'),unknown.length?'Рассчитаем после подтверждения остатков':'Сумма доступного по каждому товару','box','available')}</section>

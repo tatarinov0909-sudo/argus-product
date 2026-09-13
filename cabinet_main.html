@@ -554,6 +554,15 @@
   .oc-batches-table small{display:block; color:var(--muted); font-size:12px; margin-top:2px;}
   .oc-batch-results span{display:block;}
   .oc-batch-attention{color:var(--yellow);}
+  .oc-calculation{margin:0 0 20px; border:1px solid var(--line); border-radius:10px; background:var(--panel);}
+  .oc-calculation summary{padding:14px 16px; cursor:pointer; font-size:16px; font-weight:600; line-height:1.5;}
+  .oc-calculation summary:focus-visible{outline:2px solid var(--accent); outline-offset:3px; border-radius:8px;}
+  .oc-calculation-body{padding:0 16px 16px; font-size:15px; line-height:1.6; overflow-wrap:anywhere;}
+  .oc-calculation dl{display:grid; grid-template-columns:minmax(150px,210px) minmax(0,1fr); gap:8px 20px; margin:12px 0;}
+  .oc-calculation dt{color:var(--muted);}
+  .oc-calculation dd{margin:0;}
+  .oc-calculation-note{margin:0;}
+  @media(max-width:600px){.oc-calculation dl{grid-template-columns:minmax(0,1fr); gap:2px;}.oc-calculation dd{margin-bottom:10px;}}
   @media(max-width:900px){.oc-sync-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
   @media(max-width:600px){.oc-batches-table thead{display:none;}.oc-batches-table tr{display:grid; grid-template-columns:1fr 1fr; border-bottom:1px solid var(--line);}.oc-batches-table tr:last-child{border:0;}.oc-batches-table td{border:0; min-width:0; overflow-wrap:anywhere; padding:10px 12px;}.oc-batches-table td:before{content:attr(data-label); display:block; color:var(--muted); font-size:11px; margin-bottom:5px;}.oc-batches-table .oc-batch-num{text-align:left;}}
   .staff-head{display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:14px;}
@@ -2182,11 +2191,15 @@
             <div class="oc-batches-head"><h3 id="ocBatchesTitle">Что пришло из 1С</h3><p>Последняя полученная порция каждого вида данных. Один запуск отправляет несколько порций; эта таблица не подтверждает завершение полного обмена.</p></div>
             <div id="ocPushBatches"></div>
           </section>
+          <details class="oc-calculation" id="ocStockCalculation">
+            <summary>Расчёт остатков в 1С</summary>
+            <div class="oc-calculation-body" id="ocStockCalculationBody">Условия расчёта ещё не получены.</div>
+          </details>
           <div class="oc-note" id="ocLastSeen">Последняя связь с 1С: —</div>
-          <div class="oc-note">Текущая версия модуля: <b>2026-09-11 #12</b>. Она передаёт тип и дату документа, а также сведения об отправленных порциях. Связь продавца с контрагентом 1С настраивается в разделе «Сотрудники».</div>
+          <div class="oc-note">Доступен исходник модуля <b>2026-09-13 #13</b>: добавлены время и условия расчёта остатков. Установку и проверку в 1С выполняет администратор склада. Версия фактически запущенного модуля показана в таблице обмена.</div>
           <div style="display:flex; gap:10px; margin-top:16px;">
             <button class="wh-onboarding-btn" type="button" onclick="load1CStatus(true)">Обновить</button>
-            <a class="wh-onboarding-btn wh-onboarding-btn-link" href="argus-sync-1c-10.3.bsl" download>Скачать модуль #12</a>
+            <a class="wh-onboarding-btn wh-onboarding-btn-link" href="argus-sync-1c-10.3.zip" download>Исходник #13 и инструкция</a>
           </div>
         </div>
 
@@ -2220,6 +2233,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=73" defer></script>
+<script src="cabinet_main.js?v=74" defer></script>
 </body>
 </html>
