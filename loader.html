@@ -1013,8 +1013,8 @@
       pop.innerHTML = jobs + invoices.map((inv) => `
         <div class="invoice-popover-item ${currentInvoice && inv.id === currentInvoice.id ? 'active' : ''}" onclick="event.stopPropagation(); selectInvoice('${inv.id}')">
           <div>
-            <div class="invoice-popover-item-name">${inv.company_name}</div>
-            <div class="invoice-popover-item-sub">${inv.number}</div>
+            <div class="invoice-popover-item-name">${escapeHTML(inv.company_name)}</div>
+            <div class="invoice-popover-item-sub">${escapeHTML(inv.number)}</div>
           </div>
           <div class="invoice-popover-item-count">${directionLabel[inv.direction] || 'приёмка'} · ${statusLabel[inv.status] || inv.status}</div>
         </div>
@@ -2427,7 +2427,15 @@
     const shipBtn = document.getElementById('shipBtn');
     const shipNote = document.getElementById('shipDoneNote');
     shipNote.classList.toggle('show', isPicking() && currentInvoice.status === 'shipped');
-    if(isPicking() && currentInvoice.status === 'ready'){
+    // Заказ из поставки уезжает вместе с ней: «Уехала» отмечают у поставки,
+    // иначе поставка навсегда осталась бы «собирается».
+    const inSupply = Boolean(currentInvoice.supply_id);
+    if(isPicking() && inSupply && currentInvoice.status === 'ready'){
+      document.getElementById('doneSub').textContent = 'Заказ ' + currentInvoice.number
+        + ' собран. Он уедет в составе поставки ' + (currentInvoice.supply_number || '')
+        + ' — «Уехала» отмечают у поставки, когда её погрузят в машину.';
+    }
+    if(isPicking() && currentInvoice.status === 'ready' && !inSupply){
       shipBtn.style.display = '';
       shipBtn.disabled = false;
       shipBtn.textContent = 'Отгрузили — машина уехала';
@@ -2458,8 +2466,8 @@
       const label = isPicking() ? 'Отобрано' : (isReturn() ? 'Разобрано' : 'Принято');
       return `
         <div class="done-row ${hasDiff ? 'done-row-warn' : ''}">
-          <div class="done-row-name">${r.name}</div>
-          <div class="done-row-sku">${r.sku}</div>
+          <div class="done-row-name">${escapeHTML(r.name)}</div>
+          <div class="done-row-sku">${escapeHTML(r.sku)}</div>
           <div class="done-row-meta">
             <span>${label}: <span class="done-row-qty">${qtyText}</span></span>
             <span class="done-row-cell">→ ${r.cell}</span>

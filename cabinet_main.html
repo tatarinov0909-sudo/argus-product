@@ -1684,7 +1684,7 @@
         <div class="account-avatar" id="accountAvatar">В</div>
         <div class="account-info">
           <div class="account-name" id="accountName">Владелец</div>
-          <div class="account-role">Владелец склада</div>
+          <div class="account-role" id="accountRole">Владелец склада</div>
         </div>
         <svg class="account-chevron" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
@@ -2037,9 +2037,8 @@
         <div class="staff-head">
           <div>
             <div class="staff-title">Заказы с маркетплейсов</div>
-            <div class="staff-sub">Сначала — у кого накопилось. Двести заказов подряд это выгрузка базы,
-              по ней нельзя решить, чем заняться; «у Слим Тим набралось 153» — можно.
-              Выберите продавца и отправьте его заказы на сборку одной кнопкой.</div>
+            <div class="staff-sub">Новые заказы с площадок по продавцам. Выберите продавца,
+              отметьте заказы и составьте из них поставку — она уйдёт на склад.</div>
           </div>
           <div style="display:flex; gap:10px; flex-wrap:wrap;">
             <button class="wh-onboarding-btn" type="button" onclick="pullOrdersFromMp()">Забрать новые с площадок</button>
@@ -2051,8 +2050,8 @@
 
         <div class="staff-head" style="margin-top:34px;">
           <div>
-            <div class="staff-title">Собранные поставки</div>
-            <div class="staff-sub">Поставка — это решение «вот это уезжает сегодня». Пока она собирается, её можно разобрать: заказы вернутся в очередь.</div>
+            <div class="staff-title">Поставки</div>
+            <div class="staff-sub">Поставка становится собранной сама, когда грузчики соберут каждый заказ. Когда машина уедет — отметьте «Уехала». Пока по поставке ничего не собрано, её можно разобрать: заказы вернутся в очередь.</div>
           </div>
         </div>
         <div id="suppliesList"></div>
@@ -2233,6 +2232,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=74" defer></script>
+<script src="cabinet_main.js?v=75" defer></script>
 </body>
 </html>

@@ -335,7 +335,7 @@
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7" stroke="#5FAFA6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
       <div class="form-title">Добро пожаловать, <span id="workerNameOut"></span></div>
-      <div class="success-detail">Склад №1, Люберцы<br>Ключ <b id="workerKeyOut"></b> подтверждён</div>
+      <div class="success-detail"><span id="workerWhOut"></span>Ключ <b id="workerKeyOut"></b> подтверждён</div>
       <button class="btn" onclick="goToLoader()">Перейти к задачам</button>
     </div>
   </div>
@@ -427,6 +427,11 @@
       document.getElementById('workerNameOut').textContent = data.name
         + (data.role === 'manager' ? ' · менеджер' : '');
       document.getElementById('workerKeyOut').textContent = key;
+      // Название склада — от сервера. Здесь было вписано «Склад №1, Люберцы»,
+      // и каждый сотрудник видел чужой, выдуманный склад.
+      const whOut = document.getElementById('workerWhOut');
+      whOut.textContent = data.warehouseName || '';
+      if(data.warehouseName) whOut.after(document.createElement('br'));
       document.getElementById('successWorker').classList.add('show');
     } catch(e){
       errorEl.textContent = 'Не удалось подключиться к серверу. Проверьте интернет-соединение.';

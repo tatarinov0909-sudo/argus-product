@@ -65,8 +65,10 @@
       if(codeChip) codeChip.textContent = wh.warehouse_code || '—';
       renderWhStatusLine();
     } catch(e){ /* nothing to show if this fails, sidebar keeps its placeholder */ }
-    const name = authPayload.ownerName || 'Владелец';
+    // Менеджер входит по ключу со своим именем; «Владелец» у него было неправдой.
+    const name = authPayload.ownerName || authPayload.name || 'Владелец';
     document.getElementById('accountName').textContent = name;
+    document.getElementById('accountRole').textContent = IS_MANAGER ? 'Менеджер склада' : 'Владелец склада';
     document.getElementById('accountAvatar').textContent = name.trim()[0].toUpperCase();
   }
 
@@ -119,22 +121,12 @@
   initResizeHandles();
 
   function switchView(view){
-    document.getElementById('view-chat').classList.toggle('active', view==='chat');
-    document.getElementById('view-journal').classList.toggle('active', view==='journal');
-    document.getElementById('view-warehouse').classList.toggle('active', view==='warehouse');
-    document.getElementById('view-staff').classList.toggle('active', view==='staff');
-    document.getElementById('view-1c').classList.toggle('active', view==='1c');
-    document.getElementById('view-mp').classList.toggle('active', view==='mp');
-    document.getElementById('view-inv').classList.toggle('active', view==='inv');
-    document.getElementById('view-orders').classList.toggle('active', view==='orders');
-    document.getElementById('nav-chat').classList.toggle('active', view==='chat');
-    document.getElementById('nav-journal').classList.toggle('active', view==='journal');
-    document.getElementById('nav-warehouse').classList.toggle('active', view==='warehouse');
-    document.getElementById('nav-staff').classList.toggle('active', view==='staff');
-    document.getElementById('nav-1c').classList.toggle('active', view==='1c');
-    document.getElementById('nav-mp').classList.toggle('active', view==='mp');
-    document.getElementById('nav-inv').classList.toggle('active', view==='inv');
-    document.getElementById('nav-orders').classList.toggle('active', view==='orders');
+    // «?.»: у менеджера части пунктов меню нет вовсе (их убирает блок
+    // инициализации), и без проверки кабинет падал при первом же открытии.
+    for(const v of ['chat', 'journal', 'warehouse', 'staff', '1c', 'mp', 'inv', 'orders']){
+      document.getElementById('view-' + v)?.classList.toggle('active', view === v);
+      document.getElementById('nav-' + v)?.classList.toggle('active', view === v);
+    }
     if(view==='journal'){
       journalUnread = 0;
       document.getElementById('navBadge').classList.remove('show');
@@ -4072,7 +4064,7 @@
             p.incomplete > 0
               ? ` · <span class="ord-warn">${p.incomplete} не собрать</span>`
               : ''
-          }</div>
+          }${p.wbConfirmed > 0 ? ` · ещё ${p.wbConfirmed} подтверждены в кабинете WB` : ''}</div>
         </div>
         <div class="ord-meta">${p.companyId === ordersPicked ? 'открыт' : 'открыть →'}</div>
       </div>
@@ -4099,47 +4091,85 @@
       box.innerHTML = '<div class="staff-empty">Не удалось загрузить: ' + escapeHTML(e.message) + '</div>';
       return;
     }
+    ordersSelected = new Set();
+    renderPartnerOrders(companyId);
+  }
+
+  // Выбранные для поставки заказы. По умолчанию не выбрано ничего: поставку
+  // составляет менеджер, заказ за заказом, а не одна кнопка «забрать всё».
+  let ordersSelected = new Set();
+
+  function renderPartnerOrders(companyId){
+    const box = document.getElementById('ordersDetail');
+    if(!box) return;
     const partner = ordersPartners.find(p => p.companyId === companyId);
-    const ready = ordersRows.filter(o => o.ready);
-    const stuck = ordersRows.length - ready.length;
+    const fresh = ordersRows.filter(o => !o.wbConfirmed);
+    const confirmed = ordersRows.filter(o => o.wbConfirmed);
+    const ready = fresh.filter(o => o.ready);
+    const stuck = fresh.length - ready.length;
+    const n = ordersSelected.size;
+    const allOn = ready.length > 0 && ready.every(o => ordersSelected.has(o.id));
+    const row = (o, selectable) => `
+      <tr class="${selectable ? '' : 'not-ready'}">
+        <td>${selectable
+          ? `<input type="checkbox" ${ordersSelected.has(o.id) ? 'checked' : ''} onchange="toggleOrderPick('${companyId}', '${o.id}')" aria-label="Выбрать заказ">`
+          : ''}</td>
+        <td class="ord-mono">${escapeHTML(o.number)}</td>
+        <td>${escapeHTML(o.name || '—')}<div class="ord-mono">${escapeHTML(o.sku || 'не сопоставлен')}</div></td>
+        <td class="ord-mono">${escapeHTML(o.article || '—')}</td>
+        <td class="ord-mono">${escapeHTML(o.barcode || '—')}</td>
+        <td class="ord-mono" title="${escapeHTML(o.rid || '')}">${
+          o.rid ? escapeHTML(String(o.rid).slice(0, 14)) + '…' : '—'}</td>
+        <td class="num">${o.qty === null ? '—' : o.qty}</td>
+      </tr>`;
+    const head = (withToggle) => `<thead><tr>
+        <th>${withToggle ? `<input type="checkbox" ${allOn ? 'checked' : ''} ${ready.length ? '' : 'disabled'}
+          onchange="toggleAllOrders('${companyId}')" aria-label="Выбрать все готовые">` : ''}</th>
+        <th>Заказ</th><th>Товар</th><th>Артикул МП</th><th>Штрихкод</th>
+        <th>Отправление</th><th class="num">Кол-во</th>
+      </tr></thead>`;
 
     box.innerHTML = `
       <div class="ord-actions">
         <button class="wh-onboarding-btn" type="button"
-                onclick="makeSupply('${companyId}')"
-                ${ready.length === 0 ? 'disabled' : ''}>
-          Отправить на сборку — ${ready.length} ${pluralRu(ready.length, 'заказ', 'заказа', 'заказов')}
+                onclick="makeSupply('${companyId}')" ${n === 0 ? 'disabled' : ''}>
+          ${n === 0 ? 'Выберите заказы для поставки'
+            : `Составить поставку — ${n} ${pluralRu(n, 'заказ', 'заказа', 'заказов')}`}
         </button>
         ${stuck > 0 ? `<span class="ord-meta ord-warn">${stuck} ${
           pluralRu(stuck, 'заказ', 'заказа', 'заказов')} не сопоставить с номенклатурой — свяжите артикул на экране «Площадки», и они починятся</span>` : ''}
       </div>
       <div class="ord-scroll">
-        <table class="ord-table">
-          <thead><tr>
-            <th>Заказ</th><th>Товар</th><th>Артикул МП</th><th>Штрихкод</th>
-            <th>Отправление</th><th class="num">Кол-во</th>
-          </tr></thead>
-          <tbody>
-            ${ordersRows.map(o => `
-              <tr class="${o.ready ? '' : 'not-ready'}">
-                <td class="ord-mono">${escapeHTML(o.number)}</td>
-                <td>${escapeHTML(o.name || '—')}<div class="ord-mono">${escapeHTML(o.sku || 'не сопоставлен')}</div></td>
-                <td class="ord-mono">${escapeHTML(o.article || '—')}</td>
-                <td class="ord-mono">${escapeHTML(o.barcode || '—')}</td>
-                <td class="ord-mono" title="${escapeHTML(o.rid || '')}">${
-                  o.rid ? escapeHTML(String(o.rid).slice(0, 14)) + '…' : '—'}</td>
-                <td class="num">${o.qty === null ? '—' : o.qty}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
+        <table class="ord-table">${head(true)}<tbody>${fresh.map(o => row(o, o.ready)).join('')}</tbody></table>
       </div>
+      ${confirmed.length ? `
+        <div class="ord-meta" style="margin-top:18px;">
+          <b>Уже подтверждены в кабинете WB — ${confirmed.length}.</b> Их собирают по поставке WB,
+          которую сделали без Аргуса; в поставку Аргуса они не попадут, чтобы не собрать заказ дважды.
+        </div>
+        <div class="ord-scroll">
+          <table class="ord-table">${head(false)}<tbody>${confirmed.map(o => row(o, false)).join('')}</tbody></table>
+        </div>` : ''}
       <div class="ord-meta" style="margin-top:10px;">
-        Продавец: ${escapeHTML(partner ? partner.companyName : '')}. Заказы, ушедшие
-        в поставку, из этого списка исчезнут — они уже решены.
+        Продавец: ${escapeHTML(partner ? partner.companyName : '')}. Поставка уходит на склад, грузчики
+        собирают её по листу. Статус заказов в кабинете WB Аргус пока не меняет — это делается там вручную.
       </div>
     `;
   }
+
+  function toggleOrderPick(companyId, id){
+    if(ordersSelected.has(id)) ordersSelected.delete(id); else ordersSelected.add(id);
+    renderPartnerOrders(companyId);
+  }
+  window.toggleOrderPick = toggleOrderPick;
+
+  function toggleAllOrders(companyId){
+    const ready = ordersRows.filter(o => o.ready);
+    const allOn = ready.every(o => ordersSelected.has(o.id));
+    ordersSelected = new Set(allOn ? [] : ready.map(o => o.id));
+    renderPartnerOrders(companyId);
+  }
+  window.toggleAllOrders = toggleAllOrders;
 
   // Собранные поставки.
   //
@@ -4173,12 +4203,16 @@
         + '<div><b style="font-size:13px;">' + escapeHTML(s.company_name) + '</b>'
         +   '<div class="sup-meta">' + s.orders + ' '
         +   pluralRu(s.orders, 'заказ', 'заказа', 'заказов')
+        +   (s.status === 'collecting' && s.orders > 0 ? ' · собрано ' + s.picked + ' из ' + s.orders : '')
         +   (when ? ' · ' + fmtDay(when) : '')
         +   (s.destination ? ' · ' + escapeHTML(s.destination) : '') + '</div></div>'
         + '<div class="sup-state ' + s.status + '">' + escapeHTML(s.statusName || s.status) + '</div>'
         + '<div style="display:flex; gap:14px;">'
         +   '<span class="mp-act" onclick="printSupply(\'' + s.id + '\')">Документы</span>'
-        +   (s.status === 'collecting'
+        +   (s.status === 'ready'
+              ? '<span class="mp-act" onclick="shipSupply(\'' + s.id + '\')">Уехала</span>'
+              : '')
+        +   (s.status === 'collecting' && s.picked === 0
               ? '<span class="mp-act warn" onclick="disbandSupply(\'' + s.id + '\')">Разобрать</span>'
               : '')
         + '</div>'
@@ -4212,6 +4246,23 @@
     }
   }
   window.disbandSupply = disbandSupply;
+
+  // Машина ушла — поставка и все её заказы становятся отгруженными. Назад
+  // этого не отменить, поэтому спрашиваем.
+  async function shipSupply(id){
+    const s = (supplyRows || []).find(x => x.id === id);
+    if(!s || !confirm('Поставка «' + s.number + '» погружена и уехала?\n\n'
+      + s.orders + ' ' + pluralRu(s.orders, 'заказ', 'заказа', 'заказов')
+      + ' станут отгруженными. Отменить это нельзя.')) return;
+    try{
+      const r = await apiFetch('/api/supplies/' + id + '/ship', { method: 'POST' });
+      showWhToast('Поставка ' + r.number + ' уехала.');
+      await loadMpOrders();
+    } catch(e){
+      showWhToast('Не удалось отметить: ' + e.message);
+    }
+  }
+  window.shipSupply = shipSupply;
 
   // Забрать заказы со всех подключённых площадок.
   //
@@ -4265,23 +4316,23 @@
   function pullAllMarketplaces(){ return pullMarketplaces('mpProgress', loadMarketplaces); }
   window.pullAllMarketplaces = pullAllMarketplaces;
 
-  // Одна кнопка: собрать поставку из всех готовых заказов продавца.
+  // Поставка из выбранных заказов.
   //
-  // Несопоставленные не берём молча — они остаются в списке, и об этом
-  // написано рядом с кнопкой. Иначе менеджер решит, что отправил всё,
-  // а часть заказов останется висеть незамеченной.
+  // Только из того, что менеджер отметил сам: одна кнопка «всё на сборку»
+  // однажды отправила на склад девяносто три заказа разом, и шесть из них
+  // уже собирали по поставке WB.
   async function makeSupply(companyId){
-    const ready = ordersRows.filter(o => o.ready).map(o => o.id);
-    if(ready.length === 0){ showWhToast('Нет ни одного заказа, который можно собрать.'); return; }
+    const ready = ordersRows.filter(o => o.ready && ordersSelected.has(o.id)).map(o => o.id);
+    if(ready.length === 0){ showWhToast('Отметьте заказы, которые войдут в поставку.'); return; }
     const partner = ordersPartners.find(p => p.companyId === companyId);
-    if(!confirm(`Отправить на сборку ${ready.length} ${pluralRu(ready.length, 'заказ', 'заказа', 'заказов')}`
-      + ` продавца «${partner ? partner.companyName : ''}»?\n\nБудет создана поставка.`)) return;
+    if(!confirm(`Составить поставку: ${ready.length} ${pluralRu(ready.length, 'заказ', 'заказа', 'заказов')}`
+      + ` продавца «${partner ? partner.companyName : ''}»?\n\nОна уйдёт на склад, грузчики начнут сборку.`)) return;
     try{
       const supply = await apiFetch('/api/supplies', {
         method: 'POST',
         body: { invoiceIds: ready, marketplace: partner ? partner.marketplace : null },
       });
-      showWhToast('Поставка ' + supply.number + ' собрана: ' + supply.orders
+      showWhToast('Поставка ' + supply.number + ' передана на склад: ' + supply.orders
         + ' ' + pluralRu(supply.orders, 'заказ', 'заказа', 'заказов') + '.');
       await loadMpOrders();
     } catch(e){

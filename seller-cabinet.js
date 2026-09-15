@@ -24,11 +24,16 @@
   document.querySelectorAll('[data-icon]').forEach(el => el.innerHTML = icon(el.dataset.icon));
   const state = {token:localStorage.getItem('argus_token'),owner:localStorage.getItem('argus_role')==='owner',companyId:null,profile:null,catalog:{},orderPage:1,sourceMode:false,sourceDocuments:null,
     pageSize:30,textSize:'normal',view:'products',stock:null,stockSummary:null,orders:null,documents:null,fetchedAt:{},search:'',filter:'all',page:1,orderSearch:'',orderFilter:'all',docSearch:'',docFilter:'all',viewRun:0,drawerRun:0,exportRows:[]};
-  const statusNames = {open:'Принят складом',in_progress:'Собирается',ready:'Собран, ждёт машину',shipped:'Отгружен'};
   const statusClass = {open:'waiting',in_progress:'working',ready:'ready',shipped:''};
   const orderActive = r => r.status!=='shipped'&&!r.mp_closed_at;
-  const orderStatus = r => r.status==='shipped'?'Отгружен':r.mp_closed_at?(r.mp_close_reason==='canceled'?'Отменён на WB':'Завершён на WB'):(statusNames[r.status]||r.status);
-  const orderStyle = r => r.stock_conflict?'issue':r.mp_closed_at?'':statusClass[r.status];
+  // Order state as the seller can check it against the WB cabinet: new ones wait
+  // for a supply; one confirmed in the WB cabinet is handled there; once the
+  // warehouse takes an order into a supply it is in assembly.
+  const inWork = {in_progress:'Собирается',ready:'Собран, ждёт отгрузки'};
+  const orderStatus = r => r.status==='shipped'?'Отгружен'
+    :r.mp_closed_at?(r.mp_close_reason==='canceled'?'Отменён на WB':'Завершён на WB')
+    :inWork[r.status]||(r.in_supply?'В сборке':r.mp_supplier_status==='confirm'?'Подтверждён в кабинете WB':'Новый, ждёт поставки');
+  const orderStyle = r => r.stock_conflict?'issue':r.mp_closed_at?'':r.in_supply&&r.status==='open'?'working':statusClass[r.status];
   const badge = (text,style='') => `<span class="badge ${style}">${h(text)}</span>`;
   const quantity = value => value == null ? '<span class="unknown-number">—</span>' : n(value);
   const loading = '<div class="loading-inline" role="status"><span class="spinner"></span>Загружаем данные…</div>';
