@@ -324,3 +324,15 @@ dialog::backdrop{background:#090e1bcc;backdrop-filter:none}.drawer,.export-dialo
   .login-form{padding:25px 22px}.login-form h2{font-size:26px}.login-form>.form-note.muted{font-size:17px;margin:10px 0 24px}.form-fields{display:flex;flex-direction:column;gap:20px;align-items:stretch}.login-form label{font-size:16px}.login-form input{height:54px;font-size:18px}.login-form .button{width:100%;font-size:18px}.access-help{font-size:16px;margin-top:22px}
 }
 @media(max-width:380px){.metric{padding:14px 11px}.metric-value{font-size:26px}.metric-value.unknown{font-size:18px}.metric-label{font-size:14px}.login-head{padding-inline:18px}.login-main{padding-inline:16px}.login-intro h1{font-size:39px}.login-form{padding-inline:18px}}
+
+/* Seller inventory: three business quantities, without warehouse internals. */
+.metrics{grid-template-columns:repeat(3,minmax(0,1fr))}
+.inventory-table{min-width:1180px}
+.inventory-table .identifier-col{width:20%}
+.inventory-table .quantity-col{width:11%}
+.stock-freshness{margin-top:26px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:15px}
+@media(max-width:900px){
+  .metrics{grid-template-columns:minmax(0,1fr)}
+  .metric+.metric{border-left:0;border-top:1px solid var(--line)}
+}
+@media(max-width:760px){.inventory-table{min-width:1080px}}

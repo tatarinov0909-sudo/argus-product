@@ -8,7 +8,7 @@ const root=path.resolve(__dirname,'..');
     const page=await browser.newPage({viewport:{width:2048,height:1120}}),errors=[];
     page.on('pageerror',e=>errors.push(e.message));
     let failMore=true,moreCalls=0;
-    const row={sku:'history-test',name:'Товар для проверки истории',barcode:'000001',stockKnown:true,onHand:20,ordered:4,available:16,blockedOrdered:2};
+    const row={sku:'history-test',name:'Товар для проверки истории',barcode:'000001',totalKnown:true,total:20,reserved:4,available:16,blockedReserved:2,updatedAt:'2026-09-10T10:00:00Z'};
     const orders=[
       {id:'active',number:'ACTIVE',status:'open'},
       {id:'cancel',number:'CANCEL',status:'open',mp_closed_at:'2026-09-11T08:00:00Z',mp_close_reason:'canceled'},
@@ -42,14 +42,14 @@ const root=path.resolve(__dirname,'..');
     await page.locator('#historyMore').waitFor();
     assert.equal(await page.locator('.timeline li').count(),1);
     assert.ok((await page.locator('.timeline').textContent()).includes('−4 шт.'));
-    assert.ok((await page.locator('.timeline').textContent()).includes('Из ячейки: 01-04-002'));
+    assert.ok(!(await page.locator('.timeline').textContent()).includes('ячейк'));
     await page.locator('#historyMore').click();
     await page.getByText('Проверка повторной загрузки',{exact:true}).waitFor();
     assert.equal(await page.locator('.timeline li').count(),1,'failed page retains first page');
     await page.locator('#historyMore').click();
     await page.waitForFunction(()=>document.querySelectorAll('.timeline li').length===2);
     assert.equal(moreCalls,2);assert.equal(await page.locator('#historyMore').count(),0);
-    assert.ok((await page.locator('.timeline').textContent()).includes('В ячейку: 01-04-002'));
+    assert.ok(!(await page.locator('.timeline').textContent()).includes('01-04-002'));
     await page.setViewportSize({width:390,height:844});
     assert.ok(await page.locator('#drawer').evaluate(e=>e.scrollWidth<=e.clientWidth+1),'history fits mobile drawer');
     await page.keyboard.press('Escape');
@@ -64,6 +64,6 @@ const root=path.resolve(__dirname,'..');
     await page.locator('[data-order-filter="shipped"]').click();
     assert.equal(await page.locator('.orders-table tbody tr').count(),1);
     assert.deepEqual(errors,[]);
-    console.log('PASS seller history UI: pagination, retry, addresses, mobile width, canceled/fulfilled WB filters');
+    console.log('PASS seller history UI: pagination, retry, no cell addresses, mobile width, canceled/fulfilled WB filters');
   }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

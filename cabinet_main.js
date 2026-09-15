@@ -1816,7 +1816,7 @@
           <div class="wh-status-line" id="whStatusLine"></div>
           <div class="wh-search">
             <input type="search" id="whSearchInput" autocomplete="off" spellcheck="false"
-                   placeholder="Найти товар — артикул или название"
+                   placeholder="Найти товар — артикул, название или штрихкод"
                    oninput="onWhSearchInput()" onkeydown="onWhSearchKey(event)">
             <div class="wh-search-drop" id="whSearchDrop" hidden></div>
           </div>
@@ -1863,7 +1863,7 @@
 
   /* ===================== Поиск товара по карте =====================
      Ищем через уже готового Кладовщика (/api/agents/kladovshchik/find): он
-     умеет искать и по артикулу, и по названию, и сразу возвращает, в каких
+     умеет искать по артикулу, названию и штрихкоду и сразу возвращает, в каких
      ячейках товар лежит. Карта только подсвечивает — своей логики поиска
      здесь нет намеренно, иначе она разошлась бы с тем, что отвечает агент
      в чате на тот же вопрос. */
