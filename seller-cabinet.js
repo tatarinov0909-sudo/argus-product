@@ -32,7 +32,7 @@
   const inWork = {in_progress:'Собирается',ready:'Собран, ждёт отгрузки'};
   const orderStatus = r => r.status==='shipped'?'Отгружен'
     :r.mp_closed_at?(r.mp_close_reason==='canceled'?'Отменён на WB':'Завершён на WB')
-    :inWork[r.status]||(r.in_supply?'В сборке':r.mp_supplier_status==='confirm'?'Подтверждён в кабинете WB':'Новый, ждёт поставки');
+    :inWork[r.status]||(r.in_supply?'В сборке':r.mp_supplier_status==='confirm'?'Подтверждён в кабинете WB':'Заказан, ждёт поставки');
   const orderStyle = r => r.stock_conflict?'issue':r.mp_closed_at?'':r.in_supply&&r.status==='open'?'working':statusClass[r.status];
   const badge = (text,style='') => `<span class="badge ${style}">${h(text)}</span>`;
   const quantity = value => value == null ? '<span class="unknown-number">—</span>' : n(value);
