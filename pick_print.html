@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Лист грузчика</title>
+<link rel="stylesheet" href="fonts.css">
+<style>
+  /* Лист печатается на обычном чёрно-белом принтере: фон белый, краски
+     минимум. Цветом отмечена только площадка — по ней видно, чьи правила
+     приёмки у заказа, и это единственное, что стоит краски. */
+  *{box-sizing:border-box;}
+  body{margin:0;background:#eef1f4;color:#111;font:14px/1.45 'Golos Text', system-ui, sans-serif;}
+  .bar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;
+       padding:10px 16px;background:#fff;border-bottom:1px solid #d6dbe0;}
+  .bar b{font-size:14px;}
+  .grow{flex:1;}
+  .btn{border:1px solid #111;background:#111;color:#fff;border-radius:6px;padding:8px 14px;
+       font:600 13px/1 'Golos Text', system-ui, sans-serif;cursor:pointer;}
+  .btn.ghost{background:#fff;color:#111;border-color:#c3cad1;}
+  .hint{color:#5d6a74;font-size:12px;}
+  .sheet{width:210mm;min-height:297mm;margin:16px auto;padding:14mm 12mm;background:#fff;
+         box-shadow:0 1px 4px rgba(0,0,0,.15);}
+  .head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;
+        border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:10px;}
+  .title{font:700 22px/1.2 'Golos Text', system-ui, sans-serif;}
+  .sub{font-size:12px;color:#444;margin-top:3px;}
+  .totals{display:flex;gap:18px;font-size:12px;color:#222;text-align:right;}
+  .totals b{display:block;font:700 19px/1.1 ui-monospace,monospace;}
+  table{width:100%;border-collapse:collapse;}
+  th{font:600 11px/1.3 'Golos Text', system-ui, sans-serif;text-transform:uppercase;letter-spacing:.4px;
+     text-align:left;border-bottom:1px solid #111;padding:6px 6px;color:#333;}
+  td{border-bottom:1px solid #d5d9dd;padding:9px 6px;vertical-align:top;}
+  .cell{font:700 20px/1.1 ui-monospace,monospace;white-space:nowrap;}
+  .name{font-size:13px;line-height:1.35;max-width:62mm;}
+  .orders{font-size:10px;color:#555;margin-top:4px;line-height:1.5;}
+  .code{font:700 17px/1.2 ui-monospace,monospace;letter-spacing:-.3px;word-break:break-all;}
+  .code small{display:block;font:400 10px/1.4 'Golos Text', system-ui, sans-serif;color:#666;letter-spacing:0;}
+  .qty{font:700 22px/1 ui-monospace,monospace;text-align:right;white-space:nowrap;}
+  .mark{width:16mm;}
+  .box{width:11mm;height:11mm;border:1.5px solid #111;border-radius:2px;margin-left:auto;}
+  .short{font-size:11px;color:#8a1c12;font-weight:600;margin-top:4px;}
+  /* Пометка площадки — единственное цветное пятно на листе. */
+  .mp{display:inline-block;border-radius:3px;padding:2px 6px;font:700 10px/1.4 'Golos Text', system-ui, sans-serif;
+      color:#fff;margin-right:4px;vertical-align:middle;}
+  .mp.wb{background:#8b2ea8;}
+  .mp.ozon{background:#0059f7;}
+  .mp.ym{background:#fc3f1d;}
+  .mp.local{background:#fff;color:#333;border:1px solid #9aa4ad;}
+  .foot{display:flex;justify-content:space-between;font-size:10px;color:#555;margin-top:12px;
+        border-top:1px solid #d5d9dd;padding-top:6px;}
+  .empty{padding:40px;text-align:center;color:#555;}
+  @media print{
+    body{background:#fff;}
+    .bar{display:none;}
+    .sheet{width:auto;min-height:0;margin:0;padding:0;box-shadow:none;}
+    tr{break-inside:avoid;}
+    /* Цвет пометки печатаем как есть, остальное и так чёрно-белое. */
+    .mp{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  }
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <b>Лист грузчика</b>
+  <span class="hint" id="status">Загружаем…</span>
+  <span class="grow"></span>
+  <button class="btn" type="button" onclick="window.print()">Печать</button>
+  <button class="btn ghost" type="button" onclick="window.close()">Закрыть</button>
+</div>
+
+<div id="sheet"></div>
+
+<script>
+(function(){
+  'use strict';
+  const API_BASE = 'https://api.argus-ai.online';
+  const TOKEN = localStorage.getItem('argus_token');
+  const params = new URLSearchParams(location.search);
+
+  const ESCAPE_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ESCAPE_MAP[c]);
+  const plural = (n, one, few, many) => {
+    const m10 = n % 10; const m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
+    return many;
+  };
+  const MP_TITLE = { wb: 'WB', ozon: 'Ozon', ym: 'Я.Маркет', '1c': 'Склад' };
+  const MP_CLASS = { wb: 'wb', ozon: 'ozon', ym: 'ym', '1c': 'local' };
+  const badge = (code) => '<span class="mp ' + (MP_CLASS[code] || 'local') + '">'
+    + esc(MP_TITLE[code] || String(code).toUpperCase()) + '</span>';
+
+  function fail(text){
+    document.getElementById('status').textContent = '';
+    document.getElementById('sheet').innerHTML = '<div class="sheet"><div class="empty">' + esc(text) + '</div></div>';
+  }
+
+  async function load(){
+    if(!TOKEN){ fail('Нет входа. Откройте кабинет и войдите заново.'); return; }
+    const ids = params.get('invoiceIds');
+    const url = API_BASE + '/api/shipping/pick-list' + (ids ? '?invoiceIds=' + encodeURIComponent(ids) : '');
+    let data;
+    try{
+      const res = await fetch(url, { headers: { Authorization: 'Bearer ' + TOKEN } });
+      data = await res.json();
+      if(!res.ok) throw new Error(data && data.error ? data.error : 'Не удалось получить лист');
+    } catch(e){ fail(e.message); return; }
+    render(data);
+  }
+
+  function render(data){
+    const lines = data.lines || [];
+    document.getElementById('status').textContent = data.orders.length + ' '
+      + plural(data.orders.length, 'заказ', 'заказа', 'заказов') + ' · ' + data.totalUnits + ' шт.';
+    if(lines.length === 0){ fail('Собирать сейчас нечего.'); return; }
+
+    const companies = [...new Set(data.orders.map((o) => o.company))];
+    const mps = [...new Set(data.orders.map((o) => o.marketplace || '1c'))];
+    const rows = lines.map((l) => {
+      const cells = l.cells.length
+        ? l.cells.map((c) => esc(c.label) + (l.cells.length > 1 ? ' <small>' + c.take + '</small>' : '')).join('<br>')
+        : '<span class="short">нет в ячейках</span>';
+      const orders = l.perOrder.map((o) => esc(o.invoiceNumber) + (o.qty > 1 ? '×' + o.qty : '')).join(' · ');
+      const lineMps = (l.marketplaces || []).map(badge).join('');
+      return '<tr>'
+        + '<td class="cell">' + cells + '</td>'
+        + '<td class="name">' + lineMps + esc(l.name)
+        +   '<div class="orders">' + orders + '</div>'
+        +   (l.shortfall > 0 ? '<div class="short">не хватает ' + l.shortfall + '</div>' : '')
+        + '</td>'
+        + '<td class="code">' + esc(l.article || l.sku) + '<small>артикул</small></td>'
+        + '<td class="code">' + esc(l.barcode || '—') + '<small>штрихкод</small></td>'
+        + '<td class="qty">' + l.needQty + '</td>'
+        + '<td class="mark"><div class="box"></div></td>'
+        + '</tr>';
+    }).join('');
+
+    document.getElementById('sheet').innerHTML = '<div class="sheet">'
+      + '<div class="head">'
+      +   '<div><div class="title">Лист грузчика</div>'
+      +     '<div class="sub">' + mps.map(badge).join('') + esc(companies.join(', ')) + '</div></div>'
+      +   '<div class="totals">'
+      +     '<div><b>' + data.orders.length + '</b>заказов</div>'
+      +     '<div><b>' + data.totalUnits + '</b>штук</div>'
+      +     '<div><b>' + data.cellsToVisit + '</b>ячеек</div>'
+      +   '</div>'
+      + '</div>'
+      + '<table><thead><tr>'
+      +   '<th>Ячейка</th><th>Товар</th><th>Артикул</th><th>Штрихкод</th>'
+      +   '<th style="text-align:right">Взять</th><th></th>'
+      + '</tr></thead><tbody>' + rows + '</tbody></table>'
+      + '<div class="foot"><div>Отмечайте галочкой то, что сняли с полки.</div>'
+      +   '<div>Аргус · ' + new Date().toLocaleString('ru-RU') + '</div></div>'
+      + '</div>';
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>

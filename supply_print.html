@@ -233,6 +233,26 @@
   }
 </style>
 </head>
+<style>
+  .picker{background:#fff;border:1px solid #d6dbe0;border-radius:8px;margin:12px 16px;padding:12px 14px;}
+  .picker-head{display:flex;align-items:center;gap:10px;margin-bottom:10px;font-size:13px;}
+  .picker-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:6px 18px;}
+  .picker-list label{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.4;}
+  .picker-list input{margin-top:3px;}
+  .picker-list .sku{color:#6b7680;font-family:ui-monospace,monospace;font-size:12px;}
+  /* Этикетки WB: чёрным по белому, экономно к краске. */
+  .stickers{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
+  .sticker{border:1px solid #111;border-radius:4px;padding:10px 12px;break-inside:avoid;}
+  .sticker-top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
+  .sticker-part{font:700 30px/1.1 ui-monospace,monospace;letter-spacing:-1px;}
+  .sticker-order{font-size:12px;color:#333;}
+  .sticker-code{font:600 15px/1.4 ui-monospace,monospace;margin-top:6px;word-break:break-all;}
+  .sticker img{display:block;max-width:100%;margin-top:8px;}
+  .supply-qr{display:flex;gap:18px;align-items:center;border:2px solid #111;border-radius:6px;padding:12px 16px;margin-bottom:14px;}
+  .supply-qr img{width:150px;height:150px;object-fit:contain;}
+  .supply-qr b{font:700 20px/1.3 ui-monospace,monospace;}
+  @media print{.picker{display:none;}}
+</style>
 <body>
 
 <div class="bar">
@@ -242,10 +262,26 @@
   <button class="btn ghost" type="button" id="modeDense" onclick="setMode('dense')">Компактный</button>
   <button class="btn ghost" type="button" id="modePhoto" onclick="setMode('photo')">С фото</button>
   <span style="width:12px;"></span>
+  <button class="btn ghost" type="button" onclick="togglePicker()">Товары для печати</button>
+  <span style="width:12px;"></span>
   <button class="btn" type="button" onclick="printOnly('pick')">Печать листа комплектации</button>
   <button class="btn ghost" type="button" onclick="printOnly('pack')">Печать упаковочного</button>
-  <button class="btn ghost" type="button" onclick="printOnly(null)">Печать обоих</button>
+  <button class="btn ghost" type="button" onclick="printOnly('stickers')">Печать этикеток WB</button>
+  <button class="btn ghost" type="button" onclick="printOnly(null)">Печать всего</button>
   <button class="btn ghost" type="button" onclick="window.close()">Закрыть</button>
+</div>
+
+<!-- Выбор товаров для печати. Бывает, что часть товаров собирают отдельно
+     (маркированные «Честным ЗНАКом» и прочие особые), и лист на них нужен
+     свой. По умолчанию отмечено всё. -->
+<div class="picker" id="picker" hidden>
+  <div class="picker-head">
+    <b>Печатать только эти товары</b>
+    <span class="grow"></span>
+    <button class="btn ghost" type="button" onclick="selectAllProducts(true)">Отметить все</button>
+    <button class="btn ghost" type="button" onclick="selectAllProducts(false)">Снять все</button>
+  </div>
+  <div class="picker-list" id="pickerList"></div>
 </div>
 
 <div id="docs"></div>
@@ -264,6 +300,9 @@
   // с категорией «Контент» — включится он.
   let MODE = localStorage.getItem('argus_pick_mode') === 'photo' ? 'photo' : 'dense';
   let LAST = null;
+  // Какие товары печатать. Пусто — значит все: отметки живут только на этой
+  // странице и на состав поставки не влияют.
+  let SELECTED = null;
 
   // Экранирование для разметки — то же правило, что в кабинетах: подменяем
   // и кавычки, потому что значения попадают и в атрибуты тоже.
@@ -332,13 +371,91 @@
 
   function render(data){
     const s = data.supply;
-    const t = data.totals;
     document.title = 'Поставка ' + s.number + ' — документы';
     document.getElementById('barStatus').textContent =
-      s.number + ' · ' + s.companyName + ' · ' + s.statusName;
-    document.getElementById('docs').innerHTML = pickingSheet(s, t, data.picking)
-      + packingSheet(s, t, data.packing);
+      s.number + ' · ' + s.companyName + ' · ' + s.statusName
+      + (s.mpSupplyId ? ' · WB ' + s.mpSupplyId : '');
+    if(SELECTED === null) SELECTED = new Set(data.picking.map((r) => r.sku));
+
+    const picking = data.picking.filter((r) => SELECTED.has(r.sku));
+    const packing = data.packing.filter((r) => SELECTED.has(r.sku));
+    const orders = new Set(packing.map((r) => r.orderNumber));
+    const stickers = (data.stickers || []).filter((x) => orders.has(x.orderNumber));
+    // Итоги считаем по тому, что печатается: иначе лист на часть товаров
+    // подпишется чужой суммой.
+    const t = {
+      orders: orders.size,
+      units: packing.reduce((sum, r) => sum + Number(r.qty || 0), 0),
+      uniqueSkus: picking.length,
+    };
+
+    document.getElementById('docs').innerHTML = pickingSheet(s, t, picking)
+      + packingSheet(s, t, packing)
+      + stickersSheet(s, t, stickers);
+    renderPicker(data.picking);
     paintModeButtons();
+  }
+
+  // ---------- Выбор товаров ----------
+  function renderPicker(rows){
+    const host = document.getElementById('pickerList');
+    if(!host) return;
+    host.innerHTML = rows.map((r) => '<label><input type="checkbox" data-sku="' + esc(r.sku) + '"'
+      + (SELECTED.has(r.sku) ? ' checked' : '') + ' onchange="toggleProduct(this)">'
+      + '<span>' + esc(r.name) + ' · ' + r.qty + ' шт.'
+      + '<br><span class="sku">' + esc(r.article || r.sku) + '</span></span></label>').join('');
+  }
+
+  function toggleProduct(input){
+    const sku = input.dataset.sku;
+    if(input.checked) SELECTED.add(sku); else SELECTED.delete(sku);
+    if(LAST) render(LAST);
+  }
+  window.toggleProduct = toggleProduct;
+
+  function selectAllProducts(all){
+    SELECTED = new Set(all ? LAST.picking.map((r) => r.sku) : []);
+    render(LAST);
+  }
+  window.selectAllProducts = selectAllProducts;
+
+  function togglePicker(){
+    const el = document.getElementById('picker');
+    el.hidden = !el.hidden;
+  }
+  window.togglePicker = togglePicker;
+
+  // ---------- Этикетки площадки ----------
+  //
+  // Без них посылку не примут: этикетка — это то, по чему WB узнаёт заказ.
+  // QR поставки показывают на воротах. И то и другое приходит от площадки
+  // при передаче поставки, здесь мы их только печатаем.
+  function stickersSheet(s, t, rows){
+    if(!s.mpSupplyId && rows.length === 0) return '';
+    const qr = s.mpBarcodeFile
+      ? '<img src="data:image/svg+xml;base64,' + esc(s.mpBarcodeFile) + '" alt="">'
+      : '';
+    const supplyBlock = s.mpSupplyId
+      ? '<div class="supply-qr">' + qr
+        + '<div><div>Поставка на площадке</div><b>' + esc(s.mpSupplyId) + '</b>'
+        + (s.mpBarcode ? '<div class="sticker-code">' + esc(s.mpBarcode) + '</div>' : '')
+        + '<div class="sticker-order">' + (s.mpDeliveredAt ? 'передана в доставку' : 'на сборке')
+        + '</div></div></div>'
+      : '';
+    const list = rows.length
+      ? '<div class="stickers">' + rows.map((x) => '<div class="sticker">'
+          + '<div class="sticker-top"><span class="sticker-part">' + esc(x.partA || '') + '</span>'
+          + '<span class="sticker-part">' + esc(x.partB || '') + '</span></div>'
+          + '<div class="sticker-order">' + esc(x.orderNumber) + '</div>'
+          + (x.barcode ? '<div class="sticker-code">' + esc(x.barcode) + '</div>' : '')
+          + (x.file ? '<img src="data:image/svg+xml;base64,' + esc(x.file) + '" alt="">' : '')
+          + '</div>').join('') + '</div>'
+      : '<div class="doc-sub">Этикетки ещё не получены от площадки.</div>';
+    return '<div class="sheet" data-doc="stickers">'
+      + head(s, 'Этикетки площадки', rows.length + ' ' + plural(rows.length, 'этикетка', 'этикетки', 'этикеток'))
+      + supplyBlock + list
+      + foot(s, 'Наклеить на посылки до отгрузки')
+      + '</div>';
   }
 
   function head(s, title, sub){

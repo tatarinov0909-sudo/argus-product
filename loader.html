@@ -308,6 +308,13 @@
   .job-back:active{color:var(--accent);}
   .pick-line{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:16px;}
   .pick-line-name{font-size:15px; font-weight:700;}
+  .job-head-row{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;}
+  .job-print{margin-left:auto; border:1px solid var(--line); border-radius:8px; padding:8px 14px;
+    font-size:13px; color:var(--text); cursor:pointer; white-space:nowrap;}
+  .job-print:active{background:var(--hover);}
+  .pick-line-codes{display:flex;gap:14px;flex-wrap:wrap;margin:6px 0 2px;}
+  .pick-code{font:700 17px/1.2 ui-monospace, monospace; letter-spacing:-0.3px; color:var(--text);}
+  .pick-code i{display:block;font:400 10px/1.4 var(--sans);color:var(--muted);letter-spacing:0.4px;text-transform:uppercase;font-style:normal;}
   .pick-line-sku{font-family:var(--mono); font-size:12px; color:var(--muted); margin-top:2px;}
   .pick-line-need{margin-top:10px; font-size:13px; color:var(--muted);}
   .pick-line-need b{color:var(--accent); font-family:var(--mono); font-size:16px;}
@@ -801,9 +808,15 @@
          записывают потом по каждому заказу как обычно — здесь именно план,
          чтобы работник прошёл склад один раз, а не по разу на заказ. -->
     <div class="job-screen" id="pickListScreen">
-      <div class="job-head">
-        <div class="job-title">Лист грузчика</div>
-        <div class="job-sub" id="pickListSub">Считаю…</div>
+      <div class="job-head job-head-row">
+        <div>
+          <div class="job-title">Лист грузчика</div>
+          <div class="job-sub" id="pickListSub">Считаю…</div>
+        </div>
+        <!-- Бумажная версия того же листа: на складе с телефоном в руках
+             неудобно, а лист можно повесить на тележку. -->
+        <div class="job-print" id="pickListPrint" style="display:none;"
+             onclick="window.open('pick_print.html', '_blank')">Напечатать лист</div>
       </div>
       <div class="job-body">
         <div class="job-back" onclick="closeJob()">← К накладным</div>
@@ -2216,6 +2229,8 @@
     sub.textContent = list.orders.length + ' ' + pluralRu(list.orders.length, 'заказ', 'заказа', 'заказов')
       + ' · ' + list.totalUnits + ' шт · ' + list.cellsToVisit + ' '
       + pluralRu(list.cellsToVisit, 'ячейка', 'ячейки', 'ячеек');
+    const printBtn = document.getElementById('pickListPrint');
+    if(printBtn) printBtn.style.display = '';
 
     // Строки держим целиком: экран сборки набора берёт из них состав и
     // продавца, чтобы не тащить всё это через атрибуты в разметке.
@@ -2256,7 +2271,10 @@
       }
       return '<div class="pick-line">'
         + '<div class="pick-line-name">' + escapeHTML(l.name) + '</div>'
-        + '<div class="pick-line-sku">' + escapeHTML(l.sku) + '</div>'
+        + '<div class="pick-line-codes">'
+        +   '<span class="pick-code"><i>артикул</i>' + escapeHTML(l.article || l.sku) + '</span>'
+        +   '<span class="pick-code"><i>штрихкод</i>' + escapeHTML(l.barcode || '—') + '</span>'
+        + '</div>'
         + '<div class="pick-line-need">Собрать <b>' + l.needQty + '</b> шт</div>'
         + '<div class="pick-cells">' + cells + '</div>'
         + short

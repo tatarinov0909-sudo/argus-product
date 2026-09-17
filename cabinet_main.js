@@ -3527,6 +3527,9 @@
       const acts = cred
         ? '<span class="mp-act" onclick="syncMarketplace(\'' + c.id + '\')">Забрать заказы</span>'
           + '<span class="mp-act" onclick="checkMarketplace(\'' + c.id + '\')">Проверить связь</span>'
+          + '<span class="mp-act" onclick="toggleMpWrite(\'' + c.id + '\', \'' + cred.marketplace + '\', '
+          + (cred.writeEnabled ? 'false' : 'true') + ')">'
+          + (cred.writeEnabled ? 'Запретить менять статусы' : 'Разрешить менять статусы') + '</span>'
           + '<span class="mp-act warn" onclick="disconnectMarketplace(\'' + c.id + '\', \''
           + cred.marketplace + '\')">Отключить</span>'
         : '<span class="mp-act" onclick="connectMpFor(\'' + c.id + '\')">Подключить площадку</span>';
@@ -3537,6 +3540,12 @@
         +     st.word + '</div></div>'
         +   (st.chip ? '<div class="mp-chip ' + st.chipCss + '">' + st.chip + '</div>' : '')
         + '</div>'
+        + (cred
+            ? '<div class="mp-card-sub">' + (cred.writeEnabled
+                ? 'Аргус сам создаёт поставку на площадке и меняет статусы заказов.'
+                : 'Аргус только читает заказы. Статусы на площадке меняются вручную в её кабинете.')
+              + '</div>'
+            : '')
         + (cred
             ? '<div class="mp-facts">'
               + '<div class="mp-fact"><b class="' + (orders > 0 ? 'hot' : 'zero') + '">' + orders
@@ -3581,6 +3590,33 @@
     if(input) input.focus();
   }
   window.connectMpFor = connectMpFor;
+
+  // Разрешение Аргусу менять статусы в кабинете продавца.
+  //
+  // Это согласие продавца, а не техническая галочка: без него поставку на
+  // площадке придётся делать руками, с ним Аргус создаёт её сам и подтверждает
+  // заказы. Поэтому спрашиваем прямо и пишем, что именно начнёт происходить.
+  async function toggleMpWrite(companyId, marketplace, enable){
+    const company = companies.find((c) => c.id === companyId);
+    const name = company ? company.name : 'продавца';
+    const question = enable
+      ? 'Разрешить Аргусу менять статусы заказов «' + name + '» на площадке?\n\n'
+        + 'При отправке поставки Аргус создаст поставку на площадке, переведёт заказы'
+        + ' в «на сборке» и получит этикетки. При отгрузке — передаст поставку в доставку.\n\n'
+        + 'Убедитесь, что продавец на это согласен.'
+      : 'Запретить Аргусу менять статусы «' + name + '» на площадке?\n\n'
+        + 'Поставки на площадке снова придётся создавать вручную в её кабинете.';
+    if(!confirm(question)) return;
+    try{
+      await apiFetch('/api/marketplaces/' + companyId + '/' + marketplace + '/write',
+        { method: 'PATCH', body: { enabled: enable } });
+      showWhToast(enable ? 'Аргус будет менять статусы на площадке.' : 'Аргус больше не меняет статусы на площадке.');
+      await loadMarketplaces();
+    } catch(e){
+      showWhToast('Не удалось изменить: ' + e.message);
+    }
+  }
+  window.toggleMpWrite = toggleMpWrite;
 
   function renderMarketplaces(){
     const dot = document.getElementById('mpStatusDot');
@@ -4204,6 +4240,10 @@
         +   '<div class="sup-meta">' + s.orders + ' '
         +   pluralRu(s.orders, 'заказ', 'заказа', 'заказов')
         +   (s.status === 'collecting' && s.orders > 0 ? ' · собрано ' + s.picked + ' из ' + s.orders : '')
+        +   (s.mp_supply_id
+              ? ' · WB ' + escapeHTML(s.mp_supply_id)
+                + (s.mp_delivered_at ? ', в доставке' : ', на сборке')
+              : '')
         +   (when ? ' · ' + fmtDay(when) : '')
         +   (s.destination ? ' · ' + escapeHTML(s.destination) : '') + '</div></div>'
         + '<div class="sup-state ' + s.status + '">' + escapeHTML(s.statusName || s.status) + '</div>'
@@ -4256,7 +4296,10 @@
       + ' станут отгруженными. Отменить это нельзя.')) return;
     try{
       const r = await apiFetch('/api/supplies/' + id + '/ship', { method: 'POST' });
-      showWhToast('Поставка ' + r.number + ' уехала.');
+      const mp = r.marketplace || {};
+      showWhToast('Поставка ' + r.number + ' уехала.'
+        + (mp.delivered ? ' На WB передана в доставку.' : '')
+        + (mp.error ? ' На WB передать не удалось: ' + mp.error : ''));
       await loadMpOrders();
     } catch(e){
       showWhToast('Не удалось отметить: ' + e.message);
@@ -4332,8 +4375,19 @@
         method: 'POST',
         body: { invoiceIds: ready, marketplace: partner ? partner.marketplace : null },
       });
+      const mp = supply.marketplace;
+      let extra = '';
+      if(mp && mp.mpSupplyId){
+        extra = ' На WB создана поставка ' + mp.mpSupplyId + ': '
+          + mp.confirmed.length + ' на сборке'
+          + (mp.rejected && mp.rejected.length ? ', не принято ' + mp.rejected.length : '') + '.';
+      } else if(mp && mp.skipped === 'write_disabled'){
+        extra = ' Статусы на WB не меняются — разрешите это на экране «Площадки».';
+      } else if(mp && mp.error){
+        extra = ' WB не ответил: ' + mp.error;
+      }
       showWhToast('Поставка ' + supply.number + ' передана на склад: ' + supply.orders
-        + ' ' + pluralRu(supply.orders, 'заказ', 'заказа', 'заказов') + '.');
+        + ' ' + pluralRu(supply.orders, 'заказ', 'заказа', 'заказов') + '.' + extra);
       await loadMpOrders();
     } catch(e){
       // Отказ сервера показываем целиком: в нём назван номер заказа,
