@@ -120,7 +120,58 @@
   }
   initResizeHandles();
 
+  // Какие экраны живут внутри другого: {ключ вида: [вид-хозяин, номер вкладки]}.
+  const INNER_PANES = { inv: ['warehouse', 1], mp: ['staff', 1] };
+
+  // Переносит содержимое одного экрана внутрь другого и делает две вкладки.
+  // Разметку не трогаем: переносим узлы на старте, чтобы обработчики, id и
+  // всё, что на них завязано, остались прежними.
+  function mergePanes(hostId, extraId, titles){
+    const host = document.getElementById('view-' + hostId);
+    const extra = document.getElementById('view-' + extraId);
+    if(!host || !extra) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'pane-wrap';
+    const tabs = document.createElement('div');
+    tabs.className = 'pane-tabs';
+    const bodies = [document.createElement('div'), document.createElement('div')];
+    bodies.forEach(b => { b.className = 'pane-body'; });
+    while(host.firstChild) bodies[0].appendChild(host.firstChild);
+    while(extra.firstChild) bodies[1].appendChild(extra.firstChild);
+    extra.remove();
+    bodies[1].hidden = true;
+    titles.forEach((title, i) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'pane-tab' + (i === 0 ? ' active' : '');
+      btn.textContent = title;
+      btn.onclick = () => showPane(hostId, i);
+      tabs.appendChild(btn);
+    });
+    wrap.appendChild(tabs);
+    bodies.forEach(b => wrap.appendChild(b));
+    host.appendChild(wrap);
+    host.dataset.panes = titles.length;
+  }
+
+  function showPane(hostId, index){
+    const host = document.getElementById('view-' + hostId);
+    if(!host || !host.dataset.panes) return;
+    host.querySelectorAll(':scope > .pane-wrap > .pane-body').forEach((b, i) => { b.hidden = i !== index; });
+    host.querySelectorAll(':scope > .pane-wrap > .pane-tabs > .pane-tab').forEach((t, i) => {
+      t.classList.toggle('active', i === index);
+    });
+  }
+  window.showPane = showPane;
+
   function switchView(view){
+    // Экран может жить внутри другого: открываем хозяина и нужную вкладку.
+    const inner = INNER_PANES[view];
+    if(inner && document.getElementById('view-' + inner[0])?.dataset.panes){
+      switchView(inner[0]);
+      showPane(inner[0], inner[1]);
+      return;
+    }
     // «?.»: у менеджера части пунктов меню нет вовсе (их убирает блок
     // инициализации), и без проверки кабинет падал при первом же открытии.
     for(const v of ['chat', 'journal', 'warehouse', 'staff', '1c', 'mp', 'inv', 'orders']){
@@ -4134,13 +4185,35 @@
   // Выбранные для поставки заказы. По умолчанию не выбрано ничего: поставку
   // составляет менеджер, заказ за заказом, а не одна кнопка «забрать всё».
   let ordersSelected = new Set();
+  // Поиск и порядок в списке заказов продавца. Заказов бывает полторы сотни,
+  // и собирают их не подряд, а по товару: сперва то, что лежит рядом.
+  let ordersSearch = '';
+  let ordersSort = 'product';
+
+  function sortOrders(rows){
+    const by = {
+      product: (a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ru')
+        || String(a.number).localeCompare(String(b.number), 'ru'),
+      number: (a, b) => String(a.number).localeCompare(String(b.number), 'ru'),
+      date: (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0),
+    };
+    return [...rows].sort(by[ordersSort] || by.product);
+  }
+
+  function matchesOrderSearch(o){
+    const q = ordersSearch.trim().toLowerCase();
+    if(!q) return true;
+    return [o.number, o.name, o.sku, o.article, o.barcode, o.rid]
+      .some(v => String(v || '').toLowerCase().includes(q));
+  }
 
   function renderPartnerOrders(companyId){
     const box = document.getElementById('ordersDetail');
     if(!box) return;
     const partner = ordersPartners.find(p => p.companyId === companyId);
-    const fresh = ordersRows.filter(o => !o.wbConfirmed);
-    const confirmed = ordersRows.filter(o => o.wbConfirmed);
+    const shown = ordersRows.filter(matchesOrderSearch);
+    const fresh = sortOrders(shown.filter(o => !o.wbConfirmed));
+    const confirmed = sortOrders(shown.filter(o => o.wbConfirmed));
     const ready = fresh.filter(o => o.ready);
     const stuck = fresh.length - ready.length;
     const n = ordersSelected.size;
@@ -4174,6 +4247,15 @@
         </button>
         ${stuck > 0 ? `<span class="ord-meta ord-warn">${stuck} ${
           pluralRu(stuck, 'заказ', 'заказа', 'заказов')} не сопоставить с номенклатурой — свяжите артикул на экране «Площадки», и они починятся</span>` : ''}
+        <span class="ord-tools">
+          <input class="ord-search" type="search" placeholder="Поиск: товар, артикул, номер"
+                 value="${escapeHTML(ordersSearch)}" oninput="setOrdersSearch('${companyId}', this.value)">
+          <select class="ord-sort" onchange="setOrdersSort('${companyId}', this.value)">
+            <option value="product"${ordersSort === 'product' ? ' selected' : ''}>По товару</option>
+            <option value="number"${ordersSort === 'number' ? ' selected' : ''}>По номеру заказа</option>
+            <option value="date"${ordersSort === 'date' ? ' selected' : ''}>По дате</option>
+          </select>
+        </span>
       </div>
       <div class="ord-scroll">
         <table class="ord-table">${head(true)}<tbody>${fresh.map(o => row(o, o.ready)).join('')}</tbody></table>
@@ -4192,6 +4274,20 @@
       </div>
     `;
   }
+
+  function setOrdersSearch(companyId, value){
+    ordersSearch = value;
+    renderPartnerOrders(companyId);
+    const box = document.querySelector('.ord-search');
+    if(box){ box.focus(); box.setSelectionRange(box.value.length, box.value.length); }
+  }
+  window.setOrdersSearch = setOrdersSearch;
+
+  function setOrdersSort(companyId, value){
+    ordersSort = value;
+    renderPartnerOrders(companyId);
+  }
+  window.setOrdersSort = setOrdersSort;
 
   function toggleOrderPick(companyId, id){
     if(ordersSelected.has(id)) ordersSelected.delete(id); else ordersSelected.add(id);
@@ -4216,6 +4312,16 @@
   // соврать про склад.
   let supplyRows = [];
 
+  // Фильтр списка поставок: по клиенту, по точке доставки и по состоянию.
+  // Поставок за неделю набирается столько, что глазами уже не находишь.
+  let supplyFilter = { company: '', destination: '', status: '' };
+
+  function setSupplyFilter(field, value){
+    supplyFilter[field] = value;
+    renderSupplies();
+  }
+  window.setSupplyFilter = setSupplyFilter;
+
   async function loadSupplies(){
     const box = document.getElementById('suppliesList');
     if(!box) return;
@@ -4228,11 +4334,47 @@
       return;
     }
     supplyRows = rows;
-    if(rows.length === 0){
+    renderSupplies();
+  }
+
+  function renderSupplies(){
+    const box = document.getElementById('suppliesList');
+    if(!box) return;
+    const all = supplyRows || [];
+    if(all.length === 0){
       box.innerHTML = '<div class="staff-empty">Поставок пока нет.</div>';
       return;
     }
-    box.innerHTML = rows.map(s => {
+    const uniq = (list) => [...new Set(list.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
+    const rows = all.filter(s =>
+      (!supplyFilter.company || s.company_name === supplyFilter.company)
+      && (!supplyFilter.destination || (s.destination || '') === supplyFilter.destination)
+      && (!supplyFilter.status || s.status === supplyFilter.status));
+    const option = (value, current, label) =>
+      '<option value="' + escapeHTML(value) + '"' + (value === current ? ' selected' : '') + '>'
+      + escapeHTML(label) + '</option>';
+    const filters = '<div class="sup-filters">'
+      + '<select onchange="setSupplyFilter(\'company\', this.value)">'
+      +   option('', supplyFilter.company, 'Все клиенты')
+      +   uniq(all.map(s => s.company_name)).map(v => option(v, supplyFilter.company, v)).join('')
+      + '</select>'
+      + '<select onchange="setSupplyFilter(\'destination\', this.value)">'
+      +   option('', supplyFilter.destination, 'Любая точка доставки')
+      +   uniq(all.map(s => s.destination)).map(v => option(v, supplyFilter.destination, v)).join('')
+      + '</select>'
+      + '<select onchange="setSupplyFilter(\'status\', this.value)">'
+      +   option('', supplyFilter.status, 'Все состояния')
+      +   option('collecting', supplyFilter.status, 'Собираются')
+      +   option('ready', supplyFilter.status, 'Собраны')
+      +   option('shipped', supplyFilter.status, 'Уехали')
+      + '</select>'
+      + '<span class="ord-meta">' + rows.length + ' из ' + all.length + '</span>'
+      + '</div>';
+    if(rows.length === 0){
+      box.innerHTML = filters + '<div class="staff-empty">По этому отбору поставок нет.</div>';
+      return;
+    }
+    box.innerHTML = filters + rows.map(s => {
       const when = s.shipped_at || s.ready_at || s.created_at;
       return '<div class="sup-row">'
         + '<div class="sup-num">' + escapeHTML(s.number) + '</div>'
@@ -4260,6 +4402,7 @@
     }).join('');
   }
   window.loadSupplies = loadSupplies;
+  window.renderSupplies = renderSupplies;
 
   // Лист комплектации и упаковочный — отдельной страницей.
   //
@@ -4423,6 +4566,16 @@
       if(el.textContent.trim() === 'Тариф') el.remove();
     });
   }
+
+  // Склад и пересчёт — одно место работы; клиенты и их площадки — одно
+  // хозяйство. Вместо девяти боковых пунктов остаётся семь, а внутри
+  // каждого пара вкладок.
+  mergePanes('warehouse', 'inv', ['Карта склада', 'Инвентаризация']);
+  mergePanes('staff', 'mp', ['Клиенты и сотрудники', 'Площадки']);
+  ['nav-inv', 'nav-mp'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.remove();
+  });
 
   // Менеджер начинает с заказов — это его работа. Владелец с чата.
   switchView(IS_MANAGER ? 'orders' : 'chat');

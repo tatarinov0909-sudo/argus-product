@@ -312,6 +312,10 @@
   .job-print{margin-left:auto; border:1px solid var(--line); border-radius:8px; padding:8px 14px;
     font-size:13px; color:var(--text); cursor:pointer; white-space:nowrap;}
   .job-print:active{background:var(--hover);}
+  .pick-filter{display:flex; gap:8px; flex-wrap:wrap; padding:12px 20px 0;}
+  .pick-chip{border:1px solid var(--line); border-radius:999px; padding:8px 14px; font-size:13px;
+    color:var(--muted); cursor:pointer;}
+  .pick-chip.on{border-color:var(--accent); color:var(--accent);}
   .pick-line-codes{display:flex;gap:14px;flex-wrap:wrap;margin:6px 0 2px;}
   .pick-code{font:700 17px/1.2 ui-monospace, monospace; letter-spacing:-0.3px; color:var(--text);}
   .pick-code i{display:block;font:400 10px/1.4 var(--sans);color:var(--muted);letter-spacing:0.4px;text-transform:uppercase;font-style:normal;}
@@ -818,6 +822,7 @@
         <div class="job-print" id="pickListPrint" style="display:none;"
              onclick="window.open('pick_print.html', '_blank')">Напечатать лист</div>
       </div>
+      <div class="pick-filter" id="pickListFilter" style="display:none;"></div>
       <div class="job-body">
         <div class="job-back" onclick="closeJob()">← К накладным</div>
         <div id="pickListBody"></div>
@@ -2203,6 +2208,42 @@
     if(currentInvoice) renderCurrentItem();
   }
 
+  let pickListAll = null;
+  let pickFilter = '';
+
+  // Отбор по клиенту: чипы над листом. Один клиент — чипов нет вовсе.
+  // Обработчик вешаем кодом, а не атрибутом: в названии клиента бывают
+  // кавычки, и в разметке они ломали бы вызов.
+  function renderPickFilter(list){
+    const host = document.getElementById('pickListFilter');
+    if(!host || !list) return;
+    const companies = [];
+    list.orders.forEach(function(o){
+      if(o.company && companies.indexOf(o.company) === -1) companies.push(o.company);
+    });
+    if(companies.length < 2){ host.innerHTML = ''; host.style.display = 'none'; return; }
+    host.style.display = '';
+    const chip = function(value, label){
+      return '<span class="pick-chip' + (pickFilter === value ? ' on' : '')
+        + '" data-pick="' + escapeHTML(value) + '">' + escapeHTML(label) + '</span>';
+    };
+    host.innerHTML = chip('', 'Все клиенты') + companies.map(function(name){
+      return chip(name, name);
+    }).join('');
+    host.querySelectorAll('[data-pick]').forEach(function(el){
+      el.onclick = function(){ setPickFilter(el.dataset.pick); };
+    });
+  }
+
+  function setPickFilter(name){
+    pickFilter = name;
+    renderPickFilter(pickListAll);
+    document.querySelectorAll('#pickListBody .pick-line').forEach(function(el){
+      el.style.display = (!pickFilter || el.dataset.company === pickFilter) ? '' : 'none';
+    });
+  }
+  window.setPickFilter = setPickFilter;
+
   async function openPickList(){
     openJob('pickListScreen');
     const sub = document.getElementById('pickListSub');
@@ -2235,6 +2276,10 @@
     // Строки держим целиком: экран сборки набора берёт из них состав и
     // продавца, чтобы не тащить всё это через атрибуты в разметке.
     pickListLines = list.lines;
+    pickListAll = list;
+    // Клиентов в одном листе бывает несколько, а ходят за товаром по зонам:
+    // отбор по клиенту оставляет на экране только его строки.
+    renderPickFilter(list);
 
     const totals = '<div class="job-total"><span>Всего собрать</span><b>' + list.totalUnits + ' шт</b></div>';
     body.innerHTML = totals + list.lines.map(function(l, index){
@@ -2269,7 +2314,11 @@
         short = '<div class="pick-short">На складе не хватает ' + l.shortfall
           + ' шт — соберите сколько есть.</div>';
       }
-      return '<div class="pick-line">'
+      // Имя клиента на строке: по нему же работает отбор выше.
+      const owner = (l.perOrder[0] && (list.orders.find(function(o){
+        return o.number === l.perOrder[0].invoiceNumber;
+      }) || {}).company) || '';
+      return '<div class="pick-line" data-company="' + escapeHTML(owner) + '">'
         + '<div class="pick-line-name">' + escapeHTML(l.name) + '</div>'
         + '<div class="pick-line-codes">'
         +   '<span class="pick-code"><i>артикул</i>' + escapeHTML(l.article || l.sku) + '</span>'
