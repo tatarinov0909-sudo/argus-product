@@ -4353,8 +4353,15 @@
   // с агентами. Убираем эти пункты и не дёргаем их запросы: иначе кабинет
   // при каждом открытии получал бы связку отказов и жаловался всплывашками
   // на то, чего человеку и не положено.
+  // Склад и ячейки менеджеру открывает владелец правом «склад» — решение
+  // владельца от 17.09.2026. Сервер это же и проверяет (allowWarehouseView),
+  // здесь пункты просто не показываем, чтобы кабинет не стучал в закрытую
+  // дверь и не сыпал отказами.
+  const CAN_WAREHOUSE = !IS_MANAGER || (authPayload.grants || []).includes('warehouse');
   if(IS_MANAGER){
-    ['nav-chat', 'nav-staff', 'nav-1c', 'nav-mp'].forEach(id => {
+    const hidden = ['nav-chat', 'nav-staff', 'nav-1c', 'nav-mp'];
+    if(!CAN_WAREHOUSE) hidden.push('nav-warehouse', 'nav-inv');
+    hidden.forEach(id => {
       const el = document.getElementById(id);
       if(el) el.remove();
     });
@@ -4370,7 +4377,7 @@
   loadWarehouseInfo();
   loadCompanies().then(loadInvoicesList);
   loadJournal(true).then(startJournalPolling);
-  loadInventory();
+  if(CAN_WAREHOUSE) loadInventory();
   if(!IS_MANAGER){
     loadStaff();
     refreshAlertBadge();
@@ -4379,7 +4386,7 @@
     loadMarketplaces();
   }
 
-  apiFetch('/api/cells/rows').then(rows => {
+  if(CAN_WAREHOUSE) apiFetch('/api/cells/rows').then(rows => {
     if(rows.length > 0){
       document.getElementById('whOnboarding').style.display = 'none';
       renderWarehouseMap();
