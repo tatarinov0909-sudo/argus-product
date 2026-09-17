@@ -138,6 +138,9 @@
   const plural=new Intl.PluralRules('ru');
   const counted=(value,one,few,many)=>n(value)+' '+({one,few,many,other:many}[plural.select(Number(value))]);
   const totalQty=r=>r.total ?? r.qtyIn1c ?? (r.stockKnown?r.onHand:null);
+  // «Заказано» — купленное на площадке, чего склад ещё не взял в поставку;
+  // «в сборке» — то, что уже в поставке на складе. Оба уменьшают доступное.
+  const orderedQty=r=>Number(r.ordered||0);
   const assemblyQty=r=>Number(r.inAssembly||0);
   const availableQty=r=>r.available==null?null:Number(r.available);
   const updatedAt=r=>r.updatedAt||r.totalUpdatedAt||r.stockAt||r.countedAt||null;
@@ -159,19 +162,21 @@
     const rows=state.stock;const unknown=rows.filter(r=>totalQty(r)==null);const sum=fn=>rows.reduce((a,r)=>a+Number(fn(r)||0),0);
     const summary=state.stockSummary;const latest=summary?.updatedAt||rows.map(updatedAt).filter(Boolean).sort().at(-1);
     const total=summary?.total ?? (unknown.length?null:sum(totalQty));
+    const ordered=summary?.ordered ?? sum(orderedQty);
     const inAssembly=summary?.inAssembly ?? sum(assemblyQty);
     const available=summary?.available ?? (unknown.length?null:sum(availableQty));
     const productCount=summary?.productCount ?? rows.length;
     $('view').innerHTML=`<section aria-label="Состояние товаров" class="metrics">
       ${metric('Всего товара',total,`${counted(productCount,'товар','товара','товаров')} · обновлено ${when(latest)}`,'box')}
-      ${metric('В сборке',inAssembly,'Подтверждённая складом сборка','orders')}
-      ${metric('Доступно к продаже',available,'Всего товара за вычетом подтверждённой сборки','check','available')}</section>
+      ${metric('Заказано',ordered,'Куплено на площадке, склад ещё не начал','orders')}
+      ${metric('В сборке',inAssembly,'Передано на склад, собирают','transfer')}
+      ${metric('Доступно к продаже',available,'Всего за вычетом заказанного и сборки','check','available')}</section>
       <section aria-label="Товары"><div class="table-toolbar product-toolbar">${searchBox('productSearch',state.search,'Поиск по товарам')}</div><div id="productGroups"></div></section>`;
     $('productSearch').oninput=e=>{state.search=e.target.value;state.page=1;renderProductRows();};
     renderProductRows();
   }
   function filteredProducts(){const q=state.search.trim().toLocaleLowerCase('ru-RU');return state.stock.filter(r=>!q||[r.name,r.barcode,meta(r.sku).category,...wbIds(r.sku),...meta(r.sku).cards.map(c=>c.vendorCode)].some(v=>String(v||'').toLocaleLowerCase('ru-RU').includes(q)));}
-  function productTable(rows){return `<div class="table-scroll" tabindex="0" aria-label="Таблица товаров"><table class="data-table inventory-table"><colgroup><col class="photo-col"><col class="name-col"><col class="identifier-col"><col class="quantity-col"><col class="quantity-col"><col class="quantity-col"></colgroup><thead><tr><th>Фото</th><th>Товар</th><th>Артикул WB</th><th class="num">Всего<span class="column-unit">шт.</span></th><th class="num">В сборке<span class="column-unit">шт.</span></th><th class="num">Доступно<span class="column-unit">шт.</span></th></tr></thead><tbody>${rows.map(r=>`<tr data-product="${h(r.sku)}"><td>${photo(r)}</td><td class="product-cell"><button class="product-link" data-open-product="${h(r.sku)}">${h(productName(r))}</button></td><td class="identifier-cell">${identifiers(r)}</td><td class="num">${quantity(totalQty(r))}</td><td class="num">${quantity(assemblyQty(r))}</td><td class="num available-number">${quantity(availableQty(r))}</td></tr>`).join('')}</tbody></table></div>`;}
+  function productTable(rows){return `<div class="table-scroll" tabindex="0" aria-label="Таблица товаров"><table class="data-table inventory-table"><colgroup><col class="photo-col"><col class="name-col"><col class="identifier-col"><col class="quantity-col"><col class="quantity-col"><col class="quantity-col"><col class="quantity-col"></colgroup><thead><tr><th>Фото</th><th>Товар</th><th>Артикул WB</th><th class="num">Всего<span class="column-unit">шт.</span></th><th class="num">Заказано<span class="column-unit">шт.</span></th><th class="num">В сборке<span class="column-unit">шт.</span></th><th class="num">Доступно<span class="column-unit">шт.</span></th></tr></thead><tbody>${rows.map(r=>`<tr data-product="${h(r.sku)}"><td>${photo(r)}</td><td class="product-cell"><button class="product-link" data-open-product="${h(r.sku)}">${h(productName(r))}</button></td><td class="identifier-cell">${identifiers(r)}</td><td class="num">${quantity(totalQty(r))}</td><td class="num">${quantity(orderedQty(r))}</td><td class="num">${quantity(assemblyQty(r))}</td><td class="num available-number">${quantity(availableQty(r))}</td></tr>`).join('')}</tbody></table></div>`;}
   function renderProductRows(){
     const rows=filteredProducts(),pages=Math.max(1,Math.ceil(rows.length/state.pageSize));state.page=Math.min(state.page,pages);
     $('productGroups').innerHTML=(rows.length?productTable(paginate(rows,state.page,state.pageSize)):empty('Товары не найдены','Измените поиск или выберите «Все товары».'))+pager('product',state.page,pages,`${counted(rows.length,'товар','товара','товаров')} · Excel сохраняет весь результат фильтра`);
@@ -179,7 +184,7 @@
     $('productGroups').querySelectorAll('[data-product]').forEach(tr=>tr.onclick=e=>{if(!e.target.closest('button'))openProduct(tr.dataset.product);});
     wirePhotos($('productGroups'));
     $('productPrev').onclick=()=>{state.page--;renderProductRows();};$('productNext').onclick=()=>{state.page++;renderProductRows();};
-    state.exportRows=rows.map(r=>({'Товар':productName(r),'Артикул WB':wbIds(r.sku).join(', '),'Штрихкод':r.barcode||'','Всего, шт.':totalQty(r)??'','В сборке, шт.':assemblyQty(r),'Доступно к продаже, шт.':availableQty(r)??''}));$('excelButton').disabled=!rows.length;
+    state.exportRows=rows.map(r=>({'Товар':productName(r),'Артикул WB':wbIds(r.sku).join(', '),'Штрихкод':r.barcode||'','Всего, шт.':totalQty(r)??'','Заказано, шт.':orderedQty(r),'В сборке, шт.':assemblyQty(r),'Доступно к продаже, шт.':availableQty(r)??''}));$('excelButton').disabled=!rows.length;
   }
   function renderOrders(){
     $('view').innerHTML=`<div class="table-toolbar product-toolbar">${searchBox('orderSearch',state.orderSearch,'Поиск по заказам и товарам')}${chips([['all','Все'],['active','В работе'],['shipped','Отгружены'],['closed','Закрыты на WB']],state.orderFilter,'data-order-filter')}</div>${state.orders.hasMore?notice('Показана часть заказов','Доступны первые 1 000 позиций. Выгрузка содержит этот набор с учётом фильтра.',true):''}<div id="orderGroups"></div>`;
@@ -221,7 +226,7 @@
   function mini(label,value){return `<div><span>${label}</span><strong class="${value==null?'text':''}">${value==null?'—':n(value)+' шт.'}</strong></div>`;}
   async function openProduct(sku){
     const r=state.stock.find(x=>x.sku===sku);if(!r)return;const run=openDrawer(productName(r),'Карточка товара');
-    $('drawerBody').innerHTML=`<div class="drawer-meta"><span>${h(articleText(r.sku))}</span><span>Штрихкод <b class="mono">${h(r.barcode||'не указан')}</b></span></div><div class="mini-metrics">${mini('Всего',totalQty(r))}${mini('В сборке',assemblyQty(r))}${mini('Доступно',availableQty(r))}</div>
+    $('drawerBody').innerHTML=`<div class="drawer-meta"><span>${h(articleText(r.sku))}</span><span>Штрихкод <b class="mono">${h(r.barcode||'не указан')}</b></span></div><div class="mini-metrics">${mini('Всего',totalQty(r))}${mini('Заказано',orderedQty(r))}${mini('В сборке',assemblyQty(r))}${mini('Доступно',availableQty(r))}</div>
       <button class="button" id="productOrders">Посмотреть заказы с товаром</button>
       <section class="detail-section"><h3>Движение товара</h3><div id="productHistory">${loading}</div></section>
       <p class="stock-freshness">Количество обновлено: ${h(when(updatedAt(r)))}</p>`;
