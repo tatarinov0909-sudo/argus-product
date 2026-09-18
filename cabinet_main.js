@@ -542,10 +542,10 @@
     row.className = 'invoice-item-row';
     row.style.cssText = 'display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap;';
     row.innerHTML = `
-      <input type="text" class="inv-item-name" placeholder="Название товара" style="flex:2; min-width:140px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px 10px; color:var(--text); font-family:var(--sans); font-size:13px;">
-      <input type="text" class="inv-item-sku" placeholder="SKU" style="flex:1; min-width:90px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px 10px; color:var(--text); font-family:var(--mono); font-size:13px;">
-      <input type="number" class="inv-item-qty" placeholder="Кол-во" min="1" style="width:90px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px 10px; color:var(--text); font-family:var(--mono); font-size:13px;">
-      <button type="button" onclick="this.parentElement.remove()" style="background:none; border:none; color:var(--muted); cursor:pointer; font-size:14px;">✕</button>
+      <input type="text" class="inv-item-name" placeholder="Название товара" style="flex:2; min-width:140px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px 10px; color:var(--text); font-family:var(--sans); font-size:14px;">
+      <input type="text" class="inv-item-sku" placeholder="SKU" style="flex:1; min-width:90px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px 10px; color:var(--text); font-family:var(--mono); font-size:14px;">
+      <input type="number" class="inv-item-qty" placeholder="Кол-во" min="1" style="width:90px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px 10px; color:var(--text); font-family:var(--mono); font-size:14px;">
+      <button type="button" onclick="this.parentElement.remove()" style="background:none; border:none; color:var(--muted); cursor:pointer; font-size:15px;">✕</button>
     `;
     wrap.appendChild(row);
   }
@@ -1859,11 +1859,11 @@
           <div class="wh-status-line" id="whStatusLine"></div>
           <div class="wh-search">
             <input type="search" id="whSearchInput" autocomplete="off" spellcheck="false"
-                   placeholder="Найти товар — артикул, название или штрихкод"
+                   placeholder="Артикул, название или штрихкод"
                    oninput="onWhSearchInput()" onkeydown="onWhSearchKey(event)">
             <div class="wh-search-drop" id="whSearchDrop" hidden></div>
           </div>
-          <button class="wh-configure-btn" type="button" onclick="exportWarehouse()">
+          <button class="wh-configure-btn ghost" type="button" onclick="exportWarehouse()">
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2v8m0 0l-3-3m3 3l3-3M3 13h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Выгрузить остатки
           </button>
@@ -4189,6 +4189,10 @@
   // и собирают их не подряд, а по товару: сперва то, что лежит рядом.
   let ordersSearch = '';
   let ordersSort = 'product';
+  // Точка доставки будущей поставки: живёт, пока менеджер отмечает заказы,
+  // и не сбрасывается от перерисовки списка при поиске или сортировке.
+  let ordersPlace = '';
+  window.setOrdersPlace = (value) => { ordersPlace = value; };
 
   function sortOrders(rows){
     const by = {
@@ -4240,7 +4244,14 @@
 
     box.innerHTML = `
       <div class="ord-actions">
-        <button class="wh-onboarding-btn" type="button"
+        <!-- Куда уедет поставка. По этой точке её потом отбирают в списке
+             поставок и по ней грузчик раскладывает собранное по машинам. -->
+        <input class="ord-place" id="ordPlace" list="ordPlaceList" maxlength="120"
+               placeholder="Куда везём: склад WB или город" value="${escapeHTML(ordersPlace)}"
+               oninput="setOrdersPlace(this.value)">
+        <datalist id="ordPlaceList">${[...new Set((supplyRows || []).map(s => s.destination).filter(Boolean))]
+          .map(d => `<option value="${escapeHTML(d)}">`).join('')}</datalist>
+        <button class="wh-onboarding-btn${n > 0 ? ' primary' : ''}" type="button"
                 onclick="makeSupply('${companyId}')" ${n === 0 ? 'disabled' : ''}>
           ${n === 0 ? 'Выберите заказы для поставки'
             : `Составить поставку — ${n} ${pluralRu(n, 'заказ', 'заказа', 'заказов')}`}
@@ -4248,7 +4259,7 @@
         ${stuck > 0 ? `<span class="ord-meta ord-warn">${stuck} ${
           pluralRu(stuck, 'заказ', 'заказа', 'заказов')} не сопоставить с номенклатурой — свяжите артикул на экране «Площадки», и они починятся</span>` : ''}
         <span class="ord-tools">
-          <input class="ord-search" type="search" placeholder="Поиск: товар, артикул, номер"
+          <input class="ord-search" type="search" placeholder="Товар, артикул или номер заказа"
                  value="${escapeHTML(ordersSearch)}" oninput="setOrdersSearch('${companyId}', this.value)">
           <select class="ord-sort" onchange="setOrdersSort('${companyId}', this.value)">
             <option value="product"${ordersSort === 'product' ? ' selected' : ''}>По товару</option>
@@ -4261,16 +4272,16 @@
         <table class="ord-table">${head(true)}<tbody>${fresh.map(o => row(o, o.ready)).join('')}</tbody></table>
       </div>
       ${confirmed.length ? `
-        <div class="ord-meta" style="margin-top:18px;">
+        <div class="ord-meta" style="margin:24px 0 10px;">
           <b>Уже подтверждены в кабинете WB — ${confirmed.length}.</b> Их собирают по поставке WB,
           которую сделали без Аргуса; в поставку Аргуса они не попадут, чтобы не собрать заказ дважды.
         </div>
         <div class="ord-scroll">
           <table class="ord-table">${head(false)}<tbody>${confirmed.map(o => row(o, false)).join('')}</tbody></table>
         </div>` : ''}
-      <div class="ord-meta" style="margin-top:10px;">
+      <div class="ord-meta" style="margin-top:14px;">
         Продавец: ${escapeHTML(partner ? partner.companyName : '')}. Поставка уходит на склад, грузчики
-        собирают её по листу. Статус заказов в кабинете WB Аргус пока не меняет — это делается там вручную.
+        собирают её по листу. Пока для продавца не разрешено «Менять статусы» на экране «Площадки», поставку и статусы в кабинете WB делают вручную — после того как поставка составлена здесь.
       </div>
     `;
   }
@@ -4378,7 +4389,7 @@
       const when = s.shipped_at || s.ready_at || s.created_at;
       return '<div class="sup-row">'
         + '<div class="sup-num">' + escapeHTML(s.number) + '</div>'
-        + '<div><b style="font-size:13px;">' + escapeHTML(s.company_name) + '</b>'
+        + '<div><div class="sup-company">' + escapeHTML(s.company_name) + '</div>'
         +   '<div class="sup-meta">' + s.orders + ' '
         +   pluralRu(s.orders, 'заказ', 'заказа', 'заказов')
         +   (s.status === 'collecting' && s.orders > 0 ? ' · собрано ' + s.picked + ' из ' + s.orders : '')
@@ -4389,10 +4400,10 @@
         +   (when ? ' · ' + fmtDay(when) : '')
         +   (s.destination ? ' · ' + escapeHTML(s.destination) : '') + '</div></div>'
         + '<div class="sup-state ' + s.status + '">' + escapeHTML(s.statusName || s.status) + '</div>'
-        + '<div style="display:flex; gap:14px;">'
+        + '<div class="sup-acts">'
         +   '<span class="mp-act" onclick="printSupply(\'' + s.id + '\')">Документы</span>'
         +   (s.status === 'ready'
-              ? '<span class="mp-act" onclick="shipSupply(\'' + s.id + '\')">Уехала</span>'
+              ? '<span class="mp-act go" onclick="shipSupply(\'' + s.id + '\')">Уехала</span>'
               : '')
         +   (s.status === 'collecting' && s.picked === 0
               ? '<span class="mp-act warn" onclick="disbandSupply(\'' + s.id + '\')">Разобрать</span>'
@@ -4511,13 +4522,15 @@
     const ready = ordersRows.filter(o => o.ready && ordersSelected.has(o.id)).map(o => o.id);
     if(ready.length === 0){ showWhToast('Отметьте заказы, которые войдут в поставку.'); return; }
     const partner = ordersPartners.find(p => p.companyId === companyId);
+    const place = ordersPlace.trim();
     if(!confirm(`Составить поставку: ${ready.length} ${pluralRu(ready.length, 'заказ', 'заказа', 'заказов')}`
-      + ` продавца «${partner ? partner.companyName : ''}»?\n\nОна уйдёт на склад, грузчики начнут сборку.`)) return;
+      + ` продавца «${partner ? partner.companyName : ''}»` + (place ? ` — ${place}` : '') + `?\n\nОна уйдёт на склад, грузчики начнут сборку.`)) return;
     try{
       const supply = await apiFetch('/api/supplies', {
         method: 'POST',
-        body: { invoiceIds: ready, marketplace: partner ? partner.marketplace : null },
+        body: { invoiceIds: ready, marketplace: partner ? partner.marketplace : null, destination: place || null },
       });
+      ordersPlace = '';
       const mp = supply.marketplace;
       let extra = '';
       if(mp && mp.mpSupplyId){

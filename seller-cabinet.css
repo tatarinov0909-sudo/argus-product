@@ -330,10 +330,14 @@ dialog::backdrop{background:#090e1bcc;backdrop-filter:none}.drawer,.export-dialo
    Разделители рисует сама сетка (gap на цвете линии), поэтому при переносе
    на две строки рамки остаются ровными, без обрубков. */
 .metrics{grid-template-columns:repeat(4,minmax(0,1fr))}
-.inventory-table{min-width:1240px}
+/* Минимальная ширина только включает прокрутку на узком экране. 1240 px
+   не влезали в экран ноутбука, и столбец «Доступно» — главный для
+   продавца — обрезался по краю. */
+.inventory-table{min-width:1000px}
+.orders-table{min-width:1000px}
 .inventory-table .identifier-col{width:18%}
 .inventory-table .quantity-col{width:10%}
 .stock-freshness{margin-top:26px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:15px}
 @media(max-width:1180px){.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.metrics{grid-template-columns:minmax(0,1fr)}}
-@media(max-width:760px){.inventory-table{min-width:1080px}}
+

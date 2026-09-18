@@ -90,7 +90,8 @@
     -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
   }
   .landing-sub{font-size:14px; color:var(--muted); text-align:center; margin-bottom:38px;}
-  .cabinet-grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:18px;}
+  /* Ролей четыре: сеткой 2×2, а не три в ряд и одна отдельно внизу. */
+  .cabinet-grid{display:grid; grid-template-columns:repeat(2, 1fr); gap:18px; max-width:760px; margin-inline:auto;}
   .cabinet-card{
     position:relative; overflow:hidden;
     background:linear-gradient(165deg, var(--panel) 0%, #1A1C1F 100%);
@@ -238,7 +239,7 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
         </div>
         <div class="cabinet-name">Работник склада</div>
-        <div class="cabinet-desc">Для сотрудников склада — приёмка и размещение товара. Вход по имени и ключу от руководителя.</div>
+        <div class="cabinet-desc">Для сотрудников склада — приёмка, сборка заказов и размещение товара. Вход по имени и ключу от руководителя.</div>
       </div>
 
       <div class="cabinet-card" onclick="goForm('owner')">
@@ -262,7 +263,7 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 8l1.5-4h13L20 8M4 8h16M4 8l1 11h14l1-11" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
         </div>
         <div class="cabinet-name">Продавец</div>
-        <div class="cabinet-desc">Для продавцов маркетплейсов — акты приёмки своего товара. Вход по имени и ключу от склада.</div>
+        <div class="cabinet-desc">Для продавцов маркетплейсов — остатки, заказы и документы по своему товару. Вход по имени и ключу от склада.</div>
       </div>
 
     </div>
