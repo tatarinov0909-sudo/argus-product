@@ -352,7 +352,10 @@
   .pick-cell-id{font-family:var(--mono); font-size:20px; font-weight:700; letter-spacing:1px;}
   .pick-cell-take{font-size:14px; color:var(--accent);}
   .pick-orders{margin-top:18px; padding-top:14px; border-top:1px dashed var(--line);
-    font-size:13px; color:var(--muted); display:flex; flex-wrap:wrap; gap:10px;}
+    font-size:13px; color:var(--muted); display:flex; flex-direction:column; gap:6px;}
+  /* Заказ — своей строкой: в одну строку точка доставки читалась как
+     продолжение соседнего заказа. */
+  .pick-place{color:var(--text); font-weight:600; margin-left:6px;}
   .pick-short{margin-top:16px; padding:13px 16px; border-radius:12px; font-size:14px; line-height:1.5;
     background:var(--terracotta-soft); border:1px solid var(--terracotta); color:var(--terracotta);}
   .inv-hint{
@@ -2318,13 +2321,23 @@
       const order = list.orders.find(function(o){
         return l.perOrder[0] && o.number === l.perOrder[0].invoiceNumber;
       });
-      return { line: l, index: index, owner: (order && order.company) || '' };
+      return {
+        line: l, index: index,
+        owner: (order && order.company) || '',
+        // Точка доставки приходит от поставки: у заказа без поставки её нет.
+        place: (order && order.destination) || '',
+      };
     });
+    const byName = function(a, b){ return a.line.name.localeCompare(b.line.name, 'ru'); };
     if(pickSort === 'name'){
-      withOwner.sort(function(a, b){ return a.line.name.localeCompare(b.line.name, 'ru'); });
+      withOwner.sort(byName);
     } else if(pickSort === 'company'){
+      withOwner.sort(function(a, b){ return a.owner.localeCompare(b.owner, 'ru') || byName(a, b); });
+    } else if(pickSort === 'place'){
+      // Без точки доставки строки уходят вниз: сначала то, что едет в известное место.
       withOwner.sort(function(a, b){
-        return a.owner.localeCompare(b.owner, 'ru') || a.line.name.localeCompare(b.line.name, 'ru');
+        if(Boolean(a.place) !== Boolean(b.place)) return a.place ? -1 : 1;
+        return a.place.localeCompare(b.place, 'ru') || byName(a, b);
       });
     }
     return withOwner;
@@ -2373,10 +2386,13 @@
       return '<option value="' + value + '"' + (pickSort === value ? ' selected' : '') + '>'
         + label + '</option>';
     };
+    const places = (pickListAll && pickListAll.orders || []).some(function(o){ return o.destination; });
     return '<select class="pick-sort" aria-label="Порядок строк">'
       + option('route', 'Обход склада')
       + option('name', 'По товару')
       + option('company', 'По клиенту')
+      // Порядок по точке доставки предлагаем только тогда, когда она вообще есть.
+      + (places ? option('place', 'По точке доставки') : '')
       + '</select>';
   }
 
@@ -2443,7 +2459,10 @@
           + '</span><span class="pick-cell-take">взять ' + c.take + ' шт</span></div>';
       }).join('');
       const orders = l.perOrder.map(function(o){
-        return '<span>' + escapeHTML(String(o.invoiceNumber)) + ' — ' + o.qty + ' шт</span>';
+        const own = list.orders.find(function(x){ return x.number === o.invoiceNumber; });
+        const place = own && own.destination
+          ? '<b class="pick-place">' + escapeHTML(own.destination) + '</b>' : '';
+        return '<span>' + escapeHTML(String(o.invoiceNumber)) + ' — ' + o.qty + ' шт' + place + '</span>';
       }).join('');
       // Нехватка набора — не всегда нехватка: артикула набора на полке нет и
       // быть не может, пока его не собрали, а компоненты лежат рядом.
