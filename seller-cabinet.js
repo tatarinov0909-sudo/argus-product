@@ -226,7 +226,7 @@
   function mini(label,value){return `<div><span>${label}</span><strong class="${value==null?'text':''}">${value==null?'—':n(value)+' шт.'}</strong></div>`;}
   async function openProduct(sku){
     const r=state.stock.find(x=>x.sku===sku);if(!r)return;const run=openDrawer(productName(r),'Карточка товара');
-    $('drawerBody').innerHTML=`<div class="drawer-meta"><span>${h(articleText(r.sku))}</span><span>Штрихкод <b class="mono">${h(r.barcode||'не указан')}</b></span></div><div class="mini-metrics">${mini('Всего',totalQty(r))}${mini('Заказано',orderedQty(r))}${mini('В сборке',assemblyQty(r))}${mini('Доступно',availableQty(r))}</div>
+    $('drawerBody').innerHTML=`<div class="drawer-meta"><span>${h(articleText(r.sku))}</span><span>${r.barcode?`Штрихкод <b class="mono">${h(r.barcode)}</b>`:'Штрихкод не указан'}</span></div><div class="mini-metrics">${mini('Всего',totalQty(r))}${mini('Заказано',orderedQty(r))}${mini('В сборке',assemblyQty(r))}${mini('Доступно',availableQty(r))}</div>
       <button class="button" id="productOrders">Посмотреть заказы с товаром</button>
       <section class="detail-section"><h3>Движение товара</h3><div id="productHistory">${loading}</div></section>
       <p class="stock-freshness">Количество обновлено: ${h(when(updatedAt(r)))}</p>`;
