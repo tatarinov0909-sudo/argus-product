@@ -725,6 +725,8 @@
       +   '<div class="fact"><b>' + nf(rows.length) + '</b><span>' + plural(rows.length, 'посылка', 'посылки', 'посылок') + '</span></div>'
       +   '<div class="fact"><b>' + nf(t.units) + '</b><span>штук всего</span></div>'
       +   '<div class="fact"><b>' + esc(s.destination || '—') + '</b><span>куда</span></div>'
+      +   (s.shipDate ? '<div class="fact"><b>' + esc(new Date(s.shipDate + 'T12:00:00').toLocaleDateString('ru-RU'))
+            + '</b><span>отгрузка</span></div>' : '')
       +   '<div class="fact"><b>' + esc((s.marketplace || '—').toUpperCase()) + '</b><span>площадка</span></div>'
       + '</div>'
       + '<table><thead><tr>'

@@ -4193,6 +4193,22 @@
   // и не сбрасывается от перерисовки списка при поиске или сортировке.
   let ordersPlace = '';
   window.setOrdersPlace = (value) => { ordersPlace = value; };
+  // Поставка на WB: пункт приёма из списка WB и плановая дата. Без них WB не
+  // примет поставку в доставку. Склад возит сам, Москва (решение 19.09.2026).
+  const ordersPoints = {};  // companyId -> список пунктов | 'loading' | 'error'
+  let ordersPointId = '';
+  let ordersShipDate = '';
+  window.setOrdersPoint = (companyId, value) => { ordersPointId = value; renderPartnerOrders(companyId); };
+  window.setOrdersShipDate = (companyId, value) => { ordersShipDate = value; renderPartnerOrders(companyId); };
+  const moscowToday = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Moscow' });
+  function loadShippingPoints(companyId){
+    if(ordersPoints[companyId]) return;
+    ordersPoints[companyId] = 'loading';
+    apiFetch('/api/supplies/shipping-points/' + encodeURIComponent(companyId))
+      .then(list => { ordersPoints[companyId] = Array.isArray(list) ? list : 'error'; })
+      .catch(() => { ordersPoints[companyId] = 'error'; })
+      .then(() => renderPartnerOrders(companyId));
+  }
 
   function sortOrders(rows){
     const by = {
@@ -4222,6 +4238,10 @@
     const stuck = fresh.length - ready.length;
     const n = ordersSelected.size;
     const allOn = ready.length > 0 && ready.every(o => ordersSelected.has(o.id));
+    const isWb = partner && partner.marketplace === 'wb';
+    if(isWb) loadShippingPoints(companyId);
+    const points = isWb && Array.isArray(ordersPoints[companyId]) ? ordersPoints[companyId] : null;
+    const needShipping = !!points && (!ordersPointId || !ordersShipDate);
     const row = (o, selectable) => `
       <tr class="${selectable ? '' : 'not-ready'}">
         <td>${selectable
@@ -4245,17 +4265,32 @@
     box.innerHTML = `
       <div class="ord-actions">
         <!-- Куда уедет поставка. По этой точке её потом отбирают в списке
-             поставок и по ней грузчик раскладывает собранное по машинам. -->
+             поставок и по ней грузчик раскладывает собранное по машинам.
+             Для WB — пункт приёма из списка WB и дата: их требует WB. -->
+        ${points ? `
+        <select class="ord-place" id="ordPoint" onchange="setOrdersPoint('${companyId}', this.value)"
+                aria-label="Пункт отгрузки WB">
+          <option value="">Куда везём: пункт WB…</option>
+          ${points.map(p => `<option value="${escapeHTML(String(p.id))}"${String(p.id) === ordersPointId ? ' selected' : ''}>${
+            escapeHTML(p.name + (p.address ? ' — ' + p.address : ''))}</option>`).join('')}
+        </select>
+        <input class="ord-place ord-date" id="ordShipDate" type="date" min="${moscowToday()}"
+               value="${escapeHTML(ordersShipDate)}" onchange="setOrdersShipDate('${companyId}', this.value)"
+               aria-label="Дата отгрузки" title="Дата отгрузки">`
+        : `
         <input class="ord-place" id="ordPlace" list="ordPlaceList" maxlength="120"
-               placeholder="Куда везём: склад WB или город" value="${escapeHTML(ordersPlace)}"
-               oninput="setOrdersPlace(this.value)">
+               placeholder="${isWb && ordersPoints[companyId] === 'loading' ? 'Загружаю пункты WB…' : 'Куда везём: склад WB или город'}"
+               value="${escapeHTML(ordersPlace)}" oninput="setOrdersPlace(this.value)">
         <datalist id="ordPlaceList">${[...new Set((supplyRows || []).map(s => s.destination).filter(Boolean))]
-          .map(d => `<option value="${escapeHTML(d)}">`).join('')}</datalist>
-        <button class="wh-onboarding-btn${n > 0 ? ' primary' : ''}" type="button"
-                onclick="makeSupply('${companyId}')" ${n === 0 ? 'disabled' : ''}>
+          .map(d => `<option value="${escapeHTML(d)}">`).join('')}</datalist>`}
+        <button class="wh-onboarding-btn${n > 0 && !needShipping ? ' primary' : ''}" type="button"
+                onclick="makeSupply('${companyId}')" ${n === 0 || needShipping ? 'disabled' : ''}>
           ${n === 0 ? 'Выберите заказы для поставки'
+            : needShipping ? 'Выберите пункт WB и дату отгрузки'
             : `Составить поставку — ${n} ${pluralRu(n, 'заказ', 'заказа', 'заказов')}`}
         </button>
+        ${isWb && ordersPoints[companyId] === 'error' ? `<span class="ord-meta ord-warn">Список пунктов WB не загрузился —
+          поставку можно составить, но передать её в доставку на WB без пункта не выйдет</span>` : ''}
         ${stuck > 0 ? `<span class="ord-meta ord-warn">${stuck} ${
           pluralRu(stuck, 'заказ', 'заказа', 'заказов')} не сопоставить с номенклатурой — свяжите артикул на экране «Площадки», и они починятся</span>` : ''}
         <span class="ord-tools">
@@ -4398,6 +4433,7 @@
                 + (s.mp_delivered_at ? ', в доставке' : ', на сборке')
               : '')
         +   (when ? ' · ' + fmtDay(when) : '')
+        +   (s.ship_date && s.status !== 'shipped' ? ' · отгрузка ' + fmtDay(s.ship_date) : '')
         +   (s.destination ? ' · ' + escapeHTML(s.destination) : '') + '</div></div>'
         + '<div class="sup-state ' + s.status + '">' + escapeHTML(s.statusName || s.status) + '</div>'
         + '<div class="sup-acts">'
@@ -4522,15 +4558,25 @@
     const ready = ordersRows.filter(o => o.ready && ordersSelected.has(o.id)).map(o => o.id);
     if(ready.length === 0){ showWhToast('Отметьте заказы, которые войдут в поставку.'); return; }
     const partner = ordersPartners.find(p => p.companyId === companyId);
-    const place = ordersPlace.trim();
+    const points = Array.isArray(ordersPoints[companyId]) ? ordersPoints[companyId] : null;
+    const point = points && points.find(p => String(p.id) === ordersPointId);
+    if(points && (!point || !ordersShipDate)){ showWhToast('Выберите пункт WB и дату отгрузки.'); return; }
+    const place = point ? point.name : ordersPlace.trim();
+    const dayText = ordersShipDate
+      ? new Date(ordersShipDate + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : '';
     if(!confirm(`Составить поставку: ${ready.length} ${pluralRu(ready.length, 'заказ', 'заказа', 'заказов')}`
-      + ` продавца «${partner ? partner.companyName : ''}»` + (place ? ` — ${place}` : '') + `?\n\nОна уйдёт на склад, грузчики начнут сборку.`)) return;
+      + ` продавца «${partner ? partner.companyName : ''}»` + (place ? ` — ${place}` : '') + (dayText ? `, отгрузка ${dayText}` : '') + `?\n\nОна уйдёт на склад, грузчики начнут сборку.`)) return;
     try{
       const supply = await apiFetch('/api/supplies', {
         method: 'POST',
-        body: { invoiceIds: ready, marketplace: partner ? partner.marketplace : null, destination: place || null },
+        body: {
+          invoiceIds: ready, marketplace: partner ? partner.marketplace : null, destination: place || null,
+          shippingPointId: point ? point.id : null, shipDate: ordersShipDate || null,
+        },
       });
       ordersPlace = '';
+      ordersPointId = '';
+      ordersShipDate = '';
       const mp = supply.marketplace;
       let extra = '';
       if(mp && mp.mpSupplyId){
