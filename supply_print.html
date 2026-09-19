@@ -258,6 +258,8 @@
   .supply-qr img{width:150px;height:150px;object-fit:contain;}
   .supply-qr b{font:700 20px/1.3 ui-monospace,monospace;}
   @media print{.picker{display:none;}}
+  .qr-later{width:120px; min-height:90px; border:1px dashed #999; display:flex; align-items:center;
+    padding:8px; font-size:10px; line-height:1.35; color:#555; text-align:center;}
 </style>
 <body>
 
@@ -451,9 +453,11 @@
   // при передаче поставки, здесь мы их только печатаем.
   function stickersSheet(s, t, rows){
     if(!s.mpSupplyId && rows.length === 0) return '';
+    // QR поставки WB отдаёт только после передачи в доставку — до этого
+    // на его месте честная подсказка, а не пустая рамка.
     const qr = s.mpBarcodeFile
       ? '<img src="data:image/svg+xml;base64,' + esc(s.mpBarcodeFile) + '" alt="">'
-      : '';
+      : '<div class="qr-later">QR поставки появится после «Уехала» — WB выдаёт его при передаче в доставку</div>';
     const supplyBlock = s.mpSupplyId
       ? '<div class="supply-qr">' + qr
         + '<div><div>Поставка на площадке</div><b>' + esc(s.mpSupplyId) + '</b>'
