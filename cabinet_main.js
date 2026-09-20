@@ -1592,7 +1592,7 @@
       return `<div class="wh-big-cell ${block.state}${isMerged ? ' merged' : ''}${block.state === 'occupied' ? fillModeClass : ''}"
         style="grid-column:${block.r0} / span ${wide}; grid-row:${gridRowOf(block.t1)} / span ${tall};${fillVars}"
         title="${escapeHTML(addr)}">
-        <span class="wh-big-cell-label">${addr}</span>
+        <span class="wh-big-cell-label">${escapeHTML(addr)}</span>
         ${isMerged ? `<span class="wh-big-cell-size">${wide}×${tall}</span>
           <button class="wh-big-cell-split" type="button" title="Расцепить обратно на ${wide * tall} ${pluralRu(wide * tall, 'место', 'места', 'мест')}"
             onclick="splitBlockById('${block.blockId}')">✕</button>` : ''}
@@ -2311,11 +2311,11 @@
         <button class="panel-close-btn" onclick="closeWhDetailPanel()" aria-label="Закрыть">✕</button>
       </div>
       <div class="wh-side-body">
-        <div class="wh-detail-id">${displayAddr}</div>
+        <div class="wh-detail-id">${escapeHTML(displayAddr)}</div>
         <div class="wh-detail-status ${state}">${statusLabel}</div>
         ${rows}
         <button class="wh-onboarding-btn" style="margin-top:14px; width:100%;" type="button"
-                data-history-cell="${el.dataset.blockId}" data-history-label="${displayAddr}">Что здесь происходило</button>
+                data-history-cell="${escapeHTML(el.dataset.blockId)}" data-history-label="${escapeHTML(displayAddr)}">Что здесь происходило</button>
         ${stock.length ? `<button class="wh-onboarding-btn" style="margin-top:8px; width:100%;" type="button" onclick="exportCell('${el.dataset.blockId}')">Выгрузить в Excel</button>` : ''}
       </div>
     `;
@@ -2572,7 +2572,10 @@
         return (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1);
       });
       list.innerHTML = scopeBar + head
-        + byRisk.map(function(e){ return journalEntryHtml(e, fresh.has(e.id), e.created_at.slice(0, 10)); }).join('');
+        // День берём тем же помощником, что и в обычном режиме: срез строки
+        // даёт день по Гринвичу, и ночные записи попадали в соседний день —
+        // календарь и фильтр по дню переставали совпадать со списком.
+        + byRisk.map(function(e){ return journalEntryHtml(e, fresh.has(e.id), journalDayKey(e.created_at)); }).join('');
       restoreJournalScreenState(screen);
       renderJournalCalendar();
       return;
@@ -4073,7 +4076,7 @@
     const rows = [];
     Object.keys(cellBlocks).forEach(function(rowNum){
       cellBlocks[rowNum].forEach(function(b){
-        const addr = cellAddrLabel(rowNum, b);
+        const addr = blockAddr(rowNum, b);
         if(!b.stock || b.stock.length === 0){
           rows.push({ 'Ячейка': addr, 'Артикул': '', 'Продавец': '', 'Количество': 0,
             'Состояние ячейки': 'пусто' });
@@ -4093,16 +4096,10 @@
     saveXlsx('Остатки склада', 'Остатки', rows, [14, 18, 24, 13, 17]);
   }
 
-  function cellAddrLabel(rowNum, b){
-    const rack = b.r0 === b.r1 ? b.r0 : b.r0 + '–' + b.r1;
-    const tier = b.t0 === b.t1 ? b.t0 : b.t0 + '–' + b.t1;
-    return rowNum + '.' + rack + '.' + tier;
-  }
-
   function exportCell(blockId){
     const entry = blockById[blockId];
     if(!entry){ showWhToast('Ячейка не найдена.'); return; }
-    const addr = cellAddrLabel(entry.rowNum, entry.block);
+    const addr = blockAddr(entry.rowNum, entry.block);
     const rows = (entry.block.stock || []).map(function(it){
       return {
         'Ячейка': addr,
@@ -4313,7 +4310,11 @@
     const fresh = sortOrders(shown.filter(o => !o.wbConfirmed));
     const confirmed = sortOrders(shown.filter(o => o.wbConfirmed));
     const ready = fresh.filter(o => o.ready);
-    const stuck = fresh.length - ready.length;
+    // Строка списка — это позиция заказа. Раньше «не сопоставить N» и
+    // «уже подтверждены N» считали строки и противоречили карточке продавца
+    // прямо над таблицей, где стоит число заказов.
+    const uniq = (rows) => new Set(rows.map(o => o.id)).size;
+    const stuck = uniq(fresh) - uniq(ready);
     const n = ordersSelected.size;
     const allOn = ready.length > 0 && ready.every(o => ordersSelected.has(o.id));
     const isWb = partner && partner.marketplace === 'wb';
@@ -4384,7 +4385,7 @@
       </div>
       ${confirmed.length ? `
         <div class="ord-meta" style="margin:24px 0 10px;">
-          <b>Уже подтверждены в кабинете WB — ${confirmed.length}.</b> Их собирают по поставке WB,
+          <b>Уже подтверждены в кабинете WB — ${uniq(confirmed)}.</b> Их собирают по поставке WB,
           которую сделали без Аргуса; в поставку Аргуса они не попадут, чтобы не собрать заказ дважды.
         </div>
         <div class="ord-scroll">
@@ -4536,6 +4537,11 @@
         +   (s.status === 'collecting' && s.picked === 0
               ? '<span class="mp-act warn" onclick="disbandSupply(\'' + s.id + '\')">Разобрать</span>'
               : '')
+        // Поставка уехала, а на WB не передалась: без этой кнопки повторить
+        // было нечем — «Уехала» второй раз не нажимается.
+        +   (s.status === 'shipped' && s.mp_supply_id && !s.mp_delivered_at
+              ? '<span class="mp-act warn" onclick="retryWbDeliver(\'' + s.id + '\')">Повторить передачу на WB</span>'
+              : '')
         + '</div>'
         + '</div>';
     }).join('');
@@ -4595,6 +4601,22 @@
     }
   }
   window.shipSupply = shipSupply;
+
+  // Повтор передачи в доставку на WB. Журнал советует «повторите из Аргуса» —
+  // теперь это действительно можно сделать.
+  async function retryWbDeliver(id){
+    try{
+      const r = await apiFetch('/api/supplies/' + id + '/marketplace/deliver', { method: 'POST' });
+      showWhToast(r.delivered ? 'Поставка передана в доставку на WB.'
+        : r.alreadyDelivered ? 'Она уже передана в доставку.'
+        : r.skipped === 'write_disabled' ? 'Статусы WB для этого продавца менять не разрешено.'
+        : 'WB снова не принял: ' + (r.error || 'без ответа'));
+      await loadSupplies();
+    } catch(e){
+      showWhToast('Не удалось повторить: ' + e.message);
+    }
+  }
+  window.retryWbDeliver = retryWbDeliver;
 
   // Забрать заказы со всех подключённых площадок.
   //
@@ -4692,11 +4714,15 @@
       if(mp && mp.mpSupplyId){
         extra = ' На WB создана поставка ' + mp.mpSupplyId + ': '
           + mp.confirmed.length + ' на сборке'
-          + (mp.rejected && mp.rejected.length ? ', не принято ' + mp.rejected.length : '') + '.';
+          + (mp.rejected && mp.rejected.length ? ', не принято ' + mp.rejected.length : '') + '.'
+          // Про непринятые параметры отгрузки говорим сразу: без них WB не
+          // возьмёт поставку в доставку, а узнать об этом у ворот — поздно.
+          + (mp.shippingError ? ' Параметры отгрузки WB не принял: ' + mp.shippingError
+            + '. Поправьте пункт и дату в кабинете WB.' : '');
+      } else if(mp && mp.error){
+        extra = ' WB не ответил: ' + mp.error + ' Состав поставки в Аргусе не менялся.';
       } else if(mp && mp.skipped === 'write_disabled'){
         extra = ' Статусы на WB не меняются — разрешите это на экране «Площадки».';
-      } else if(mp && mp.error){
-        extra = ' WB не ответил: ' + mp.error;
       }
       showWhToast('Поставка ' + supply.number + ' передана на склад: ' + supply.orders
         + ' ' + pluralRu(supply.orders, 'заказ', 'заказа', 'заказов') + '.' + extra);

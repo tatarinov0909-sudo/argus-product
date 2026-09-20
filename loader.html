@@ -916,7 +916,7 @@
             <!-- Бумажная версия того же листа: на складе с телефоном в руках
                  неудобно, а лист можно повесить на тележку. -->
             <div class="job-print" id="pickListPrint" style="display:none;"
-                 onclick="window.open('pick_print.html', '_blank')">Напечатать лист</div>
+                 onclick="printPickList()">Напечатать лист</div>
           </div>
         </div>
       </div>
@@ -1967,11 +1967,30 @@
     renderKitScreen();
   }
 
+  // Ввод количества с клавиатуры не перерисовывает экран: перерисовка
+  // подменяла поле новым, фокус слетал, и набрать больше одной цифры было
+  // нельзя — «12» превращалось в «1».
   function kitQtyTyped(raw){
     if(!kitState) return;
     const digits = String(raw).replace(/[^0-9]/g, '');
     if(digits === '') return;
-    stepKitQty(Number(digits) - kitState.qty);
+    const max = kitState.line.kit.canBuild;
+    kitState.qty = Math.max(1, Math.min(max, Number(digits)));
+    const field = document.querySelector('#kitBody .qty-value');
+    if(field && field.value !== String(kitState.qty)) field.value = kitState.qty;
+    updateKitConfirm();
+  }
+
+  // Подпись кнопки зависит от количества и выбранной ячейки — обновляем её
+  // на месте, не трогая остальной экран.
+  function updateKitConfirm(){
+    const btn = document.getElementById('kitConfirm');
+    if(!btn || !kitState) return;
+    const ready = Boolean(kitState.cellBlockId);
+    btn.disabled = !ready;
+    btn.textContent = ready
+      ? 'Собрать ' + kitState.qty + ' — в ячейку ' + kitState.cellLabel
+      : 'Выберите ячейку';
   }
 
   function selectKitCell(blockId, label){
@@ -2043,8 +2062,8 @@
       + cells
       + '<button class="confirm-btn" id="kitConfirm" ' + (ready ? '' : 'disabled ')
       +   'onclick="confirmKit()">'
-      +   (ready
-        ? 'Собрать ' + kitState.qty + ' — в ячейку ' + escapeHTML(kitState.cellLabel)
+      +   escapeHTML(ready
+        ? 'Собрать ' + kitState.qty + ' — в ячейку ' + kitState.cellLabel
         : 'Выберите ячейку')
       + '</button>';
   }
@@ -2433,6 +2452,22 @@
   // Отбор по клиенту: чипы над листом. Один клиент — чипов нет вовсе.
   // Обработчик вешаем кодом, а не атрибутом: в названии клиента бывают
   // кавычки, и в разметке они ломали бы вызов.
+  // На бумагу уходит ровно то, что человек отобрал на экране: раньше печать
+  // всегда брала весь лист целиком, и отфильтрованный по клиенту экран не
+  // совпадал с бумагой в руках.
+  function printPickList(){
+    const orders = (pickListAll && pickListAll.orders) || [];
+    const ids = orders
+      .filter(function(o){ return !pickFilter || o.company === pickFilter; })
+      .map(function(o){ return o.id; })
+      .filter(Boolean);
+    const query = ids.length && ids.length < orders.length
+      ? '?invoiceIds=' + encodeURIComponent(ids.join(','))
+      : '';
+    window.open('pick_print.html' + query, '_blank');
+  }
+  window.printPickList = printPickList;
+
   function renderPickFilter(list){
     const host = document.getElementById('pickListFilter');
     if(!host || !list) return;

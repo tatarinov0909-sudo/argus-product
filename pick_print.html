@@ -135,7 +135,21 @@
         + '<td class="cell">' + cells + '</td>'
         + '<td class="name">' + lineMps + esc(l.name)
         +   '<div class="orders">' + orders + '</div>'
-        +   (l.shortfall > 0 ? '<div class="short">не хватает ' + l.shortfall + '</div>' : '')
+        // Набор на полке не лежит — его собирают из компонентов. Красное
+        // «не хватает» отправляло работника искать то, чего не существует.
+        +   (l.shortfall > 0 ? (l.kit && l.kit.canBuild > 0
+              ? '<div class="short">это набор: собрать ' + l.kit.canBuild
+                + ' из компонентов' + (l.kit.stillShort > 0 ? ', не хватает ' + l.kit.stillShort : '')
+                + '</div>'
+              : l.kit
+                ? '<div class="short">это набор, но собрать не из чего'
+                  + (l.kit.limitedBy && l.kit.limitedBy.length
+                      ? ' — кончился ' + esc((l.kit.components || [])
+                          .filter(function(c){ return l.kit.limitedBy.indexOf(c.sku) >= 0; })
+                          .map(function(c){ return c.name; }).join(', ') || l.kit.limitedBy.join(', '))
+                      : '')
+                  + '</div>'
+                : '<div class="short">не хватает ' + l.shortfall + '</div>') : '')
         + '</td>'
         + '<td class="code">' + esc(l.article || l.sku) + '<small>артикул</small></td>'
         + '<td class="code">' + esc(l.barcode || '—') + '<small>штрихкод</small></td>'

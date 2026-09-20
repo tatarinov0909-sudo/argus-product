@@ -74,7 +74,16 @@
       $('warehouseName').textContent=localStorage.getItem('argus_wh_name')||'Ваш склад';
       document.title=state.profile.name+' · Аргус';
       await navigate();
-    }catch(e){if(state.token)$('view').innerHTML=empty('Не удалось открыть кабинет',e.message);}
+    }catch(e){
+      // Без кнопки повтора это был тупик: «Обновить» в шапке зовёт navigate(),
+      // который без профиля ничего не делает, а «Настройки» падали.
+      if(state.token){
+        $('view').innerHTML=empty('Не удалось открыть кабинет',e.message)
+          +'<div style="text-align:center;margin-top:-10px;"><button class="button" id="bootRetry">Попробовать ещё раз</button></div>';
+        const retry=$('bootRetry');
+        if(retry) retry.onclick=()=>{$('view').innerHTML=loading;boot();};
+      }
+    }
   }
   $('loginForm').addEventListener('submit',async e=>{
     e.preventDefault();$('loginError').textContent='';$('loginSubmit').disabled=true;
@@ -179,7 +188,7 @@
   function productTable(rows){return `<div class="table-scroll" tabindex="0" aria-label="Таблица товаров"><table class="data-table inventory-table"><colgroup><col class="photo-col"><col class="name-col"><col class="identifier-col"><col class="quantity-col"><col class="quantity-col"><col class="quantity-col"><col class="quantity-col"></colgroup><thead><tr><th>Фото</th><th>Товар</th><th>Артикул WB</th><th class="num">Всего<span class="column-unit">шт.</span></th><th class="num">Заказано<span class="column-unit">шт.</span></th><th class="num">В сборке<span class="column-unit">шт.</span></th><th class="num">Доступно<span class="column-unit">шт.</span></th></tr></thead><tbody>${rows.map(r=>`<tr data-product="${h(r.sku)}"><td>${photo(r)}</td><td class="product-cell"><button class="product-link" data-open-product="${h(r.sku)}">${h(productName(r))}</button></td><td class="identifier-cell">${identifiers(r)}</td><td class="num">${quantity(totalQty(r))}</td><td class="num">${quantity(orderedQty(r))}</td><td class="num">${quantity(assemblyQty(r))}</td><td class="num available-number">${quantity(availableQty(r))}</td></tr>`).join('')}</tbody></table></div>`;}
   function renderProductRows(){
     const rows=filteredProducts(),pages=Math.max(1,Math.ceil(rows.length/state.pageSize));state.page=Math.min(state.page,pages);
-    $('productGroups').innerHTML=(rows.length?productTable(paginate(rows,state.page,state.pageSize)):empty('Товары не найдены','Измените поиск или выберите «Все товары».'))+pager('product',state.page,pages,`${counted(rows.length,'товар','товара','товаров')} · Excel сохраняет весь результат фильтра`);
+    $('productGroups').innerHTML=(rows.length?productTable(paginate(rows,state.page,state.pageSize)):empty('Товары не найдены','Проверьте артикул или название — возможно, товар ещё не заведён складом.'))+pager('product',state.page,pages,`${counted(rows.length,'товар','товара','товаров')} · Excel сохраняет весь результат фильтра`);
     $('productGroups').querySelectorAll('[data-open-product]').forEach(b=>b.onclick=()=>openProduct(b.dataset.openProduct));
     $('productGroups').querySelectorAll('[data-product]').forEach(tr=>tr.onclick=e=>{if(!e.target.closest('button'))openProduct(tr.dataset.product);});
     wirePhotos($('productGroups'));
@@ -216,7 +225,7 @@
   }
   function renderDocumentRows(){
     const q=state.docSearch.trim().toLocaleLowerCase('ru-RU');const rows=documentData().rows.filter(r=>[r.number,r.company_name].some(v=>String(v||'').toLocaleLowerCase('ru-RU').includes(q))&&(state.docFilter==='all'||r.direction===state.docFilter));
-    $('documentsBody').innerHTML=rows.map(r=>`<tr><td><button class="product-link" data-document="${h(r.id)}">${h(r.number)}</button><span class="product-meta">${n(r.item_count)} позиций${state.sourceMode?' · '+h(r.company_name):''}</span>${state.sourceMode&&r.source==='1c'?`<span class="product-meta">Дата в 1С: ${h(sourceDocumentDate(r.source_document_date))}</span>`:''}</td><td>${h(documentType(r))}</td><td class="small muted">${h(when(r.created_at))}</td><td class="num">${n(r.declared_qty)}</td><td>${badge(documentStatus(r),r.status==='completed'?'ready':r.status==='open'?'waiting':'working')}</td></tr>`).join('')||`<tr><td colspan="5">${empty('Документов пока нет','Здесь появятся ваши документы и результаты приёмки после передачи данных складом.','document')}</td></tr>`;
+    $('documentsBody').innerHTML=rows.map(r=>`<tr><td><button class="product-link" data-document="${h(r.id)}">${h(r.number)}</button><span class="product-meta">${counted(r.item_count,'позиция','позиции','позиций')}${state.sourceMode?' · '+h(r.company_name):''}</span>${state.sourceMode&&r.source==='1c'?`<span class="product-meta">Дата в 1С: ${h(sourceDocumentDate(r.source_document_date))}</span>`:''}</td><td>${h(documentType(r))}</td><td class="small muted">${h(when(r.created_at))}</td><td class="num">${n(r.declared_qty)}</td><td>${badge(documentStatus(r),r.status==='completed'?'ready':r.status==='open'?'waiting':'working')}</td></tr>`).join('')||`<tr><td colspan="5">${empty('Документов пока нет','Здесь появятся ваши документы и результаты приёмки после передачи данных складом.','document')}</td></tr>`;
     $('documentsBody').querySelectorAll('[data-document]').forEach(b=>b.onclick=()=>openDocument(b.dataset.document));
     state.exportRows=rows.map(r=>({'Документ':r.number,...(state.sourceMode?{'Компания в 1С':r.company_name,'Источник':r.source==='1c'?'1С':'Склад','Дата в 1С':r.source==='1c'?sourceDocumentDate(r.source_document_date):''}:{}),'Тип':documentType(r),'Загружен в Аргус':when(r.created_at),'Заявлено, шт.':Number(r.declared_qty),'Статус':documentStatus(r)}));$('excelButton').disabled=!rows.length;
   }

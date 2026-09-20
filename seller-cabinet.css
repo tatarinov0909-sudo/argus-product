@@ -257,7 +257,9 @@ main{padding:28px 28px 48px}.page-heading{margin-bottom:24px}.page-heading .mute
 .badge.waiting{background:#302a23}.badge.working{background:#2b3652;color:#d0dcff}.badge.ready{background:var(--accent-bg);color:var(--accent)}.badge.issue{background:#422c36;color:var(--red)}
 .table-footer{font-size:15px;padding:18px 0}.table-panel>.table-footer{padding:16px 18px}.pagination{font-size:16px}.pagination .icon-button{width:44px;height:44px}
 .larger-table-text .data-table td,.larger-table-text .product-link,.larger-table-text .data-table .order-product{font-size:21px}
-.larger-table-text .inventory-table{min-width:1400px}.larger-table-text .orders-table{min-width:1440px}
+/* Крупный шрифт не должен возвращать горизонтальную прокрутку: ширины
+   подняты ровно настолько, чтобы колонки не слипались, а не на 1400px. */
+.larger-table-text .inventory-table{min-width:1120px}.larger-table-text .orders-table{min-width:1160px}
 .larger-table-text .unknown-number,.larger-table-text .data-table .order-date,.larger-table-text .wb-article,.larger-table-text .product-barcode{font-size:18px}
 .empty{padding:48px 24px}.empty h2{font-size:24px}.empty p{font-size:17px;line-height:1.6;max-width:560px}.empty.compact{padding:32px 18px}
 .skeleton{background:#293449;border-radius:4px}.skeleton-row{height:55px}.skeleton-metrics{height:158px}

@@ -164,6 +164,10 @@
   .row-addr span{display:block; font-size:10px; color:var(--ink-soft);}
   .row-addr b{display:block; font-size:15px; font-weight:700;}
   .row-addr.one b{font-size:13px;}
+  /* Вторая и следующие ячейки — той же строкой, помельче: «+2» отправляло
+     кладовщика к одной полке за товаром, который лежит в трёх. */
+  .row-addr em{display:block; font-style:normal; font-size:10px; color:var(--ink-soft);
+    line-height:1.3;}
   /* Артикул продавца — первым и крупно.
      Это то, чем товар подписан на коробке и чем его зовут на площадке;
      наш код номенклатуры (PB…) кладовщику ни о чём не говорит и стоит
@@ -572,12 +576,15 @@
   // Делим по ПОСЛЕДНЕМУ разделителю — место всегда последнее, сколько бы
   // частей ни было в имени ячейки. Неразделимое имя показываем целиком:
   // резать незнакомую строку значит однажды отрезать значащее.
-  function addrTiers(label){
+  function addrTiers(label, take){
     const s = String(label);
     const i = Math.max(s.lastIndexOf('-'), s.lastIndexOf('.'), s.lastIndexOf('/'), s.lastIndexOf(' '));
+    // Сколько брать именно отсюда: когда товар лежит в нескольких ячейках,
+    // без этого числа кладовщик у полки сам делит количество на глазок.
+    const qty = take != null && take !== '' ? '<em>взять ' + nf(take) + '</em>' : '';
     return i > 0
-      ? '<div class="row-addr"><span>' + esc(s.slice(0, i)) + '</span><b>' + esc(s.slice(i + 1)) + '</b></div>'
-      : '<div class="row-addr one"><b>' + esc(s) + '</b></div>';
+      ? '<div class="row-addr"><span>' + esc(s.slice(0, i)) + '</span><b>' + esc(s.slice(i + 1)) + '</b>' + qty + '</div>'
+      : '<div class="row-addr one"><b>' + esc(s) + '</b>' + qty + '</div>';
   }
 
   // Чем считается «ряд» для полосы.
@@ -656,8 +663,12 @@
           + '<td class="mid"><div class="tick"></div></td>'
           + '<td>'
           +   (first
-                ? addrTiers(first.label)
-                  + (rest.length ? '<div class="addr-more">+' + rest.length + '</div>' : '')
+                ? addrTiers(first.label, first.take != null ? first.take : null)
+                  + (rest.length
+                      ? '<div class="addr-more">' + rest.map(function(c){
+                          return esc(c.label) + (c.take != null ? ' — ' + nf(c.take) : '');
+                        }).join('<br>') + '</div>'
+                      : '')
                 : '<div class="row-addr one short"><b>—</b></div>')
           + '</td>'
           + (withPhoto
@@ -675,6 +686,12 @@
           + '</td>'
           + '<td class="goods">'
           +   '<div class="goods-line">' + esc(r.name) + '</div>'
+          // Лист печатают и посреди работы: если часть уже снята с полки,
+          // в «Взять» стоит остаток, и об этом надо сказать прямо.
+          +   (r.picked > 0
+                ? '<div class="short-note" style="color:var(--ink-soft);">уже собрано '
+                  + nf(r.picked) + ' из ' + nf(r.total) + '</div>'
+                : '')
           +   (notEnough && r.available > 0
                 ? '<div class="short-note">в ячейках только ' + nf(r.available) + '</div>'
                 : '')
