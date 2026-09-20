@@ -1382,9 +1382,18 @@
     document.getElementById('cellOptions').innerHTML =
       '<div style="font-size:13px; color:var(--muted); text-align:center; padding:8px;">Ищу, где лежит…</div>';
 
+    // Пока ищем, где лежит товар, человек может переключить накладную. Ответ
+    // по прошлой накладной не должен дорисовывать её кнопки поверх новой —
+    // на экране приёмки оставалась подпись «Товара нет ни в одной ячейке».
+    const forItem = item.id;
     try{
-      pickSuggestion = await apiFetch('/api/shipping/suggest/' + item.id);
+      const suggestion = await apiFetch('/api/shipping/suggest/' + item.id);
+      const still = currentInvoice && currentInvoice.items[currentItemIndex];
+      if(!still || still.id !== forItem) return;
+      pickSuggestion = suggestion;
     } catch(e){
+      const still = currentInvoice && currentInvoice.items[currentItemIndex];
+      if(!still || still.id !== forItem) return;
       const box = document.getElementById('cellOptions');
       box.innerHTML = '<div style="font-size:13px; color:var(--muted); text-align:center; padding:8px;"></div>';
       // textContent, а не разметка: текст ошибки приходит с сервера, и
@@ -1737,6 +1746,8 @@
       valEl.classList.remove('warn');
       diffEl.classList.remove('show');
     }
+    // В подписи кнопки стоит количество — обновляем её вместе с числом.
+    updateConfirmState();
   }
 
   function setupHoldButton(el, delta){
@@ -1786,9 +1797,14 @@
     const postpone = document.getElementById('postponeBtn');
     if(postpone) postpone.style.display = 'none';
     const btn = document.getElementById('confirmBtn');
-    if(selectedCellLabel){
+    const field = document.getElementById('qtyValue');
+    const empty = field && String(field.value).trim() === '';
+    if(empty){
+      btn.disabled = true;
+      btn.textContent = 'Введите количество';
+    } else if(selectedCellLabel){
       btn.disabled = false;
-      btn.textContent = 'Подтвердить и положить';
+      btn.textContent = 'Принять ' + currentQty + ' шт — ' + selectedCellLabel;
     } else {
       btn.disabled = true;
       btn.textContent = 'Выберите место и подтвердите';
@@ -1857,7 +1873,13 @@
      однажды разойдутся. */
   function qtyTyped(raw){
     const digits = String(raw).replace(/[^0-9]/g, '');
-    if(digits === '') return; // человек стирает поле, чтобы набрать заново
+    if(digits === ''){
+      // Человек стирает поле, чтобы набрать заново. Пока оно пустое,
+      // подтверждать нечего: раньше на сервер уходило прежнее число, а на
+      // экране было пусто — и заметить подмену было невозможно.
+      updateConfirmState();
+      return;
+    }
     stepQty(Number(digits) - currentQty);
     // stepQty в некоторых состояниях выходит раньше, чем перерисует поле
     // (например, пока не пришла подсказка по отбору). Тогда на экране осталось

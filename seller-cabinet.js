@@ -149,9 +149,12 @@
   const totalQty=r=>r.total ?? r.qtyIn1c ?? (r.stockKnown?r.onHand:null);
   // «Заказано» — купленное на площадке, чего склад ещё не взял в поставку;
   // «в сборке» — то, что уже в поставке на складе. Оба уменьшают доступное.
-  const orderedQty=r=>Number(r.ordered||0);
+  const orderedQty=r=>Number(r.orderedNotInSupply ?? r.ordered ?? 0);
   const assemblyQty=r=>Number(r.inAssembly||0);
-  const availableQty=r=>r.available==null?null:Number(r.available);
+  const availableQty=r=>{
+    const value = r.sellerAvailable !== undefined ? r.sellerAvailable : r.available;
+    return value==null?null:Number(value);
+  };
   const updatedAt=r=>r.updatedAt||r.totalUpdatedAt||r.stockAt||r.countedAt||null;
   const meta = sku => state.catalog[sku] || {category:'Без категории',cards:[]};
   function wbIds(sku){return [...new Set(meta(sku).cards.map(c=>c.nmId))];}

@@ -563,6 +563,17 @@
     if(!companyId){ showWhToast('Выберите компанию.'); return; }
     if(!number){ showWhToast('Введите номер накладной.'); return; }
     if(items.length === 0){ showWhToast('Добавьте хотя бы одну позицию.'); return; }
+    // Недозаполненная строка раньше молча выбрасывалась, и накладная
+    // создавалась без неё — с сообщением «создана», как будто всё в порядке.
+    const filled = rows.filter(r => [r.querySelector('.inv-item-name').value,
+      r.querySelector('.inv-item-sku').value, r.querySelector('.inv-item-qty').value]
+      .some(v => String(v).trim() !== ''));
+    if(filled.length > items.length){
+      const dropped = filled.length - items.length;
+      showWhToast(dropped + ' ' + pluralRu(dropped, 'строка заполнена', 'строки заполнены', 'строк заполнены')
+        + ' не полностью: нужны название, артикул и количество больше нуля.');
+      return;
+    }
 
     try{
       await apiFetch('/api/invoices', {method:'POST', body:{companyId, number, items}});
@@ -2195,10 +2206,10 @@
     const rows = items.map(it => `
       <div class="wh-zone-item">
         <div class="wh-zone-item-top">
-          <span class="wh-zone-item-client">${it.client}</span>
-          <span class="wh-zone-item-meta">${it.sku}</span>
+          <span class="wh-zone-item-client">${escapeHTML(String(it.client || ''))}</span>
+          <span class="wh-zone-item-meta">${escapeHTML(String(it.sku || ''))}</span>
         </div>
-        <div class="wh-zone-item-meta">${it.qty}</div>
+        <div class="wh-zone-item-meta">${escapeHTML(String(it.qty))}</div>
         <span class="wh-zone-status ${it.direction}">${it.direction === 'in' ? 'ожидает размещения' : 'ожидает отгрузки'}</span>
       </div>
     `).join('');
@@ -2206,7 +2217,7 @@
     detail.innerHTML = `
       ${backBtn}
       <button class="wh-detail-id wh-renamable" type="button" onclick="startRename('zone', '${id}')" title="Нажмите, чтобы переименовать зону">${escapeHTML(String(zoneName))}</button>
-      <div class="wh-detail-status occupied">${items.length} ${items.length === 1 ? 'позиция' : 'позиции'}</div>
+      <div class="wh-detail-status occupied">${items.length} ${pluralRu(items.length, 'позиция', 'позиции', 'позиций')}</div>
       ${rows}
     `;
   }
