@@ -49,7 +49,7 @@
     if(state.owner && state.companyId && path.startsWith('/api/sellers/')) path+=(path.includes('?')?'&':'?')+'companyId='+encodeURIComponent(state.companyId);
     const response = await fetch('https://api.argus-ai.online'+path,{method:options.method||'GET',headers:{'Content-Type':'application/json',...(state.token?{Authorization:'Bearer '+state.token}:{})},body:options.body?JSON.stringify(options.body):undefined,cache:'no-store'});
     const data=await response.json().catch(()=>null);
-    if(response.status===401 && !path.includes('/auth/')) {state.viewRun++;state.drawerRun++;state.token=null;localStorage.removeItem('argus_token');localStorage.removeItem('argus_role');$('drawer').close();$('settingsDialog').close();$('accountMenu').hidePopover();$('app').hidden=true;$('loginScreen').hidden=false;$('loginError').textContent='Сессия завершилась. Войдите ещё раз.';}
+    if(response.status===401 && !path.includes('/auth/')) {state.viewRun++;state.drawerRun++;state.token=null;localStorage.removeItem('argus_token');localStorage.removeItem('argus_role');$('drawer').close();$('settingsDialog').close();const accountMenu=$('accountMenu');if(accountMenu.matches(':popover-open'))accountMenu.hidePopover();$('app').hidden=true;$('loginScreen').hidden=false;$('loginError').textContent='Сессия завершилась. Войдите ещё раз.';}
     if(!response.ok) throw new Error(data?.error || 'Не удалось получить данные. Попробуйте ещё раз.');
     return data;
   }
@@ -195,7 +195,7 @@
   function renderOrderRows(){
     const q=state.orderSearch.trim().toLocaleLowerCase('ru-RU');const rows=state.orders.rows.filter(r=>(!q||[r.number,r.name,r.sku,r.mp_rid,r.mp_nm_id,r.mp_article,...wbIds(r.sku)].some(v=>String(v||'').toLocaleLowerCase('ru-RU').includes(q)))&&(state.orderFilter!=='active'||orderActive(r))&&(state.orderFilter!=='shipped'||r.status==='shipped')&&(state.orderFilter!=='closed'||!!r.mp_closed_at));
     const pages=Math.max(1,Math.ceil(rows.length/state.pageSize));state.orderPage=Math.min(state.orderPage,pages);
-    $('orderGroups').innerHTML=(rows.length?orderTable(paginate(rows,state.orderPage,state.pageSize)):empty('Заказы не найдены',q?'Попробуйте другой номер или артикул.':'Новые заказы появятся после загрузки с маркетплейса.','orders'))+pager('order',state.orderPage,pages,`${counted(new Set(rows.map(r=>r.id)).size,'заказ','заказа','заказов')} · Excel сохраняет весь результат фильтра`);
+    $('orderGroups').innerHTML=(rows.length?orderTable(paginate(rows,state.orderPage,state.pageSize)):empty('Заказы не найдены',q?'Попробуйте другой номер или артикул.':'Новые заказы появятся после загрузки с маркетплейса.','orders'))+pager('order',state.orderPage,pages,`${(()=>{const orders=new Set(rows.map(r=>r.id)).size;return orders===rows.length?counted(orders,'заказ','заказа','заказов'):`${counted(rows.length,'строка','строки','строк')} · ${counted(orders,'заказ','заказа','заказов')}`;})()} · Excel сохраняет весь результат фильтра`);
     $('orderGroups').querySelectorAll('[data-order-id]').forEach(b=>b.onclick=()=>openDocument(b.dataset.orderId,true));wirePhotos($('orderGroups'));
     $('orderPrev').onclick=()=>{state.orderPage--;renderOrderRows();};$('orderNext').onclick=()=>{state.orderPage++;renderOrderRows();};
     const active=new Set(state.orders.rows.filter(orderActive).map(r=>r.id)).size;$('orderBadge').textContent=n(active);$('orderBadge').hidden=!active;

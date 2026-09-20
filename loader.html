@@ -512,6 +512,14 @@
   }
   .confirm-btn:active{opacity:0.85;}
   .confirm-btn:disabled{background:var(--panel-2); color:var(--muted); cursor:default;}
+  /* «Отложить» — второстепенное действие рядом с главным: появляется только
+     тогда, когда собрать позицию физически нечем. */
+  .postpone-btn{
+    width:100%; margin-top:10px; padding:14px; border-radius:14px; cursor:pointer;
+    background:transparent; color:var(--text); border:1px solid var(--line);
+    font-size:15px; font-weight:600; font-family:var(--sans);
+  }
+  .postpone-btn:active{opacity:0.85;}
 
   /* ---------- Финальный экран ---------- */
   .done-screen{display:none; flex:1; flex-direction:column; align-items:center; justify-content:center; padding:32px; text-align:center; background:var(--bg);}
@@ -818,6 +826,10 @@
 
       <div class="task-footer">
         <button class="confirm-btn" id="confirmBtn" onclick="confirmItem()" disabled>Выберите место и подтвердите</button>
+        <!-- Появляется только тогда, когда товара нет ни в одной ячейке:
+             иначе работник упирался в неработающую кнопку и не мог ни собрать
+             позицию, ни перейти к следующей. -->
+        <button class="postpone-btn" id="postponeBtn" onclick="postponeItem()" style="display:none;">Отложить и взять следующую</button>
       </div>
     </div>
 
@@ -850,7 +862,7 @@
         <div class="sheet-step" id="sheetStepManual">
           <div class="sheet-back" onclick="goSheetStep('choice')">← Назад</div>
           <div class="sheet-title">Ввести место вручную</div>
-          <div class="sheet-sub">Например: A-14 · ярус 2</div>
+          <div class="sheet-sub">Например: 1.4.2 — ряд, стеллаж, ярус. Ячейка должна быть на складе.</div>
           <input type="text" class="sheet-input" id="manualCellInput" placeholder="Ряд-стеллаж · ярус" oninput="document.getElementById('manualConfirmBtn').disabled = !this.value.trim();">
           <button class="sheet-confirm" id="manualConfirmBtn" disabled onclick="confirmManualCell()">Подтвердить место</button>
         </div>
@@ -1066,6 +1078,13 @@
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
   }
+  // Значение внутри JS-строки в onclick. Имена ячеек приезжают из 1С, и
+  // апостроф в имени («Зона 'А'») обрывал строку — кнопка выбора ячейки молча
+  // переставала работать. Сначала экранируем для JS, потом для разметки.
+  function jsArg(value){
+    return escapeHTML(String(value == null ? '' : value).replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+  }
+
   // «1 заказ / 2 заказа / 5 заказов» — в кабинете такой помощник есть, тут не
   // было: экраны до сих пор обходились числами без существительных.
   function pluralRu(n, one, few, many){
@@ -1158,6 +1177,8 @@
     startTaskTimer();
     totalPausedMs = 0;
     pauseLog = [];
+    // Отложенные позиции — только про текущую накладную.
+    postponedItems = new Set();
     pauseStart = null;
     results.length = 0;
     document.getElementById('pauseBanner').classList.remove('show');
@@ -1242,9 +1263,19 @@
   // Какой именно подсказке следует ответ работника — нужно, чтобы сервер узнал,
   // согласились с ней или положили по-своему.
   let lastSuggestionId = null;
+  // Номер запроса подсказки. Позиции листают быстро, ответы приходят вразнобой,
+  // и ответ по предыдущему товару перезаписывал ячейки нового: на экране одно
+  // название, а ячейки от другого товара — и товар кладут не туда.
+  let cellOptionsRequest = 0;
+
+  // Отменить ожидание подсказки: ответ, который прилетит после, уже не наш.
+  // Работник нажал «Хороший», сразу поправился на «Брак» — и через секунду
+  // на экране брака появлялись ячейки с годным товаром.
+  function cancelCellOptions(){ cellOptionsRequest += 1; }
 
   async function renderCellOptions(sku){
     const wrap = document.getElementById('cellOptions');
+    const request = ++cellOptionsRequest;
     wrap.innerHTML = '<div style="font-size:13px; color:var(--muted); text-align:center; padding:8px;">Подбираю ячейку…</div>';
 
     let options;
@@ -1254,9 +1285,11 @@
       const company = currentInvoice && currentInvoice.company_id
         ? '&companyId=' + encodeURIComponent(currentInvoice.company_id) : '';
       const data = await apiFetch('/api/agents/kladovshchik/suggest-cell?sku=' + encodeURIComponent(sku) + company);
+      if(request !== cellOptionsRequest) return;   // уже листают другой товар
       options = data.options;
       lastSuggestionId = data.suggestionId || null;
     } catch(e){
+      if(request !== cellOptionsRequest) return;
       wrap.innerHTML = '<div style="font-size:13px; color:var(--muted); text-align:center; padding:8px;">Не удалось подобрать ячейку — выберите «Своё место»</div>';
       return;
     }
@@ -1271,9 +1304,9 @@
       empty: 'свободно',
     };
     wrap.innerHTML = options.map((c, i) => `
-      <div class="cell-option" id="cell-${i}" onclick="selectCellOption('${c.blockId}', '${c.label}', ${i})">
+      <div class="cell-option" id="cell-${i}" onclick="selectCellOption('${jsArg(c.blockId)}', '${jsArg(c.label)}', ${i})">
         <div>
-          <div class="cell-option-id">${c.label}</div>
+          <div class="cell-option-id">${escapeHTML(c.label)}</div>
           <div class="cell-option-note">${noteText[c.reason] || 'свободно'}</div>
         </div>
         <div class="cell-option-check"></div>
@@ -1292,9 +1325,33 @@
 
   let pickSuggestion = null;
 
+  // Позиции, отложенные работником «вернусь позже». Только на время этого
+  // экрана: в базе ничего не меняется, позиция остаётся открытой.
+  let postponedItems = new Set();
+
   function findNextUnpickedIndex(){
-    return currentInvoice.items.findIndex(it => !it.closed);
+    const next = currentInvoice.items.findIndex(it => !it.closed && !postponedItems.has(it.id));
+    if(next !== -1) return next;
+    // Остались только отложенные — значит по ним товара на складе нет, и это
+    // уже разговор с менеджером, а не работа у стеллажа.
+    return -1;
   }
+
+  // Отложить позицию и перейти к следующей. Раньше в этом месте была кнопка
+  // «Товара нет — закрыть позицию», которая не нажималась никогда: сервер
+  // умеет записать только отбор из ячейки, а закрыть позицию «ничем» нельзя.
+  // Заказ вставал намертво на первой же позиции без остатка.
+  function postponeItem(){
+    const item = currentInvoice.items[currentItemIndex];
+    if(!item) return;
+    postponedItems.add(item.id);
+    const left = currentInvoice.items.filter(it => !it.closed && !postponedItems.has(it.id)).length;
+    showToast(left > 0
+      ? 'Позиция отложена — вернитесь к ней, когда товар появится'
+      : 'Отложены все оставшиеся позиции. Скажите менеджеру: этого товара нет на складе');
+    renderCurrentItem();
+  }
+  window.postponeItem = postponeItem;
 
   async function renderPickItem(){
     document.getElementById('bucketBlock').classList.remove('show');
@@ -1304,6 +1361,7 @@
     document.getElementById('cellLabel').textContent = 'Откуда взять — по порядку обхода';
     // Своё место при отборе не предлагаем: брать можно только оттуда, где
     // товар действительно лежит, а это сервер и так перечисляет.
+    cancelCellOptions();
     document.getElementById('manualCellBtn').style.display = 'none';
     document.getElementById('customCellDisplay').classList.remove('show');
 
@@ -1402,12 +1460,12 @@
     // Галочку «последняя ячейка» показываем только когда отбор не закрывает
     // позицию: если взяли всё, она закроется сама и спрашивать не о чем.
     toggle.classList.toggle('show', selectedCellBlockId !== null && currentQty < remaining);
+    const nowhere = Boolean(pickSuggestion) && pickSuggestion.cells.length === 0;
+    const postpone = document.getElementById('postponeBtn');
+    if(postpone) postpone.style.display = nowhere ? '' : 'none';
     if(!selectedCellBlockId){
       btn.disabled = true;
-      btn.textContent = pickSuggestion && pickSuggestion.cells.length === 0
-        ? 'Товара нет — закрыть позицию'
-        : 'Выберите ячейку';
-      if(pickSuggestion && pickSuggestion.cells.length === 0) btn.disabled = true;
+      btn.textContent = nowhere ? 'Товара нет ни в одной ячейке' : 'Выберите ячейку';
       return;
     }
     btn.disabled = false;
@@ -1438,6 +1496,18 @@
     updatePickConfirm();
   }
 
+  // Сохранено, но экран не обновился.
+  //
+  // Запись на сервер уже прошла, а следом падает обновление списка или карты
+  // ячеек — и грузчик видел «Не удалось сохранить». Он жал ещё раз, и
+  // количество записывалось дважды: на полке десять, в базе двадцать.
+  // Поэтому после удачной записи кнопку не возвращаем и говорим правду.
+  function savedButStale(error){
+    showToast('Сохранено. Экран не обновился (' + error.message + ') — обновите страницу.');
+    const btn = document.getElementById('confirmBtn');
+    if(btn){ btn.disabled = true; btn.textContent = 'Сохранено — обновите страницу'; }
+  }
+
   async function confirmPick(){
     const item = currentInvoice.items[currentItemIndex];
     const btn = document.getElementById('confirmBtn');
@@ -1445,6 +1515,7 @@
     btn.textContent = 'Сохраняю…';
     const willClose = currentQty >= pickSuggestion.item.remaining;
     const isFinal = willClose || document.getElementById('isFinalCheck').checked;
+    let saved = false;
     try{
       await apiFetch('/api/shipping', {
         method: 'POST',
@@ -1457,6 +1528,7 @@
           pauseReasons: pauseLog.map(p => p.reason),
         },
       });
+      saved = true;
       if(isFinal){
         results.push({
           name: item.name, sku: item.sku, declared: Number(item.declared_qty),
@@ -1468,6 +1540,7 @@
       cellRows = await apiFetch('/api/cells/rows');
       renderCurrentItem();
     } catch(e){
+      if(saved){ savedButStale(e); return; }
       showToast('Не удалось сохранить: ' + e.message);
       updatePickConfirm();
     }
@@ -1584,6 +1657,7 @@
       // склада, и знает о них человек, а не подсказка по артикулу.
       document.getElementById('cellLabel').textContent = 'Куда отнесли — можно не указывать';
       document.getElementById('manualCellBtn').style.display = '';
+      cancelCellOptions();
       document.getElementById('cellOptions').innerHTML =
         '<div style="font-size:13px; color:var(--muted); text-align:center; padding:8px;">'
         + 'Для брака ячейку подбирает не Кладовщик, а вы — укажите своё место или пропустите.</div>';
@@ -1615,6 +1689,7 @@
     const btn = document.getElementById('confirmBtn');
     btn.disabled = true;
     btn.textContent = 'Сохраняю…';
+    let saved = false;
     try{
       await apiFetch('/api/returns', {
         method: 'POST',
@@ -1628,6 +1703,7 @@
           pauseReasons: pauseLog.map(p => p.reason),
         },
       });
+      saved = true;
       results.push({
         name: item.name, sku: item.sku, declared: Number(item.declared_qty),
         accepted: currentQty, cell: selectedCellLabel || BUCKET_NAME[selectedBucket],
@@ -1637,6 +1713,7 @@
       if(selectedCellBlockId) cellRows = await apiFetch('/api/cells/rows');
       renderCurrentItem();
     } catch(e){
+      if(saved){ savedButStale(e); return; }
       showToast('Не удалось сохранить: ' + e.message);
       updateReturnConfirm();
     }
@@ -1706,6 +1783,8 @@
   // зовут сюда. Ветка возврата стоит один раз здесь, а не в каждом из них.
   function updateConfirmState(){
     if(isReturn()){ return updateReturnConfirm(); }
+    const postpone = document.getElementById('postponeBtn');
+    if(postpone) postpone.style.display = 'none';
     const btn = document.getElementById('confirmBtn');
     if(selectedCellLabel){
       btn.disabled = false;
@@ -1723,6 +1802,7 @@
     const btn = document.getElementById('confirmBtn');
     btn.disabled = true;
     btn.textContent = 'Сохраняю…';
+    let saved = false;
     try{
       await apiFetch('/api/receiving', {
         method: 'POST',
@@ -1735,6 +1815,7 @@
           pauseReasons: pauseLog.map(p => p.reason),
         },
       });
+      saved = true;
       results.push({
         name: item.name, sku: item.sku, declared: Number(item.declared_qty),
         accepted: currentQty, cell: selectedCellLabel || 'своё место',
@@ -1743,6 +1824,7 @@
       if(selectedCellBlockId) cellRows = await apiFetch('/api/cells/rows');
       renderCurrentItem();
     } catch(e){
+      if(saved){ savedButStale(e); return; }
       showToast('Не удалось сохранить: ' + e.message);
       updateConfirmState();
     }
@@ -1932,7 +2014,7 @@
       cells = kitState.options.map(function(o){
         const on = o.blockId === kitState.cellBlockId;
         return '<div class="stock-row' + (on ? ' selected' : '') + '" '
-          + 'onclick="selectKitCell(\'' + o.blockId + '\', \'' + o.label + '\')">'
+          + 'onclick="selectKitCell(\'' + jsArg(o.blockId) + '\', \'' + jsArg(o.label) + '\')">'
           + '<div><div class="stock-row-sku">' + escapeHTML(o.label) + '</div>'
           + '<div class="stock-row-state">' + (KIT_CELL_REASON[o.reason] || 'ячейка') + '</div></div>'
           + '<div class="stock-row-qty">' + (on ? 'выбрана' : '') + '</div></div>';
@@ -2535,8 +2617,8 @@
       const states = [...new Set(o.block.stock.map(function(st){
         return QUALITY_NAME[st.quality] || 'годный';
       }))].join(', ');
-      return '<div class="stock-row" onclick="pickMoveCell(\'' + o.block.id + '\', \'' + label + '\')">'
-        + '<div><div class="stock-row-sku">' + label + '</div>'
+      return '<div class="stock-row" onclick="pickMoveCell(\'' + jsArg(o.block.id) + '\', \'' + jsArg(label) + '\')">'
+        + '<div><div class="stock-row-sku">' + escapeHTML(label) + '</div>'
         + '<div class="stock-row-state">' + escapeHTML(states) + '</div></div>'
         + '<div class="stock-row-qty">' + total + ' шт</div></div>';
     }).join('');
@@ -2578,7 +2660,7 @@
     // разница между двумя видами брака, о которой говорил владелец склада.
     const canRepack = st.quality === 'packaging_defect';
     document.getElementById('moveBody').innerHTML =
-      '<div class="job-back" onclick="pickMoveCell(\'' + moveState.cellBlockId + '\', \'' + moveState.cellLabel + '\')">← Другой товар</div>'
+      '<div class="job-back" onclick="pickMoveCell(\'' + jsArg(moveState.cellBlockId) + '\', \'' + jsArg(moveState.cellLabel) + '\')">← Другой товар</div>'
       + '<div class="pick-line"><div class="pick-line-name">' + escapeHTML(st.sku) + '</div>'
       + '<div class="pick-line-sku">' + state + ' · ' + Number(st.qty) + ' шт в ячейке</div>'
       + '<div class="qty-block" style="background:none; border:none; padding:14px 0 0;">'
@@ -2614,8 +2696,8 @@
       + all.map(function(o){
         const label = formatBlockLabel(o.rowNum, o.block);
         const busy = (o.block.stock || []).length > 0 ? 'занята' : 'свободна';
-        return '<div class="stock-row" onclick="doMoveToCell(\'' + o.block.id + '\')">'
-          + '<div><div class="stock-row-sku">' + label + '</div>'
+        return '<div class="stock-row" onclick="doMoveToCell(\'' + jsArg(o.block.id) + '\')">'
+          + '<div><div class="stock-row-sku">' + escapeHTML(label) + '</div>'
           + '<div class="stock-row-state">' + busy + '</div></div></div>';
       }).join('');
   }
@@ -2628,7 +2710,11 @@
     await sendMove({ toCellBlockId: toBlockId }, 'Переставил ' + moveState.qty + ' шт');
   }
 
+  let moveInFlight = false;
+
   async function sendMove(extra, okText){
+    if(moveInFlight) return;
+    moveInFlight = true;
     const st = moveState.stock;
     const body = Object.assign({
       sku: st.sku,
@@ -2642,6 +2728,8 @@
     } catch(e){
       showToast('Не удалось: ' + e.message);
       return;
+    } finally {
+      moveInFlight = false;
     }
     showToast(okText);
     try{ cellRows = await apiFetch('/api/cells/rows'); } catch(e){ /* обновим при следующем входе */ }
@@ -2655,11 +2743,19 @@
     // Экран завершения говорит о том, что человек только что делал: собирать,
     // принимать и разбирать возврат — разные работы, и подписи не должны их
     // путать.
-    document.getElementById('doneTitle').textContent =
-      isPicking() ? 'Отгрузка собрана' : (isReturn() ? 'Возврат разобран' : 'Приёмка завершена');
-    document.getElementById('doneSub').textContent = isReturn()
-      ? 'Возврат ' + currentInvoice.number + ' разобран по состоянию товара. Продавец увидит, что вернулось в продажу, а что легло в брак.'
-      : 'Накладная ' + currentInvoice.number + ' полностью обработана. Владелец склада увидит расхождения в журнале, если они есть.';
+    // Отложенные позиции — это не «всё собрано». Говорим прямо, сколько
+    // осталось и что с ними делать, иначе экран поздравляет с работой,
+    // которую никто не сделал.
+    const postponed = currentInvoice.items.filter(function(it){ return !it.closed && postponedItems.has(it.id); }).length;
+    document.getElementById('doneTitle').textContent = postponed > 0
+      ? 'Собрано, кроме отложенного'
+      : (isPicking() ? 'Отгрузка собрана' : (isReturn() ? 'Возврат разобран' : 'Приёмка завершена'));
+    document.getElementById('doneSub').textContent = postponed > 0
+      ? 'Отложено ' + postponed + ' ' + pluralRu(postponed, 'позиция', 'позиции', 'позиций')
+        + ': этого товара нет ни в одной ячейке. Скажите менеджеру — накладная остаётся в работе.'
+      : (isReturn()
+        ? 'Возврат ' + currentInvoice.number + ' разобран по состоянию товара. Продавец увидит, что вернулось в продажу, а что легло в брак.'
+        : 'Накладная ' + currentInvoice.number + ' полностью обработана. Владелец склада увидит расхождения в журнале, если они есть.');
 
     // «Собран» и «отгружен» — разные события: заказ может стоять собранным
     // часами, пока не придёт машина. Поэтому отгрузку подтверждают отдельно, и
@@ -2710,7 +2806,7 @@
           <div class="done-row-sku">${escapeHTML(r.sku)}</div>
           <div class="done-row-meta">
             <span>${label}: <span class="done-row-qty">${qtyText}</span></span>
-            <span class="done-row-cell">→ ${r.cell}</span>
+            <span class="done-row-cell">→ ${escapeHTML(r.cell)}</span>
           </div>
         </div>
       `;
@@ -2752,16 +2848,21 @@
     const dateStr = now.toLocaleDateString('ru-RU') + ' ' + now.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
     const netMs = (now - taskStartTime) - totalPausedMs;
 
+    const BUCKET_TITLE = { good: 'Годный', defective: 'Брак', packaging_defect: 'Брак упаковки' };
     const rows = results.map(r => ({
       'Товар': r.name,
       'SKU': r.sku,
       'Заявлено': r.declared,
-      'Принято': r.accepted,
-      'Расхождение': r.accepted - r.declared,
+      [isReturn() ? 'Разобрано' : 'Принято']: r.accepted,
+      // У возврата «расхождения» нет: 7 годных из 10 — это не недостача,
+      // а раскладка по состоянию. Вместо выдуманного минуса пишем состояние.
+      [isReturn() ? 'Состояние' : 'Расхождение']: isReturn()
+        ? (BUCKET_TITLE[r.bucket] || 'Годный')
+        : r.accepted - r.declared,
       'Ячейка': r.cell,
       'Накладная': currentInvoice.number,
       'Клиент': currentInvoice.company_name,
-      'Дата приёмки': dateStr,
+      [isPicking() ? 'Дата отбора' : isReturn() ? 'Дата разбора' : 'Дата приёмки']: dateStr,
       'Начало': formatClock(taskStartTime),
       'Окончание': formatClock(now),
       'Чистое время': formatDuration(netMs),
@@ -2774,7 +2875,7 @@
       {wch:9}, {wch:11}, {wch:13}, {wch:7}
     ];
     const wb = XLSX.utils.book_new();
-    const sheetName = isPicking() ? 'Отгрузка' : 'Приёмка';
+    const sheetName = isPicking() ? 'Отгрузка' : (isReturn() ? 'Возврат' : 'Приёмка');
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
     XLSX.writeFile(wb, sheetName + ' ' + currentInvoice.number + '.xlsx');
   }
@@ -2858,10 +2959,36 @@
     return String(date.getHours()).padStart(2,'0') + ':' + String(date.getMinutes()).padStart(2,'0');
   }
 
+  // Ячейку ищем среди настоящих ячеек склада.
+  //
+  // Раньше введённый текст просто показывался на экране, а на сервер уходил
+  // cellBlockId: null — товар принимался «в никуда»: в отчёте и в Excel стоял
+  // адрес, а в ячейках его не было, и отбор этот товар не видел.
+  function normalizeCellLabel(text){
+    return String(text).toLowerCase().replace(/ярус/g, '').replace(/[^0-9a-zа-яё]+/gi, '');
+  }
+
+  function findCellByLabel(text){
+    const wanted = normalizeCellLabel(text);
+    if(!wanted) return null;
+    for(const row of cellRows){
+      for(const block of (row.blocks || [])){
+        const label = formatBlockLabel(row.row_num, block);
+        if(normalizeCellLabel(label) === wanted) return { id: block.id, label: label };
+      }
+    }
+    return null;
+  }
+
   function confirmManualCell(){
     const val = document.getElementById('manualCellInput').value.trim();
     if(!val) return;
-    applyCustomCell(null, val);
+    const found = findCellByLabel(val);
+    if(!found){
+      showToast('Такой ячейки на складе нет. Проверьте адрес или выберите её на карте.');
+      return;
+    }
+    applyCustomCell(found.id, found.label);
   }
 
   function showMapRowsPicker(){

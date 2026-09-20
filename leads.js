@@ -23,7 +23,7 @@
     $('telegramStatus').textContent=connected ? `Подключён @${s.bot_username}. ${s.last_error?'Последняя отправка не удалась — повторим автоматически.':s.last_delivered_at?'Последняя доставка: '+date(s.last_delivered_at):'Новые заявки будут приходить сюда.'}`:'Ещё не подключён';
   }
   async function load(){
-    if(busy)return;busy=true;$('refresh').disabled=true;
+    if(busy)return;busy=true;$('refresh').disabled=true;$('next').disabled=true;$('previous').disabled=true;
     try{
       const data=await api('?status='+encodeURIComponent($('status').value)+'&offset='+offset);
       $('count').textContent=`Новых: ${data.counts.new} · Всего: ${data.counts.total}`;
@@ -55,8 +55,8 @@
   $('confirm').onclick=()=>action($('confirm'),async()=>{const s=await api('/telegram/confirm','POST',{});if(!s.connected){message('setupMessage','Нажатие «Старт» ещё не получено. Откройте ссылку выше и попробуйте снова.');return;}$('confirmStep').hidden=true;$('startBot').removeAttribute('href');$('setup').hidden=true;await settings();await load();message('pageMessage','Telegram подключён. Новые заявки будут приходить автоматически.');});
   $('disconnect').onclick=()=>{if(window.confirm('Отключить Telegram? Заявки продолжат сохраняться в Аргусе.'))action($('disconnect'),async()=>{await api('/telegram','DELETE');await settings();await load();});};
   $('refresh').onclick=()=>action($('refresh'),async()=>{await settings();await load();message('pageMessage','Данные обновлены.');});
-  $('status').onchange=()=>{offset=0;load().catch(e=>message('pageMessage',e.message,true));};
-  $('previous').onclick=()=>{offset=Math.max(0,offset-30);load().catch(e=>message('pageMessage',e.message,true));};
-  $('next').onclick=()=>{if(hasMore){offset+=30;load().catch(e=>message('pageMessage',e.message,true));}};
+  $('status').onchange=()=>{if(busy)return;offset=0;load().catch(e=>message('pageMessage',e.message,true));};
+  $('previous').onclick=()=>{if(busy||offset===0)return;offset=Math.max(0,offset-30);load().catch(e=>message('pageMessage',e.message,true));};
+  $('next').onclick=()=>{if(busy||!hasMore)return;offset+=30;load().catch(e=>message('pageMessage',e.message,true));};
   (async()=>{if(!token){message('pageMessage','Войдите в кабинет владельца Аргуса, затем откройте эту страницу.');return;}try{await api('/access');$('content').hidden=false;message('pageMessage','');await settings();await load();}catch(e){message('pageMessage',e.message,true);}})();
 })();

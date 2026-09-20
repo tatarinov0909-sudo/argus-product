@@ -697,7 +697,8 @@
     return '<div class="sheet" data-doc="pick">'
       + head(s, 'Лист комплектации', 'Собрать со склада. Одинаковые артикулы сложены — за товаром идём один раз, по рядам.')
       + '<div class="facts">'
-      +   '<div class="fact"><b>' + nf(t.uniqueSkus) + '</b><span>позиций</span></div>'
+      +   '<div class="fact"><b>' + nf(t.uniqueSkus) + '</b><span>'
+      +     plural(t.uniqueSkus, 'позиция', 'позиции', 'позиций') + '</span></div>'
       +   '<div class="fact"><b>' + nf(t.units) + '</b><span>штук всего</span></div>'
       +   '<div class="fact"><b>' + nf(t.orders) + '</b><span>' + plural(t.orders, 'заказ', 'заказа', 'заказов') + '</span></div>'
       +   '<div class="fact"><b>' + day(s.createdAt) + '</b><span>создана в ' + clock(s.createdAt) + '</span></div>'

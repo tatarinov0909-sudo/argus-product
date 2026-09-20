@@ -254,7 +254,7 @@
 
     if(staffError){
       wrap.innerHTML = '<div class="staff-empty">Не удалось загрузить работников: '
-        + staffError + '</div>';
+        + escapeHTML(staffError) + '</div>';
       return;
     }
     if(staffMembers.length === 0){
@@ -584,7 +584,7 @@
       invoices = await apiFetch('/api/invoices');
       lastInvoices = invoices;
     } catch(e){
-      document.getElementById('invoicesList').innerHTML = '<div class="staff-empty">Не удалось загрузить накладные: ' + e.message + '</div>';
+      document.getElementById('invoicesList').innerHTML = '<div class="staff-empty">Не удалось загрузить накладные: ' + escapeHTML(e.message) + '</div>';
       return;
     }
     const wrap = document.getElementById('invoicesList');
@@ -2505,8 +2505,34 @@
     return base + ' ' + y;
   }
 
+  // Что человек уже сделал на экране: отмеченные записи и раскрытые группы.
+  // Журнал перечитывается каждые 25 секунд, и без этого отметки для массового
+  // подтверждения слетали прямо во время работы.
+  function journalScreenState(){
+    return {
+      checked: [...document.querySelectorAll('.j-check:checked')]
+        .map(function(cb){ const e = cb.closest('.j-entry'); return e && e.dataset.entryId; })
+        .filter(Boolean),
+      open: [...document.querySelectorAll('.j-group.open')].map(function(g){ return g.dataset.group; }),
+    };
+  }
+
+  function restoreJournalScreenState(state){
+    if(!state) return;
+    state.checked.forEach(function(id){
+      const entry = document.querySelector('.j-entry[data-entry-id="' + CSS.escape(id) + '"] .j-check');
+      if(entry) entry.checked = true;
+    });
+    state.open.forEach(function(id){
+      const group = document.querySelector('.j-group[data-group="' + CSS.escape(id) + '"]');
+      if(group) group.classList.add('open');
+    });
+    updateBulk();
+  }
+
   function renderJournalEntries(newIds){
     const list = document.getElementById('jList');
+    const screen = journalScreenState();
     if(journalEntries.length === 0){
       list.innerHTML = journalScope
         ? '<div class="j-scope"><span class="j-scope-kind">'
@@ -2538,6 +2564,20 @@
       + pending.length + ' ' + pluralRu(pending.length, 'запись ждёт', 'записи ждут', 'записей ждут')
       + ' вашего решения</div></div>';
 
+    // «По уровню риска» — плоский список: сначала то, что ждёт решения.
+    // Дни в этом режиме не разделяем: ожидающие записи приходят из разных
+    // дней, и разделители дублировались бы через строку.
+    if(sortMode === 'risk'){
+      const byRisk = journalEntries.slice().sort(function(a, b){
+        return (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1);
+      });
+      list.innerHTML = scopeBar + head
+        + byRisk.map(function(e){ return journalEntryHtml(e, fresh.has(e.id), e.created_at.slice(0, 10)); }).join('');
+      restoreJournalScreenState(screen);
+      renderJournalCalendar();
+      return;
+    }
+
     // Дни — потому что двести строк подряд читать нельзя.
     let html = scopeBar + head;
     let lastDay = null;
@@ -2554,6 +2594,7 @@
       html += journalGroupHtml(node, fresh);
     });
     list.innerHTML = html;
+    restoreJournalScreenState(screen);
     renderJournalCalendar();
   }
 
@@ -2632,23 +2673,23 @@
       const canResolve = entry.status === 'pending';
       const isWb = entry.agent === 'Обмен с WB';
       return `
-        <div class="j-entry ${agentClass}${isNew ? ' j-new' : ''}" data-client="" data-risk="${entry.status === 'pending' ? 'high' : 'low'}" data-order="0" data-day="${dayKey}" data-entry-id="${entry.id}">
+        <div class="j-entry ${agentClass}${isNew ? ' j-new' : ''}" data-client="" data-risk="${entry.status === 'pending' ? 'high' : 'low'}" data-order="0" data-day="${dayKey}" data-entry-id="${escapeHTML(entry.id)}">
           <input type="checkbox" class="j-check" onclick="event.stopPropagation(); updateBulk()" ${canResolve ? '' : 'style=\"visibility:hidden;\"'}>
           <div class="j-avatar">
             <svg width="20" height="20" viewBox="0 0 22 22"><use href="#icon-warehouse-agent"/></svg>
           </div>
           <div class="j-body">
             <div class="j-top">
-              <span class="j-agent ${agentClass}">${entry.agent}</span>
+              <span class="j-agent ${agentClass}">${escapeHTML(entry.agent)}</span>
               <span class="j-time">${formatEntryTime(entry.created_at)}</span>
             </div>
-            <div class="j-text">${entry.action_text}</div>
+            <div class="j-text">${escapeHTML(entry.action_text)}</div>
             ${journalLinksHtml(entry)}
             <div class="j-meta">
-              <span class="j-status ${entry.status === 'auto' ? 'auto' : entry.status === 'confirmed' ? 'applied' : entry.status === 'rolled_back' ? 'pending' : 'pending'}">${STATUS_LABEL[entry.status] || entry.status}</span>
+              <span class="j-status ${entry.status === 'auto' ? 'auto' : entry.status === 'confirmed' ? 'applied' : entry.status === 'rolled_back' ? 'pending' : 'pending'}">${escapeHTML(STATUS_LABEL[entry.status] || entry.status)}</span>
               ${canResolve ? (isWb
                 ? '<a class="staff-action restore" style="display:inline-block; margin-left:8px;" href="marketplace-reconciliation.html">Открыть сверку WB</a>'
-                : `<span class="staff-action" style="display:inline-block; margin-left:8px;" onclick="resolveJournalEntry('${entry.id}', 'confirm')">Принять</span><span class="staff-action revoke" style="display:inline-block; margin-left:8px;" onclick="resolveJournalEntry('${entry.id}', 'rollback')">Отклонить</span>`)
+                : `<span class="staff-action" style="display:inline-block; margin-left:8px;" onclick="resolveJournalEntry('${escapeHTML(entry.id)}', 'confirm')">Принять</span><span class="staff-action revoke" style="display:inline-block; margin-left:8px;" onclick="resolveJournalEntry('${escapeHTML(entry.id)}', 'rollback')">Отклонить</span>`)
                 : ''}
             </div>
           </div>
@@ -2705,12 +2746,12 @@
   function journalLinksHtml(entry){
     const parts = [];
     if(entry.cell_label){
-      parts.push('<span class="j-link" data-go-cell="' + entry.cell_block_id
+      parts.push('<span class="j-link" data-go-cell="' + escapeHTML(entry.cell_block_id)
         + '" title="Показать на карте склада">' + ICON_CELL
         + escapeHTML(entry.cell_label) + '</span>');
     }
     if(entry.invoice_number){
-      parts.push('<span class="j-link" data-go-invoice="' + entry.invoice_id
+      parts.push('<span class="j-link" data-go-invoice="' + escapeHTML(entry.invoice_id)
         + '" title="Показать накладную">' + ICON_DOC
         + escapeHTML(entry.invoice_number) + '</span>');
     }
@@ -2942,18 +2983,13 @@
     }
   });
 
+  // Порядок задаётся данными и перерисовкой, а не перестановкой готовых узлов:
+  // раньше записи выдёргивались из групп и из-под разделителей дней, и список
+  // разваливался — заголовки дней висели над пустотой, а свёрнутые группы
+  // внезапно раскрывались.
   function sortEntries(){
-    const mode = sortMode;
-    const list = document.getElementById('jList');
-    const entries = Array.from(list.querySelectorAll('.j-entry'));
-    entries.sort((a,b)=>{
-      if(mode==='risk'){
-        const order = {high:0, low:1, none:2};
-        return (order[a.dataset.risk] ?? 3) - (order[b.dataset.risk] ?? 3);
-      }
-      return 0; // client sort dropped — real entries no longer carry a client field client-side
-    });
-    entries.forEach(e=>list.appendChild(e));
+    renderJournalEntries();
+    applyFilters();
   }
 
   function togglePin(el){
@@ -4105,6 +4141,9 @@
   let ordersPartners = [];
   let ordersPicked = null;
   let ordersRows = [];
+  // Чей экран заказов открыт сейчас: ответы приходят с задержкой, и поздний
+  // ответ по прошлому продавцу не должен перерисовать чужой экран.
+  let ordersCompanyId = null;
 
   async function loadMpOrders(){
     const host = document.getElementById('ordersContent');
@@ -4172,12 +4211,17 @@
     const box = document.getElementById('ordersDetail');
     if(!box) return;
     box.innerHTML = '<div class="staff-empty">Загружаем заказы…</div>';
+    ordersCompanyId = companyId;
+    let rows;
     try{
-      ordersRows = await apiFetch('/api/supplies/pending/' + companyId);
+      rows = await apiFetch('/api/supplies/pending/' + companyId);
     } catch(e){
+      if(ordersCompanyId !== companyId) return;
       box.innerHTML = '<div class="staff-empty">Не удалось загрузить: ' + escapeHTML(e.message) + '</div>';
       return;
     }
+    if(ordersCompanyId !== companyId) return;   // уже открыли другого продавца
+    ordersRows = rows;
     ordersSelected = new Set();
     renderPartnerOrders(companyId);
   }
@@ -4237,7 +4281,11 @@
         ordersPoints[companyId] = list;
       })
       .catch(() => { ordersPoints[companyId] = 'error'; })
-      .then(() => renderPartnerOrders(companyId));
+      .then(() => {
+        // Ответ мог прийти, когда менеджер уже открыл другого продавца:
+        // перерисовывать его экран данными прошлого нельзя.
+        if(ordersCompanyId === companyId) renderPartnerOrders(companyId);
+      });
   }
 
   function sortOrders(rows){
@@ -4350,10 +4398,14 @@
   }
 
   function setOrdersSearch(companyId, value){
+    // Каретку возвращаем туда, где её поставил человек: её гнало в конец
+    // строки, и исправить букву в середине запроса было невозможно.
+    const before = document.querySelector('.ord-search');
+    const at = before && before.selectionStart != null ? before.selectionStart : value.length;
     ordersSearch = value;
     renderPartnerOrders(companyId);
     const box = document.querySelector('.ord-search');
-    if(box){ box.focus(); box.setSelectionRange(box.value.length, box.value.length); }
+    if(box){ box.focus(); const pos = Math.min(at, box.value.length); box.setSelectionRange(pos, pos); }
   }
   window.setOrdersSearch = setOrdersSearch;
 
@@ -4365,14 +4417,26 @@
 
   function toggleOrderPick(companyId, id){
     if(ordersSelected.has(id)) ordersSelected.delete(id); else ordersSelected.add(id);
+    // Список перерисовывается целиком, поэтому прокрутку возвращаем на место:
+    // иначе после каждой галки таблица прыгала в начало, и до восьмидесятого
+    // заказа приходилось доезжать заново.
+    const before = [...document.querySelectorAll('.ord-scroll')].map(el => el.scrollTop);
     renderPartnerOrders(companyId);
+    document.querySelectorAll('.ord-scroll').forEach((el, i) => {
+      if(before[i] != null) el.scrollTop = before[i];
+    });
   }
   window.toggleOrderPick = toggleOrderPick;
 
   function toggleAllOrders(companyId){
-    const ready = ordersRows.filter(o => o.ready);
-    const allOn = ready.every(o => ordersSelected.has(o.id));
-    ordersSelected = new Set(allOn ? [] : ready.map(o => o.id));
+    // Только видимые: галка стоит над отфильтрованным списком и обязана
+    // означать ровно его. Отметки на скрытых заказах не трогаем — их ставил
+    // человек. Раньше бралась вся сотня заказов, включая спрятанные поиском.
+    const ready = ordersRows.filter(o => o.ready && !o.wbConfirmed && matchesOrderSearch(o));
+    const allOn = ready.length > 0 && ready.every(o => ordersSelected.has(o.id));
+    const next = new Set(ordersSelected);
+    ready.forEach(o => { if(allOn) next.delete(o.id); else next.add(o.id); });
+    ordersSelected = next;
     renderPartnerOrders(companyId);
   }
   window.toggleAllOrders = toggleAllOrders;
@@ -4515,9 +4579,16 @@
     try{
       const r = await apiFetch('/api/supplies/' + id + '/ship', { method: 'POST' });
       const mp = r.marketplace || {};
-      showWhToast('Поставка ' + r.number + ' уехала.'
-        + (mp.delivered ? ' На WB передана в доставку.' : '')
-        + (mp.error ? ' На WB передать не удалось: ' + mp.error : ''));
+      // Без этого всплывашка говорила только «уехала», а на WB поставка так и
+      // висела «на сборке»: менеджер был уверен, что дело закрыто.
+      const wb = mp.delivered ? ' На WB передана в доставку.'
+        : mp.error ? ' На WB передать не удалось: ' + mp.error
+        : mp.skipped === 'write_disabled'
+          ? ' На WB ничего не менялось: для этого продавца не разрешено «Менять статусы» — передайте поставку в кабинете WB руками.'
+        : mp.skipped === 'no_mp_supply'
+          ? ' На WB поставки нет — передайте её в кабинете WB руками.'
+        : '';
+      showWhToast('Поставка ' + r.number + ' уехала.' + wb);
       await loadMpOrders();
     } catch(e){
       showWhToast('Не удалось отметить: ' + e.message);
@@ -4582,8 +4653,15 @@
   // Только из того, что менеджер отметил сам: одна кнопка «всё на сборку»
   // однажды отправила на склад девяносто три заказа разом, и шесть из них
   // уже собирали по поставке WB.
+  // Пока запрос летит, кнопка заблокирована: второе нажатие уходило вторым
+  // POST с теми же заказами и делало вторую поставку.
+  let supplyInFlight = false;
+
   async function makeSupply(companyId){
-    const ready = ordersRows.filter(o => o.ready && ordersSelected.has(o.id)).map(o => o.id);
+    if(supplyInFlight){ showWhToast('Поставка уже составляется — подождите.'); return; }
+    // Одна строка списка — это позиция заказа, а не заказ: у заказа из двух
+    // товаров id повторялся дважды, и сервер отвечал «Часть заказов не найдена».
+    const ready = [...new Set(ordersRows.filter(o => o.ready && ordersSelected.has(o.id)).map(o => o.id))];
     if(ready.length === 0){ showWhToast('Отметьте заказы, которые войдут в поставку.'); return; }
     const partner = ordersPartners.find(p => p.companyId === companyId);
     const points = Array.isArray(ordersPoints[companyId]) ? ordersPoints[companyId] : null;
@@ -4594,6 +4672,9 @@
       ? new Date(ordersShipDate + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : '';
     if(!confirm(`Составить поставку: ${ready.length} ${pluralRu(ready.length, 'заказ', 'заказа', 'заказов')}`
       + ` продавца «${partner ? partner.companyName : ''}»` + (place ? ` — ${place}` : '') + (dayText ? `, отгрузка ${dayText}` : '') + `?\n\nОна уйдёт на склад, грузчики начнут сборку.`)) return;
+    supplyInFlight = true;
+    const button = document.querySelector('.ord-actions button');
+    if(button){ button.disabled = true; button.textContent = 'Составляем поставку…'; }
     try{
       const supply = await apiFetch('/api/supplies', {
         method: 'POST',
@@ -4625,6 +4706,9 @@
       // из-за которого поставка не собралась, и это единственная подсказка,
       // что делать дальше.
       showWhToast('Не удалось собрать поставку: ' + e.message);
+    } finally {
+      supplyInFlight = false;
+      renderPartnerOrders(companyId);
     }
   }
   window.makeSupply = makeSupply;
