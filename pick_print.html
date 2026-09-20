@@ -36,6 +36,10 @@
   .code{font:700 17px/1.2 ui-monospace,monospace;letter-spacing:-.3px;word-break:break-all;}
   .code small{display:block;font:400 10px/1.4 'Golos Text', system-ui, sans-serif;color:#666;letter-spacing:0;}
   .qty{font:700 22px/1 ui-monospace,monospace;text-align:right;white-space:nowrap;}
+  /* Фото товара, если площадка его отдала: узнать товар на полке по картинке
+     быстрее, чем по названию. Нет фото — колонки нет. */
+  .photo{width:46px;height:46px;object-fit:contain;border:1px solid #c9ced3;border-radius:3px;
+         display:block;background:#fff;}
   .mark{width:16mm;}
   .box{width:11mm;height:11mm;border:1.5px solid #111;border-radius:2px;margin-left:auto;}
   .short{font-size:11px;color:#8a1c12;font-weight:600;margin-top:4px;}
@@ -117,6 +121,7 @@
 
     const companies = [...new Set(data.orders.map((o) => o.company))];
     const mps = [...new Set(data.orders.map((o) => o.marketplace || '1c'))];
+    const withPhoto = lines.some((l) => l.photo);
     const rows = lines.map((l) => {
       const cells = l.cells.length
         ? l.cells.map((c) => esc(c.label) + (l.cells.length > 1 ? ' <small>' + c.take + '</small>' : '')).join('<br>')
@@ -124,6 +129,9 @@
       const orders = l.perOrder.map((o) => esc(o.invoiceNumber) + (o.qty > 1 ? '×' + o.qty : '')).join(' · ');
       const lineMps = (l.marketplaces || []).map(badge).join('');
       return '<tr>'
+        + (withPhoto ? '<td style="width:52px;">'
+            + (l.photo ? '<img class="photo" src="' + esc(l.photo) + '" alt="" loading="lazy">' : '')
+            + '</td>' : '')
         + '<td class="cell">' + cells + '</td>'
         + '<td class="name">' + lineMps + esc(l.name)
         +   '<div class="orders">' + orders + '</div>'
@@ -141,13 +149,16 @@
       +   '<div><div class="title">Лист грузчика</div>'
       +     '<div class="sub">' + mps.map(badge).join('') + esc(companies.join(', ')) + '</div></div>'
       +   '<div class="totals">'
-      +     '<div><b>' + data.orders.length + '</b>заказов</div>'
-      +     '<div><b>' + data.totalUnits + '</b>штук</div>'
-      +     '<div><b>' + data.cellsToVisit + '</b>ячеек</div>'
+      +     '<div><b>' + data.orders.length + '</b>'
+      +       plural(data.orders.length, 'заказ', 'заказа', 'заказов') + '</div>'
+      +     '<div><b>' + data.totalUnits + '</b>'
+      +       plural(data.totalUnits, 'штука', 'штуки', 'штук') + '</div>'
+      +     '<div><b>' + data.cellsToVisit + '</b>'
+      +       plural(data.cellsToVisit, 'ячейка', 'ячейки', 'ячеек') + '</div>'
       +   '</div>'
       + '</div>'
       + '<table><thead><tr>'
-      +   '<th>Ячейка</th><th>Товар</th><th>Артикул</th><th>Штрихкод</th>'
+      +   (withPhoto ? '<th></th>' : '') + '<th>Ячейка</th><th>Товар</th><th>Артикул</th><th>Штрихкод</th>'
       +   '<th style="text-align:right">Взять</th><th></th>'
       + '</tr></thead><tbody>' + rows + '</tbody></table>'
       + '<div class="foot"><div>Отмечайте галочкой то, что сняли с полки.</div>'

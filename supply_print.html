@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Документы поставки — Аргус</title>
 <link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="seller-fonts.css?v=20260912-ink">
 <style>
   /* Документ, а не кабинет.
 
@@ -24,7 +25,7 @@
        делит — иначе лист превращается в клетку. */
     --rule-hair:#c9c9c9;
     --warn:#a33;
-    --sans:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --sans:'Golos Text', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --mono:'IBM Plex Mono', 'Consolas', monospace;
   }
   body{background:#e9e9e9; color:var(--ink); font-family:var(--sans); font-size:13px; line-height:1.45;}
@@ -74,7 +75,11 @@
   }
   .fact{text-align:center; padding:7px 6px 6px;}
   .fact + .fact{border-left:1px solid var(--rule-hair);}
-  .fact b{display:block; font-family:var(--mono); font-size:16px; line-height:1.15;}
+  .fact b{display:block; font-family:var(--mono); font-size:16px; line-height:1.15;
+    overflow-wrap:anywhere;}
+  /* Адрес пункта отгрузки — это предложение, а не число: тем же кеглем, что
+     и цифры, он разваливал полосу итогов на пять строк. */
+  .fact b.text{font-family:var(--sans); font-size:11.5px; font-weight:600; line-height:1.25;}
   .fact span{display:block; font-size:9px; color:var(--ink-soft); text-transform:uppercase;
     letter-spacing:.07em; margin-top:2px;}
 
@@ -85,7 +90,13 @@
      же держат строку целиком: в плохом свете и на ходу глаз не съезжает
      на соседнюю. Это форма, которую заполняют карандашом, а не таблица,
      на которую смотрят. */
-  table{width:100%; border-collapse:collapse;}
+  /* Доли, а не пиксели: лист печатается на A4, и колонки, заданные в пикселях,
+     в сумме однажды становятся шире страницы — правый край (клетка «Факт»)
+     просто обрезается принтером. table-layout:fixed держит ширины по первой
+     строке и делит остаток между названием товара. */
+  table{width:100%; border-collapse:collapse; table-layout:fixed;}
+  /* Длинное значение переносится внутри клетки, а не раздвигает таблицу. */
+  td, th{overflow-wrap:anywhere;}
   th{
     text-align:left; font-size:9px; text-transform:uppercase; letter-spacing:.06em;
     color:var(--ink-soft); border-bottom:1.2px solid var(--line); padding:0 5px 4px; font-weight:600;
@@ -178,7 +189,10 @@
      переносится на второй ярус — как и всё остальное в этой строке.
      Не обрезаем: два «Батончика Грильяж» различаются как раз хвостом. */
   .goods-line{font-weight:600; font-size:10.5px; line-height:1.25;}
-  td.goods{width:44%;}
+  td.goods{overflow-wrap:break-word;}
+  /* Артикул и номер отправления рвать по буквам можно — это цифры; название
+     товара нельзя, иначе слово переносится посередине. */
+  .goods-line{overflow-wrap:break-word; hyphens:auto;}
 
   /* Заказ и отправление — парой, в два яруса. Оба длинные, оба сверяют
      глазами: номер заказа по списку, номер отправления по стикеру на
@@ -186,6 +200,12 @@
   .pair{font-family:var(--mono); text-align:center; line-height:1.2;}
   .pair span{display:block; font-size:8.5px; color:var(--ink-soft);}
   .pair b{display:block; font-size:10.5px; font-weight:700; word-break:break-all;}
+
+  /* Номер стикера: по нему упаковщик берёт нужную этикетку из пачки.
+     Крупно ровно то, что различает, — как и у штрихкода. */
+  .stick{font-family:var(--mono); text-align:center; line-height:1.15; white-space:nowrap;}
+  .stick b{display:block; font-size:15px; font-weight:700;}
+  .stick span{display:block; font-size:8.5px; color:var(--ink-soft);}
 
   /* Клетка под факт. На бумаге всегда нужно место записать, сколько взяли
      на самом деле: «взял 3 из 4» — это то, ради чего лист и возвращается
@@ -202,13 +222,15 @@
   .addr-more{font-family:var(--mono); font-size:10.5px; color:var(--ink-soft); font-weight:400;}
   .qty{font-family:var(--mono); font-size:16px; font-weight:700;}
 
-  /* Место под фото. Ключа с категорией «Контент» у нас нет, картинки взять
-     негде — но рамка на бумаге нужна уже сейчас: по ней кладовщик сверяет
-     товар глазами, и её отсутствие меняет вёрстку листа. Пустая рамка честнее
-     подписи «фото будет позже». */
-  .photo{width:52px; height:52px; border:1px dashed var(--line-soft); border-radius:3px;
-    display:flex; align-items:center; justify-content:center; font-size:8px;
-    color:var(--line-soft); text-align:center; line-height:1.1;}
+  /* Фото товара. По нему кладовщик узнаёт товар на полке быстрее, чем по
+     названию, — так же устроены чужие складские листы. Картинку отдаёт
+     площадка; нет её — колонки на листе нет вовсе, пустые рамки только едят
+     место. Печатаем как картинку, а не фоном: фоны браузер по умолчанию
+     не печатает. */
+  .photo{width:46px; height:46px; border:1px solid var(--line-soft); border-radius:3px;
+    object-fit:contain; background:#fff; display:block; margin:0 auto;}
+  .photo-none{width:46px; height:46px; border:1px dashed var(--line-soft); border-radius:3px;
+    margin:0 auto;}
 
   /* Клетка для галочки. Лист комплектации — рабочий документ: по нему идут
      и отмечают карандашом, что взято. */
@@ -308,11 +330,10 @@
   const TOKEN = localStorage.getItem('argus_token');
   const supplyId = new URLSearchParams(location.search).get('id');
 
-  // Плотный по умолчанию: фотографий у нас пока нет, и пустая рамка под них
-  // задавала высоту каждой строки — треть листа уходила на прямоугольники,
-  // в которых ничего нет. Режим «с фото» оставлен готовым: появится ключ
-  // с категорией «Контент» — включится он.
-  let MODE = localStorage.getItem('argus_pick_mode') === 'photo' ? 'photo' : 'dense';
+  // С фото, когда площадка их отдала: так лист сверяют глазами, а не по
+  // названию. Нет фотографий (у ключа WB нет категории «Контент») — колонка
+  // не рисуется вовсе и кнопка недоступна: пустые рамки только едят лист.
+  let MODE = localStorage.getItem('argus_pick_mode') === 'dense' ? 'dense' : 'photo';
   let LAST = null;
   // Какие товары печатать. Пусто — значит все: отметки живут только на этой
   // странице и на состав поставки не влияют.
@@ -382,12 +403,19 @@
   }
   window.setMode = setMode;
 
+  function havePhotos(){
+    return !!(LAST && LAST.picking && LAST.picking.some((r) => r.photo));
+  }
+
   function paintModeButtons(){
     const dense = document.getElementById('modeDense');
     const photo = document.getElementById('modePhoto');
     if(!dense || !photo) return;
-    dense.classList.toggle('ghost', MODE !== 'dense');
-    photo.classList.toggle('ghost', MODE !== 'photo');
+    const can = havePhotos();
+    photo.disabled = !can;
+    photo.title = can ? '' : 'Площадка не отдала фотографии товаров';
+    dense.classList.toggle('ghost', MODE !== 'dense' || !can);
+    photo.classList.toggle('ghost', MODE !== 'photo' || !can);
   }
 
   function render(data){
@@ -568,12 +596,20 @@
     return cell.rowNum == null ? label : String(cell.rowNum).padStart(2, '0');
   }
 
+  // Доли колонок — одним местом на документ. При table-layout:fixed ширину
+  // держит colgroup; ширины на ячейках строк браузер игнорирует, и колонки
+  // делятся поровну — название товара тогда переносится по слогам, а цифры
+  // артикула разрываются пополам.
+  function cols(widths){
+    return '<colgroup>' + widths.map((w) => '<col' + (w ? ' style="width:' + w + '%"' : '') + '>').join('') + '</colgroup>';
+  }
+
   function pickingSheet(s, t, rows){
     if(!rows || rows.length === 0){
       return '<div class="sheet" data-doc="pick">' + head(s, 'Лист комплектации', '')
         + '<div class="empty">В поставке нет позиций.</div></div>';
     }
-    const withPhoto = MODE === 'photo';
+    const withPhoto = MODE === 'photo' && rows.some((r) => r.photo);
     const tail = tailLength(rows);
     const short = rows.filter(r => r.available < r.qty).length;
 
@@ -616,16 +652,22 @@
         const notEnough = r.available < r.qty;
         const bc = String(r.barcode || '');
         return '<tr' + (newAisle ? ' class="aisle"' : '') + '>'
-          + '<td class="cellno" style="width:20px;">' + n + '</td>'
-          + '<td class="mid" style="width:22px;"><div class="tick"></div></td>'
-          + '<td style="width:58px;">'
+          + '<td class="cellno">' + n + '</td>'
+          + '<td class="mid"><div class="tick"></div></td>'
+          + '<td>'
           +   (first
                 ? addrTiers(first.label)
                   + (rest.length ? '<div class="addr-more">+' + rest.length + '</div>' : '')
                 : '<div class="row-addr one short"><b>—</b></div>')
           + '</td>'
-          + (withPhoto ? '<td class="mid" style="width:40px;"><div class="photo">фото</div></td>' : '')
-          + '<td style="width:70px;">'
+          + (withPhoto
+                ? '<td class="mid">'
+                  + (r.photo
+                      ? '<img class="photo" src="' + esc(r.photo) + '" alt="" loading="lazy">'
+                      : '<div class="photo-none"></div>')
+                  + '</td>'
+                : '')
+          + '<td>'
           +   '<div class="goods-art">'
           +     (r.article ? esc(r.article) : '<span class="short">нет арт.</span>')
           +     '<i>' + esc(r.sku) + '</i>'
@@ -637,16 +679,16 @@
                 ? '<div class="short-note">в ячейках только ' + nf(r.available) + '</div>'
                 : '')
           + '</td>'
-          + '<td class="bc" style="width:62px;">'
+          + '<td class="bc">'
           +   (bc
                 ? (tail
                     ? esc(bc.slice(0, bc.length - tail)) + '<b>' + esc(bc.slice(-tail)) + '</b>'
                     : '<b style="font-size:11px;">' + esc(bc) + '</b>')
                 : '')
           + '</td>'
-          + '<td class="num" style="width:38px;"><span class="qty' + (notEnough ? ' short' : '') + '">'
+          + '<td class="num"><span class="qty' + (notEnough ? ' short' : '') + '">'
           +   nf(r.qty) + '</span></td>'
-          + '<td class="fact-box" style="width:46px;"></td>'
+          + '<td class="fact-box"></td>'
           + '</tr>';
       }).join('');
       return band + lines;
@@ -665,7 +707,9 @@
             + plural(short, 'позиции', 'позициям', 'позициям')
             + ' в ячейках меньше, чем нужно, — они отмечены в списке и собраны в нижнюю группу.</div>'
           : '')
-      + '<table><thead><tr>'
+      + '<table>'
+      + cols([4, 4, 9].concat(withPhoto ? [8] : []).concat([13, 0, 11, 6, 8]))
+      + '<thead><tr>'
       +   '<th></th><th></th><th class="mid">Ячейка</th>' + (withPhoto ? '<th></th>' : '')
       +   '<th class="mid">Артикул</th><th>Товар</th>'
       +   '<th class="bc">Штрихкод</th><th class="num">Взять</th><th class="mid">Факт</th>'
@@ -686,6 +730,8 @@
   function packingSheet(s, t, rows){
     if(!rows || rows.length === 0) return '';
     const tail = tailLength(rows);
+    const withPhoto = MODE === 'photo' && rows.some((r) => r.photo);
+    const withStick = rows.some((r) => r.stickerTail);
     // Два яруса и здесь, там же где у листа комплектации: заказ над номером
     // отправления, артикул над нашим кодом, незначащая часть штрихкода над
     // различающим хвостом. Заказ и отправление были двумя колонками из
@@ -694,28 +740,40 @@
     const body = rows.map((r, i) => {
       const bc = String(r.barcode || '');
       return '<tr>'
-        + '<td class="cellno" style="width:20px;">' + (i + 1) + '</td>'
-        + '<td class="mid" style="width:22px;"><div class="tick"></div></td>'
-        + '<td class="pair" style="width:104px;">'
+        + '<td class="cellno">' + (i + 1) + '</td>'
+        + '<td class="mid"><div class="tick"></div></td>'
+        + (withPhoto
+              ? '<td class="mid">'
+                + (r.photo
+                    ? '<img class="photo" src="' + esc(r.photo) + '" alt="" loading="lazy">'
+                    : '<div class="photo-none"></div>')
+                + '</td>'
+              : '')
+        + '<td class="pair">'
         +   '<span>' + esc(r.orderNumber) + '</span>'
         +   (r.rid ? '<b>' + esc(r.rid) + '</b>' : '<b class="short">нет отправления</b>')
         + '</td>'
-        + '<td style="width:70px;">'
+        + '<td>'
         +   '<div class="goods-art">'
         +     (r.article ? esc(r.article) : '<span class="short">нет арт.</span>')
         +     '<i>' + esc(r.sku) + '</i>'
         +   '</div>'
         + '</td>'
         + '<td class="goods"><div class="goods-line">' + esc(r.name) + '</div></td>'
-        + '<td class="bc" style="width:62px;">'
+        + '<td class="bc">'
         +   (bc
               ? (tail
                   ? esc(bc.slice(0, bc.length - tail)) + '<b>' + esc(bc.slice(-tail)) + '</b>'
                   : '<b style="font-size:11px;">' + esc(bc) + '</b>')
               : '')
         + '</td>'
-        + '<td class="num" style="width:38px;"><span class="qty">' + nf(r.qty) + '</span></td>'
-        + '<td class="fact-box" style="width:46px;"></td>'
+        + '<td class="num"><span class="qty">' + nf(r.qty) + '</span></td>'
+        + (withStick
+              ? '<td class="stick">'
+                + (r.stickerTail ? '<b>' + esc(r.stickerTail) + '</b>' : '<span>нет</span>')
+                + '</td>'
+              : '')
+        + '<td class="fact-box"></td>'
         + '</tr>';
     }).join('');
 
@@ -724,15 +782,21 @@
       + '<div class="facts">'
       +   '<div class="fact"><b>' + nf(rows.length) + '</b><span>' + plural(rows.length, 'посылка', 'посылки', 'посылок') + '</span></div>'
       +   '<div class="fact"><b>' + nf(t.units) + '</b><span>штук всего</span></div>'
-      +   '<div class="fact"><b>' + esc(s.destination || '—') + '</b><span>куда</span></div>'
+      +   '<div class="fact"><b' + (String(s.destination || '').length > 18 ? ' class="text"' : '')
+            + '>' + esc(s.destination || '—') + '</b><span>куда</span></div>'
       +   (s.shipDate ? '<div class="fact"><b>' + esc(new Date(s.shipDate + 'T12:00:00').toLocaleDateString('ru-RU'))
             + '</b><span>отгрузка</span></div>' : '')
       +   '<div class="fact"><b>' + esc((s.marketplace || '—').toUpperCase()) + '</b><span>площадка</span></div>'
       + '</div>'
-      + '<table><thead><tr>'
-      +   '<th></th><th></th><th class="mid">Заказ и отправление</th>'
+      + '<table>'
+      + cols([4, 4].concat(withPhoto ? [7] : []).concat([15, 12, 0, 10, 6])
+              .concat(withStick ? [8] : []).concat([7]))
+      + '<thead><tr>'
+      +   '<th></th><th></th>' + (withPhoto ? '<th></th>' : '')
+      +   '<th class="mid">Заказ / отправление</th>'
       +   '<th class="mid">Артикул</th><th>Товар</th>'
-      +   '<th class="bc">Штрихкод</th><th class="num">Кол-во</th><th class="mid">Факт</th>'
+      +   '<th class="bc">Штрихкод</th><th class="num">Кол-во</th>'
+      +   (withStick ? '<th class="mid">№ стикера</th>' : '') + '<th class="mid">Факт</th>'
       + '</tr></thead><tbody>' + body + '</tbody></table>'
       + '<div class="sign">'
       +   '<div><div class="sign-line"></div><div class="sign-label">Упаковал — фамилия, подпись</div></div>'
