@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>АРГУС — личный кабинет</title>
-<link rel="stylesheet" href="fonts.css?v=197ea624">
-<link rel="stylesheet" href="seller-fonts.css?v=452d0046">
+<link rel="stylesheet" href="fonts.css?v=f77584bf">
+<link rel="stylesheet" href="seller-fonts.css?v=d1da12bc">
 <style>
   :root{
     --bg:#111315;
@@ -673,6 +673,7 @@
   .staff-kind.worker{background:var(--panel-2); color:var(--muted);}
   .staff-rights{font-size:12px; color:var(--muted); margin-top:3px; font-weight:400;}
   .staff-row.staff-edit{grid-template-columns:1fr; background:var(--panel-2);}
+  .staff-row[hidden]{display:none;}
   .staff-edit-actions{display:flex; gap:10px; align-items:center; margin-top:10px;}
 
   /* Разрыв на месте свёрнутых стеллажей: без него схлопнутый ряд выглядит
@@ -818,7 +819,7 @@
   #staffRows, #companiesList{margin-top:10px;}
   .staff-table{background:var(--panel); border:1px solid var(--line); border-radius:12px; overflow:hidden;}
   .staff-row{
-    display:grid; grid-template-columns:1fr 110px 130px 110px 100px 140px; align-items:center; gap:10px;
+    display:grid; grid-template-columns:1fr 130px 120px 110px 200px; align-items:center; gap:10px;
     padding:13px 16px; border-bottom:1px solid var(--line); font-size:14px;
   }
   .staff-row:last-child{border-bottom:none;}
@@ -2020,34 +2021,47 @@
 
     <div class="view" id="view-staff">
       <div class="staff-wrap">
+        <!-- Три роли — три раздела, у каждого своя форма выдачи ключа.
+             Общий список с выпадающим «кем выдать» владелец трижды заполнил
+             не той ролью: выбор стоял рядом, но глазами не читался. Здесь
+             промахнуться нечем — ключ выдаётся в том разделе, куда человек
+             и относится. -->
         <div class="staff-head">
           <div>
-            <div class="staff-title">Сотрудники</div>
-            <div class="staff-sub">Каждый сотрудник входит по имени и своему ключу — без пароля. Уволили человека — отзовите его ключ, остальные продолжат работать.</div>
+            <div class="staff-title">Менеджеры</div>
+            <div class="staff-sub">Заказы с площадок, поставки и журнал. Входит по имени и своему ключу — без пароля. Всё остальное открывается отдельно, галочками ниже.</div>
           </div>
           <div class="staff-code-chip">Код склада: <b id="whCodeChip">—</b></div>
         </div>
 
         <div class="staff-add">
-          <input type="text" id="staffNameInput" placeholder="Имя нового сотрудника" onkeydown="if(event.key==='Enter') addStaffMember()">
-          <!-- Роль решает, куда человека пустит вход: работника — на экран
-               приёмки и сборки, менеджера — в кабинет с заказами. Раньше
-               форма всегда выдавала ключ работника, и «Менеджер» попадал
-               к грузчикам. -->
-          <select id="staffKindSelect" onchange="onStaffKindChange()" aria-label="Роль сотрудника">
-            <option value="worker">Работник склада</option>
-            <option value="manager">Менеджер</option>
-          </select>
-          <button onclick="addStaffMember()">+ Сгенерировать ключ</button>
+          <input type="text" id="managerNameInput" placeholder="Имя менеджера" onkeydown="if(event.key==='Enter') addManager()">
+          <button onclick="addManager()">+ Выдать ключ менеджера</button>
         </div>
-        <div class="staff-grants" id="staffGrants" hidden>
+        <div class="staff-grants">
           <div class="staff-grants-title">Что открыть менеджеру, кроме заказов, поставок и журнала</div>
           <div class="staff-grants-list" id="staffGrantsList"></div>
         </div>
 
+        <div class="staff-toggle" id="managersToggle" onclick="toggleManagersList()">
+          <span class="staff-toggle-arrow">▸</span>
+          <span id="managersToggleLabel">Менеджеры</span>
+        </div>
+        <div id="managerRows" hidden></div>
+
+        <div class="staff-head staff-section">
+          <div>
+            <div class="staff-title">Кладовщики</div>
+            <div class="staff-sub">Приёмка, сборка и пересчёт на телефоне. Кладовщик не видит заказы, чат и деньги — только свою работу у полок.</div>
+          </div>
+        </div>
+        <div class="staff-add">
+          <input type="text" id="staffNameInput" placeholder="Имя кладовщика" onkeydown="if(event.key==='Enter') addStaffMember()">
+          <button onclick="addStaffMember()">+ Выдать ключ кладовщика</button>
+        </div>
         <div class="staff-toggle" id="staffToggle" onclick="toggleStaffList()">
           <span class="staff-toggle-arrow" id="staffToggleArrow">▸</span>
-          <span id="staffToggleLabel">Сотрудники</span>
+          <span id="staffToggleLabel">Кладовщики</span>
         </div>
         <div id="staffRows" hidden></div>
 
@@ -2345,6 +2359,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=74700a67" defer></script>
+<script src="cabinet_main.js?v=9e065246" defer></script>
 </body>
 </html>

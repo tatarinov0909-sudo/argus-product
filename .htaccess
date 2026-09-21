@@ -10,7 +10,8 @@
 #   * страницы (html) — всегда спрашивать сервер, они маленькие;
 #   * css и js — хранить долго, потому что в ссылке на них стоит отпечаток
 #     содержимого (tools/stamp-assets.js): изменился файл — изменился адрес;
-#   * шрифты — месяц: они меняются раз в год, но адрес у них без отпечатка.
+#   * шрифты — год: в ссылке на них внутри css тоже стоит отпечаток;
+#   * картинки и иконку не трогаем: отпечатка у них нет.
 #
 # Обёртка IfModule обязательна: если на хостинге не включён mod_headers,
 # директива Header роняет весь сайт в 500, а не «просто не работает».
@@ -21,8 +22,11 @@
   <FilesMatch "\.(css|js)$">
     Header set Cache-Control "public, max-age=31536000"
   </FilesMatch>
-  <FilesMatch "\.(woff2|woff|ttf|ico|png|svg)$">
-    Header set Cache-Control "public, max-age=2592000"
+  # Шрифты: год, потому что в ссылке на них внутри css теперь стоит отпечаток.
+  # Картинки и иконку сюда НЕ добавляем: отпечатка у них нет, и заменённый
+  # логотип месяц не доезжал бы до людей.
+  <FilesMatch "\.(woff2|woff|ttf)$">
+    Header set Cache-Control "public, max-age=31536000"
   </FilesMatch>
 </IfModule>
 
@@ -31,5 +35,5 @@
   ExpiresByType text/html "access plus 0 seconds"
   ExpiresByType text/css "access plus 1 year"
   ExpiresByType application/javascript "access plus 1 year"
-  ExpiresByType font/woff2 "access plus 1 month"
+  ExpiresByType font/woff2 "access plus 1 year"
 </IfModule>

@@ -244,17 +244,6 @@
     return [...document.querySelectorAll(`input[data-grant][data-for="${prefix}"]:checked`)].map(i => i.dataset.grant);
   }
 
-  function onStaffKindChange(){
-    const select = document.getElementById('staffKindSelect');
-    const box = document.getElementById('staffGrants');
-    if(!select || !box) return;
-    const manager = select.value === 'manager';
-    box.hidden = !manager;
-    if(manager && !document.getElementById('staffGrantsList').children.length){
-      document.getElementById('staffGrantsList').innerHTML = grantsChecklist('new', []);
-    }
-  }
-  window.onStaffKindChange = onStaffKindChange;
 
   async function loadStaff(){
     staffError = '';
@@ -268,60 +257,35 @@
       staffError = e.message;
       staffMembers = [];
     }
+    const newGrants = document.getElementById('staffGrantsList');
+    if(newGrants && !newGrants.children.length) newGrants.innerHTML = grantsChecklist('new', []);
     renderStaffTable();
   }
 
-  function renderStaffTable(){
-    const wrap = document.getElementById('staffRows');
-    if(!wrap){
-      // Раньше здесь молча падало исключение: ни строк, ни пустого состояния,
-      // ни ошибки — просто пустое место под заголовком.
-      showWhToast('Некуда вывести сотрудников: страница загрузилась не полностью. Обновите через Ctrl+Shift+R.');
-      return;
-    }
-    // Счётчик в заголовке — главное здесь. Он берётся из тех же данных, что
-    // и строки, поэтому отвечает на вопрос «они вообще приехали?» даже когда
-    // список свёрнут и ни одной строки на экране нет.
-    const label = document.getElementById('staffToggleLabel');
-    if(label){
-      label.innerHTML = staffError
-        ? 'Сотрудники <span class="staff-toggle-count">— не загрузились</span>'
-        : 'Сотрудники <span class="staff-toggle-count">· ' + staffMembers.length + '</span>';
-    }
-
-    if(staffError){
-      wrap.innerHTML = '<div class="staff-empty">Не удалось загрузить сотрудников: '
-        + escapeHTML(staffError) + '</div>';
-      return;
-    }
-    if(staffMembers.length === 0){
-      wrap.innerHTML = '<div class="staff-empty">Сотрудников пока нет — добавьте первого выше.</div>';
-      return;
-    }
-    // Развернуть сам, если человек только что выдал ключ: иначе он нажимает
-    // «сгенерировать» и не видит результата — ровно на это и была жалоба.
-    wrap.innerHTML = '<div class="staff-row head"><div>Имя</div><div>Роль</div><div>Ключ</div>'
-      + '<div>Выдан</div><div>Статус</div><div></div></div>'
-      + staffMembers.map((s) => {
+  // Одна таблица на оба раздела: колонки и действия у них общие, разнится
+  // только, кого показываем и что предлагаем сделать.
+  function staffTableHtml(rows, role){
+    const head = '<div class="staff-row head"><div>Имя</div><div>Ключ</div>'
+      + '<div>Выдан</div><div>Статус</div><div></div></div>';
+    return head + rows.map((s) => {
       const issued = new Date(s.issued_at).toLocaleDateString('ru-RU');
-      const manager = s.kind === 'manager';
+      const manager = role === 'manager';
       const rights = (s.permissions || []).map(grantTitle);
       const rightsText = manager
         ? (rights.length ? 'Открыто: ' + rights.join(', ') : 'Только заказы, поставки и журнал')
         : '';
       const canEdit = manager && !IS_MANAGER;
       // Роль ключа меняется без перевыдачи: код у человека остаётся прежним.
-      const canSwitch = !IS_MANAGER;
+      const canPromote = !manager && !IS_MANAGER;
       return `
         <div class="staff-row ${s.active ? '' : 'revoked'}">
           <div class="staff-name">${escapeHTML(s.name)}
             ${rightsText ? `<div class="staff-rights">${escapeHTML(rightsText)}</div>` : ''}</div>
-          <div><span class="staff-kind ${manager ? 'manager' : 'worker'}">${manager ? 'менеджер' : 'работник'}</span></div>
           <div class="staff-key">${escapeHTML(s.key_code)}</div>
           <div class="staff-date">${issued}</div>
           <div><span class="staff-status ${s.active ? 'active' : 'revoked'}">${s.active ? 'активен' : 'отозван'}</span></div>
           <div style="text-align:right;">
-            ${canSwitch && !manager ? `<span class="staff-action restore" style="margin-right:12px;" onclick="makeManager('${escapeHTML(s.id)}', '${escapeHTML(s.name)}')">Сделать менеджером</span>` : ''}
+            ${canPromote ? `<span class="staff-action restore" style="margin-right:12px;" onclick="makeManager('${escapeHTML(s.id)}', '${escapeHTML(s.name)}')">Сделать менеджером</span>` : ''}
             ${canEdit ? `<span class="staff-action restore" style="margin-right:12px;" onclick="editStaffGrants('${escapeHTML(s.id)}')">Права</span>` : ''}
             <span class="staff-action ${s.active ? 'revoke' : 'restore'}" onclick="toggleStaffKey('${escapeHTML(s.id)}')">${s.active ? 'Отозвать' : 'Восстановить'}</span>
           </div>
@@ -338,6 +302,60 @@
     }).join('');
   }
 
+  function renderStaffTable(){
+    // Менеджеры и кладовщики — разные разделы. Менеджеру список менеджеров
+    // сервер не отдаёт вовсе (их ключи — дело владельца), поэтому раздел у
+    // него просто пустой, и это честно написано.
+    const managerWrap = document.getElementById('managerRows');
+    if(managerWrap){
+      const managers = staffMembers.filter((s) => s.kind === 'manager');
+      const label = document.getElementById('managersToggleLabel');
+      if(label){
+        label.innerHTML = staffError
+          ? 'Менеджеры <span class="staff-toggle-count">— не загрузились</span>'
+          : 'Менеджеры <span class="staff-toggle-count">· ' + managers.length + '</span>';
+      }
+      managerWrap.innerHTML = staffError
+        ? '<div class="staff-empty">Не удалось загрузить: ' + escapeHTML(staffError) + '</div>'
+        : IS_MANAGER
+          ? '<div class="staff-empty">Ключи менеджеров видит только руководитель склада.</div>'
+          : managers.length === 0
+            ? '<div class="staff-empty">Менеджеров пока нет — выдайте ключ выше.</div>'
+            : staffTableHtml(managers, 'manager');
+    }
+
+    const wrap = document.getElementById('staffRows');
+    if(!wrap){
+      // Раньше здесь молча падало исключение: ни строк, ни пустого состояния,
+      // ни ошибки — просто пустое место под заголовком.
+      showWhToast('Некуда вывести сотрудников: страница загрузилась не полностью. Обновите через Ctrl+Shift+R.');
+      return;
+    }
+    // Счётчик в заголовке — главное здесь. Он берётся из тех же данных, что
+    // и строки, поэтому отвечает на вопрос «они вообще приехали?» даже когда
+    // список свёрнут и ни одной строки на экране нет.
+    const workers = staffMembers.filter((s) => s.kind !== 'manager');
+    const label = document.getElementById('staffToggleLabel');
+    if(label){
+      label.innerHTML = staffError
+        ? 'Кладовщики <span class="staff-toggle-count">— не загрузились</span>'
+        : 'Кладовщики <span class="staff-toggle-count">· ' + workers.length + '</span>';
+    }
+
+    if(staffError){
+      wrap.innerHTML = '<div class="staff-empty">Не удалось загрузить кладовщиков: '
+        + escapeHTML(staffError) + '</div>';
+      return;
+    }
+    if(workers.length === 0){
+      wrap.innerHTML = '<div class="staff-empty">Кладовщиков пока нет — выдайте ключ выше.</div>';
+      return;
+    }
+    // Развернуть сам, если человек только что выдал ключ: иначе он нажимает
+    // «сгенерировать» и не видит результата — ровно на это и была жалоба.
+    wrap.innerHTML = staffTableHtml(workers, 'worker');
+  }
+
   // Один сворачиватель на оба списка: работников и продавцов. Второй такой же
   // функцией они бы разъехались в поведении при первой же правке.
   function toggleList(rowsId, btnId, open){
@@ -349,28 +367,49 @@
     btn.classList.toggle('open', show);
   }
   function toggleStaffList(open){ toggleList('staffRows', 'staffToggle', open); }
+  function toggleManagersList(open){ toggleList('managerRows', 'managersToggle', open); }
+  window.toggleManagersList = toggleManagersList;
   function toggleCompaniesList(open){ toggleList('companiesList', 'companiesToggle', open); }
   window.toggleStaffList = toggleStaffList;
   window.toggleCompaniesList = toggleCompaniesList;
 
+  // Кладовщик и менеджер заводятся в своих разделах: одна форма с выбором
+  // роли трижды подвела — владелец выбирал «Менеджер», а ключ уходил работнику.
   async function addStaffMember(){
     const input = document.getElementById('staffNameInput');
     const name = input.value.trim();
-    if(!name){ showWhToast('Введите имя сотрудника.'); return; }
-    const kindSelect = document.getElementById('staffKindSelect');
-    const kind = kindSelect && kindSelect.value === 'manager' ? 'manager' : 'worker';
-    const permissions = kind === 'manager' ? grantsChecked('new') : [];
+    if(!name){ showWhToast('Введите имя кладовщика.'); return; }
     try{
-      const key = await apiFetch('/api/staff', {method:'POST', body:{name, kind, permissions}});
+      const key = await apiFetch('/api/staff', {method:'POST', body:{name, kind:'worker'}});
       input.value = '';
       await loadStaff();
       toggleStaffList(true);
-      showWhToast('Ключ ' + key.key_code + ' выдан ' + (kind === 'manager' ? 'менеджеру' : 'работнику')
-        + ' «' + name + '».' + (kind === 'manager' ? ' Вход по нему откроет кабинет с заказами.' : ''));
+      showWhToast('Ключ ' + key.key_code + ' выдан кладовщику «' + name + '». '
+        + 'Вход по нему откроет приёмку и сборку.');
     } catch(e){
       showWhToast('Не удалось выдать ключ: ' + e.message);
     }
   }
+
+  async function addManager(){
+    const input = document.getElementById('managerNameInput');
+    const name = input.value.trim();
+    if(!name){ showWhToast('Введите имя менеджера.'); return; }
+    try{
+      const key = await apiFetch('/api/staff', {
+        method:'POST', body:{name, kind:'manager', permissions: grantsChecked('new')},
+      });
+      input.value = '';
+      document.querySelectorAll('input[data-grant][data-for="new"]').forEach(i => { i.checked = false; });
+      await loadStaff();
+      toggleManagersList(true);
+      showWhToast('Ключ ' + key.key_code + ' выдан менеджеру «' + name + '». '
+        + 'Вход по нему откроет кабинет с заказами.');
+    } catch(e){
+      showWhToast('Не удалось выдать ключ: ' + e.message);
+    }
+  }
+  window.addManager = addManager;
 
   // Ключ выдали работнику, а человек оказался менеджером — так бывает.
   // Отзывать и выдавать новый незачем: код остаётся у человека, меняется роль.
@@ -380,7 +419,7 @@
     try{
       await apiFetch('/api/staff/' + id + '/kind', {method:'PATCH', body:{kind:'manager', permissions: []}});
       await loadStaff();
-      toggleStaffList(true);
+      toggleManagersList(true);
       const box = document.getElementById('staffEdit-' + id);
       if(box) box.hidden = false;   // сразу показываем, что можно открыть
       showWhToast('Теперь это менеджер. Отметьте, что ему открыть, и сохраните права.');
