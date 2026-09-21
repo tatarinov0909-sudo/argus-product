@@ -2843,7 +2843,7 @@
       : (isPicking() ? 'Отгрузка собрана' : (isReturn() ? 'Возврат разобран' : 'Приёмка завершена'));
     const reported = currentInvoice.items.filter(function(it){ return !it.closed && postponedItems.has(it.id) && it.missing_marked; }).length;
     document.getElementById('doneSub').textContent = postponed > 0
-      ? 'Отложено ' + postponed + ' ' + pluralRu(postponed, 'позиция', 'позиции', 'позиций') + '. '
+      ? 'Отложено: ' + postponed + ' ' + pluralRu(postponed, 'позиция', 'позиции', 'позиций') + '. '
         + (reported === postponed
           ? 'Отметка «нет товара» отправлена руководителю — заказ остаётся в работе, пока он не решит.'
           : 'По ' + (postponed - reported) + ' из них руководитель ещё не знает — вернитесь и нажмите «Нет товара».')

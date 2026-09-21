@@ -2274,7 +2274,10 @@
   function isUrgentWaiting(e){ return Boolean(e.urgent) && isWaiting(e); }
   // Текст срочной отметки уже начинается с «ОЧЕНЬ ВАЖНО:» — рядом с красной
   // меткой эти слова дублировались бы.
-  function urgentText(text){ return String(text || '').replace(/^ОЧЕНЬ ВАЖНО:\s*/, ''); }
+  function urgentText(text){
+    const t = String(text || '').replace(/^ОЧЕНЬ ВАЖНО:\s*/, '');
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }
 
   function renderWhSummary(){
     const panel = document.getElementById('whSummary');
@@ -2861,7 +2864,7 @@
       const statusKey = entry.status === 'pending' && entry.answered ? 'answered' : entry.status;
       return `
         <div class="j-entry ${agentClass}${hot ? ' j-urgent' : ''}${isNew ? ' j-new' : ''}" data-client="" data-risk="${canResolve ? 'high' : 'low'}" data-order="0" data-day="${dayKey}" data-entry-id="${escapeHTML(entry.id)}">
-          <input type="checkbox" class="j-check" onclick="event.stopPropagation(); updateBulk()" ${canResolve ? '' : 'style=\"visibility:hidden;\"'}>
+          <input type="checkbox" class="j-check" onclick="event.stopPropagation(); updateBulk()" ${canResolve && !hot ? '' : 'style=\"visibility:hidden;\"'}>
           <div class="j-avatar">
             <svg width="20" height="20" viewBox="0 0 22 22"><use href="#icon-warehouse-agent"/></svg>
           </div>
@@ -2876,6 +2879,7 @@
               <span class="j-status ${statusKey === 'auto' || statusKey === 'answered' ? 'auto' : statusKey === 'confirmed' ? 'applied' : 'pending'}">${escapeHTML(STATUS_LABEL[statusKey] || statusKey)}</span>
               ${canResolve ? (isWb
                 ? '<a class="staff-action restore" style="display:inline-block; margin-left:8px;" href="marketplace-reconciliation.html">Открыть сверку WB</a>'
+                : hot ? urgentActionsHtml(entry, 'journal')
                 : `<span class="staff-action" style="display:inline-block; margin-left:8px;" onclick="resolveJournalEntry('${escapeHTML(entry.id)}', 'confirm')">Принять</span><span class="staff-action revoke" style="display:inline-block; margin-left:8px;" onclick="resolveJournalEntry('${escapeHTML(entry.id)}', 'rollback')">Отклонить</span>`)
                 : ''}
             </div>
@@ -3035,15 +3039,51 @@
         <div class="ctx-actions">
           ${isWb
             ? '<a class="ctx-btn confirm" href="marketplace-reconciliation.html">Открыть сверку WB</a>'
+            : e.urgent ? urgentActionsHtml(e, 'ctx')
             : `<div class="ctx-btn confirm" onclick="resolveJournalEntry('${e.id}', 'confirm')">Принять</div>
                <div class="ctx-btn reject" onclick="resolveJournalEntry('${e.id}', 'rollback')">Отклонить</div>`}
         </div>
         <div class="ctx-note">${isWb
           ? 'Проверьте записанный отбор и фактическое движение товара в сверке. Данные 1С автоматически не изменяются.'
-          : 'Решение сохранится в журнале вместе с вашим именем. Данные 1С не изменяются.'}</div>
+          : e.urgent && e.invoice_supply_id
+            ? 'Убранный заказ вернётся в очередь, поставка уедет без него. Данные 1С не изменяются.'
+            : 'Решение сохранится в журнале вместе с вашим именем. Данные 1С не изменяются.'}</div>
       </div>
     `;}).join('');
   }
+
+  // Отметку «нет товара» решают делом, а не «Принять»: «принято» ничего не
+  // сдвигало — поставка стояла дальше. Заказ в поставке — убрать его оттуда;
+  // товар нашёлся — закрыть отметку, и грузчик соберёт позицию как обычно.
+  function urgentActionsHtml(e, kind){
+    const act = (primary, onclick, label) => kind === 'ctx'
+      ? '<div class="ctx-btn ' + (primary ? 'confirm' : 'reject') + '" onclick="' + onclick + '">' + label + '</div>'
+      : '<span class="staff-action" style="display:inline-block; margin-left:8px;" onclick="' + onclick + '">' + label + '</span>';
+    const id = escapeHTML(e.id);
+    const order = escapeHTML(String(e.invoice_number || '').replace(/['\\]/g, ''));
+    return (e.invoice_supply_id
+        ? act(true, "removeSupplyOrder('" + escapeHTML(e.invoice_id) + "', '" + order + "')", 'Убрать заказ из поставки')
+        : act(true, "resolveUrgent('" + id + "', 'confirm')", 'Понятно'))
+      + act(false, "resolveUrgent('" + id + "', 'rollback')", 'Товар нашёлся');
+  }
+
+  async function resolveUrgent(id, resolution){
+    const entry = journalEntries.find(x => x.id === id);
+    const found = resolution === 'rollback';
+    if(!confirm(found
+      ? 'Товар нашёлся?\n\nОтметка закроется, и грузчик соберёт позицию как обычно.'
+      : 'Отметить, что вы в курсе?\n\nЗаказ остаётся в работе: грузчику позиция снова откроется для сборки.')) return;
+    const text = entry ? urgentText(entry.action_text) : '';
+    try{
+      await apiFetch('/api/journal/' + id + '/resolve', {method:'POST', body:{
+        resolution, note: (found ? 'товар нашёлся, собирать как обычно — ' : 'в курсе — ') + text,
+      }});
+      await loadJournal();
+    } catch(e){
+      showWhToast('Не удалось выполнить действие: ' + e.message);
+    }
+  }
+  window.resolveUrgent = resolveUrgent;
 
   async function resolveJournalEntry(id, resolution){
     if(resolution === 'confirm' && !confirm('Принять рекомендацию и сохранить решение в журнале?')) return;
@@ -3084,7 +3124,11 @@
     document.querySelectorAll('.j-entry').forEach(entry=>{
       let show = true;
       if(show && agentKeys.length>0){ show = agentKeys.some(k=>entry.classList.contains(k)); }
-      if(show && needPending){ show = !!entry.querySelector('.j-status.pending'); }
+      // «Ждёт решения» — только то, что ещё можно решить (data-risk="high").
+      // По цвету метки считать нельзя: «отклонено вами» тоже красное, и
+      // решённая запись висела в счётчике «ждёт решения».
+      const waiting = entry.dataset.risk === 'high';
+      if(show && needPending){ show = waiting; }
       if(show && search){
         const searchable = [
           entry.querySelector('.j-text')?.textContent || '',
@@ -3097,10 +3141,10 @@
       if(show){
         visibleCount++;
         const st = entry.querySelector('.j-status');
-        if(st){
+        if(waiting) pending++;
+        else if(st){
           if(st.classList.contains('auto')) auto++;
           else if(st.classList.contains('applied')) confirmed++;
-          else if(st.classList.contains('pending')) pending++;
         }
       }
     });
@@ -5102,11 +5146,20 @@
     if(!d) return '<div class="sup-head">Смотрю…</div>';
     if(d.error) return '<div class="sup-head warn">Не удалось посмотреть: ' + escapeHTML(d.error) + '</div>';
     // Отметки грузчика «нет товара» — первым делом: поставка стоит, пока по
-    // ним не решили. Решают в журнале («Принять» / «Отклонить»).
+    // ним не решили. Решение прямо здесь: убрать заказ из поставки (она
+    // уедет без него) — или, если товар нашёлся, закрыть отметку в журнале.
+    const canRemove = d.supply && d.supply.status !== 'shipped' && !d.supply.mpSupplyId;
     const alerts = (d.shortages || []).length
       ? '<div class="sup-alert"><b>ОЧЕНЬ ВАЖНО — грузчик отметил «нет товара»</b>'
-        + d.shortages.map(x => '<div>' + escapeHTML(urgentText(x.text)) + '</div>').join('')
-        + '<div><span class="mp-act" onclick="switchView(\'journal\')">Решить в журнале →</span></div></div>'
+        + d.shortages.map(x => '<div>' + escapeHTML(urgentText(x.text))
+          + (!canRemove ? ''
+            : x.orderPicked
+              ? '<div class="sup-alert-note">По заказу уже отбирали товар — убрать его из поставки нельзя, только дособрать.</div>'
+              : ' <span class="mp-act warn" onclick="removeSupplyOrder(\'' + escapeHTML(x.invoiceId) + '\', \''
+                + escapeHTML(String(x.orderNumber || '').replace(/['\\]/g, '')) + '\')">Убрать заказ из поставки</span>')
+          + '</div>').join('')
+        + '<div class="sup-alert-note">Заказ вернётся в очередь, а поставка уедет без него. Товар нашёлся — нажмите'
+        + ' «Товар нашёлся» у отметки в <span class="mp-act" onclick="switchView(\'journal\')">журнале</span>.</div></div>'
       : '';
     const byProduct = new Map();
     (d.packing || []).forEach(r => {
@@ -5273,6 +5326,27 @@
     window.open('supply_print.html?id=' + encodeURIComponent(id), '_blank');
   }
   window.printSupply = printSupply;
+
+  // Ответ на «нет товара»: убрать заказ из поставки. Заказ возвращается
+  // в очередь, поставка едет без него и сама становится «собранной», если
+  // остальное собрано. Это решение, а не справка, — поэтому спрашиваем.
+  async function removeSupplyOrder(invoiceId, orderNumber){
+    if(!confirm('Убрать заказ «' + orderNumber + '» из поставки?\n\nЗаказ вернётся в очередь — его можно будет'
+      + ' поставить в следующую поставку, когда товар найдётся. Поставка уедет без него.')) return;
+    try{
+      const r = await apiFetch('/api/supplies/orders/' + encodeURIComponent(invoiceId) + '/remove', { method: 'POST' });
+      showWhToast('Заказ ' + r.orderNumber + ' убран из поставки ' + r.supplyNumber + ' и вернулся в очередь.'
+        + (r.supplyStatus === 'ready' ? ' Поставка собрана — можно отгружать.' : ''));
+      if(supplyOpen.has(r.supplyId)){
+        try{ supplyInside[r.supplyId] = await apiFetch('/api/supplies/' + r.supplyId); } catch(_){}
+      }
+      await loadMpOrders();
+      await loadJournal();
+    } catch(e){
+      showWhToast('Не удалось убрать заказ: ' + e.message);
+    }
+  }
+  window.removeSupplyOrder = removeSupplyOrder;
 
   async function disbandSupply(id){
     const s = (supplyRows || []).find(x => x.id === id);
