@@ -188,10 +188,21 @@
     renderProductRows();
   }
   function filteredProducts(){const q=state.search.trim().toLocaleLowerCase('ru-RU');return state.stock.filter(r=>!q||[r.name,r.barcode,meta(r.sku).category,...wbIds(r.sku),...meta(r.sku).cards.map(c=>c.vendorCode)].some(v=>String(v||'').toLocaleLowerCase('ru-RU').includes(q)));}
-  function productTable(rows){return `<div class="table-scroll" tabindex="0" aria-label="Таблица товаров"><table class="data-table inventory-table"><colgroup><col class="photo-col"><col class="name-col"><col class="identifier-col"><col class="quantity-col"><col class="quantity-col"><col class="quantity-col"><col class="quantity-col"></colgroup><thead><tr><th>Фото</th><th>Товар</th><th>Артикул WB</th><th class="num">Всего<span class="column-unit">шт.</span></th><th class="num">Заказано<span class="column-unit">шт.</span></th><th class="num">В сборке<span class="column-unit">шт.</span></th><th class="num">Доступно<span class="column-unit">шт.</span></th></tr></thead><tbody>${rows.map(r=>`<tr data-product="${h(r.sku)}"><td>${photo(r)}</td><td class="product-cell"><button class="product-link" data-open-product="${h(r.sku)}">${h(productName(r))}</button></td><td class="identifier-cell">${identifiers(r)}</td><td class="num">${quantity(totalQty(r))}</td><td class="num">${quantity(orderedQty(r))}</td><td class="num">${quantity(assemblyQty(r))}</td><td class="num available-number">${quantity(availableQty(r))}</td></tr>`).join('')}</tbody></table></div>`;}
+  // «Заказов больше, чем товара»: сумма «заказано» и «в сборке» превысила
+  // «всего» по учёту склада. Показываем прямо в строке — иначе продавец видит
+  // «Доступно 0» и не понимает, что именно случилось.
+  const isShort = r => r.shortage === true
+    || (totalQty(r) != null && orderedQty(r) + assemblyQty(r) > Number(totalQty(r)));
+  const shortageNote = r => (isShort(r)
+    ? '<span class="row-note negative">Заказов больше, чем товара по учёту</span>' : '');
+
+  function productTable(rows){return `<div class="table-scroll" tabindex="0" aria-label="Таблица товаров"><table class="data-table inventory-table"><colgroup><col class="photo-col"><col class="name-col"><col class="identifier-col"><col class="quantity-col"><col class="quantity-col"><col class="quantity-col"><col class="quantity-col"></colgroup><thead><tr><th>Фото</th><th>Товар</th><th>Артикул WB</th><th class="num">Всего<span class="column-unit">шт.</span></th><th class="num">Заказано<span class="column-unit">шт.</span></th><th class="num">В сборке<span class="column-unit">шт.</span></th><th class="num">Доступно<span class="column-unit">шт.</span></th></tr></thead><tbody>${rows.map(r=>`<tr data-product="${h(r.sku)}"><td>${photo(r)}</td><td class="product-cell"><button class="product-link" data-open-product="${h(r.sku)}">${h(productName(r))}</button>${shortageNote(r)}</td><td class="identifier-cell">${identifiers(r)}</td><td class="num">${quantity(totalQty(r))}</td><td class="num">${quantity(orderedQty(r))}</td><td class="num">${quantity(assemblyQty(r))}</td><td class="num available-number">${quantity(availableQty(r))}</td></tr>`).join('')}</tbody></table></div>`;}
   function renderProductRows(){
     const rows=filteredProducts(),pages=Math.max(1,Math.ceil(rows.length/state.pageSize));state.page=Math.min(state.page,pages);
-    $('productGroups').innerHTML=(rows.length?productTable(paginate(rows,state.page,state.pageSize)):empty('Товары не найдены','Проверьте артикул или название — возможно, товар ещё не заведён складом.'))+pager('product',state.page,pages,`${counted(rows.length,'товар','товара','товаров')} · Excel сохраняет весь результат фильтра`);
+    const short=rows.filter(isShort).length;
+    $('productGroups').innerHTML=(short?notice('Заказов больше, чем товара по учёту',
+      counted(short,'товар','товара','товаров')+': склад проверяет расхождение, «Доступно» по ним — ноль.',true):'')
+      +(rows.length?productTable(paginate(rows,state.page,state.pageSize)):empty('Товары не найдены','Проверьте артикул или название — возможно, товар ещё не заведён складом.'))+pager('product',state.page,pages,`${counted(rows.length,'товар','товара','товаров')} · Excel сохраняет весь результат фильтра`);
     $('productGroups').querySelectorAll('[data-open-product]').forEach(b=>b.onclick=()=>openProduct(b.dataset.openProduct));
     $('productGroups').querySelectorAll('[data-product]').forEach(tr=>tr.onclick=e=>{if(!e.target.closest('button'))openProduct(tr.dataset.product);});
     wirePhotos($('productGroups'));
