@@ -310,6 +310,8 @@
         ? (rights.length ? 'Открыто: ' + rights.join(', ') : 'Только заказы, поставки и журнал')
         : '';
       const canEdit = manager && !IS_MANAGER;
+      // Роль ключа меняется без перевыдачи: код у человека остаётся прежним.
+      const canSwitch = !IS_MANAGER;
       return `
         <div class="staff-row ${s.active ? '' : 'revoked'}">
           <div class="staff-name">${escapeHTML(s.name)}
@@ -319,6 +321,7 @@
           <div class="staff-date">${issued}</div>
           <div><span class="staff-status ${s.active ? 'active' : 'revoked'}">${s.active ? 'активен' : 'отозван'}</span></div>
           <div style="text-align:right;">
+            ${canSwitch && !manager ? `<span class="staff-action restore" style="margin-right:12px;" onclick="makeManager('${escapeHTML(s.id)}', '${escapeHTML(s.name)}')">Сделать менеджером</span>` : ''}
             ${canEdit ? `<span class="staff-action restore" style="margin-right:12px;" onclick="editStaffGrants('${escapeHTML(s.id)}')">Права</span>` : ''}
             <span class="staff-action ${s.active ? 'revoke' : 'restore'}" onclick="toggleStaffKey('${escapeHTML(s.id)}')">${s.active ? 'Отозвать' : 'Восстановить'}</span>
           </div>
@@ -368,6 +371,24 @@
       showWhToast('Не удалось выдать ключ: ' + e.message);
     }
   }
+
+  // Ключ выдали работнику, а человек оказался менеджером — так бывает.
+  // Отзывать и выдавать новый незачем: код остаётся у человека, меняется роль.
+  async function makeManager(id, name){
+    if(!confirm('Сделать «' + name + '» менеджером?\n\nКлюч останется прежним, '
+      + 'кабинет с заказами откроется при следующем входе. Права можно отметить сразу после.')) return;
+    try{
+      await apiFetch('/api/staff/' + id + '/kind', {method:'PATCH', body:{kind:'manager', permissions: []}});
+      await loadStaff();
+      toggleStaffList(true);
+      const box = document.getElementById('staffEdit-' + id);
+      if(box) box.hidden = false;   // сразу показываем, что можно открыть
+      showWhToast('Теперь это менеджер. Отметьте, что ему открыть, и сохраните права.');
+    } catch(e){
+      showWhToast('Не удалось поменять роль: ' + e.message);
+    }
+  }
+  window.makeManager = makeManager;
 
   function editStaffGrants(id){
     const box = document.getElementById('staffEdit-' + id);
