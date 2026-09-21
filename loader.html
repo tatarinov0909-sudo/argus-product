@@ -1431,13 +1431,20 @@
       return;
     }
     const remaining = pickSuggestion.item.remaining;
+    // Сколько брать из каждой ячейки по порядку обхода: первая закрывает,
+    // сколько может, остаток — следующая.
+    let left = remaining;
     wrap.innerHTML = cells.map((c, i) => {
       const label = blockLabel(c);
+      const take = Math.max(0, Math.min(left, Number(c.available)));
+      left -= take;
       const short = c.available < remaining;
       return '<div class="cell-option" id="cell-' + i + '" onclick="selectPickCell(' + i + ')">'
         + '<div><div class="cell-option-id">' + label + '</div>'
         + '<div class="cell-option-note' + (short ? ' short' : '') + '">'
-        + c.available + ' шт' + (short ? ' — меньше, чем нужно' : '') + '</div></div>'
+        + 'взять ' + take
+        + (short ? ' — здесь только ' + c.available + ' из ' + remaining : '')
+        + '</div></div>'
         + '<div class="cell-option-check"></div></div>';
     }).join('');
   }
@@ -2039,7 +2046,7 @@
         + '<div class="kit-part-name">' + escapeHTML(c.name)
         + '<span class="kit-part-sku">' + escapeHTML(c.sku) + '</span></div>'
         + '<div class="kit-part-qty' + (short ? ' short' : '') + '">взять ' + need
-        + ' · есть ' + c.available + '</div>'
+        + (short ? ' · есть только ' + c.available : '') + '</div>'
         + '</div>';
     }).join('');
 
