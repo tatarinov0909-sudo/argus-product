@@ -1433,6 +1433,39 @@
   }
   .wh-onboarding-btn.danger:hover{border-color:var(--terracotta); background:rgba(217,142,110,0.08);}
 
+  /* Загрузка остатков по ячейкам. Таблица плотнее обычной: строк в файле
+     сотни, и проверять их глазами надо на одном экране, а не листая. */
+  .sl-field{display:flex; flex-direction:column; gap:6px; max-width:420px; margin-bottom:14px;}
+  .sl-field label{font-size:13px; color:var(--muted);}
+  .sl-row{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px;}
+  .sl-file{position:relative; overflow:hidden;}
+  .sl-file input{position:absolute; inset:0; opacity:0; cursor:pointer;}
+  .sl-sum{display:flex; gap:10px; flex-wrap:wrap; margin:6px 0 12px;}
+  .sl-chip{font-size:14px; padding:7px 12px; border-radius:9px; border:1px solid var(--line); background:var(--panel-2);}
+  .sl-chip b{font-family:var(--mono);}
+  .sl-chip.ok{border-color:var(--green); color:var(--green); background:var(--green-soft);}
+  .sl-chip.bad{border-color:var(--terracotta); color:var(--terracotta); background:var(--terracotta-soft);}
+  .sl-table{width:100%; border-collapse:collapse; font-size:13px; line-height:1.4;}
+  .sl-table th{color:var(--muted); font-weight:500; text-align:left; padding:6px 10px; border-bottom:1px solid var(--line);
+    position:sticky; top:-22px; background:var(--panel);}
+  .sl-table td{padding:6px 10px; border-bottom:1px solid var(--line); vertical-align:top;}
+  .sl-table td.num{text-align:right; font-family:var(--mono); white-space:nowrap;}
+  .sl-table .mono{font-family:var(--mono);}
+  .sl-table th, .sl-table td.mono{white-space:nowrap;}
+  .sl-table .sub{color:var(--muted); font-size:12px;}
+  .sl-table tr.bad td{background:rgba(217,142,110,0.07);}
+  .sl-table .err{color:var(--terracotta);}
+  .sl-table .okay{color:var(--green);}
+  .sl-table tr.done td{color:var(--muted);}
+  .sl-batches{margin-top:26px; border-top:1px solid var(--line); padding-top:16px;}
+  .sl-batches h4{font-size:15px; font-weight:600; margin:0 0 10px;}
+  .sl-undo{background:none; border:1px solid var(--line); color:var(--terracotta); border-radius:8px;
+    padding:5px 10px; font-size:13px; cursor:pointer; font-family:var(--sans);}
+  .sl-undo:hover{border-color:var(--terracotta);}
+  .sl-undo[disabled]{opacity:.5; cursor:default;}
+  .sl-fold{margin:0 0 12px;}
+  .sl-fold summary{cursor:pointer; font-size:14px; padding:6px 0;}
+
   .wh-ctor-warning{
     display:flex; align-items:flex-start; gap:8px; background:var(--terracotta-soft); border:1px solid rgba(217,142,110,0.4);
     border-radius:10px; padding:11px 14px; font-size:13px; color:var(--terracotta); line-height:1.5; margin-bottom:20px;
@@ -2023,6 +2056,19 @@
 
       <div id="whMapWrap" style="display:none; flex:1; height:100%;"></div>
 
+      <!-- Загрузка остатков по ячейкам: бланк → обход склада → файл →
+           проверка каждой строки → загрузка одним заходом. -->
+      <div class="wh-modal-overlay" id="stockLoadModal" onclick="if(event.target===this) closeStockLoad()">
+        <div class="wh-modal">
+          <div class="wh-modal-head">
+            <div class="wh-modal-title">Загрузить остатки по ячейкам</div>
+            <button class="panel-close-btn" onclick="closeStockLoad()" aria-label="Закрыть">✕</button>
+          </div>
+          <div class="wh-modal-body" id="stockLoadBody"></div>
+          <div class="wh-modal-actions" id="stockLoadActions"></div>
+        </div>
+      </div>
+
       <div class="wh-modal-overlay" id="whModal" onclick="if(event.target===this) closeWhSettings()">
         <div class="wh-modal">
           <div class="wh-modal-head">
@@ -2381,6 +2427,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=b7e57c65" defer></script>
+<script src="cabinet_main.js?v=7b316d05" defer></script>
 </body>
 </html>

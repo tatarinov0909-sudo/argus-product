@@ -276,9 +276,9 @@
     await loadMoreHistory();
   }
   function historyEvent(e){
-    const labels={received:'Принято на склад',picked:'Собрано для заказа',shipped:'Отгружено со склада',returned:'Возврат',add:'Добавлено',remove:'Списано',move:'Перемещение',adjust:'Корректировка',set:'Пересчёт',inventory_adjust:'Пересчёт',inventory:'Пересчёт',kit_assemble:'Собран набор',repack:'Перепаковка',canceled_pick_return:'Возвращено после отмены WB'};
+    const labels={received:'Принято на склад',picked:'Собрано для заказа',shipped:'Отгружено со склада',returned:'Возврат',add:'Добавлено',remove:'Списано',move:'Перемещение',adjust:'Корректировка',set:'Пересчёт',inventory_adjust:'Пересчёт',inventory:'Пересчёт',kit_assemble:'Собран набор',repack:'Перепаковка',canceled_pick_return:'Возвращено после отмены WB',initial_load:'Начальный остаток на складе',initial_load_undo:'Отмена начального остатка'};
     const quality={good:'Годное',defective:'Брак',packaging_defect:'Повреждена упаковка'};
-    const sign=['received','returned'].includes(e.kind)?'+':e.kind==='shipped'?'−':'';
+    const sign=['received','returned','initial_load'].includes(e.kind)?'+':['shipped','initial_load_undo'].includes(e.kind)?'−':'';
     return `<li><div class="timeline-line"><strong>${h(labels[e.kind]||'Операция склада')}</strong><span class="quantity">${sign}${n(e.qty)} шт.</span></div><time>${e.at?h(when(e.at)):'Время операции не сохранено'}</time>${e.document?`<p>${h(e.document)}</p>`:''}${e.supplyNumber?`<p>Поставка ${h(e.supplyNumber)}</p>`:''}${e.quality?`<p>${h(quality[e.quality]||e.quality)}</p>`:''}${e.note?`<p>${h(e.note)}</p>`:''}</li>`;
   }  async function openDocument(id,order=false){
     const list=order?state.orders.rows:documentData().rows;const selected=list.find(r=>r.id===id);if(!selected)return;const run=openDrawer(selected.number,order?'Заказ':documentType(selected));

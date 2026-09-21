@@ -478,6 +478,8 @@
     renderCompaniesList();
     renderInvoiceCompanySelect();
     renderMpCompanySelect();
+    const loadModal = document.getElementById('stockLoadModal');
+    if(loadModal && loadModal.classList.contains('open')) renderStockLoad();
   }
 
   function renderCompaniesList(){
@@ -2012,6 +2014,10 @@
                    oninput="onWhSearchInput()" onkeydown="onWhSearchKey(event)">
             <div class="wh-search-drop" id="whSearchDrop" hidden></div>
           </div>
+          ${IS_MANAGER ? '' : `<button class="wh-configure-btn ghost" type="button" onclick="openStockLoad()">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 11V3m0 0L5 6m3-3l3 3M3 13h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Загрузить остатки
+          </button>`}
           <button class="wh-configure-btn ghost" type="button" onclick="exportWarehouse()">
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 2v8m0 0l-3-3m3 3l3-3M3 13h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Выгрузить остатки
@@ -4207,7 +4213,7 @@
      файлом: показать поставщику, отправить бухгалтеру, свести у себя. Файл
      собирается из того, что уже загружено, — второго похода на сервер нет. */
 
-  function saveXlsx(fileName, sheetName, rows, widths){
+  function saveXlsx(fileName, sheetName, rows, widths, onSheet){
     if(typeof XLSX === 'undefined'){
       showWhToast('Выгрузка ещё грузится, повторите через секунду.');
       return;
@@ -4215,6 +4221,7 @@
     if(!rows.length){ showWhToast('Выгружать нечего — список пуст.'); return; }
     const ws = XLSX.utils.json_to_sheet(rows);
     if(widths) ws['!cols'] = widths.map(w => ({wch: w}));
+    if(onSheet) onSheet(ws);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
     const stamp = new Date().toLocaleDateString('ru-RU').replace(/\./g, '-');
@@ -4245,6 +4252,405 @@
       });
     });
     saveXlsx('Остатки склада', 'Остатки', rows, [14, 18, 24, 13, 17]);
+  }
+
+  /* ===================== Загрузка остатков по ячейкам =====================
+     Товар лежит на полках, а в ячейках Аргуса его нет — склад жил в 1С.
+     Склад берёт бланк, обходит полки, вписывает посчитанное, владелец
+     загружает файл. Сервер проверяет каждую строку и пишет всё или ничего;
+     в 1С ничего не уходит. Правила — в argus-api/src/cells/initialStock.js. */
+
+  // busy — что сейчас идёт: 'check' (проверка файла), 'apply' (запись),
+  // 'undo' (отмена); пусто — ничего. seq — номер проверки: ответ устаревшей
+  // (файл или продавца успели сменить) не должен перетереть свежую.
+  const stockLoad = { companyId: '', rows: null, blank: 0, fileName: '', preview: null, error: '',
+    busy: '', seq: 0, batches: null };
+
+  function openStockLoad(){
+    document.getElementById('stockLoadModal').classList.add('open');
+    let id = stockLoad.companyId;
+    if(!id || !companies.some(c => c.id === id)) id = companies.length === 1 ? companies[0].id : '';
+    // Проверка с прошлого раза могла устареть — открываем со свежей.
+    stockLoad.preview = null;
+    if(id !== stockLoad.companyId || stockLoad.rows) setStockLoadCompany(id); else renderStockLoad();
+    loadStockBatches();
+  }
+  window.openStockLoad = openStockLoad;
+
+  // Последние загрузки — чтобы ошибку можно было отменить целиком.
+  async function loadStockBatches(){
+    try{ stockLoad.batches = await apiFetch('/api/cells/initial-stock/batches'); }
+    catch(e){ stockLoad.batches = null; }
+    renderStockLoad();
+  }
+
+  async function undoStockBatch(batch){
+    const b = (stockLoad.batches || []).find(x => x.batch === batch);
+    if(!b || stockLoad.busy) return;
+    if(!confirm('Отменить загрузку от ' + new Date(b.at).toLocaleString('ru-RU') + ' — «' + b.companyName + '», '
+      + b.units + ' шт.?\n\nЭти штуки уйдут из ячеек Аргуса. В 1С ничего не отправляется.')) return;
+    stockLoad.busy = 'undo';
+    stockLoad.error = '';
+    renderStockLoad();
+    try{
+      const r = await apiFetch('/api/cells/initial-stock/batches/' + encodeURIComponent(batch) + '/undo', { method: 'POST' });
+      showWhToast('Загрузка отменена: ' + r.units + ' шт. сняты из ячеек.');
+      stockLoad.preview = null;   // проверка файла устарела: ячейки изменились
+      renderWarehouseMap().catch(() => {});
+    } catch(e){
+      // В окне, а не во всплывашке на три секунды: причину надо успеть прочитать.
+      stockLoad.error = 'Не отменено: ' + e.message;
+    }
+    stockLoad.busy = '';
+    await loadStockBatches();
+    if(stockLoad.rows && stockLoad.companyId) previewStockLoad();
+  }
+  window.undoStockBatch = undoStockBatch;
+
+  function closeStockLoad(){
+    // Пока идёт запись или отмена, окно не закрываем; проверку — можно.
+    if(stockLoad.busy === 'apply' || stockLoad.busy === 'undo') return;
+    document.getElementById('stockLoadModal').classList.remove('open');
+  }
+  window.closeStockLoad = closeStockLoad;
+
+  function setStockLoadCompany(id){
+    stockLoad.companyId = id;
+    stockLoad.preview = null;
+    stockLoad.error = '';
+    // Файл уже выбран — проверяем его заново для нового продавца: артикулы
+    // и «уже лежит» у каждого продавца свои.
+    if(stockLoad.rows && id) previewStockLoad(); else renderStockLoad();
+  }
+  window.setStockLoadCompany = setStockLoadCompany;
+
+  // Бланк на весь каталог продавца. Ячейка подставлена там, где её знает 1С;
+  // количество пустое — его вписывают у полки. «По 1С» — только для сверки.
+  async function downloadStockTemplate(){
+    if(!stockLoad.companyId){ showWhToast('Сначала выберите продавца.'); return; }
+    let data;
+    try{
+      data = await apiFetch('/api/cells/initial-stock/template?companyId=' + encodeURIComponent(stockLoad.companyId));
+    } catch(e){ showWhToast('Не удалось получить бланк: ' + e.message); return; }
+    const rows = [];
+    data.products.forEach(p => {
+      // «Продавец» — чтобы бланк одного продавца нельзя было загрузить другому:
+      // сервер отклонит строки с чужим именем.
+      const base = { 'Артикул': p.sku, 'Товар': p.name, 'Штрихкод': p.barcode || '',
+        'По 1С (для сверки)': p.stock1c == null ? '' : p.stock1c, 'Количество': '', 'Состояние': '',
+        'Продавец': data.seller.name };
+      (p.cells1c && p.cells1c.length ? p.cells1c : ['']).forEach(cell => rows.push(Object.assign({ 'Ячейка': cell }, base)));
+    });
+    // Колонка «Ячейка» — текстом, и с запасом пустых строк под дописанное
+    // у полки. Иначе Excel превращает набранное «01-03-011» в дату.
+    const asText = (ws) => {
+      const last = rows.length + 300;
+      for(let r = 1; r <= last; r++){
+        const ref = XLSX.utils.encode_cell({ r, c: 0 });
+        ws[ref] = { t: 's', v: ws[ref] ? String(ws[ref].v) : '', z: '@' };
+      }
+      const range = XLSX.utils.decode_range(ws['!ref']);
+      range.e.r = Math.max(range.e.r, last);
+      ws['!ref'] = XLSX.utils.encode_range(range);
+    };
+    saveXlsx('Бланк остатков — ' + data.seller.name, 'Остатки', rows, [14, 16, 42, 16, 12, 12, 14, 22], asText);
+  }
+  window.downloadStockTemplate = downloadStockTemplate;
+
+  // Разбор файла. Заголовок ищем в первых строках по словам, а не по месту:
+  // колонки переставляют, над таблицей пишут пометки.
+  function parseStockFile(wb){
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    if(!ws || !ws['!ref']) throw new Error('В файле нет листа с данными.');
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    const at = (r, c) => ws[XLSX.utils.encode_cell({ r, c })];
+    const text = (r, c) => {
+      const cell = at(r, c);
+      if(!cell) return '';
+      if(cell.w == null && cell.v instanceof Date) return cell.v.toLocaleDateString('ru-RU');
+      return String(cell.w != null ? cell.w : cell.v != null ? cell.v : '').trim();
+    };
+    // Число берём как есть, а не как оно нарисовано: «1 200» или «1,200»
+    // на экране — это 1200, а не полторы штуки.
+    const number = (r, c) => {
+      const cell = at(r, c);
+      return cell && cell.t === 'n' ? String(cell.v) : text(r, c);
+    };
+    const code = (r, c) => {
+      const cell = at(r, c);
+      if(cell && cell.t === 'n'){
+        const shown = String(cell.w == null ? '' : cell.w).trim();
+        return /^\d+$/.test(shown) ? shown : String(cell.v);
+      }
+      return text(r, c);
+    };
+    const isDate = (r, c) => {
+      const cell = at(r, c);
+      return !!cell && (cell.t === 'd'
+        || (cell.t === 'n' && !!cell.z && !!(XLSX.SSF && XLSX.SSF.is_date) && XLSX.SSF.is_date(cell.z)));
+    };
+    const NAMES = {
+      cell: ['ячейка', 'адрес', 'адрес ячейки'],
+      sku: ['артикул', 'артикул или штрихкод', 'штрихкод или артикул'],
+      qty: ['количество', 'кол-во', 'посчитано'],
+      quality: ['состояние', 'состояние товара'],
+      seller: ['продавец'],
+    };
+    let head = -1;
+    let cols = {};
+    for(let r = range.s.r; r <= Math.min(range.e.r, range.s.r + 9) && head < 0; r++){
+      const found = {};
+      for(let c = range.s.c; c <= range.e.c; c++){
+        const h = text(r, c).toLowerCase();
+        Object.keys(NAMES).forEach(k => { if(found[k] == null && NAMES[k].includes(h)) found[k] = c; });
+      }
+      if(found.sku != null && found.cell != null && found.qty != null){ head = r; cols = found; }
+    }
+    if(head < 0) throw new Error('Не нашёл колонки «Ячейка», «Артикул» и «Количество». Возьмите за основу бланк.');
+    const rows = [];
+    let blank = 0;
+    for(let r = head + 1; r <= range.e.r; r++){
+      const row = {
+        line: r + 1,
+        cell: text(r, cols.cell),
+        sku: code(r, cols.sku),
+        qty: number(r, cols.qty),
+        quality: cols.quality != null ? text(r, cols.quality) : '',
+        seller: cols.seller != null ? text(r, cols.seller) : '',
+      };
+      if(!row.cell && !row.sku && !row.qty) continue;
+      // Не посчитано — строка бланка, до которой не дошли. На сервер её не
+      // шлём: бланк большого каталога иначе упирался бы в предел строк.
+      if(row.qty === ''){ blank += 1; continue; }
+      if(row.cell && isDate(r, cols.cell)) row.cellIsDate = true;
+      rows.push(row);
+    }
+    if(!rows.length) throw new Error(blank ? 'Ни в одной строке не вписано количество.' : 'Под заголовком нет ни одной строки.');
+    return { rows, blank };
+  }
+
+  async function readStockWorkbook(file){
+    const buf = await file.arrayBuffer();
+    if(/\.(csv|txt)$/i.test(file.name)){
+      // CSV — только как текст: разбор по умолчанию сам превращает «01-03-011»
+      // и даже «1.3.11» в даты, и адрес ячейки пропадает. Русский Excel
+      // сохраняет CSV в Windows-1251, поэтому пробуем и её.
+      let text;
+      try{ text = new TextDecoder('utf-8', { fatal: true }).decode(buf); }
+      catch(e){ text = new TextDecoder('windows-1251').decode(buf); }
+      return XLSX.read(text.replace(/^\uFEFF/, ''), { type: 'string', raw: true });
+    }
+    // cellDates — чтобы адрес, который Excel успел превратить в дату, пришёл
+    // датой и был пойман, а не уехал на сервер числом 40574.
+    return XLSX.read(buf, { type: 'array', cellDates: true, cellNF: true });
+  }
+
+  async function onStockLoadFile(input){
+    const file = input.files && input.files[0];
+    input.value = '';   // тот же файл после правки выбирают снова
+    if(!file) return;
+    if(typeof XLSX === 'undefined'){ showWhToast('Excel ещё грузится, повторите через секунду.'); return; }
+    stockLoad.fileName = file.name;
+    stockLoad.preview = null;
+    try{
+      const parsed = parseStockFile(await readStockWorkbook(file));
+      stockLoad.rows = parsed.rows;
+      stockLoad.blank = parsed.blank;
+      stockLoad.error = '';
+    } catch(e){
+      stockLoad.rows = null;
+      stockLoad.error = 'Файл не прочитан: ' + e.message;
+      renderStockLoad();
+      return;
+    }
+    if(stockLoad.companyId) previewStockLoad(); else renderStockLoad();
+  }
+  window.onStockLoadFile = onStockLoadFile;
+
+  async function previewStockLoad(){
+    const seq = ++stockLoad.seq;
+    stockLoad.busy = 'check';
+    renderStockLoad();
+    let preview = null;
+    let error = '';
+    try{
+      preview = await apiFetch('/api/cells/initial-stock', { method: 'POST',
+        body: { companyId: stockLoad.companyId, rows: stockLoad.rows } });
+    } catch(e){
+      error = 'Проверка не прошла: ' + e.message;
+    }
+    if(seq !== stockLoad.seq) return;   // пока ждали, выбрали другой файл или продавца
+    stockLoad.preview = preview;
+    stockLoad.error = error;
+    stockLoad.busy = '';
+    renderStockLoad();
+  }
+
+  async function applyStockLoad(){
+    const p = stockLoad.preview;
+    if(!p || p.summary.errors > 0 || p.summary.ok === 0 || stockLoad.busy) return;
+    const s = p.summary;
+    if(!confirm('Загрузить в ячейки «' + p.seller.name + '» ' + s.units + ' шт. — '
+      + s.products + ' ' + pluralRu(s.products, 'товар', 'товара', 'товаров') + ' в '
+      + s.cells + ' ' + pluralRu(s.cells, 'ячейку', 'ячейки', 'ячеек') + '?\n\n'
+      + 'Ошиблись — загрузку можно отменить целиком, пока её товар не отбирали, не перемещали и не пересчитывали.')) return;
+    stockLoad.busy = 'apply';
+    stockLoad.seq += 1;   // ответ проверки, если она ещё в пути, уже не нужен
+    renderStockLoad();
+    let r;
+    try{
+      r = await apiFetch('/api/cells/initial-stock', { method: 'POST',
+        body: { companyId: stockLoad.companyId, rows: stockLoad.rows, apply: true,
+          expect: { ok: s.ok, units: s.units } } });
+    } catch(e){
+      // Ответ не дошёл — неизвестно, записалось ли. Перепроверяем: повтор
+      // безопасен, записанные строки покажутся как «уже загружено».
+      stockLoad.busy = '';
+      stockLoad.error = 'Связь прервалась (' + e.message + ') — неизвестно, записалось ли. Проверил файл заново: '
+        + 'если строки стоят как «уже загружено», загрузка прошла.';
+      loadStockBatches();
+      renderWarehouseMap().catch(() => {});
+      previewStockLoad();
+      return;
+    }
+    stockLoad.busy = '';
+    if(!r.applied){
+      stockLoad.preview = r;
+      stockLoad.error = r.stale
+        ? 'Пока вы смотрели проверку, цифры изменились. Ничего не загружено — посмотрите новую проверку и подтвердите снова.'
+        : r.summary.errors > 0
+          ? 'Пока вы смотрели проверку, на складе что-то изменилось. Ничего не загружено — посмотрите строки с ошибками.'
+          : 'Всё из файла уже загружено — возможно, прошлой попыткой. Смотрите «Последние загрузки».';
+      loadStockBatches();
+      renderStockLoad();
+      return;
+    }
+    stockLoad.rows = null;
+    stockLoad.fileName = '';
+    stockLoad.preview = null;
+    stockLoad.error = '';
+    document.getElementById('stockLoadModal').classList.remove('open');
+    showWhToast('Загружено: ' + r.summary.units + ' шт. в ' + r.summary.cells + ' '
+      + pluralRu(r.summary.cells, 'ячейку', 'ячейки', 'ячеек') + '.');
+    // Карта сама не обновится — без этого владелец увидит пустые ячейки
+    // и нажмёт ещё раз.
+    renderWarehouseMap().catch(() => {});
+  }
+  window.applyStockLoad = applyStockLoad;
+
+  const SL_QUALITY = { good: 'годный', defective: 'брак', packaging_defect: 'брак упаковки' };
+  const SL_SHOW = 500;
+
+  function renderStockLoad(){
+    const body = document.getElementById('stockLoadBody');
+    const acts = document.getElementById('stockLoadActions');
+    if(!body || !acts) return;
+    const p = stockLoad.preview;
+    const s = p && p.summary;
+    const options = '<option value="">Выберите продавца</option>'
+      + companies.map(c => '<option value="' + escapeHTML(c.id) + '"' + (c.id === stockLoad.companyId ? ' selected' : '')
+        + '>' + escapeHTML(c.name) + '</option>').join('');
+
+    let result = '';
+    if(stockLoad.busy === 'check' && !p){
+      result = '<div class="oc-note">Проверяю файл…</div>';
+    } else if(p){
+      const rank = (l) => (l.error ? 2 : l.already ? 0 : 1);
+      const lines = p.lines.slice().sort((a, b) => rank(b) - rank(a) || a.line - b.line);
+      const blank = s.skipped + stockLoad.blank;
+      const shown = lines.slice(0, SL_SHOW);
+      result = '<div class="sl-sum">'
+        + '<span class="sl-chip ok">Загрузится: <b>' + s.ok + '</b> ' + pluralRu(s.ok, 'строка', 'строки', 'строк')
+        +   ' · <b>' + s.units + '</b> шт. · ' + s.products + ' ' + pluralRu(s.products, 'товар', 'товара', 'товаров')
+        +   ' в ' + s.cells + ' ' + pluralRu(s.cells, 'ячейке', 'ячейках', 'ячейках') + '</span>'
+        + (s.errors ? '<span class="sl-chip bad">Ошибок: <b>' + s.errors + '</b> — исправьте файл и выберите его снова</span>' : '')
+        + (s.already ? '<span class="sl-chip">Уже загружено раньше: <b>' + s.already + '</b> — пропущены</span>' : '')
+        + (blank ? '<span class="sl-chip">Не заполнено: <b>' + blank + '</b> — пропущены</span>' : '')
+        + '</div>'
+        + (s.vs1c.length
+            ? '<details class="sl-fold"><summary>С учётом 1С не сходится: ' + s.vs1c.length + ' '
+              + pluralRu(s.vs1c.length, 'товар', 'товара', 'товаров') + ' — это не ошибка, только для сверки</summary>'
+              + '<table class="sl-table"><thead><tr><th>Товар</th><th class="num">Уже в ячейках</th>'
+              + '<th class="num">Загружаете</th><th class="num">По 1С</th></tr></thead><tbody>'
+              + s.vs1c.map(v => '<tr><td>' + escapeHTML(v.name) + '<div class="sub mono">' + escapeHTML(v.sku) + '</div></td>'
+                + '<td class="num">' + (v.inCells || '—') + '</td>'
+                + '<td class="num">' + v.loaded + '</td><td class="num">' + v.stock1c + '</td></tr>').join('')
+              + '</tbody></table></details>'
+            : '')
+        + (s.notInFile
+            ? '<div class="oc-note" style="margin-bottom:12px;">По 1С есть остаток ещё у ' + s.notInFile + ' '
+              + pluralRu(s.notInFile, 'товара', 'товаров', 'товаров') + ', которых нет в файле. Их можно загрузить следующим файлом.</div>'
+            : '')
+        + '<table class="sl-table"><thead><tr><th>Строка</th><th>Ячейка</th><th>Товар</th>'
+        + '<th class="num">Кол-во</th><th>Состояние</th><th>Проверка</th></tr></thead><tbody>'
+        + shown.map(l => '<tr' + (l.error ? ' class="bad"' : l.already ? ' class="done"' : '') + '>'
+          + '<td class="num">' + l.line + '</td>'
+          // Вписанное и найденное — рядом, когда они различаются: подмену
+          // адреса на сотнях строк иначе не заметить.
+          + '<td class="mono">' + (l.cellLabel && l.cell && l.cell !== l.cellLabel
+              ? escapeHTML(l.cell) + ' → ' + escapeHTML(l.cellLabel)
+              : escapeHTML(l.cellLabel || l.cell || '—')) + '</td>'
+          + '<td>' + (l.name ? escapeHTML(l.name) + '<div class="sub mono">' + escapeHTML(l.sku) + '</div>'
+              : '<span class="mono">' + escapeHTML(l.sku || '—') + '</span>') + '</td>'
+          + '<td class="num">' + (l.qty == null ? '—' : l.qty) + '</td>'
+          + '<td>' + escapeHTML(SL_QUALITY[l.quality] || '') + '</td>'
+          + '<td>' + (l.error ? '<span class="err">' + escapeHTML(l.error) + '</span>'
+              : l.already ? 'уже загружено ' + escapeHTML(l.already)
+              : '<span class="okay">загрузится</span>') + '</td>'
+          + '</tr>').join('')
+        + '</tbody></table>'
+        + (lines.length > SL_SHOW ? '<div class="oc-note" style="margin-top:10px;">Показаны первые ' + SL_SHOW + ' строк из '
+          + lines.length + ' — сначала строки с ошибками.</div>' : '');
+    }
+
+    body.innerHTML = '<div class="oc-note">Для товара, который уже лежит на полках, а в ячейках Аргуса его нет. '
+      + 'Скачайте бланк, впишите у полки посчитанное количество (ячейку — с таблички), загрузите файл: '
+      + 'Аргус проверит каждую строку и покажет, что загрузится. Одна ошибка — и не загрузится ничего. '
+      + 'Тот же файл можно загружать снова, дописывая: уже загруженные строки пропускаются. '
+      + 'Ошиблись — загрузку можно отменить, пока её товар не отбирали, не перемещали и не пересчитывали. '
+      + 'В 1С ничего не отправляется.</div>'
+      + '<div class="sl-field"><label for="stockLoadCompany">Продавец</label>'
+      + '<select class="mp-field" id="stockLoadCompany" onchange="setStockLoadCompany(this.value)"'
+      + (stockLoad.busy ? ' disabled' : '') + '>' + options + '</select></div>'
+      + '<div class="sl-row">'
+      +   '<button class="wh-onboarding-btn" type="button" onclick="downloadStockTemplate()"'
+      +     (stockLoad.companyId ? '' : ' disabled') + '>Скачать бланк</button>'
+      +   '<label class="wh-onboarding-btn sl-file">' + (stockLoad.fileName ? 'Выбрать другой файл' : 'Выбрать файл')
+      +     '<input type="file" accept=".xlsx,.xls,.csv" onchange="onStockLoadFile(this)"' + (stockLoad.busy ? ' disabled' : '') + '></label>'
+      +   (stockLoad.fileName ? '<span class="ord-meta">' + escapeHTML(stockLoad.fileName) + '</span>' : '')
+      + '</div>'
+      + (stockLoad.rows && !stockLoad.companyId ? '<div class="oc-note">Выберите продавца — и файл проверится.</div>' : '')
+      + (stockLoad.error ? '<div class="oc-note" style="color:var(--terracotta);">' + escapeHTML(stockLoad.error) + '</div>' : '')
+      + result;
+
+    const batches = stockLoad.batches || [];
+    if(batches.length){
+      body.innerHTML += '<div class="sl-batches"><h4>Последние загрузки</h4>'
+        + '<table class="sl-table"><thead><tr><th>Когда</th><th>Продавец</th><th class="num">Штук</th>'
+        + '<th class="num">Ячеек</th><th></th></tr></thead><tbody>'
+        + batches.map(b => '<tr' + (b.undone ? ' class="done"' : '') + '>'
+          + '<td>' + escapeHTML(new Date(b.at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })) + '</td>'
+          + '<td>' + escapeHTML(b.companyName || '—') + '</td>'
+          + '<td class="num">' + b.units + '</td><td class="num">' + b.cells + '</td>'
+          + '<td>' + (b.undone ? 'отменена'
+              : b.canUndo ? '<button class="sl-undo" type="button" onclick="undoStockBatch(\'' + escapeHTML(b.batch) + '\')"'
+                + (stockLoad.busy ? ' disabled' : '') + '>Отменить</button>'
+              : '<span class="sub">' + ({
+                  touched: 'её товар уже отбирали, перемещали или пересчитывали — не отменить',
+                  counting: 'назначен пересчёт — сначала закройте задание',
+                  legacy: 'загружена до появления отмены — не отменить',
+                }[b.blocked] || 'не отменить') + '</span>') + '</td>'
+          + '</tr>').join('')
+        + '</tbody></table></div>';
+    }
+
+    const canApply = !!(s && s.errors === 0 && s.ok > 0 && !stockLoad.busy);
+    acts.innerHTML = '<button class="wh-onboarding-btn" type="button" onclick="closeStockLoad()"'
+      + (stockLoad.busy === 'apply' || stockLoad.busy === 'undo' ? ' disabled' : '') + '>Закрыть</button>'
+      + '<button class="wh-onboarding-btn primary" type="button" onclick="applyStockLoad()"' + (canApply ? '' : ' disabled') + '>'
+      + (stockLoad.busy === 'apply' ? 'Загружаю…' : stockLoad.busy === 'undo' ? 'Отменяю загрузку…'
+        : stockLoad.busy === 'check' ? 'Проверяю файл…' : s && s.errors ? 'Сначала исправьте ошибки'
+        : s && s.ok ? 'Загрузить ' + s.units + ' шт.' : s && s.already ? 'Всё уже загружено' : 'Загрузить') + '</button>';
   }
 
   function exportCell(blockId){
