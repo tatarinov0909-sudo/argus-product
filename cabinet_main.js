@@ -219,6 +219,43 @@
   // она гаснет через три секунды, и человек остаётся с пустым экраном без
   // единого объяснения — ровно так «сотрудников не видно» и выглядело.
   let staffError = '';
+  // Права менеджера — те же ключи, что на сервере (GRANTS в middleware/auth),
+  // подписаны словами владельца. Заказы, поставки и журнал открыты менеджеру
+  // всегда: это и есть его работа, права — про остальное.
+  const GRANT_LABELS = {
+    warehouse: ['Склад', 'карта ячеек, зоны, пересчёт'],
+    clients: ['Продавцы', 'заводить продавцов и выдавать им ключи'],
+    staff: ['Работники', 'выдавать ключи работникам'],
+    marketplaces: ['Площадки', 'подключать WB, разрешать менять статусы'],
+    integration: ['1С', 'подключать обмен'],
+    billing: ['Тариф и деньги', ''],
+  };
+  const grantTitle = (g) => (GRANT_LABELS[g] ? GRANT_LABELS[g][0] : g);
+
+  function grantsChecklist(prefix, selected){
+    const on = new Set(selected || []);
+    return Object.keys(GRANT_LABELS).map(g => `
+      <label class="staff-grant">
+        <input type="checkbox" data-grant="${g}" data-for="${escapeHTML(prefix)}" ${on.has(g) ? 'checked' : ''}>
+        <span>${escapeHTML(GRANT_LABELS[g][0])}${GRANT_LABELS[g][1] ? `<i>${escapeHTML(GRANT_LABELS[g][1])}</i>` : ''}</span>
+      </label>`).join('');
+  }
+  function grantsChecked(prefix){
+    return [...document.querySelectorAll(`input[data-grant][data-for="${prefix}"]:checked`)].map(i => i.dataset.grant);
+  }
+
+  function onStaffKindChange(){
+    const select = document.getElementById('staffKindSelect');
+    const box = document.getElementById('staffGrants');
+    if(!select || !box) return;
+    const manager = select.value === 'manager';
+    box.hidden = !manager;
+    if(manager && !document.getElementById('staffGrantsList').children.length){
+      document.getElementById('staffGrantsList').innerHTML = grantsChecklist('new', []);
+    }
+  }
+  window.onStaffKindChange = onStaffKindChange;
+
   async function loadStaff(){
     staffError = '';
     try{
@@ -248,33 +285,52 @@
     const label = document.getElementById('staffToggleLabel');
     if(label){
       label.innerHTML = staffError
-        ? 'Работники <span class="staff-toggle-count">— не загрузились</span>'
-        : 'Работники <span class="staff-toggle-count">· ' + staffMembers.length + '</span>';
+        ? 'Сотрудники <span class="staff-toggle-count">— не загрузились</span>'
+        : 'Сотрудники <span class="staff-toggle-count">· ' + staffMembers.length + '</span>';
     }
 
     if(staffError){
-      wrap.innerHTML = '<div class="staff-empty">Не удалось загрузить работников: '
+      wrap.innerHTML = '<div class="staff-empty">Не удалось загрузить сотрудников: '
         + escapeHTML(staffError) + '</div>';
       return;
     }
     if(staffMembers.length === 0){
-      wrap.innerHTML = '<div class="staff-empty">Работников пока нет — добавьте первого выше.</div>';
+      wrap.innerHTML = '<div class="staff-empty">Сотрудников пока нет — добавьте первого выше.</div>';
       return;
     }
     // Развернуть сам, если человек только что выдал ключ: иначе он нажимает
     // «сгенерировать» и не видит результата — ровно на это и была жалоба.
-    wrap.innerHTML = '<div class="staff-row head"><div>Имя</div><div>Ключ</div>'
+    wrap.innerHTML = '<div class="staff-row head"><div>Имя</div><div>Роль</div><div>Ключ</div>'
       + '<div>Выдан</div><div>Статус</div><div></div></div>'
       + staffMembers.map((s) => {
       const issued = new Date(s.issued_at).toLocaleDateString('ru-RU');
+      const manager = s.kind === 'manager';
+      const rights = (s.permissions || []).map(grantTitle);
+      const rightsText = manager
+        ? (rights.length ? 'Открыто: ' + rights.join(', ') : 'Только заказы, поставки и журнал')
+        : '';
+      const canEdit = manager && !IS_MANAGER;
       return `
         <div class="staff-row ${s.active ? '' : 'revoked'}">
-          <div class="staff-name">${escapeHTML(s.name)}</div>
+          <div class="staff-name">${escapeHTML(s.name)}
+            ${rightsText ? `<div class="staff-rights">${escapeHTML(rightsText)}</div>` : ''}</div>
+          <div><span class="staff-kind ${manager ? 'manager' : 'worker'}">${manager ? 'менеджер' : 'работник'}</span></div>
           <div class="staff-key">${escapeHTML(s.key_code)}</div>
           <div class="staff-date">${issued}</div>
           <div><span class="staff-status ${s.active ? 'active' : 'revoked'}">${s.active ? 'активен' : 'отозван'}</span></div>
-          <div class="staff-action ${s.active ? 'revoke' : 'restore'}" onclick="toggleStaffKey('${s.id}')">${s.active ? 'Отозвать' : 'Восстановить'}</div>
+          <div style="text-align:right;">
+            ${canEdit ? `<span class="staff-action restore" style="margin-right:12px;" onclick="editStaffGrants('${escapeHTML(s.id)}')">Права</span>` : ''}
+            <span class="staff-action ${s.active ? 'revoke' : 'restore'}" onclick="toggleStaffKey('${escapeHTML(s.id)}')">${s.active ? 'Отозвать' : 'Восстановить'}</span>
+          </div>
         </div>
+        ${canEdit ? `<div class="staff-row staff-edit" id="staffEdit-${escapeHTML(s.id)}" hidden>
+          <div class="staff-grants-title">Права менеджера «${escapeHTML(s.name)}». Вступят в силу при следующем входе.</div>
+          <div class="staff-grants-list">${grantsChecklist(s.id, s.permissions || [])}</div>
+          <div class="staff-edit-actions">
+            <button class="wh-onboarding-btn primary" type="button" onclick="saveStaffGrants('${escapeHTML(s.id)}')">Сохранить права</button>
+            <span class="staff-action" onclick="editStaffGrants('${escapeHTML(s.id)}')">Свернуть</span>
+          </div>
+        </div>` : ''}
       `;
     }).join('');
   }
@@ -298,16 +354,38 @@
     const input = document.getElementById('staffNameInput');
     const name = input.value.trim();
     if(!name){ showWhToast('Введите имя сотрудника.'); return; }
+    const kindSelect = document.getElementById('staffKindSelect');
+    const kind = kindSelect && kindSelect.value === 'manager' ? 'manager' : 'worker';
+    const permissions = kind === 'manager' ? grantsChecked('new') : [];
     try{
-      const key = await apiFetch('/api/staff', {method:'POST', body:{name}});
+      const key = await apiFetch('/api/staff', {method:'POST', body:{name, kind, permissions}});
       input.value = '';
       await loadStaff();
       toggleStaffList(true);
-      showWhToast('Ключ ' + key.key_code + ' выдан работнику «' + name + '».');
+      showWhToast('Ключ ' + key.key_code + ' выдан ' + (kind === 'manager' ? 'менеджеру' : 'работнику')
+        + ' «' + name + '».' + (kind === 'manager' ? ' Вход по нему откроет кабинет с заказами.' : ''));
     } catch(e){
       showWhToast('Не удалось выдать ключ: ' + e.message);
     }
   }
+
+  function editStaffGrants(id){
+    const box = document.getElementById('staffEdit-' + id);
+    if(box) box.hidden = !box.hidden;
+  }
+  window.editStaffGrants = editStaffGrants;
+
+  async function saveStaffGrants(id){
+    try{
+      await apiFetch('/api/staff/' + id + '/permissions', {method:'PATCH', body:{permissions: grantsChecked(id)}});
+      await loadStaff();
+      toggleStaffList(true);
+      showWhToast('Права сохранены. Менеджер увидит их при следующем входе.');
+    } catch(e){
+      showWhToast('Не удалось сохранить права: ' + e.message);
+    }
+  }
+  window.saveStaffGrants = saveStaffGrants;
 
   async function toggleStaffKey(id){
     try{
@@ -3841,8 +3919,10 @@
   let invWaiting = [];
 
   async function loadInventory(){
+    // Настройки инвентаризации — только владельцу; менеджеру с правом «склад»
+    // сервер отвечал 403, и запрос просто шумел в консоли.
     try{
-      invSettings = await apiFetch('/api/inventory/settings');
+      invSettings = IS_MANAGER ? null : await apiFetch('/api/inventory/settings');
     } catch(e){ invSettings = null; }
     try{
       invWaiting = await apiFetch('/api/inventory/tasks?status=waiting_owner');

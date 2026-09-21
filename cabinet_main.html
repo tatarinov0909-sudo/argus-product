@@ -656,6 +656,24 @@
     font-size:15px; font-weight:700; cursor:pointer; font-family:var(--sans); white-space:nowrap;
   }
   .staff-add button:hover{opacity:0.92;}
+  .staff-add select{
+    background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:10px 14px;
+    color:var(--text); font-family:var(--sans); font-size:15px;
+  }
+  .staff-grants{
+    margin-top:10px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px;
+  }
+  .staff-grants-title{font-size:13px; color:var(--muted); margin-bottom:10px;}
+  .staff-grants-list{display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:8px 18px;}
+  .staff-grant{display:flex; align-items:flex-start; gap:9px; font-size:14px; cursor:pointer; line-height:1.35;}
+  .staff-grant input{margin-top:3px; accent-color:var(--accent);}
+  .staff-grant span i{display:block; font-style:normal; font-size:12px; color:var(--muted);}
+  .staff-kind{font-size:12px; font-weight:600; padding:3px 8px; border-radius:6px; display:inline-block;}
+  .staff-kind.manager{background:rgba(95,175,166,0.15); color:var(--accent);}
+  .staff-kind.worker{background:var(--panel-2); color:var(--muted);}
+  .staff-rights{font-size:12px; color:var(--muted); margin-top:3px; font-weight:400;}
+  .staff-row.staff-edit{grid-template-columns:1fr; background:var(--panel-2);}
+  .staff-edit-actions{display:flex; gap:10px; align-items:center; margin-top:10px;}
 
   /* Разрыв на месте свёрнутых стеллажей: без него схлопнутый ряд выглядит
      как сплошная стенка, и человек промахнётся мимо полки, решив, что
@@ -800,7 +818,7 @@
   #staffRows, #companiesList{margin-top:10px;}
   .staff-table{background:var(--panel); border:1px solid var(--line); border-radius:12px; overflow:hidden;}
   .staff-row{
-    display:grid; grid-template-columns:1fr 130px 120px 100px 90px; align-items:center; gap:10px;
+    display:grid; grid-template-columns:1fr 110px 130px 110px 100px 140px; align-items:center; gap:10px;
     padding:13px 16px; border-bottom:1px solid var(--line); font-size:14px;
   }
   .staff-row:last-child{border-bottom:none;}
@@ -2012,12 +2030,24 @@
 
         <div class="staff-add">
           <input type="text" id="staffNameInput" placeholder="Имя нового сотрудника" onkeydown="if(event.key==='Enter') addStaffMember()">
+          <!-- Роль решает, куда человека пустит вход: работника — на экран
+               приёмки и сборки, менеджера — в кабинет с заказами. Раньше
+               форма всегда выдавала ключ работника, и «Менеджер» попадал
+               к грузчикам. -->
+          <select id="staffKindSelect" onchange="onStaffKindChange()" aria-label="Роль сотрудника">
+            <option value="worker">Работник склада</option>
+            <option value="manager">Менеджер</option>
+          </select>
           <button onclick="addStaffMember()">+ Сгенерировать ключ</button>
+        </div>
+        <div class="staff-grants" id="staffGrants" hidden>
+          <div class="staff-grants-title">Что открыть менеджеру, кроме заказов, поставок и журнала</div>
+          <div class="staff-grants-list" id="staffGrantsList"></div>
         </div>
 
         <div class="staff-toggle" id="staffToggle" onclick="toggleStaffList()">
           <span class="staff-toggle-arrow" id="staffToggleArrow">▸</span>
-          <span id="staffToggleLabel">Работники</span>
+          <span id="staffToggleLabel">Сотрудники</span>
         </div>
         <div id="staffRows" hidden></div>
 
