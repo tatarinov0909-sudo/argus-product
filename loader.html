@@ -519,6 +519,11 @@
     background:transparent; color:var(--text); border:1px solid var(--line);
     font-size:15px; font-weight:600; font-family:var(--sans);
   }
+  /* «Нет товара» — красным: это не «отложить», а тревога руководителю. */
+  .missing-btn{color:var(--terracotta); border-color:rgba(217,142,110,0.5);}
+  .sheet-confirm.missing-confirm{background:var(--terracotta); color:#fff;}
+  .sheet-confirm.missing-confirm:disabled{opacity:.55; cursor:default;}
+  .missing-label{font-size:13px; color:var(--muted); margin:14px 0 8px;}
   .postpone-btn:active{opacity:0.85;}
 
   /* ---------- Финальный экран ---------- */
@@ -830,6 +835,9 @@
              иначе работник упирался в неработающую кнопку и не мог ни собрать
              позицию, ни перейти к следующей. -->
         <button class="postpone-btn" id="postponeBtn" onclick="postponeItem()" style="display:none;">Отложить и взять следующую</button>
+        <!-- Товара нет или не хватает — отметка руководителю «очень важно»,
+             видна в поставке. Раньше было только «скажите менеджеру». -->
+        <button class="postpone-btn missing-btn" id="missingBtn" onclick="openMissingSheet()" style="display:none;">Нет товара / не хватает</button>
       </div>
     </div>
 
@@ -876,6 +884,22 @@
             <div class="map-back" onclick="showMapRowsPicker()">← Другой ряд</div>
             <div class="map-rack-row" id="mapRackRow"></div>
           </div>
+        </div>
+
+        <div class="sheet-step" id="sheetStepMissing">
+          <div class="sheet-title">Нет товара</div>
+          <div class="sheet-sub" id="missingItemName"></div>
+          <div class="missing-label">Сколько не хватает</div>
+          <div class="qty-stepper">
+            <button class="qty-btn" onclick="stepMissing(-1)" aria-label="Меньше">−</button>
+            <input class="qty-value" id="missingQty" type="text" inputmode="numeric" pattern="[0-9]*"
+                   aria-label="Сколько не хватает" oninput="missingTyped(this.value)" onfocus="this.select()">
+            <button class="qty-btn" onclick="stepMissing(1)" aria-label="Больше">+</button>
+          </div>
+          <div class="missing-label">Комментарий, если нужно</div>
+          <textarea class="defect-input" id="missingNote" rows="2" maxlength="300"
+                    placeholder="Где искали, что нашли вместо"></textarea>
+          <button class="sheet-confirm missing-confirm" id="missingConfirmBtn" onclick="sendMissing()" style="margin-top:14px;">Отправить руководителю — очень важно</button>
         </div>
 
         <div class="sheet-step" id="sheetStepPause">
@@ -1177,8 +1201,10 @@
     startTaskTimer();
     totalPausedMs = 0;
     pauseLog = [];
-    // Отложенные позиции — только про текущую накладную.
-    postponedItems = new Set();
+    // Отложенные позиции — только про текущую накладную. Позиции, по которым
+    // уже отправлено «нет товара» и руководитель ещё не ответил, сразу
+    // отложены: иначе после перезагрузки грузчик пошёл бы за ними снова.
+    postponedItems = new Set(currentInvoice.items.filter(it => it.missing_marked && !it.closed).map(it => it.id));
     pauseStart = null;
     results.length = 0;
     document.getElementById('pauseBanner').classList.remove('show');
@@ -1219,6 +1245,7 @@
   }
 
   function renderCurrentItem(){
+    document.getElementById('missingBtn').style.display = isPicking() ? '' : 'none';
     document.getElementById('invoiceNum').textContent = currentInvoice.number;
     document.getElementById('invoiceClient').textContent = currentInvoice.company_name;
     if(isPicking()){ renderPickItem(); return; }
@@ -1348,7 +1375,7 @@
     const left = currentInvoice.items.filter(it => !it.closed && !postponedItems.has(it.id)).length;
     showToast(left > 0
       ? 'Позиция отложена — вернитесь к ней, когда товар появится'
-      : 'Отложены все оставшиеся позиции. Скажите менеджеру: этого товара нет на складе');
+      : 'Отложены все оставшиеся позиции. Нажмите «Нет товара» — руководитель узнает сразу');
     renderCurrentItem();
   }
   window.postponeItem = postponeItem;
@@ -2814,9 +2841,12 @@
     document.getElementById('doneTitle').textContent = postponed > 0
       ? 'Собрано, кроме отложенного'
       : (isPicking() ? 'Отгрузка собрана' : (isReturn() ? 'Возврат разобран' : 'Приёмка завершена'));
+    const reported = currentInvoice.items.filter(function(it){ return !it.closed && postponedItems.has(it.id) && it.missing_marked; }).length;
     document.getElementById('doneSub').textContent = postponed > 0
-      ? 'Отложено ' + postponed + ' ' + pluralRu(postponed, 'позиция', 'позиции', 'позиций')
-        + ': этого товара нет ни в одной ячейке. Скажите менеджеру — накладная остаётся в работе.'
+      ? 'Отложено ' + postponed + ' ' + pluralRu(postponed, 'позиция', 'позиции', 'позиций') + '. '
+        + (reported === postponed
+          ? 'Отметка «нет товара» отправлена руководителю — заказ остаётся в работе, пока он не решит.'
+          : 'По ' + (postponed - reported) + ' из них руководитель ещё не знает — вернитесь и нажмите «Нет товара».')
       : (isReturn()
         ? 'Возврат ' + currentInvoice.number + ' разобран по состоянию товара. Продавец увидит, что вернулось в продажу, а что легло в брак.'
         : 'Накладная ' + currentInvoice.number + ' полностью обработана. Владелец склада увидит расхождения в журнале, если они есть.');
@@ -2973,12 +3003,79 @@
       document.getElementById('sheetStepMap').classList.add('show');
       showMapRowsPicker();
     }
+    if(step === 'missing'){
+      document.getElementById('sheetStepMissing').classList.add('show');
+    }
     if(step === 'pause'){
       document.getElementById('sheetStepPause').classList.add('show');
       document.getElementById('pauseCustomInput').value = '';
       document.getElementById('pauseCustomBtn').disabled = true;
     }
   }
+
+  // ---------- «Нет товара» ----------
+  let missingState = null;   // { item, max }
+
+  function openMissingSheet(){
+    const item = currentInvoice && currentInvoice.items[currentItemIndex];
+    if(!item || item.closed) return;
+    const remaining = pickSuggestion && pickSuggestion.item && pickSuggestion.item.id === item.id
+      ? pickSuggestion.item.remaining
+      : Number(item.declared_qty) - Number(item.picked_qty || 0);
+    if(remaining <= 0) return;
+    // По умолчанию — сколько не хватает по подсчёту склада; если ячейки
+    // говорят «всё есть», а человек пришёл и не нашёл, — вся позиция.
+    const guess = pickSuggestion && pickSuggestion.shortfall > 0 ? pickSuggestion.shortfall : remaining;
+    missingState = { item, max: remaining };
+    document.getElementById('missingItemName').textContent = item.name + (item.sku ? ' · ' + item.sku : '')
+      + ' — нужно ' + remaining + ' шт';
+    document.getElementById('missingQty').value = Math.min(guess, remaining);
+    document.getElementById('missingNote').value = '';
+    document.getElementById('missingConfirmBtn').disabled = false;
+    document.getElementById('sheetOverlay').classList.add('show');
+    goSheetStep('missing');
+  }
+  window.openMissingSheet = openMissingSheet;
+
+  function stepMissing(d){
+    if(!missingState) return;
+    const field = document.getElementById('missingQty');
+    const now = parseInt(field.value, 10) || 0;
+    field.value = Math.max(1, Math.min(missingState.max, now + d));
+    missingTyped(field.value);
+  }
+  window.stepMissing = stepMissing;
+
+  function missingTyped(value){
+    if(!missingState) return;
+    const n = parseInt(String(value).replace(/\D/g, ''), 10);
+    document.getElementById('missingConfirmBtn').disabled = !(n >= 1 && n <= missingState.max);
+  }
+  window.missingTyped = missingTyped;
+
+  async function sendMissing(){
+    if(!missingState) return;
+    const btn = document.getElementById('missingConfirmBtn');
+    const qty = parseInt(String(document.getElementById('missingQty').value).replace(/\D/g, ''), 10);
+    if(!(qty >= 1 && qty <= missingState.max)){ btn.disabled = true; return; }
+    btn.disabled = true;   // второе нажатие не шлёт вторую тревогу
+    const item = missingState.item;
+    try{
+      const r = await apiFetch('/api/shipping/missing', { method: 'POST', body: {
+        invoiceItemId: item.id, missingQty: qty, note: document.getElementById('missingNote').value,
+      } });
+      closeSheet();
+      missingState = null;
+      item.missing_marked = true;
+      postponedItems.add(item.id);
+      showToast(r.repeated ? 'Уже отмечено — руководитель знает' : 'Отправлено руководителю с пометкой «очень важно»');
+      renderCurrentItem();
+    } catch(e){
+      btn.disabled = false;
+      showToast('Не отправлено: ' + e.message);
+    }
+  }
+  window.sendMissing = sendMissing;
 
   function openPauseSheet(){
     document.getElementById('sheetOverlay').classList.add('show');
@@ -2998,7 +3095,7 @@
     document.getElementById('pauseReasonLabel').textContent = reason;
     document.getElementById('pauseBanner').classList.add('show');
     document.getElementById('confirmBtn').disabled = true;
-    document.querySelectorAll('.qty-btn, .cell-option, .cell-manual, .bucket-option').forEach(el => el.style.pointerEvents = 'none');
+    document.querySelectorAll('.qty-btn, .cell-option, .cell-manual, .bucket-option, .missing-btn').forEach(el => el.style.pointerEvents = 'none');
   }
 
   function resumeTask(){
@@ -3008,7 +3105,7 @@
     pauseLog[pauseLog.length - 1].end = now;
     pauseStart = null;
     document.getElementById('pauseBanner').classList.remove('show');
-    document.querySelectorAll('.qty-btn, .cell-option, .cell-manual, .bucket-option').forEach(el => el.style.pointerEvents = '');
+    document.querySelectorAll('.qty-btn, .cell-option, .cell-manual, .bucket-option, .missing-btn').forEach(el => el.style.pointerEvents = '');
     updateConfirmState();
   }
 

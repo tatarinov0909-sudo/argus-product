@@ -229,6 +229,7 @@
     marketplaces: ['Площадки', 'подключать WB, разрешать менять статусы'],
     integration: ['1С', 'подключать обмен'],
     billing: ['Тариф и деньги', ''],
+    shortages: ['Нет товара', 'получать отметки грузчиков «нет товара» со сборки'],
   };
   const grantTitle = (g) => (GRANT_LABELS[g] ? GRANT_LABELS[g][0] : g);
 
@@ -2266,13 +2267,22 @@
     renderWhSummary();
   }
 
+  // Ждёт решения — запись pending, на которую ещё не ответили. Решение не
+  // меняет исходную запись (журнал только дописывается), поэтому без
+  // answered уже принятое висело «требует внимания» вечно.
+  function isWaiting(e){ return e.status === 'pending' && !e.answered; }
+  function isUrgentWaiting(e){ return Boolean(e.urgent) && isWaiting(e); }
+  // Текст срочной отметки уже начинается с «ОЧЕНЬ ВАЖНО:» — рядом с красной
+  // меткой эти слова дублировались бы.
+  function urgentText(text){ return String(text || '').replace(/^ОЧЕНЬ ВАЖНО:\s*/, ''); }
+
   function renderWhSummary(){
     const panel = document.getElementById('whSummary');
     if(!panel) return;
     const s = warehouseStats();
     const top = [...s.perRow].sort((a,b) => b.occ - a.occ).slice(0,3);
     const freeRow = [...s.perRow].sort((a,b) => b.free - a.free)[0];
-    const pending = journalEntries.filter(e => e.status === 'pending');
+    const pending = journalEntries.filter(isWaiting);
 
     const topHtml = top.length
       ? top.map(r => `
@@ -2614,6 +2624,11 @@
     applyFilters();
     renderWhSummary();
 
+    // Новая отметка «нет товара» — сразу на экран, где бы владелец ни был:
+    // по ней стоит поставка, ждать, пока откроют журнал, нельзя.
+    const hotNew = fresh.filter(function(e){ return newIds.includes(e.id) && isUrgentWaiting(e); });
+    if(hotNew.length) showWhToast(hotNew[0].action_text);
+
     if(newIds.length > 0 && !document.getElementById('view-journal').classList.contains('active')){
       journalUnread += newIds.length;
       const badge = document.getElementById('navBadge');
@@ -2637,7 +2652,7 @@
     return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
   }
 
-  const STATUS_LABEL = {auto:'закрыто автоматически', pending:'требует внимания', confirmed:'принято вами', rolled_back:'отклонено вами'};
+  const STATUS_LABEL = {auto:'закрыто автоматически', pending:'требует внимания', answered:'решено', confirmed:'принято вами', rolled_back:'отклонено вами'};
 
   function journalDayKey(iso){
     const d = new Date(iso);
@@ -2713,18 +2728,28 @@
 
     // Приколотое сверху: то, что ждёт решения. Раньше оно лежало вперемешку с
     // рутиной, и «есть ли у меня работа» приходилось выяснивать глазами.
-    const pending = journalEntries.filter(e => e.status === 'pending');
+    const pending = journalEntries.filter(isWaiting);
+    const urgent = journalEntries.filter(isUrgentWaiting);
     const head = pending.length === 0 ? '' :
       '<div class="j-pinned"><div class="j-pinned-head">'
       + pending.length + ' ' + pluralRu(pending.length, 'запись ждёт', 'записи ждут', 'записей ждут')
-      + ' вашего решения</div></div>';
+      + ' вашего решения'
+      + (urgent.length ? ', из них ' + urgent.length + ' — очень важно' : '') + '</div>'
+      // Срочные — прямо здесь, целиком: «нет товара» не должно ждать, пока
+      // его найдут в ленте за день.
+      + (urgent.length ? '<div class="j-pinned-list">'
+        + urgent.map(function(e){ return journalEntryHtml(e, fresh.has(e.id), journalDayKey(e.created_at)); }).join('')
+        + '</div>' : '')
+      + '</div>';
+    const urgentIds = new Set(urgent.map(function(e){ return e.id; }));
+    const feed = journalEntries.filter(function(e){ return !urgentIds.has(e.id); });
 
     // «По уровню риска» — плоский список: сначала то, что ждёт решения.
     // Дни в этом режиме не разделяем: ожидающие записи приходят из разных
     // дней, и разделители дублировались бы через строку.
     if(sortMode === 'risk'){
-      const byRisk = journalEntries.slice().sort(function(a, b){
-        return (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1);
+      const byRisk = feed.slice().sort(function(a, b){
+        return (isWaiting(a) ? 0 : 1) - (isWaiting(b) ? 0 : 1);
       });
       list.innerHTML = scopeBar + head
         // День берём тем же помощником, что и в обычном режиме: срез строки
@@ -2739,7 +2764,7 @@
     // Дни — потому что двести строк подряд читать нельзя.
     let html = scopeBar + head;
     let lastDay = null;
-    groupJournalDay(journalEntries).forEach(function(node){
+    groupJournalDay(feed).forEach(function(node){
       if(node.day !== lastDay){
         html += '<div class="j-day-sep" data-day-sep="' + node.day + '">'
           + escapeHTML(journalDayLabel(node.day)) + '</div>';
@@ -2769,7 +2794,7 @@
     const buckets = new Map();
     entries.forEach(function(e){
       const day = journalDayKey(e.created_at);
-      const groupable = e.status !== 'pending' && e.invoice_id;
+      const groupable = !isWaiting(e) && e.invoice_id;
       const key = groupable ? day + '|' + e.invoice_id : null;
       if(!key){ out.push({ kind: 'entry', day: day, entry: e }); return; }
       if(!buckets.has(key)){
@@ -2828,10 +2853,14 @@
   function journalEntryHtml(entry, isNew, dayKey){
     return (function(){
       const agentClass = AGENT_LABEL[entry.agent] || 'warehouse';
-      const canResolve = entry.status === 'pending';
+      const canResolve = isWaiting(entry);
+      const hot = isUrgentWaiting(entry);
       const isWb = entry.agent === 'Обмен с WB';
+      // Отвеченная запись остаётся pending (журнал не переписывается), но
+      // подписывать её «требует внимания» — неправда.
+      const statusKey = entry.status === 'pending' && entry.answered ? 'answered' : entry.status;
       return `
-        <div class="j-entry ${agentClass}${isNew ? ' j-new' : ''}" data-client="" data-risk="${entry.status === 'pending' ? 'high' : 'low'}" data-order="0" data-day="${dayKey}" data-entry-id="${escapeHTML(entry.id)}">
+        <div class="j-entry ${agentClass}${hot ? ' j-urgent' : ''}${isNew ? ' j-new' : ''}" data-client="" data-risk="${canResolve ? 'high' : 'low'}" data-order="0" data-day="${dayKey}" data-entry-id="${escapeHTML(entry.id)}">
           <input type="checkbox" class="j-check" onclick="event.stopPropagation(); updateBulk()" ${canResolve ? '' : 'style=\"visibility:hidden;\"'}>
           <div class="j-avatar">
             <svg width="20" height="20" viewBox="0 0 22 22"><use href="#icon-warehouse-agent"/></svg>
@@ -2841,10 +2870,10 @@
               <span class="j-agent ${agentClass}">${escapeHTML(entry.agent)}</span>
               <span class="j-time">${formatEntryTime(entry.created_at)}</span>
             </div>
-            <div class="j-text">${escapeHTML(entry.action_text)}</div>
+            <div class="j-text">${hot ? '<span class="j-urgent-tag">ОЧЕНЬ ВАЖНО</span>' + escapeHTML(urgentText(entry.action_text)) : escapeHTML(entry.action_text)}</div>
             ${journalLinksHtml(entry)}
             <div class="j-meta">
-              <span class="j-status ${entry.status === 'auto' ? 'auto' : entry.status === 'confirmed' ? 'applied' : entry.status === 'rolled_back' ? 'pending' : 'pending'}">${escapeHTML(STATUS_LABEL[entry.status] || entry.status)}</span>
+              <span class="j-status ${statusKey === 'auto' || statusKey === 'answered' ? 'auto' : statusKey === 'confirmed' ? 'applied' : 'pending'}">${escapeHTML(STATUS_LABEL[statusKey] || statusKey)}</span>
               ${canResolve ? (isWb
                 ? '<a class="staff-action restore" style="display:inline-block; margin-left:8px;" href="marketplace-reconciliation.html">Открыть сверку WB</a>'
                 : `<span class="staff-action" style="display:inline-block; margin-left:8px;" onclick="resolveJournalEntry('${escapeHTML(entry.id)}', 'confirm')">Принять</span><span class="staff-action revoke" style="display:inline-block; margin-left:8px;" onclick="resolveJournalEntry('${escapeHTML(entry.id)}', 'rollback')">Отклонить</span>`)
@@ -2986,7 +3015,8 @@
   function renderContextPanel(){
     const host = document.getElementById('ctxPending');
     if(!host) return;
-    const pending = journalEntries.filter(e => e.status === 'pending');
+    const pending = journalEntries.filter(isWaiting)
+      .sort(function(a, b){ return (b.urgent ? 1 : 0) - (a.urgent ? 1 : 0); });
     if(pending.length === 0){
       host.innerHTML = '<div class="ctx-card"><div class="ctx-empty">'
         + 'Ничего не ждёт решения. Здесь появятся найденные агентами расхождения, '
@@ -3001,7 +3031,7 @@
           <span class="ctx-entry-agent">${escapeHTML(String(e.agent || 'Агент'))}</span>
           <span class="ctx-entry-time">${formatEntryTime(e.created_at)}</span>
         </div>
-        <div class="ctx-entry-text">${escapeHTML(String(e.action_text || ''))}</div>
+        <div class="ctx-entry-text">${e.urgent ? '<span class="j-urgent-tag">ОЧЕНЬ ВАЖНО</span>' + escapeHTML(urgentText(e.action_text)) : escapeHTML(String(e.action_text || ''))}</div>
         <div class="ctx-actions">
           ${isWb
             ? '<a class="ctx-btn confirm" href="marketplace-reconciliation.html">Открыть сверку WB</a>'
@@ -5071,6 +5101,13 @@
     const d = supplyInside[id];
     if(!d) return '<div class="sup-head">Смотрю…</div>';
     if(d.error) return '<div class="sup-head warn">Не удалось посмотреть: ' + escapeHTML(d.error) + '</div>';
+    // Отметки грузчика «нет товара» — первым делом: поставка стоит, пока по
+    // ним не решили. Решают в журнале («Принять» / «Отклонить»).
+    const alerts = (d.shortages || []).length
+      ? '<div class="sup-alert"><b>ОЧЕНЬ ВАЖНО — грузчик отметил «нет товара»</b>'
+        + d.shortages.map(x => '<div>' + escapeHTML(urgentText(x.text)) + '</div>').join('')
+        + '<div><span class="mp-act" onclick="switchView(\'journal\')">Решить в журнале →</span></div></div>'
+      : '';
     const byProduct = new Map();
     (d.packing || []).forEach(r => {
       const it = byProduct.get(r.sku)
@@ -5082,7 +5119,7 @@
     const left = new Map((d.picking || []).map(p => [p.sku, p]));
     const rows = [...byProduct.values()]
       .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ru'));
-    if(rows.length === 0) return '<div class="sup-head">В поставке нет товаров.</div>';
+    if(rows.length === 0) return alerts + '<div class="sup-head">В поставке нет товаров.</div>';
     const orders = new Set((d.packing || []).map(r => r.orderNumber)).size;
     const units = rows.reduce((sum, r) => sum + r.qty, 0);
     const body = rows.map(r => {
@@ -5104,7 +5141,7 @@
         + '<td>' + where + '</td>'
         + '</tr>';
     }).join('');
-    return '<div class="sup-head">' + orders + ' ' + pluralRu(orders, 'заказ', 'заказа', 'заказов')
+    return alerts + '<div class="sup-head">' + orders + ' ' + pluralRu(orders, 'заказ', 'заказа', 'заказов')
       + ' · ' + units + ' ' + pluralRu(units, 'штука', 'штуки', 'штук')
       + ' · ' + rows.length + ' ' + pluralRu(rows.length, 'позиция', 'позиции', 'позиций') + '</div>'
       + '<table><thead><tr><th>Товар</th><th class="num">Заказов</th>'
@@ -5198,7 +5235,10 @@
         +   (when ? ' · ' + fmtDay(when) : '')
         +   (s.ship_date && s.status !== 'shipped' ? ' · отгрузка ' + fmtDay(s.ship_date) : '')
         +   (s.destination ? ' · ' + escapeHTML(s.destination) : '') + '</div></div>'
-        + '<div class="sup-state ' + s.status + '">' + escapeHTML(s.statusName || s.status) + '</div>'
+        + '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">'
+        +   (s.missing > 0 ? '<span class="sup-missing" title="Грузчик отметил на сборке — смотрите «Что внутри» и журнал">Нет товара: ' + s.missing + '</span>' : '')
+        +   '<div class="sup-state ' + s.status + '">' + escapeHTML(s.statusName || s.status) + '</div>'
+        + '</div>'
         + '<div class="sup-acts">'
         +   '<span class="mp-act" onclick="toggleSupplyInside(\'' + s.id + '\')">'
         +     (supplyOpen.has(s.id) ? 'Свернуть' : 'Что внутри') + '</span>'

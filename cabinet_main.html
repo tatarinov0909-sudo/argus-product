@@ -1656,6 +1656,18 @@
   .j-pinned{background:linear-gradient(135deg, rgba(217,142,110,0.14), rgba(217,142,110,0.05));
     border:1px solid rgba(217,142,110,0.35); border-radius:10px; padding:11px 14px; margin-bottom:14px;}
   .j-pinned-head{font-size:14px; font-weight:600; color:#D98E6E;}
+  /* «Очень важно» — отметка грузчика «нет товара»: по ней стоит поставка. */
+  .j-urgent-tag{display:inline-block; font-size:12px; font-weight:700; letter-spacing:.04em;
+    padding:3px 9px; border-radius:6px; background:var(--terracotta); color:#fff; margin-right:8px;}
+  .j-entry.j-urgent{border-color:rgba(217,142,110,0.7); border-left:4px solid var(--terracotta);
+    background:linear-gradient(135deg, rgba(217,142,110,0.12), var(--panel) 60%);}
+  .j-pinned-list{margin-top:12px;}
+  .sup-missing{display:inline-block; font-size:13px; font-weight:600; padding:4px 10px; border-radius:8px;
+    background:var(--terracotta); color:#fff; white-space:nowrap;}
+  .sup-inside .sup-alert{border:1px solid var(--terracotta); background:var(--terracotta-soft);
+    border-radius:10px; padding:10px 14px; margin-bottom:12px; font-size:14px;}
+  .sup-inside .sup-alert b{color:var(--terracotta);}
+  .sup-inside .sup-alert div + div{margin-top:6px;}
   .j-day-sep{font-size:13px; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted);
     margin:18px 0 10px; padding-bottom:7px; border-bottom:1px solid var(--line);}
   .j-day-sep:first-child{margin-top:0;}
