@@ -272,6 +272,9 @@
   .picker-list label{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.4;}
   .picker-list input{margin-top:3px;}
   .picker-list .sku{color:#6b7680;font-family:ui-monospace,monospace;font-size:12px;}
+  /* Когда поставок несколько, товары разделены по поставкам: один и тот же
+     артикул у двух продавцов — разный товар, и отмечать их надо по отдельности. */
+  .picker-list .picker-sup{grid-column:1/-1;font-weight:600;font-size:13px;margin-top:8px;}
   /* Этикетки WB: чёрным по белому, экономно к краске. */
   .stickers{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;}
   .sticker{border:1px solid #111;border-radius:4px;padding:10px 12px;break-inside:avoid;}
@@ -332,12 +335,15 @@
 
   const API_BASE = 'https://api.argus-ai.online';
   const TOKEN = localStorage.getItem('argus_token');
-  const supplyId = new URLSearchParams(location.search).get('id');
+  // Поставок может быть несколько: в кабинете их отмечают галками и открывают
+  // одной страницей, чтобы напечатать за один заход, а не по одной.
+  const supplyIds = new URLSearchParams(location.search).getAll('id').filter(Boolean);
 
   // С фото, когда площадка их отдала: так лист сверяют глазами, а не по
   // названию. Нет фотографий (у ключа WB нет категории «Контент») — колонка
   // не рисуется вовсе и кнопка недоступна: пустые рамки только едят лист.
   let MODE = localStorage.getItem('argus_pick_mode') === 'dense' ? 'dense' : 'photo';
+  // Список загруженных поставок: по одной на каждый id в адресе.
   let LAST = null;
   // Какие товары печатать. Пусто — значит все: отметки живут только на этой
   // странице и на состав поставки не влияют.
@@ -382,21 +388,25 @@
 
   async function load(){
     if(!TOKEN){ fail('Нет входа. Откройте кабинет и войдите заново.'); return; }
-    if(!supplyId){ fail('Не указана поставка.'); return; }
-    let data;
-    try{
-      const res = await fetch(API_BASE + '/api/supplies/' + encodeURIComponent(supplyId), {
-        headers: { 'Authorization': 'Bearer ' + TOKEN },
-      });
-      if(res.status === 401){ fail('Сессия истекла. Откройте кабинет и войдите заново.'); return; }
-      data = await res.json();
-      if(!res.ok) throw new Error((data && data.error) || 'Ошибка запроса');
-    } catch(e){
-      fail('Не удалось загрузить поставку: ' + e.message);
-      return;
+    if(supplyIds.length === 0){ fail('Не указана поставка.'); return; }
+    const list = [];
+    for(const id of supplyIds){
+      let data;
+      try{
+        const res = await fetch(API_BASE + '/api/supplies/' + encodeURIComponent(id), {
+          headers: { 'Authorization': 'Bearer ' + TOKEN },
+        });
+        if(res.status === 401){ fail('Сессия истекла. Откройте кабинет и войдите заново.'); return; }
+        data = await res.json();
+        if(!res.ok) throw new Error((data && data.error) || 'Ошибка запроса');
+      } catch(e){
+        fail('Не удалось загрузить поставку: ' + e.message);
+        return;
+      }
+      list.push(data);
     }
-    LAST = data;
-    render(data);
+    LAST = list;
+    render(list);
   }
 
   function setMode(mode){
@@ -408,7 +418,7 @@
   window.setMode = setMode;
 
   function havePhotos(){
-    return !!(LAST && LAST.picking && LAST.picking.some((r) => r.photo));
+    return !!(LAST && LAST.some((d) => d.picking.some((r) => r.photo)));
   }
 
   function paintModeButtons(){
@@ -422,52 +432,87 @@
     photo.classList.toggle('ghost', MODE !== 'photo' || !can);
   }
 
-  function render(data){
-    const s = data.supply;
-    document.title = 'Поставка ' + s.number + ' — документы';
-    document.getElementById('barStatus').textContent =
-      s.number + ' · ' + s.companyName + ' · ' + s.statusName
-      + (s.mpSupplyId ? ' · WB ' + s.mpSupplyId : '');
-    if(SELECTED === null) SELECTED = new Set(data.picking.map((r) => r.sku));
+  // Ключ отметки — поставка и артикул вместе. Один и тот же артикул у двух
+  // продавцов — два разных товара, и снятая галка не должна убирать чужой
+  // товар с чужого листа.
+  const keyOf = (data, r) => data.supply.id + '|' + r.sku;
 
-    const picking = data.picking.filter((r) => SELECTED.has(r.sku));
-    const packing = data.packing.filter((r) => SELECTED.has(r.sku));
-    const orders = new Set(packing.map((r) => r.orderNumber));
-    const stickers = (data.stickers || []).filter((x) => orders.has(x.orderNumber));
-    // Итоги считаем по тому, что печатается: иначе лист на часть товаров
-    // подпишется чужой суммой.
-    const t = {
-      orders: orders.size,
-      units: packing.reduce((sum, r) => sum + Number(r.qty || 0), 0),
-      uniqueSkus: picking.length,
-    };
+  // Все товары поставки, а не только те, за которыми ещё идти. Отметки
+  // строились по листу комплектации — и у собранной поставки, где идти уже
+  // некуда, снимали с печати всё: ни упаковочного листа, ни этикеток.
+  // А упаковывают как раз собранное.
+  function productsOf(data){
+    const by = new Map();
+    (data.packing || []).forEach((r) => {
+      const it = by.get(r.sku) || { sku: r.sku, name: r.name, article: r.article, qty: 0 };
+      it.qty += Number(r.qty || 0);
+      by.set(r.sku, it);
+    });
+    return [...by.values()].sort((a, b) => String(a.name).localeCompare(String(b.name), 'ru'));
+  }
 
-    document.getElementById('docs').innerHTML = pickingSheet(s, t, picking)
-      + packingSheet(s, t, packing)
-      + stickersSheet(s, t, stickers);
-    renderPicker(data.picking);
+  function render(list){
+    const many = list.length > 1;
+    const first = list[0].supply;
+    document.title = many
+      ? 'Поставки ' + list.map((d) => d.supply.number).join(', ') + ' — документы'
+      : 'Поставка ' + first.number + ' — документы';
+    document.getElementById('barStatus').textContent = many
+      ? list.length + ' ' + plural(list.length, 'поставка', 'поставки', 'поставок')
+        + ' · ' + list.map((d) => d.supply.number).join(', ')
+      : first.number + ' · ' + first.companyName + ' · ' + first.statusName
+        + (first.mpSupplyId ? ' · WB ' + first.mpSupplyId : '');
+    if(SELECTED === null){
+      SELECTED = new Set();
+      list.forEach((d) => productsOf(d).forEach((r) => SELECTED.add(keyOf(d, r))));
+    }
+
+    // Каждая поставка — свой комплект листов, подряд. Складывать товар
+    // разных поставок в один лист нельзя: уезжают они по отдельности, и
+    // собранное надо разложить по машинам, а не в общую кучу.
+    document.getElementById('docs').innerHTML = list.map((data) => {
+      const s = data.supply;
+      const picking = data.picking.filter((r) => SELECTED.has(keyOf(data, r)));
+      const packing = data.packing.filter((r) => SELECTED.has(keyOf(data, r)));
+      const orders = new Set(packing.map((r) => r.orderNumber));
+      const stickers = (data.stickers || []).filter((x) => orders.has(x.orderNumber));
+      // Итоги считаем по тому, что печатается: иначе лист на часть товаров
+      // подпишется чужой суммой.
+      const t = {
+        orders: orders.size,
+        units: packing.reduce((sum, r) => sum + Number(r.qty || 0), 0),
+        uniqueSkus: picking.length,
+      };
+      return pickingSheet(s, t, picking, packing.length > 0) + packingSheet(s, t, packing)
+        + stickersSheet(s, t, stickers);
+    }).join('');
+    renderPicker(list);
     paintModeButtons();
   }
 
   // ---------- Выбор товаров ----------
-  function renderPicker(rows){
+  function renderPicker(list){
     const host = document.getElementById('pickerList');
     if(!host) return;
-    host.innerHTML = rows.map((r) => '<label><input type="checkbox" data-sku="' + esc(r.sku) + '"'
-      + (SELECTED.has(r.sku) ? ' checked' : '') + ' onchange="toggleProduct(this)">'
-      + '<span>' + esc(r.name) + ' · ' + r.qty + ' шт.'
-      + '<br><span class="sku">' + esc(r.article || r.sku) + '</span></span></label>').join('');
+    host.innerHTML = list.map((d) => (list.length > 1
+        ? '<div class="picker-sup">' + esc(d.supply.number) + ' · ' + esc(d.supply.companyName) + '</div>'
+        : '')
+      + productsOf(d).map((r) => '<label><input type="checkbox" data-key="' + esc(keyOf(d, r)) + '"'
+        + (SELECTED.has(keyOf(d, r)) ? ' checked' : '') + ' onchange="toggleProduct(this)">'
+        + '<span>' + esc(r.name) + ' · ' + r.qty + ' шт.'
+        + '<br><span class="sku">' + esc(r.article || r.sku) + '</span></span></label>').join('')).join('');
   }
 
   function toggleProduct(input){
-    const sku = input.dataset.sku;
-    if(input.checked) SELECTED.add(sku); else SELECTED.delete(sku);
+    const key = input.dataset.key;
+    if(input.checked) SELECTED.add(key); else SELECTED.delete(key);
     if(LAST) render(LAST);
   }
   window.toggleProduct = toggleProduct;
 
   function selectAllProducts(all){
-    SELECTED = new Set(all ? LAST.picking.map((r) => r.sku) : []);
+    SELECTED = new Set();
+    if(all) LAST.forEach((d) => productsOf(d).forEach((r) => SELECTED.add(keyOf(d, r))));
     render(LAST);
   }
   window.selectAllProducts = selectAllProducts;
@@ -611,10 +656,12 @@
     return '<colgroup>' + widths.map((w) => '<col' + (w ? ' style="width:' + w + '%"' : '') + '>').join('') + '</colgroup>';
   }
 
-  function pickingSheet(s, t, rows){
+  function pickingSheet(s, t, rows, hasGoods){
     if(!rows || rows.length === 0){
       return '<div class="sheet" data-doc="pick">' + head(s, 'Лист комплектации', '')
-        + '<div class="empty">В поставке нет позиций.</div></div>';
+        + '<div class="empty">'
+        + (hasGoods ? 'Всё по этой поставке уже собрано — идти больше некуда.' : 'В поставке нет позиций.')
+        + '</div></div>';
     }
     const withPhoto = MODE === 'photo' && rows.some((r) => r.photo);
     const tail = tailLength(rows);

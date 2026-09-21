@@ -4606,11 +4606,105 @@
   // Поставок за неделю набирается столько, что глазами уже не находишь.
   let supplyFilter = { company: '', destination: '', status: '' };
 
+  // Отмеченные поставки: их документы печатаются одним заходом. За день
+  // поставок бывает несколько, и открывать их по одной ради печати — та же
+  // работа, умноженная на число поставок.
+  let supplyPicked = new Set();
+  // Какие поставки раскрыты «что внутри» и что в них лежит. Прошлый ответ
+  // держим, чтобы панель не мигала пустотой, пока едет новый.
+  let supplyOpen = new Set();
+  const supplyInside = {};
+
   function setSupplyFilter(field, value){
     supplyFilter[field] = value;
     renderSupplies();
   }
   window.setSupplyFilter = setSupplyFilter;
+
+  function toggleSupplyPick(id){
+    if(supplyPicked.has(id)) supplyPicked.delete(id); else supplyPicked.add(id);
+    renderSupplies();
+  }
+  window.toggleSupplyPick = toggleSupplyPick;
+
+  // «Выбрать все» — ровно то, что видно под отбором: галка стоит над
+  // отфильтрованным списком и обязана означать его, а не всю базу поставок.
+  function toggleAllSupplies(ids){
+    const allOn = ids.length > 0 && ids.every(id => supplyPicked.has(id));
+    ids.forEach(id => { if(allOn) supplyPicked.delete(id); else supplyPicked.add(id); });
+    renderSupplies();
+  }
+  window.toggleAllSupplies = toggleAllSupplies;
+
+  // Документы сразу по нескольким поставкам: одна страница, одна печать.
+  function printPickedSupplies(ids){
+    if(ids.length === 0) return;
+    window.open('supply_print.html?' + ids.map(id => 'id=' + encodeURIComponent(id)).join('&'), '_blank');
+  }
+  window.printPickedSupplies = printPickedSupplies;
+
+  // Что внутри поставки: товары, сколько чего и где лежит — под строкой,
+  // не уходя на страницу печати.
+  async function toggleSupplyInside(id){
+    if(supplyOpen.has(id)){ supplyOpen.delete(id); renderSupplies(); return; }
+    supplyOpen.add(id);
+    renderSupplies();
+    // Спрашиваем заново при каждом открытии: пока панель была закрыта,
+    // заказы могли собрать. Прошлый ответ до этого момента остаётся на
+    // экране — открытая панель не должна мигать пустотой.
+    try{ supplyInside[id] = await apiFetch('/api/supplies/' + id); }
+    catch(e){ if(!supplyInside[id]) supplyInside[id] = { error: e.message }; }
+    renderSupplies();
+  }
+  window.toggleSupplyInside = toggleSupplyInside;
+
+  // Состав поставки одной таблицей: строки заказов сложены по товару.
+  // «Взять» и ячейки берём из листа комплектации — это те же данные, по
+  // которым собирают, и расходиться с бумагой экран не должен.
+  function insideHtml(id){
+    const d = supplyInside[id];
+    if(!d) return '<div class="sup-head">Смотрю…</div>';
+    if(d.error) return '<div class="sup-head warn">Не удалось посмотреть: ' + escapeHTML(d.error) + '</div>';
+    const byProduct = new Map();
+    (d.packing || []).forEach(r => {
+      const it = byProduct.get(r.sku)
+        || { sku: r.sku, name: r.name, article: r.article, qty: 0, orders: new Set() };
+      it.qty += Number(r.qty || 0);
+      it.orders.add(r.orderNumber);
+      byProduct.set(r.sku, it);
+    });
+    const left = new Map((d.picking || []).map(p => [p.sku, p]));
+    const rows = [...byProduct.values()]
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ru'));
+    if(rows.length === 0) return '<div class="sup-head">В поставке нет товаров.</div>';
+    const orders = new Set((d.packing || []).map(r => r.orderNumber)).size;
+    const units = rows.reduce((sum, r) => sum + r.qty, 0);
+    const body = rows.map(r => {
+      const p = left.get(r.sku);
+      const taken = r.qty - (p ? p.qty : 0);
+      // Где лежит. Идти больше некуда — товар уже на столе. Некуда идти —
+      // товар в ячейки Аргуса не положен: собрать по такому листу нельзя,
+      // и сказать об этом надо здесь, а не у стеллажа.
+      const where = taken >= r.qty
+        ? 'собрано'
+        : p && p.cells && p.cells.length
+          ? p.cells.map(c => escapeHTML(c.label) + (c.take ? ' — ' + c.take : '')).join('<br>')
+          : '<span class="warn">не в ячейках Аргуса</span>';
+      return '<tr>'
+        + '<td>' + escapeHTML(r.name || '—')
+        +   '<div class="sku">' + escapeHTML(r.article || r.sku || '') + '</div></td>'
+        + '<td class="num">' + r.orders.size + '</td>'
+        + '<td class="num">' + r.qty + (taken > 0 ? '<div class="sku">собрано ' + taken + '</div>' : '') + '</td>'
+        + '<td>' + where + '</td>'
+        + '</tr>';
+    }).join('');
+    return '<div class="sup-head">' + orders + ' ' + pluralRu(orders, 'заказ', 'заказа', 'заказов')
+      + ' · ' + units + ' ' + pluralRu(units, 'штука', 'штуки', 'штук')
+      + ' · ' + rows.length + ' ' + pluralRu(rows.length, 'позиция', 'позиции', 'позиций') + '</div>'
+      + '<table><thead><tr><th>Товар</th><th class="num">Заказов</th>'
+      + '<th class="num">Штук</th><th>Где лежит</th></tr></thead><tbody>'
+      + body + '</tbody></table>';
+  }
 
   async function loadSupplies(){
     const box = document.getElementById('suppliesList');
@@ -4640,6 +4734,12 @@
       (!supplyFilter.company || s.company_name === supplyFilter.company)
       && (!supplyFilter.destination || (s.destination || '') === supplyFilter.destination)
       && (!supplyFilter.status || s.status === supplyFilter.status));
+    // Отметки живут по id: отбор и перерисовка их не сбрасывают, но «выбрать
+    // все» и печать работают только по тому, что сейчас на экране.
+    const ids = rows.map(s => s.id);
+    const picked = ids.filter(id => supplyPicked.has(id));
+    const allPicked = ids.length > 0 && picked.length === ids.length;
+    const idsArg = JSON.stringify(ids).replace(/"/g, '&quot;');
     const option = (value, current, label) =>
       '<option value="' + escapeHTML(value) + '"' + (value === current ? ' selected' : '') + '>'
       + escapeHTML(label) + '</option>';
@@ -4659,6 +4759,15 @@
       +   option('shipped', supplyFilter.status, 'Уехали')
       + '</select>'
       + '<span class="ord-meta">' + rows.length + ' из ' + all.length + '</span>'
+      + '<label class="sup-all"><input type="checkbox"' + (allPicked ? ' checked' : '')
+      +   (rows.length ? '' : ' disabled')
+      +   ' onchange="toggleAllSupplies(' + idsArg + ')"> Выбрать все</label>'
+      + (picked.length
+          ? '<button class="wh-onboarding-btn primary" type="button"'
+            + ' onclick="printPickedSupplies(' + JSON.stringify(picked).replace(/"/g, '&quot;') + ')">'
+            + 'Документы — ' + picked.length + ' '
+            + pluralRu(picked.length, 'поставка', 'поставки', 'поставок') + '</button>'
+          : '')
       + '</div>';
     if(rows.length === 0){
       box.innerHTML = filters + '<div class="staff-empty">По этому отбору поставок нет.</div>';
@@ -4667,7 +4776,11 @@
     box.innerHTML = filters + rows.map(s => {
       const when = s.shipped_at || s.ready_at || s.created_at;
       return '<div class="sup-row">'
-        + '<div class="sup-num">' + escapeHTML(s.number) + '</div>'
+        + '<div class="sup-num">'
+        +   '<input class="sup-pick" type="checkbox" aria-label="Выбрать поставку"'
+        +     (supplyPicked.has(s.id) ? ' checked' : '')
+        +     ' onchange="toggleSupplyPick(\'' + s.id + '\')">'
+        +   escapeHTML(s.number) + '</div>'
         + '<div><div class="sup-company">' + escapeHTML(s.company_name) + '</div>'
         +   '<div class="sup-meta">' + s.orders + ' '
         +   pluralRu(s.orders, 'заказ', 'заказа', 'заказов')
@@ -4681,6 +4794,8 @@
         +   (s.destination ? ' · ' + escapeHTML(s.destination) : '') + '</div></div>'
         + '<div class="sup-state ' + s.status + '">' + escapeHTML(s.statusName || s.status) + '</div>'
         + '<div class="sup-acts">'
+        +   '<span class="mp-act" onclick="toggleSupplyInside(\'' + s.id + '\')">'
+        +     (supplyOpen.has(s.id) ? 'Свернуть' : 'Что внутри') + '</span>'
         +   '<span class="mp-act" onclick="printSupply(\'' + s.id + '\')">Документы</span>'
         +   (s.status === 'ready'
               ? '<span class="mp-act go" onclick="shipSupply(\'' + s.id + '\')">Уехала</span>'
@@ -4694,7 +4809,10 @@
               ? '<span class="mp-act warn" onclick="retryWbDeliver(\'' + s.id + '\')">Повторить передачу на WB</span>'
               : '')
         + '</div>'
-        + '</div>';
+        + '</div>'
+        + (supplyOpen.has(s.id)
+            ? '<div class="sup-inside">' + insideHtml(s.id) + '</div>'
+            : '');
     }).join('');
   }
   window.loadSupplies = loadSupplies;

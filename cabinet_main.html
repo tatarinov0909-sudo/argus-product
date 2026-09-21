@@ -1553,7 +1553,25 @@
   .sup-row{display:grid; grid-template-columns:auto 1fr auto auto; gap:18px; align-items:center;
     background:var(--panel-2); border:1px solid var(--line); border-radius:12px;
     padding:16px 20px; margin-bottom:10px;}
-  .sup-num{font-family:var(--mono); font-size:16px; color:var(--accent-2); white-space:nowrap;}
+  .sup-pick{width:17px; height:17px; cursor:pointer; accent-color:var(--accent);}
+  .sup-all{display:inline-flex; align-items:center; gap:7px; font-size:14px;
+    color:var(--muted); cursor:pointer; white-space:nowrap;}
+  .sup-all input{width:17px; height:17px; cursor:pointer; accent-color:var(--accent);}
+  /* Что внутри поставки — под её строкой, не открывая страницу печати.
+     Смотрят это чаще, чем печатают: «что я туда набрал» — вопрос к экрану. */
+  .sup-inside{background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:12px 18px 14px; margin:-4px 0 10px 26px;}
+  .sup-inside .sup-head{font-size:14px; color:var(--muted); margin-bottom:8px;}
+  .sup-inside table{width:100%; border-collapse:collapse; font-size:14px;}
+  .sup-inside th{text-align:left; font-size:12px; color:var(--muted); font-weight:600;
+    letter-spacing:.04em; text-transform:uppercase; padding:0 10px 6px 0;}
+  .sup-inside td{padding:7px 10px 7px 0; border-top:1px solid var(--line); vertical-align:top;}
+  .sup-inside th.num, .sup-inside td.num{text-align:right;}
+  .sup-inside td.num{font-family:var(--mono); white-space:nowrap;}
+  .sup-inside .sku{font-family:var(--mono); font-size:12px; color:var(--muted);}
+  .sup-inside .warn{color:var(--terracotta);}
+  .sup-num{font-family:var(--mono); font-size:16px; color:var(--accent-2); white-space:nowrap;
+    display:flex; align-items:center; gap:10px;}
   .sup-company{font-size:16px; font-weight:600;}
   .sup-meta{font-size:14px; color:var(--muted); margin-top:3px;}
   .sup-state{font-size:13px; padding:5px 12px; border-radius:20px; border:1px solid var(--line); color:var(--muted); white-space:nowrap;}
@@ -1564,9 +1582,13 @@
   .sup-acts .mp-act.go{background:var(--accent); border-color:var(--accent); color:#182422; font-weight:600;}
   .sup-acts .mp-act.warn{color:var(--terracotta);}
   .sup-acts .mp-act.warn:hover{border-color:var(--terracotta);}
-  @media(max-width:1000px){
+  /* Узкое окно: кнопки уходят на свою строку. Порог не 1000, а 1200 —
+     слева ещё меню, и на ноутбуке названию продавца оставалось шестьдесят
+     пикселей, из-за чего оно ломалось на три строки. */
+  @media(max-width:1200px){
     .sup-row{grid-template-columns:auto 1fr; row-gap:12px;}
     .sup-acts{grid-column:1 / -1; justify-content:flex-start;}
+    .sup-inside{margin-left:0;}
   }
   .sup-state.collecting{border-color:var(--yellow); color:var(--yellow); background:var(--yellow-soft);}
   .sup-state.ready{border-color:var(--green); color:var(--green); background:var(--green-soft);}
@@ -2359,6 +2381,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=9e065246" defer></script>
+<script src="cabinet_main.js?v=b7e57c65" defer></script>
 </body>
 </html>
