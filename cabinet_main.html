@@ -1757,6 +1757,19 @@
     text-overflow:ellipsis; white-space:nowrap;}
   .j-group-count{font-size:13px; color:var(--accent); font-family:var(--mono); white-space:nowrap;}
   .j-group-time{font-size:12px; color:var(--muted); font-family:var(--mono); white-space:nowrap;}
+  /* Сборка поставки — одна запись на всю поставку: сколько собрано и полоса
+     на всю ширину. Внутри, по раскрытию, каждый товар отдельной строкой. */
+  .j-group-head.j-supply{flex-wrap:wrap; row-gap:9px;}
+  .j-group-bar{flex:0 0 100%; height:4px; border-radius:2px; background:var(--line); overflow:hidden;}
+  .j-group-bar i{display:block; height:100%; border-radius:2px; background:var(--accent);
+    transition:width 0.35s var(--ease);}
+  /* На телефоне название работы не должно ужиматься до «Кл…»: оно занимает
+     первую строку целиком, счёт и время уходят на вторую. */
+  @media(max-width:760px){
+    .j-group-head{flex-wrap:wrap; row-gap:7px;}
+    .j-group-title{flex:1 1 180px; white-space:normal;}
+    .j-group-count{flex:1 1 auto; min-width:0;}
+  }
   .j-group-body{display:none; padding:4px 10px 10px; border-top:1px solid var(--line);}
   .j-group.open .j-group-body{display:block;}
   .j-scope{display:flex; align-items:center; gap:10px; flex-wrap:wrap;
@@ -2569,6 +2582,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=cf860d82" defer></script>
+<script src="cabinet_main.js?v=d17f39db" defer></script>
 </body>
 </html>

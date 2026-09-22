@@ -2927,7 +2927,11 @@
     if(hotNew.length) showWhToast(hotNew[0].action_text);
 
     if(newIds.length > 0 && !document.getElementById('view-journal').classList.contains('active')){
-      journalUnread += newIds.length;
+      // Сборка поставки — одно событие, а не сорок: значок считает работы,
+      // иначе за одну поставку он набегает на сотню и перестаёт что-то значить.
+      const newEvents = new Set(fresh.filter(function(e){ return newIds.includes(e.id); })
+        .map(function(e){ return e.invoice_supply_id || e.id; })).size;
+      journalUnread += newEvents;
       const badge = document.getElementById('navBadge');
       badge.textContent = journalUnread > 99 ? '99+' : journalUnread;
       badge.classList.add('show');
@@ -3092,11 +3096,18 @@
     entries.forEach(function(e){
       const day = journalDayKey(e.created_at);
       const groupable = !isWaiting(e) && e.invoice_id;
-      const key = groupable ? day + '|' + e.invoice_id : null;
+      // В поставке у каждого заказа свой товар, и по документу такая сборка
+      // не собирается: сорок заказов — сорок групп по одной строке. Владельцу
+      // нужна одна запись «собирается поставка» с полосой готовности.
+      const key = groupable
+        ? (e.invoice_supply_id ? day + '|s|' + e.invoice_supply_id : day + '|' + e.invoice_id)
+        : null;
       if(!key){ out.push({ kind: 'entry', day: day, entry: e }); return; }
       if(!buckets.has(key)){
         const node = { kind: 'group', day: day, id: key.replace(/[^a-zA-Z0-9]/g, ''),
-          invoiceNumber: e.invoice_number, agent: e.agent, entries: [] };
+          invoiceNumber: e.invoice_number, supplyNumber: e.invoice_supply_number || null,
+          supplyDone: e.supply_items_done, supplyTotal: e.supply_items_total,
+          agent: e.agent, entries: [] };
         buckets.set(key, node);
         out.push(node);
       }
@@ -3104,7 +3115,9 @@
     });
     // Группа из одной-двух записей ничего не экономит, только прячет.
     return out.map(function(node){
-      if(node.kind === 'group' && node.entries.length < GROUP_MIN){
+      // Сборку поставки сворачиваем всегда, даже когда собран первый товар:
+      // это одна работа, и она только началась.
+      if(node.kind === 'group' && !node.supplyNumber && node.entries.length < GROUP_MIN){
         return node.entries.map(function(e){
           return { kind: 'entry', day: node.day, entry: e };
         });
@@ -3119,15 +3132,28 @@
     const span = times.length > 1
       ? times[times.length - 1] + ' – ' + times[0]
       : times[0];
+    const total = Number(node.supplyTotal || 0);
+    const done = Math.min(Number(node.supplyDone || 0), total);
+    const finished = total > 0 && done >= total;
+    const title = node.supplyNumber
+      ? escapeHTML(node.agent || 'Кладовщик') + (finished ? ' собрал поставку ' : ' собирает поставку ')
+        + escapeHTML(node.supplyNumber)
+      : escapeHTML(node.agent || 'Кладовщик') + ' · ' + escapeHTML(node.invoiceNumber || '');
+    const count = node.supplyNumber && total > 0
+      ? 'собрано ' + done + ' из ' + total
+      : node.entries.length + ' ' + pluralRu(node.entries.length, 'запись', 'записи', 'записей');
+    // Полоса — чтобы ход сборки читался с одного взгляда, без арифметики.
+    const bar = node.supplyNumber && total > 0
+      ? '<span class="j-group-bar"><i style="width:' + Math.round(done / total * 100) + '%"></i></span>'
+      : '';
     return '<div class="j-group' + (hasNew ? ' j-new' : '') + '" data-group="' + node.id + '">'
-      + '<div class="j-group-head" data-toggle-group="' + node.id + '">'
+      + '<div class="j-group-head' + (node.supplyNumber ? ' j-supply' : '') + '" data-toggle-group="' + node.id + '">'
       +   '<svg class="j-group-chev" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">'
       +     '<path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-      +   '<span class="j-group-title">' + escapeHTML(node.agent || 'Кладовщик')
-      +     ' · ' + escapeHTML(node.invoiceNumber || '') + '</span>'
-      +   '<span class="j-group-count">' + node.entries.length + ' '
-      +     pluralRu(node.entries.length, 'запись', 'записи', 'записей') + '</span>'
+      +   '<span class="j-group-title">' + title + '</span>'
+      +   '<span class="j-group-count">' + count + '</span>'
       +   '<span class="j-group-time">' + escapeHTML(span) + '</span>'
+      +   bar
       + '</div>'
       + '<div class="j-group-body">'
       +   node.entries.map(function(e){
