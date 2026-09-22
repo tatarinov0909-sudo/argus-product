@@ -250,12 +250,12 @@
         <div class="cabinet-desc">Для владельцев fulfillment-центра — чат с агентами, журнал, склад и сотрудники.</div>
       </div>
 
-      <div class="cabinet-card" onclick="goForm('worker')">
+      <div class="cabinet-card" onclick="goForm('manager')">
         <div class="cabinet-icon">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 7h18M3 12h18M3 17h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="18" cy="17" r="3" stroke="currentColor" stroke-width="1.6"/></svg>
         </div>
         <div class="cabinet-name">Менеджер</div>
-        <div class="cabinet-desc">Заказы с маркетплейсов, поставки и документы. Вход по тому же ключу — кабинет откроется сам, по виду ключа.</div>
+        <div class="cabinet-desc">Заказы с маркетплейсов, поставки и документы. Вход по ключу менеджера от руководителя склада.</div>
       </div>
 
       <div class="cabinet-card" onclick="goForm('seller')">
@@ -273,8 +273,8 @@
   <div class="form-screen" id="formWorker">
     <div class="form-card">
       <div class="back" onclick="goLanding()">← Другой кабинет</div>
-      <div class="form-title">Работник склада</div>
-      <div class="form-sub">Ключ выдаёт руководитель склада при найме — он же указал ваше имя</div>
+      <div class="form-title" id="staffFormTitle">Работник склада</div>
+      <div class="form-sub" id="staffFormSub">Ключ выдаёт руководитель склада при найме — он же указал ваше имя</div>
       <div class="field">
         <label>Ключ доступа</label>
         <input type="text" class="mono" id="workerKey" placeholder="Например: 7734-01">
@@ -340,7 +340,7 @@
       </div>
       <div class="form-title">Добро пожаловать, <span id="workerNameOut"></span></div>
       <div class="success-detail"><span id="workerWhOut"></span>Ключ <b id="workerKeyOut"></b> подтверждён</div>
-      <button class="btn" onclick="goToLoader()">Перейти к задачам</button>
+      <button class="btn" id="staffGoBtn" onclick="goToLoader()">Перейти к задачам</button>
     </div>
   </div>
 
@@ -382,6 +382,9 @@
 <script>
   const API_BASE = 'https://api.argus-ai.online';
   let ownerMode = 'login';
+  // Какую дверь выбрали: «Работник склада» или «Менеджер». Сервер пускает
+  // в неё только свои ключи.
+  let staffDoor = 'worker';
 
   function hideAll(){
     document.getElementById('landing').classList.remove('show');
@@ -395,7 +398,12 @@
 
   function goForm(type){
     hideAll();
-    if(type === 'worker'){
+    if(type === 'worker' || type === 'manager'){
+      staffDoor = type;
+      document.getElementById('staffFormTitle').textContent = type === 'manager' ? 'Менеджер' : 'Работник склада';
+      document.getElementById('staffFormSub').textContent = type === 'manager'
+        ? 'Введите ключ менеджера — его выдаёт руководитель склада'
+        : 'Ключ выдаёт руководитель склада при найме — он же указал ваше имя';
       document.getElementById('workerError').classList.remove('show');
       document.getElementById('formWorker').classList.add('show');
     }
@@ -417,20 +425,26 @@
     try{
       const res = await fetch(API_BASE + '/api/auth/staff/login', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({keyCode: key}),
+        body: JSON.stringify({keyCode: key, as: staffDoor}),
       });
       const data = await res.json();
       if(!res.ok){ errorEl.textContent = data.error || 'Не удалось войти.'; errorEl.classList.add('show'); return; }
+      // Сервер уже проверил дверь; это страховка на случай старого сервера.
+      if(data.role !== staffDoor){
+        errorEl.textContent = staffDoor === 'manager'
+          ? 'Это ключ работника склада. Вернитесь и выберите кабинет «Работник склада».'
+          : 'Это ключ менеджера. Вернитесь и выберите кабинет «Менеджер».';
+        errorEl.classList.add('show');
+        return;
+      }
       localStorage.setItem('argus_token', data.token);
-      // Роль — из ответа сервера, а не из нажатой карточки. Ключ менеджера
-      // и ключ работника вводятся в одном поле, и решать, куда пускать,
-      // должен ключ. Иначе менеджер, нажавший «работник», попал бы в лист
-      // приёмки, а не в свои заказы.
-      localStorage.setItem('argus_role', data.role || 'worker');
+      // Роль — из ответа сервера (совпадает с дверью, проверено выше).
+      localStorage.setItem('argus_role', data.role);
       hideAll();
       document.getElementById('workerNameOut').textContent = data.name
         + (data.role === 'manager' ? ' · менеджер' : '');
       document.getElementById('workerKeyOut').textContent = key;
+      document.getElementById('staffGoBtn').textContent = data.role === 'manager' ? 'Перейти в кабинет' : 'Перейти к задачам';
       // Название склада — от сервера. Здесь было вписано «Склад №1, Люберцы»,
       // и каждый сотрудник видел чужой, выдуманный склад.
       const whOut = document.getElementById('workerWhOut');
