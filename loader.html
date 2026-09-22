@@ -2700,7 +2700,7 @@
       .filter(function(o){ return !pickFilter || o.company === pickFilter; })
       .map(function(o){ return o.id; })
       .filter(Boolean);
-    const query = ids.length && ids.length < orders.length
+    const query = ids.length && (pickListIds || ids.length < orders.length)
       ? '?invoiceIds=' + encodeURIComponent(ids.join(','))
       : '';
     window.open('pick_print.html' + query, '_blank');

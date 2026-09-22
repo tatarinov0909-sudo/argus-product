@@ -62,6 +62,11 @@
   .doc-sub{font-size:12px; color:var(--ink-soft); margin-top:3px;}
   .doc-num{font-family:var(--mono); font-size:22px; font-weight:700; text-align:right; white-space:nowrap;}
   .doc-num span{display:block; font-family:var(--sans); font-size:11px; font-weight:400; color:var(--ink-soft);}
+  /* Куда везти, когда отгрузка и когда напечатано — сверху, на каждом листе. */
+  .doc-where{display:flex; flex-wrap:wrap; justify-content:space-between; gap:4px 16px; align-items:baseline;
+    font-size:12px; margin:-2px 0 9px;}
+  .doc-where .dest{font-size:15px; font-weight:700;}
+  .doc-where .grow{flex:1;}
 
   /* Итоги — полосой во всю ширину, каждый по центру своей клетки.
      Прижатые к левому краю, они висели кучкой у угла, а справа зияло поле;
@@ -77,9 +82,6 @@
   .fact + .fact{border-left:1px solid var(--rule-hair);}
   .fact b{display:block; font-family:var(--mono); font-size:16px; line-height:1.15;
     overflow-wrap:anywhere;}
-  /* Адрес пункта отгрузки — это предложение, а не число: тем же кеглем, что
-     и цифры, он разваливал полосу итогов на пять строк. */
-  .fact b.text{font-family:var(--sans); font-size:11.5px; font-weight:600; line-height:1.25;}
   .fact span{display:block; font-size:9px; color:var(--ink-soft); text-transform:uppercase;
     letter-spacing:.07em; margin-top:2px;}
 
@@ -564,12 +566,17 @@
       +   '<div class="doc-sub">' + esc(sub) + '</div></div>'
       + '<div class="doc-num">' + esc(s.number)
       +   '<span>' + esc(s.companyName) + '</span></div>'
+      + '</div>'
+      + '<div class="doc-where">'
+      +   '<span class="dest">→ ' + esc(s.destination || 'адрес не указан') + '</span><span class="grow"></span>'
+      +   (s.shipDate ? '<span>отгрузка <b>' + esc(new Date(s.shipDate + 'T12:00:00').toLocaleDateString('ru-RU')) + '</b></span>' : '')
+      +   '<span>напечатано <b>' + when(new Date().toISOString()) + '</b></span>'
       + '</div>';
   }
 
   function foot(s, extra){
     return '<div class="doc-foot"><div>' + esc(extra) + '</div>'
-      + '<div>Аргус · напечатано ' + when(new Date().toISOString()) + '</div></div>';
+      + '<div>Аргус</div></div>';
   }
 
   // ---------- Лист комплектации ----------
@@ -847,10 +854,6 @@
       + '<div class="facts">'
       +   '<div class="fact"><b>' + nf(rows.length) + '</b><span>' + plural(rows.length, 'посылка', 'посылки', 'посылок') + '</span></div>'
       +   '<div class="fact"><b>' + nf(t.units) + '</b><span>штук всего</span></div>'
-      +   '<div class="fact"><b' + (String(s.destination || '').length > 18 ? ' class="text"' : '')
-            + '>' + esc(s.destination || '—') + '</b><span>куда</span></div>'
-      +   (s.shipDate ? '<div class="fact"><b>' + esc(new Date(s.shipDate + 'T12:00:00').toLocaleDateString('ru-RU'))
-            + '</b><span>отгрузка</span></div>' : '')
       +   '<div class="fact"><b>' + esc((s.marketplace || '—').toUpperCase()) + '</b><span>площадка</span></div>'
       + '</div>'
       + '<table>'

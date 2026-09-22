@@ -26,6 +26,14 @@
   .sub{font-size:12px;color:#444;margin-top:3px;}
   .totals{display:flex;gap:18px;font-size:12px;color:#222;text-align:right;}
   .totals b{display:block;font:700 19px/1.1 ui-monospace,monospace;}
+  /* Куда везти и когда — сразу под заголовком: по адресу собранное
+     раскладывают по машинам. */
+  .sups{border:1.5px solid #111;border-radius:4px;padding:8px 10px;margin-bottom:10px;}
+  .sup + .sup{border-top:1px solid #d5d9dd;margin-top:7px;padding-top:7px;}
+  .sup-num{font:700 20px/1.15 ui-monospace,monospace;}
+  .sup-dest{font-size:16px;font-weight:700;margin-top:2px;}
+  .sup-when{font-size:13px;margin-top:2px;}
+  .sup-loose{font-size:12px;color:#444;margin-top:6px;}
   table{width:100%;border-collapse:collapse;}
   th{font:600 11px/1.3 'Golos Text', system-ui, sans-serif;text-transform:uppercase;letter-spacing:.4px;
      text-align:left;border-bottom:1px solid #111;padding:6px 6px;color:#333;}
@@ -122,6 +130,23 @@
     const companies = [...new Set(data.orders.map((o) => o.company))];
     const mps = [...new Set(data.orders.map((o) => o.marketplace || '1c'))];
     const withPhoto = lines.some((l) => l.photo);
+    // Поставки этого листа — по одной строке: номер, адрес, отгрузка, приход.
+    const sups = [];
+    data.orders.forEach((o) => {
+      if(o.supply && !sups.some((s) => s.number === o.supply.number)) sups.push(o.supply);
+    });
+    const loose = data.orders.filter((o) => !o.supply).length;
+    const dt = (iso) => new Date(iso).toLocaleString('ru-RU',
+      { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const supsHtml = sups.length === 0 ? '' : '<div class="sups">'
+      + sups.map((s) => '<div class="sup"><div class="sup-num">Поставка ' + esc(s.number) + '</div>'
+        + '<div class="sup-dest">→ ' + esc(s.destination || 'адрес не указан') + '</div>'
+        + '<div class="sup-when">'
+        +   (s.shipDate ? 'отгрузка <b>' + esc(new Date(s.shipDate + 'T12:00:00').toLocaleDateString('ru-RU')) + '</b> · ' : '')
+        +   'пришла ' + esc(dt(s.arrivedAt)) + '</div></div>').join('')
+      + (loose ? '<div class="sup-loose">и ещё ' + loose + ' ' + plural(loose, 'заказ', 'заказа', 'заказов')
+        + ' со склада без поставки</div>' : '')
+      + '</div>';
     const rows = lines.map((l) => {
       const cells = l.cells.length
         ? l.cells.map((c) => esc(c.label) + (l.cells.length > 1 ? ' <small>' + c.take + '</small>' : '')).join('<br>')
@@ -163,6 +188,7 @@
       +   '<div><div class="title">Лист грузчика</div>'
       +     '<div class="sub">' + mps.map(badge).join('') + esc(companies.join(', ')) + '</div></div>'
       +   '<div class="totals">'
+      +     '<div><b>' + esc(dt(new Date().toISOString())) + '</b>напечатано</div>'
       +     '<div><b>' + data.orders.length + '</b>'
       +       plural(data.orders.length, 'заказ', 'заказа', 'заказов') + '</div>'
       +     '<div><b>' + data.totalUnits + '</b>'
@@ -171,12 +197,13 @@
       +       plural(data.cellsToVisit, 'ячейка', 'ячейки', 'ячеек') + '</div>'
       +   '</div>'
       + '</div>'
+      + supsHtml
       + '<table><thead><tr>'
       +   (withPhoto ? '<th></th>' : '') + '<th>Ячейка</th><th>Товар</th><th>Артикул</th><th>Штрихкод</th>'
       +   '<th style="text-align:right">Взять</th><th></th>'
       + '</tr></thead><tbody>' + rows + '</tbody></table>'
       + '<div class="foot"><div>Отмечайте галочкой то, что сняли с полки.</div>'
-      +   '<div>Аргус · ' + new Date().toLocaleString('ru-RU') + '</div></div>'
+      +   '<div>Аргус</div></div>'
       + '</div>';
   }
 
