@@ -121,7 +121,7 @@
   initResizeHandles();
 
   // Какие экраны живут внутри другого: {ключ вида: [вид-хозяин, номер вкладки]}.
-  const INNER_PANES = { inv: ['warehouse', 1], mp: ['staff', 1] };
+  const INNER_PANES = { inv: ['warehouse', 1] };
 
   // Переносит содержимое одного экрана внутрь другого и делает две вкладки.
   // Разметку не трогаем: переносим узлы на старте, чтобы обработчики, id и
@@ -174,7 +174,7 @@
     }
     // «?.»: у менеджера части пунктов меню нет вовсе (их убирает блок
     // инициализации), и без проверки кабинет падал при первом же открытии.
-    for(const v of ['chat', 'journal', 'warehouse', 'receipts', 'staff', '1c', 'mp', 'inv', 'orders']){
+    for(const v of ['chat', 'journal', 'orders', 'supplies', 'receipts', 'products', 'warehouse', 'mp', 'staff', '1c', 'inv']){
       document.getElementById('view-' + v)?.classList.toggle('active', view === v);
       document.getElementById('nav-' + v)?.classList.toggle('active', view === v);
     }
@@ -200,6 +200,8 @@
     if(view==='mp'){ loadMarketplaces(); }
     if(view==='inv'){ loadInventory(); }
     if(view==='orders'){ loadMpOrders(); }
+    if(view==='supplies'){ loadSupplies(); }
+    if(view==='products'){ loadProducts(); }
     if(view==='chat'){
       loadChatHistory();
       const badge = document.getElementById('chatBadge');
@@ -484,6 +486,7 @@
     renderCompaniesList();
     renderInvoiceCompanySelect();
     renderMpCompanySelect();
+    renderProductsCompanySelects();
     const loadModal = document.getElementById('stockLoadModal');
     if(loadModal && loadModal.classList.contains('open')) renderStockLoad();
   }
@@ -741,7 +744,7 @@
       note.textContent = 'артикул ' + found.sku;
     } else if(found === null && input.value.trim()){
       note.className = 'rc-note bad';
-      note.textContent = 'Нет в каталоге продавца — выберите из списка. Новый товар заводят в 1С, в Аргус он придёт сам.';
+      note.textContent = 'Нет в каталоге продавца — выберите из списка или заведите товар во вкладке «Товары».';
     } else {
       note.className = 'rc-note';
       note.textContent = found === undefined && input.value.trim() ? 'каталог загружается…' : '';
@@ -870,6 +873,136 @@
           + (receiptsShowAll ? 'Показать последние ' + LIMIT : 'Показать все ' + all.length) + '</span></div>'
         : '');
   }
+
+  /* ===================== Товары ===================== */
+
+  // Каталог продавца: что есть, сколько в ячейках Аргуса, где и сколько по
+  // учёту 1С. Новый товар заводится здесь, не дожидаясь 1С.
+  let productRows = [];
+  let productsFor = '';
+
+  function renderProductsCompanySelects(){
+    const opts = companies.map(c => '<option value="' + escapeHTML(c.id) + '">' + escapeHTML(c.name) + '</option>').join('');
+    ['productsCompany', 'productFormCompany'].forEach(id => {
+      const el = document.getElementById(id);
+      if(!el) return;
+      const keep = el.value;
+      el.innerHTML = companies.length ? opts : '<option value="">Сначала добавьте продавца</option>';
+      if(keep && companies.some(c => c.id === keep)) el.value = keep;
+    });
+    if(document.getElementById('view-products')?.classList.contains('active')) loadProducts();
+  }
+
+  async function loadProducts(){
+    const companyId = document.getElementById('productsCompany').value;
+    const box = document.getElementById('productsList');
+    if(!companyId){ box.innerHTML = '<div class="staff-empty">Выберите продавца.</div>'; return; }
+    productsFor = companyId;
+    box.innerHTML = '<div class="staff-empty">Загружаем…</div>';
+    let rows;
+    try{
+      rows = await apiFetch('/api/sellers/stock?companyId=' + encodeURIComponent(companyId));
+    } catch(e){
+      if(productsFor === companyId) box.innerHTML = '<div class="staff-empty">Не удалось загрузить товары: ' + escapeHTML(e.message) + '</div>';
+      return;
+    }
+    if(productsFor !== companyId) return;   // пока ждали, выбрали другого продавца
+    productRows = rows;
+    renderProducts();
+  }
+  window.loadProducts = loadProducts;
+
+  // Где лежит — по карте склада, если она загружена (у менеджера без права
+  // «склад» её нет: тогда только число ячеек).
+  function productCells(companyId, sku){
+    const out = [];
+    Object.keys(cellBlocks || {}).forEach(rowNum => {
+      (cellBlocks[rowNum] || []).forEach(b => {
+        const q = (b.stock || []).filter(it => it.companyId === companyId && it.sku === sku)
+          .reduce((s, it) => s + Number(it.qty || 0), 0);
+        if(q > 0) out.push({ label: blockAddr(rowNum, b), qty: q });
+      });
+    });
+    return out;
+  }
+
+  function renderProducts(){
+    const box = document.getElementById('productsList');
+    const companyId = productsFor;
+    const q = String(document.getElementById('productsSearch').value || '').trim().toLowerCase();
+    const rows = productRows.filter(r => !q || [r.name, r.sku, r.barcode].some(v => String(v || '').toLowerCase().includes(q)))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ru'));
+    const inCells = productRows.filter(r => Number(r.qty) + Number(r.notForSale || 0) > 0).length;
+    document.getElementById('productsMeta').textContent = productRows.length
+      ? productRows.length + ' ' + pluralRu(productRows.length, 'товар', 'товара', 'товаров') + ' · в ячейках — ' + inCells
+      : '';
+    if(productRows.length === 0){ box.innerHTML = '<div class="staff-empty">У продавца пока нет товаров. Заведите первый кнопкой «+ Добавить товар».</div>'; return; }
+    if(rows.length === 0){ box.innerHTML = '<div class="staff-empty">По этому поиску ничего нет.</div>'; return; }
+    box.innerHTML = '<table class="pr-table"><thead><tr><th>Товар</th><th>Штрихкод</th>'
+      + '<th class="num">В ячейках</th><th class="num">По 1С</th><th>Где лежит</th></tr></thead><tbody>'
+      + rows.map(r => {
+        const cells = productCells(companyId, r.sku);
+        const bad = Number(r.notForSale || 0);
+        const where = cells.length
+          ? cells.slice(0, 3).map(c => escapeHTML(c.label) + ' — ' + c.qty).join('<br>')
+            + (cells.length > 3 ? '<div class="sub">и ещё ' + (cells.length - 3) + '</div>' : '')
+          : Number(r.cells) > 0 ? 'в ' + r.cells + ' ' + pluralRu(Number(r.cells), 'ячейке', 'ячейках', 'ячейках')
+          : '<span class="sub">не в ячейках</span>';
+        return '<tr>'
+          + '<td>' + escapeHTML(r.name || '—') + '<div class="sub">' + escapeHTML(r.sku) + '</div></td>'
+          + '<td class="sub">' + escapeHTML(r.barcode || '—') + '</td>'
+          + '<td class="num">' + (Number(r.qty) || 0) + (bad ? '<div class="sub warn">брак ' + bad + '</div>' : '') + '</td>'
+          + '<td class="num">' + (r.totalKnown ? escapeHTML(String(r.total)) : '—') + '</td>'
+          + '<td class="cells">' + where + '</td>'
+          + '</tr>';
+      }).join('')
+      + '</tbody></table>';
+  }
+  window.renderProducts = renderProducts;
+
+  function toggleProductForm(open){
+    const form = document.getElementById('productForm');
+    form.hidden = !open;
+    if(open){
+      const sel = document.getElementById('productFormCompany');
+      const current = document.getElementById('productsCompany').value;
+      if(current) sel.value = current;
+      document.getElementById('productFormSku').focus();
+    }
+  }
+  window.toggleProductForm = toggleProductForm;
+
+  let productSaving = false;
+
+  async function saveProduct(){
+    if(productSaving) return;
+    const companyId = document.getElementById('productFormCompany').value;
+    const sku = document.getElementById('productFormSku').value.trim();
+    const name = document.getElementById('productFormName').value.trim();
+    const barcode = document.getElementById('productFormBarcode').value.trim();
+    if(!companyId){ showWhToast('Выберите продавца.'); return; }
+    if(!sku){ showWhToast('Впишите артикул.'); document.getElementById('productFormSku').focus(); return; }
+    if(!name){ showWhToast('Впишите название.'); document.getElementById('productFormName').focus(); return; }
+    productSaving = true;
+    const btn = document.getElementById('productFormSave');
+    btn.disabled = true;
+    try{
+      await apiFetch('/api/products', { method: 'POST', body: { companyId, sku, name, barcode: barcode || undefined } });
+      ['productFormSku', 'productFormName', 'productFormBarcode'].forEach(id => { document.getElementById(id).value = ''; });
+      toggleProductForm(false);
+      // Новый товар сразу доступен в приходе: каталог продавца перечитается.
+      delete receiptCatalog[companyId];
+      if(document.getElementById('invoiceCompanySelect').value === companyId) loadReceiptCatalog(companyId);
+      document.getElementById('productsCompany').value = companyId;
+      await loadProducts();
+      showWhToast('Товар «' + name + '» заведён. Его можно выбирать в приходе.');
+    } catch(e){
+      showWhToast('Товар не заведён: ' + e.message);
+    }
+    productSaving = false;
+    btn.disabled = false;
+  }
+  window.saveProduct = saveProduct;
 
   function toggleReceiptsAll(){
     receiptsShowAll = !receiptsShowAll;
@@ -5343,6 +5476,13 @@
     const box = document.getElementById('suppliesList');
     if(!box) return;
     const all = supplyRows || [];
+    // Значок у пункта меню — отметки «нет товара», по которым поставка стоит.
+    const missing = all.reduce((s, x) => s + (Number(x.missing) || 0), 0);
+    const badge = document.getElementById('suppliesBadge');
+    if(badge){
+      badge.textContent = missing > 0 ? String(missing) : '';
+      badge.classList.toggle('show', missing > 0);
+    }
     if(all.length === 0){
       box.innerHTML = '<div class="staff-empty">Поставок пока нет.</div>';
       return;
@@ -5680,10 +5820,25 @@
   // хозяйство. Вместо девяти боковых пунктов остаётся семь, а внутри
   // каждого пара вкладок.
   mergePanes('warehouse', 'inv', ['Карта склада', 'Инвентаризация']);
-  mergePanes('staff', 'mp', ['Клиенты и сотрудники', 'Площадки']);
-  ['nav-inv', 'nav-mp'].forEach(id => {
+  ['nav-inv'].forEach(id => {
     const el = document.getElementById(id);
     if(el) el.remove();
+  });
+
+  // Заголовок раздела без единого пункта (у менеджера «Настройки») — лишний:
+  // прячем его вместе с разделителем.
+  document.querySelectorAll('.nav-label').forEach(label => {
+    let el = label.nextElementSibling;
+    let has = false;
+    while(el && !el.classList.contains('nav-label') && !el.classList.contains('nav-sep')){
+      if(el.classList.contains('nav-item')) has = true;
+      el = el.nextElementSibling;
+    }
+    if(!has){
+      const sep = label.previousElementSibling;
+      if(sep && sep.classList.contains('nav-sep')) sep.remove();
+      label.remove();
+    }
   });
 
   // Менеджер начинает с заказов — это его работа. Владелец с чата.

@@ -894,6 +894,19 @@
     padding:8px 12px; font-size:14px; cursor:pointer; font-family:var(--sans);}
   .rc-list-head{display:flex; align-items:baseline; gap:12px; margin-bottom:10px; flex-wrap:wrap;}
   .rc-src{font-size:12px; color:var(--muted);}
+  /* Товары */
+  .pr-bar{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+  .pr-bar select{max-width:280px;}
+  .pr-bar input{max-width:360px; flex:1; min-width:200px;}
+  .pr-table{width:100%; border-collapse:collapse; font-size:14px;}
+  .pr-table th{text-align:left; font-size:12px; color:var(--muted); font-weight:600; letter-spacing:.04em;
+    text-transform:uppercase; padding:0 12px 8px 0; border-bottom:1px solid var(--line);}
+  .pr-table td{padding:10px 12px 10px 0; border-bottom:1px solid var(--line); vertical-align:top;}
+  .pr-table td.num, .pr-table th.num{text-align:right; white-space:nowrap;}
+  .pr-table td.num{font-family:var(--mono);}
+  .pr-table .sub{font-family:var(--mono); font-size:12px; color:var(--muted);}
+  .pr-table .warn{color:var(--terracotta);}
+  .pr-table .cells{font-family:var(--mono); font-size:13px;}
   @media(max-width:700px){ .rc-row{grid-template-columns:1fr 80px 28px;} }
 
   .wh-zone-item{padding:10px 0; border-bottom:1px solid var(--line);}
@@ -1857,15 +1870,26 @@
     <div class="nav-item active" id="nav-chat" onclick="switchView('chat')"><span class="nav-dot"></span>Чат<span class="nav-badge" id="chatBadge"></span></div>
     <div class="nav-item" id="nav-journal" onclick="switchView('journal')"><span class="nav-dot"></span>Журнал действий<span class="nav-badge" id="navBadge">1</span></div>
 
+    <!-- Разделы по работе: заказы → склад → настройки (решение владельца
+         22.09). Раздел, из которого у человека не осталось ни одного пункта,
+         прячется вместе с заголовком. -->
     <div class="nav-sep"></div>
-    <div class="nav-label">Управление</div>
-    <div class="nav-item" id="nav-warehouse" onclick="switchView('warehouse')"><span class="nav-dot"></span>Склад и ячейки</div>
+    <div class="nav-label">Заказы</div>
+    <div class="nav-item" id="nav-orders" onclick="switchView('orders')"><span class="nav-dot"></span>Заказы с маркетплейсов<span class="nav-badge" id="ordersBadge"></span></div>
+    <div class="nav-item" id="nav-supplies" onclick="switchView('supplies')"><span class="nav-dot"></span>Поставки<span class="nav-badge" id="suppliesBadge"></span></div>
+
+    <div class="nav-sep"></div>
+    <div class="nav-label">Склад</div>
     <div class="nav-item" id="nav-receipts" onclick="switchView('receipts')"><span class="nav-dot"></span>Приход товара</div>
+    <div class="nav-item" id="nav-products" onclick="switchView('products')"><span class="nav-dot"></span>Товары</div>
+    <div class="nav-item" id="nav-warehouse" onclick="switchView('warehouse')"><span class="nav-dot"></span>Склад и ячейки</div>
+    <div class="nav-item" id="nav-inv" onclick="switchView('inv')"><span class="nav-dot"></span>Инвентаризация<span class="nav-badge" id="invBadge"></span></div>
+
+    <div class="nav-sep"></div>
+    <div class="nav-label">Настройки</div>
+    <div class="nav-item" id="nav-mp" onclick="switchView('mp')"><span class="nav-dot"></span>Продавцы и площадки</div>
     <div class="nav-item" id="nav-staff" onclick="switchView('staff')"><span class="nav-dot"></span>Сотрудники</div>
     <div class="nav-item" id="nav-1c" onclick="switchView('1c')"><span class="nav-dot"></span>Подключение 1С</div>
-    <div class="nav-item" id="nav-mp" onclick="switchView('mp')"><span class="nav-dot"></span>Площадки</div>
-    <div class="nav-item" id="nav-orders" onclick="switchView('orders')"><span class="nav-dot"></span>Заказы с МП<span class="nav-badge" id="ordersBadge"></span></div>
-    <div class="nav-item" id="nav-inv" onclick="switchView('inv')"><span class="nav-dot"></span>Инвентаризация<span class="nav-badge" id="invBadge"></span></div>
 
     <div class="sidebar-footer">
       <div class="account-menu" id="accountMenu">
@@ -2167,21 +2191,6 @@
         </div>
         <div id="staffRows" hidden></div>
 
-        <div class="staff-head staff-section">
-          <div>
-            <div class="staff-title">Продавцы</div>
-            <div class="staff-sub">Компания получает ключ вида ST-4K2P7Q-K. По нему продавец видит свой товар, заказы и документы — и ничего чужого.</div>
-          </div>
-        </div>
-        <div class="staff-add">
-          <input type="text" id="companyNameInput" placeholder="Название компании" onkeydown="if(event.key==='Enter') addCompany()">
-          <button onclick="addCompany()">+ Добавить компанию</button>
-        </div>
-        <div class="staff-toggle" id="companiesToggle" onclick="toggleCompaniesList()">
-          <span class="staff-toggle-arrow" id="companiesToggleArrow">▸</span>
-          <span id="companiesToggleLabel">Компании</span>
-        </div>
-        <div id="companiesList" hidden></div>
 
       </div>
     </div>
@@ -2297,13 +2306,62 @@
         <div id="ordersProgress"></div>
         <div id="ordersContent"><div class="staff-empty">Загружаем…</div></div>
 
-        <div class="staff-head staff-section">
+      </div>
+    </div>
+
+    <!-- Поставки — своя вкладка (решение владельца 22.09): составляют их из
+         заказов, а живут они дальше своей жизнью — сборка, документы, «нет
+         товара», «Уехала». В одном экране с очередью заказов их было не найти. -->
+    <div class="view" id="view-supplies">
+      <div class="staff-wrap">
+        <div class="staff-head">
           <div>
             <div class="staff-title">Поставки</div>
-            <div class="staff-sub">Поставка становится собранной сама, когда грузчики соберут каждый заказ. Когда машина уедет — отметьте «Уехала». Пока по поставке ничего не собрано, её можно разобрать: заказы вернутся в очередь.</div>
+            <div class="staff-sub">Поставка становится собранной сама, когда грузчики соберут каждый заказ. Когда машина уедет — отметьте «Уехала». Пока по поставке ничего не собрано, её можно разобрать: заказы вернутся в очередь. Составляют поставку во вкладке «Заказы с маркетплейсов».</div>
           </div>
+          <button class="wh-onboarding-btn" type="button" onclick="loadSupplies()">Обновить</button>
         </div>
         <div id="suppliesList"></div>
+      </div>
+    </div>
+
+    <!-- Товары — каталог продавцов: что есть, сколько лежит и где. Новый товар
+         заводится здесь, не дожидаясь 1С (решение владельца 22.09). -->
+    <div class="view" id="view-products">
+      <div class="staff-wrap">
+        <div class="staff-head">
+          <div>
+            <div class="staff-title">Товары</div>
+            <div class="staff-sub">Каталог продавцов: сколько товара лежит в ячейках Аргуса, где и сколько по учёту 1С. Новый товар можно завести здесь, не дожидаясь 1С. Когда такой же артикул того же продавца придёт из 1С, карточки свяжутся сами.</div>
+          </div>
+          <button class="wh-onboarding-btn primary" type="button" onclick="toggleProductForm(true)">+ Добавить товар</button>
+        </div>
+        <div class="rc-card" id="productForm" hidden>
+          <div class="staff-title" style="font-size:16px; margin-bottom:12px;">Новый товар</div>
+          <div class="rc-top">
+            <label class="rc-field"><span>Продавец</span>
+              <select id="productFormCompany" class="mp-field"></select></label>
+            <label class="rc-field"><span>Артикул</span>
+              <input type="text" id="productFormSku" class="mp-field" maxlength="100" placeholder="Как у продавца, например PB000021144"></label>
+          </div>
+          <div class="rc-top">
+            <label class="rc-field" style="flex:2;"><span>Название</span>
+              <input type="text" id="productFormName" class="mp-field" maxlength="300" placeholder="Как товар называется у продавца"></label>
+            <label class="rc-field"><span>Штрихкод — если есть</span>
+              <input type="text" id="productFormBarcode" class="mp-field" maxlength="64" inputmode="numeric" placeholder="4607012345678"></label>
+          </div>
+          <div class="rc-actions">
+            <span class="grow"></span>
+            <button type="button" class="wh-onboarding-btn" onclick="toggleProductForm(false)">Отмена</button>
+            <button type="button" class="wh-onboarding-btn primary" id="productFormSave" onclick="saveProduct()">Завести товар</button>
+          </div>
+        </div>
+        <div class="pr-bar">
+          <select id="productsCompany" class="mp-field" onchange="loadProducts()"></select>
+          <input type="search" id="productsSearch" class="mp-field" placeholder="Название, артикул или штрихкод" oninput="renderProducts()">
+          <span class="ord-meta" id="productsMeta"></span>
+        </div>
+        <div id="productsList"><div class="staff-empty">Выберите продавца.</div></div>
       </div>
     </div>
 
@@ -2311,8 +2369,24 @@
       <div class="staff-wrap">
         <div class="staff-head">
           <div>
-            <div class="staff-title">Клиенты и площадки</div>
-            <div class="staff-sub">Все ваши клиенты и то, что у каждого с маркетплейсом. Аргус сам забирает сборочные задания и заводит их заказами склада. По умолчанию он только читает; создавать поставки и менять статусы на площадке он будет только у того продавца, для которого вы это разрешили.</div>
+            <div class="staff-title">Продавцы и площадки</div>
+            <div class="staff-sub">Компания получает ключ вида ST-4K2P7Q-K. По нему продавец видит свой товар, заказы и документы — и ничего чужого.</div>
+          </div>
+        </div>
+        <div class="staff-add">
+          <input type="text" id="companyNameInput" placeholder="Название компании" onkeydown="if(event.key==='Enter') addCompany()">
+          <button onclick="addCompany()">+ Добавить компанию</button>
+        </div>
+        <div class="staff-toggle" id="companiesToggle" onclick="toggleCompaniesList()">
+          <span class="staff-toggle-arrow" id="companiesToggleArrow">▸</span>
+          <span id="companiesToggleLabel">Компании</span>
+        </div>
+        <div id="companiesList" hidden></div>
+
+        <div class="staff-head staff-section">
+          <div>
+            <div class="staff-title">Площадки</div>
+            <div class="staff-sub">Что у каждого продавца с маркетплейсом. Аргус сам забирает сборочные задания и заводит их заказами склада. По умолчанию он только читает; создавать поставки и менять статусы на площадке он будет только у того продавца, для которого вы это разрешили.</div>
           </div>
           <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center"><a id="wbReconciliationLink" href="marketplace-reconciliation.html" style="color:var(--accent)">Сверка заказов WB</a><button class="wh-onboarding-btn" type="button" onclick="pullAllMarketplaces()">Забрать заказы у всех</button></div>
         </div>
@@ -2481,6 +2555,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=cea69e3b" defer></script>
+<script src="cabinet_main.js?v=315651c8" defer></script>
 </body>
 </html>
