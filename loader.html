@@ -88,6 +88,22 @@
   .worker-menu-item:hover{background:var(--panel);}
   .task-logout{font-size:11.5px; color:var(--muted); cursor:pointer; text-decoration:underline;}
   .task-head-row{display:flex; align-items:center; gap:8px;}
+  /* Что за работа сейчас открыта: приёмка, сборка поставки, возврат. Раньше
+     это приходилось угадывать по номеру документа. */
+  .task-kind{font-size:12px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase;
+    color:var(--muted); margin-bottom:8px;}
+  .task-kind b{color:var(--accent); font-weight:600; letter-spacing:0; font-family:var(--mono);}
+
+  /* Позиция записана — посередине экрана коротко вспыхивает «Следующий
+     товар», и сразу открывается следующая. Экран с итогом ждёт конца всей
+     поставки: раньше он выскакивал после каждого заказа и мешал работать. */
+  .next-flash{position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    pointer-events:none; z-index:90; opacity:0; transition:opacity 0.18s var(--ease);}
+  .next-flash.show{opacity:1;}
+  .next-flash div{display:flex; align-items:center; gap:12px; padding:20px 28px; border-radius:16px;
+    background:rgba(24,38,36,0.96); border:1px solid var(--accent); color:var(--accent);
+    font-size:20px; font-weight:600; box-shadow:var(--shadow-md);}
+  @media (prefers-reduced-motion: reduce){ .next-flash{transition:none;} }
   /* Распорка держала переключатель по центру. Ради симметрии она отнимала
      70 px у номера накладной — на телефоне от него оставалось «Нак…». */
   .task-head-spacer{display:none;}
@@ -576,12 +592,6 @@
   .done-row-cell{color:var(--accent);}
 
   .done-actions{width:100%; display:flex; flex-direction:column; gap:10px;}
-  .excel-btn{
-    width:100%; padding:15px; border-radius:12px; border:1px solid var(--line); background:var(--panel-2);
-    color:var(--text); font-size:14px; font-weight:600; cursor:pointer; font-family:var(--sans);
-    display:flex; align-items:center; justify-content:center; gap:8px;
-  }
-  .excel-btn:active{border-color:var(--accent); color:var(--accent);}
   .done-btn{
     width:100%; padding:15px; border-radius:12px; border:1px solid var(--line); background:var(--panel-2);
     color:var(--text); font-size:14px; font-weight:600; cursor:pointer; font-family:var(--sans);
@@ -628,10 +638,10 @@
   .confirm-btn:active:not(:disabled), .sheet-confirm:active:not(:disabled){transform:scale(0.98); box-shadow:0 2px 10px rgba(95,175,166,0.28); opacity:1; filter:brightness(1.05);}
   .confirm-btn:disabled, .sheet-confirm:disabled{box-shadow:none;}
 
-  .excel-btn, .done-btn, .task-pause-btn, .pause-resume-btn{
+  .done-btn, .task-pause-btn, .pause-resume-btn{
     transition:border-color 0.2s var(--ease), color 0.2s var(--ease), transform 0.15s var(--ease);
   }
-  .excel-btn:active, .done-btn:active{transform:scale(0.98);}
+  .done-btn:active{transform:scale(0.98);}
 
   .done-icon{background:radial-gradient(circle at 35% 30%, #325F4A, var(--green-soft)); box-shadow:0 0 0 6px rgba(127,183,126,0.1), 0 8px 24px rgba(127,183,126,0.18); animation:fadeInUp 0.4s var(--ease) both;}
   .done-screen.show{animation:fadeInUp 0.35s var(--ease) both;}
@@ -710,7 +720,6 @@
     .done-screen > *:not(.done-icon){max-width:640px; width:100%;}
   }
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 </head>
 <body>
 
@@ -760,6 +769,7 @@
     <div id="taskScreen" style="display:none;">
       <div class="task-head">
         <div class="task-head-top">
+          <div class="task-kind" id="taskKind">Работа</div>
           <div class="task-head-row">
             <div class="worker-chip" onclick="event.stopPropagation(); toggleWorkerMenu()">
               <div class="worker-avatar" id="workerAvatar">И</div>
@@ -1065,16 +1075,14 @@
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Заказ отгружен
         </div>
-        <button class="excel-btn" id="excelBtn" onclick="downloadExcel()">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 3v13m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          Скачать в Excel
-        </button>
         <button class="done-btn" id="doneNextBtn" onclick="goToNextInvoice()">Следующая накладная</button>
         <button class="done-btn" onclick="goBackFromTask()">← К списку</button>
       </div>
     </div>
 
   </div>
+
+  <div class="next-flash" id="nextFlash"><div>Следующий товар</div></div>
 
   <div class="toast" id="toast"></div>
 
@@ -1192,7 +1200,7 @@
     await showHome();
   }
 
-  async function selectInvoice(invoiceId){
+  async function selectInvoice(invoiceId, keepRun){
     try{
       currentInvoice = await apiFetch('/api/invoices/' + invoiceId);
     } catch(e){
@@ -1200,16 +1208,22 @@
       return;
     }
     hideAllScreens();
-    taskStartTime = new Date();
+    // Сборка поставки — одна работа, а не десять отдельных. Переходя к
+    // следующему заказу той же поставки, не сбрасываем ни таймер, ни то,
+    // что уже собрано: итог считается по всей поставке.
+    if(!keepRun){
+      taskStartTime = new Date();
+      totalPausedMs = 0;
+      pauseLog = [];
+      results.length = 0;
+      runVisited.clear();
+    }
     startTaskTimer();
-    totalPausedMs = 0;
-    pauseLog = [];
     // Отложенные позиции — только про текущую накладную. Позиции, по которым
     // уже отправлено «нет товара» и руководитель ещё не ответил, сразу
     // отложены: иначе после перезагрузки грузчик пошёл бы за ними снова.
     postponedItems = new Set(currentInvoice.items.filter(it => it.missing_marked && !it.closed).map(it => it.id));
     pauseStart = null;
-    results.length = 0;
     document.getElementById('pauseBanner').classList.remove('show');
     document.getElementById('doneScreen').classList.remove('show');
     document.getElementById('taskScreen').style.display = '';
@@ -1242,8 +1256,28 @@
     return currentInvoice && currentInvoice.direction === 'return';
   }
 
+  // Короткий знак посередине экрана: предыдущая позиция записана, открыта
+  // следующая. Ничего не перекрывает — исчезает сам.
+  let nextFlashTimer = null;
+  function flashNext(text){
+    const el = document.getElementById('nextFlash');
+    if(!el) return;
+    el.firstElementChild.textContent = text;
+    el.classList.add('show');
+    clearTimeout(nextFlashTimer);
+    nextFlashTimer = setTimeout(() => el.classList.remove('show'), 1200);
+  }
+
   function renderCurrentItem(){
     document.getElementById('missingBtn').style.display = isPicking() ? '' : 'none';
+    const kind = document.getElementById('taskKind');
+    if(kind){
+      kind.innerHTML = isPicking()
+        ? (currentInvoice.supply_number
+            ? 'Сборка поставки · <b>' + escapeHTML(currentInvoice.supply_number) + '</b>'
+            : 'Отгрузка')
+        : (isReturn() ? 'Возврат и брак' : 'Приёмка');
+    }
     document.getElementById('invoiceNum').textContent = currentInvoice.number;
     document.getElementById('invoiceClient').textContent = currentInvoice.company_name;
     if(isPicking()){ renderPickItem(); return; }
@@ -1579,7 +1613,9 @@
       }
       await reloadCurrentInvoice();
       cellRows = await apiFetch('/api/cells/rows');
+      const more = findNextUnpickedIndex() !== -1;
       renderCurrentItem();
+      if(more) flashNext('Следующий товар');
     } catch(e){
       if(saved){ savedButStale(e); return; }
       showToast('Не удалось сохранить: ' + e.message);
@@ -1881,7 +1917,12 @@
   // Следующая работа — из того же списка, откуда пришли: следующий заказ этой
   // поставки, следующий приход. Кончились — обратно к списку.
   function sameListInvoices(){
-    if(backTarget && backTarget.kind === 'supply') return invoices.filter(i => i.supply_id === backTarget.id);
+    // По поставке идём по номерам заказов — в том же порядке, что на экране
+    // поставки и в напечатанном листе, иначе обход получается вразнобой.
+    if(backTarget && backTarget.kind === 'supply'){
+      return invoices.filter(i => i.supply_id === backTarget.id)
+        .sort((x, y) => String(x.number).localeCompare(String(y.number)));
+    }
     if(backTarget && backTarget.kind === 'docs') return invoices.filter(i => i.direction === backTarget.dir);
     if(backTarget && backTarget.kind === 'supplies') return invoices.filter(i => i.direction === 'out' && !i.supply_id);
     return invoices;
@@ -2475,6 +2516,9 @@
   let supplies = [];
   // Куда вернуться из накладной: {kind:'supply', id} | {kind:'docs', dir} | {kind:'supplies'}.
   let backTarget = null;
+  // Заказы, уже пройденные в этом заходе по поставке: без этого заказ, где
+  // всё отложено, гонял бы грузчика по кругу.
+  const runVisited = new Set();
   // Лист грузчика по конкретным заказам — поставке. null — по всем.
   let pickListIds = null;
   let pickListSupply = null;
@@ -3050,10 +3094,23 @@
   }
 
   function showDone(){
+    // Внутри поставки заказы идут подряд: записали позицию — сразу следующая.
+    if(isPicking() && backTarget && backTarget.kind === 'supply'){
+      runVisited.add(currentInvoice.id);
+      const next = sameListInvoices().find(i => isOpenDoc(i) && !runVisited.has(i.id));
+      if(next){
+        flashNext('Следующий товар');
+        selectInvoice(next.id, true);
+        return;
+      }
+    }
     document.getElementById('taskScreen').style.display = 'none';
     document.getElementById('doneScreen').classList.add('show');
-    document.getElementById('doneNextBtn').textContent = backTarget && backTarget.kind === 'supply'
+    const hasNext = Boolean(sameListInvoices().find(i => isOpenDoc(i) && i.id !== currentInvoice.id && !runVisited.has(i.id)));
+    const nextBtn = document.getElementById('doneNextBtn');
+    nextBtn.textContent = backTarget && backTarget.kind === 'supply'
       ? 'Следующий заказ поставки' : 'Следующая накладная';
+    nextBtn.style.display = hasNext ? '' : 'none';
     document.getElementById('invoiceNum').textContent = currentInvoice.number;
     // Экран завершения говорит о том, что человек только что делал: собирать,
     // принимать и разбирать возврат — разные работы, и подписи не должны их
@@ -3062,9 +3119,12 @@
     // осталось и что с ними делать, иначе экран поздравляет с работой,
     // которую никто не сделал.
     const postponed = currentInvoice.items.filter(function(it){ return !it.closed && postponedItems.has(it.id); }).length;
+    const supplyDone = isPicking() && backTarget && backTarget.kind === 'supply' && !hasNext;
     document.getElementById('doneTitle').textContent = postponed > 0
       ? 'Собрано, кроме отложенного'
-      : (isPicking() ? 'Отгрузка собрана' : (isReturn() ? 'Возврат разобран' : 'Приёмка завершена'));
+      : supplyDone
+        ? 'Поставка ' + (currentInvoice.supply_number || '') + ' собрана'
+        : (isPicking() ? 'Отгрузка собрана' : (isReturn() ? 'Возврат разобран' : 'Приёмка завершена'));
     const reported = currentInvoice.items.filter(function(it){ return !it.closed && postponedItems.has(it.id) && it.missing_marked; }).length;
     document.getElementById('doneSub').textContent = postponed > 0
       ? 'Отложено: ' + postponed + ' ' + pluralRu(postponed, 'позиция', 'позиции', 'позиций') + '. '
@@ -3085,9 +3145,11 @@
     // иначе поставка навсегда осталась бы «собирается».
     const inSupply = Boolean(currentInvoice.supply_id);
     if(isPicking() && inSupply && currentInvoice.status === 'ready'){
-      document.getElementById('doneSub').textContent = 'Заказ ' + currentInvoice.number
-        + ' собран. Он уедет в составе поставки ' + (currentInvoice.supply_number || '')
-        + ' — «Уехала» отмечают у поставки, когда её погрузят в машину.';
+      document.getElementById('doneSub').textContent = (supplyDone
+        ? 'Все заказы поставки ' + (currentInvoice.supply_number || '') + ' собраны.'
+        : 'Заказ ' + currentInvoice.number + ' собран. Он уедет в составе поставки '
+          + (currentInvoice.supply_number || '') + '.')
+        + ' «Уехала» отмечают у поставки, когда её погрузят в машину.';
     }
     if(isPicking() && currentInvoice.status === 'ready' && !inSupply){
       shipBtn.style.display = '';
@@ -3135,7 +3197,6 @@
     const worked = results.length > 0;
     document.getElementById('doneTime').style.display = worked ? '' : 'none';
     document.getElementById('doneSummary').style.display = worked ? '' : 'none';
-    document.getElementById('excelBtn').style.display = worked ? '' : 'none';
   }
 
   async function confirmShipped(){
@@ -3155,48 +3216,6 @@
     }
   }
 
-  function downloadExcel(){
-    // Библиотека таблиц приходит с внешнего адреса. На складском вайфае она
-    // иногда не доходит — тогда кнопка молча ничего не делала.
-    if(typeof XLSX === 'undefined'){
-      showToast('Таблица не загрузилась. Проверьте интернет и обновите страницу');
-      return;
-    }
-    const now = new Date();
-    const dateStr = now.toLocaleDateString('ru-RU') + ' ' + now.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
-    const netMs = (now - taskStartTime) - totalPausedMs;
-
-    const BUCKET_TITLE = { good: 'Годный', defective: 'Брак', packaging_defect: 'Брак упаковки' };
-    const rows = results.map(r => ({
-      'Товар': r.name,
-      'SKU': r.sku,
-      'Заявлено': r.declared,
-      [isReturn() ? 'Разобрано' : 'Принято']: r.accepted,
-      // У возврата «расхождения» нет: 7 годных из 10 — это не недостача,
-      // а раскладка по состоянию. Вместо выдуманного минуса пишем состояние.
-      [isReturn() ? 'Состояние' : 'Расхождение']: isReturn()
-        ? (BUCKET_TITLE[r.bucket] || 'Годный')
-        : r.accepted - r.declared,
-      'Ячейка': r.cell,
-      'Накладная': currentInvoice.number,
-      'Клиент': currentInvoice.company_name,
-      [isPicking() ? 'Дата отбора' : isReturn() ? 'Дата разбора' : 'Дата приёмки']: dateStr,
-      'Начало': formatClock(taskStartTime),
-      'Окончание': formatClock(now),
-      'Чистое время': formatDuration(netMs),
-      'Пауз': pauseLog.length,
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [
-      {wch:32}, {wch:12}, {wch:10}, {wch:10}, {wch:12}, {wch:16}, {wch:12}, {wch:16}, {wch:16},
-      {wch:9}, {wch:11}, {wch:13}, {wch:7}
-    ];
-    const wb = XLSX.utils.book_new();
-    const sheetName = isPicking() ? 'Отгрузка' : (isReturn() ? 'Возврат' : 'Приёмка');
-    XLSX.utils.book_append_sheet(wb, ws, sheetName);
-    XLSX.writeFile(wb, sheetName + ' ' + currentInvoice.number + '.xlsx');
-  }
 
   let toastTimer = null;
   function showToast(text){
