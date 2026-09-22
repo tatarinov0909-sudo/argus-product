@@ -422,7 +422,7 @@
   // Ключ выдали работнику, а человек оказался менеджером — так бывает.
   // Отзывать и выдавать новый незачем: код остаётся у человека, меняется роль.
   async function makeManager(id, name){
-    if(!confirm('Сделать «' + name + '» менеджером?\n\nКлюч останется прежним, '
+    if(!await askConfirm('Сделать «' + name + '» менеджером?\n\nКлюч останется прежним, '
       + 'кабинет с заказами откроется при следующем входе. Права можно отметить сразу после.')) return;
     try{
       await apiFetch('/api/staff/' + id + '/kind', {method:'PATCH', body:{kind:'manager', permissions: []}});
@@ -2184,7 +2184,7 @@
     if(positions > 0){
       question += `\n\nВНИМАНИЕ: в ячейках и зонах числится товар — ${positions} ${pluralRu(positions, 'позиция', 'позиции', 'позиций')}, ${units.toLocaleString('ru-RU')} шт. Эти записи будут стёрты, хотя товар останется лежать на складе.`;
     }
-    if(!confirm(question)) return;
+    if(!await askConfirm(question)) return;
 
     try{
       await apiFetch('/api/cells/rows?confirm=true', {method:'DELETE'});
@@ -2532,6 +2532,41 @@
   function urgentText(text){
     const t = String(text || '').replace(/^ОЧЕНЬ ВАЖНО:\s*/, '');
     return t.charAt(0).toUpperCase() + t.slice(1);
+  }
+
+  // Своё окно подтверждения вместо браузерного «Подтвердите действие на
+  // argus-ai.online»: то выглядит как чужое предупреждение, пугает и ничего
+  // не выделяет. Первый абзац вопроса — заголовок, остальное — пояснение.
+  // Enter — «Да», Escape и клик мимо — «Отмена».
+  const DANGER_WORDS = /^(Удалить|Разобрать|Отключить|Отменить|Отклонить|Убрать)/;
+  function askConfirm(message){
+    return new Promise(function(resolve){
+      const parts = String(message || '').split('\n\n');
+      const title = parts.shift();
+      const overlay = document.createElement('div');
+      overlay.className = 'ask-overlay';
+      overlay.innerHTML = '<div class="ask-box' + (DANGER_WORDS.test(title) ? ' danger' : '') + '" role="dialog" aria-modal="true">'
+        + '<div class="ask-title"></div><div class="ask-text"></div>'
+        + '<div class="ask-actions"><button type="button" class="wh-onboarding-btn ask-cancel">Отмена</button>'
+        + '<button type="button" class="wh-onboarding-btn primary ask-ok">Да</button></div></div>';
+      overlay.querySelector('.ask-title').textContent = title;
+      overlay.querySelector('.ask-text').textContent = parts.join('\n\n');
+      function done(answer){
+        document.removeEventListener('keydown', onKey, true);
+        overlay.remove();
+        resolve(answer);
+      }
+      function onKey(e){
+        if(e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); done(false); }
+        else if(e.key === 'Enter'){ e.preventDefault(); e.stopPropagation(); done(true); }
+      }
+      overlay.addEventListener('click', function(e){ if(e.target === overlay) done(false); });
+      overlay.querySelector('.ask-cancel').onclick = function(){ done(false); };
+      overlay.querySelector('.ask-ok').onclick = function(){ done(true); };
+      document.addEventListener('keydown', onKey, true);
+      document.body.appendChild(overlay);
+      overlay.querySelector('.ask-ok').focus();
+    });
   }
 
   function renderWhSummary(){
@@ -3325,7 +3360,7 @@
   async function resolveUrgent(id, resolution){
     const entry = journalEntries.find(x => x.id === id);
     const found = resolution === 'rollback';
-    if(!confirm(found
+    if(!await askConfirm(found
       ? 'Товар нашёлся?\n\nОтметка закроется, и грузчик соберёт позицию как обычно.'
       : 'Отметить, что вы в курсе?\n\nЗаказ остаётся в работе: грузчику позиция снова откроется для сборки.')) return;
     const text = entry ? urgentText(entry.action_text) : '';
@@ -3341,8 +3376,8 @@
   window.resolveUrgent = resolveUrgent;
 
   async function resolveJournalEntry(id, resolution){
-    if(resolution === 'confirm' && !confirm('Принять рекомендацию и сохранить решение в журнале?')) return;
-    if(resolution === 'rollback' && !confirm('Отклонить рекомендацию и сохранить решение в журнале?')) return;
+    if(resolution === 'confirm' && !await askConfirm('Принять рекомендацию и сохранить решение в журнале?')) return;
+    if(resolution === 'rollback' && !await askConfirm('Отклонить рекомендацию и сохранить решение в журнале?')) return;
     try{
       await apiFetch('/api/journal/' + id + '/resolve', {method:'POST', body:{resolution}});
       await loadJournal();
@@ -3498,7 +3533,7 @@
   async function confirmSelected(){
     const checked = document.querySelectorAll('.j-check:checked');
     if(checked.length === 0) return;
-    if(!confirm('Подтвердить ' + checked.length + ' запис' + (checked.length===1?'ь':'и') + '? Правки будут проведены в 1С.')) return;
+    if(!await askConfirm('Подтвердить ' + checked.length + ' запис' + (checked.length===1?'ь':'и') + '? Правки будут проведены в 1С.')) return;
     const ids = Array.from(checked).map(cb => cb.closest('.j-entry').dataset.entryId);
     try{
       for(const id of ids){
@@ -4180,7 +4215,7 @@
         + 'Убедитесь, что продавец на это согласен.'
       : 'Запретить Аргусу менять статусы «' + name + '» на площадке?\n\n'
         + 'Поставки на площадке снова придётся создавать вручную в её кабинете.';
-    if(!confirm(question)) return;
+    if(!await askConfirm(question)) return;
     try{
       await apiFetch('/api/marketplaces/' + companyId + '/' + marketplace + '/write',
         { method: 'PATCH', body: { enabled: enable } });
@@ -4290,7 +4325,7 @@
   }
 
   async function disconnectMarketplace(companyId, marketplace){
-    if(!confirm('Отключить площадку? Заказы перестанут приходить. Уже заведённые накладные останутся.')) return;
+    if(!await askConfirm('Отключить площадку? Заказы перестанут приходить. Уже заведённые накладные останутся.')) return;
     try{
       await apiFetch('/api/marketplaces/' + companyId + '/' + marketplace, { method: 'DELETE' });
       await loadMarketplaces();
@@ -4524,7 +4559,7 @@
 
   async function resolveInv(taskId, decision){
     if(decision === 'apply'
-      && !confirm('Принять пересчёт? Остаток в ячейке станет таким, каким его увидел работник.')) return;
+      && !await askConfirm('Принять пересчёт? Остаток в ячейке станет таким, каким его увидел работник.')) return;
     try{
       await apiFetch('/api/inventory/tasks/' + taskId + '/resolve', {
         method: 'POST', body: { decision },
@@ -4616,7 +4651,7 @@
   async function undoStockBatch(batch){
     const b = (stockLoad.batches || []).find(x => x.batch === batch);
     if(!b || stockLoad.busy) return;
-    if(!confirm('Отменить загрузку от ' + new Date(b.at).toLocaleString('ru-RU') + ' — «' + b.companyName + '», '
+    if(!await askConfirm('Отменить загрузку от ' + new Date(b.at).toLocaleString('ru-RU') + ' — «' + b.companyName + '», '
       + b.units + ' шт.?\n\nЭти штуки уйдут из ячеек Аргуса. В 1С ничего не отправляется.')) return;
     stockLoad.busy = 'undo';
     stockLoad.error = '';
@@ -4819,7 +4854,7 @@
     const p = stockLoad.preview;
     if(!p || p.summary.errors > 0 || p.summary.ok === 0 || stockLoad.busy) return;
     const s = p.summary;
-    if(!confirm('Загрузить в ячейки «' + p.seller.name + '» ' + s.units + ' шт. — '
+    if(!await askConfirm('Загрузить в ячейки «' + p.seller.name + '» ' + s.units + ' шт. — '
       + s.products + ' ' + pluralRu(s.products, 'товар', 'товара', 'товаров') + ' в '
       + s.cells + ' ' + pluralRu(s.cells, 'ячейку', 'ячейки', 'ячеек') + '?\n\n'
       + 'Ошиблись — загрузку можно отменить целиком, пока её товар не отбирали, не перемещали и не пересчитывали.')) return;
@@ -5549,7 +5584,12 @@
               : '')
         +   (when ? ' · ' + fmtDay(when) : '')
         +   (s.ship_date && s.status !== 'shipped' ? ' · отгрузка ' + fmtDay(s.ship_date) : '')
-        +   (s.destination ? ' · ' + escapeHTML(s.destination) : '') + '</div></div>'
+        +   (s.destination ? ' · ' + escapeHTML(s.destination) : '') + '</div>'
+        // Кто составил и когда — видно сразу, без журнала.
+        +   (s.created_at ? '<div class="sup-by">составлена ' + escapeHTML(new Date(s.created_at).toLocaleString('ru-RU',
+              { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))
+              + (s.created_by ? ' · составил ' + escapeHTML(s.created_by) : '') + '</div>' : '')
+        + '</div>'
         + '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">'
         +   (s.missing > 0 ? '<span class="sup-missing" title="Грузчик отметил на сборке — смотрите «Что внутри» и журнал">Нет товара: ' + s.missing + '</span>' : '')
         +   '<div class="sup-state ' + s.status + '">' + escapeHTML(s.statusName || s.status) + '</div>'
@@ -5593,7 +5633,7 @@
   // в очередь, поставка едет без него и сама становится «собранной», если
   // остальное собрано. Это решение, а не справка, — поэтому спрашиваем.
   async function removeSupplyOrder(invoiceId, orderNumber){
-    if(!confirm('Убрать заказ «' + orderNumber + '» из поставки?\n\nЗаказ вернётся в очередь — его можно будет'
+    if(!await askConfirm('Убрать заказ «' + orderNumber + '» из поставки?\n\nЗаказ вернётся в очередь — его можно будет'
       + ' поставить в следующую поставку, когда товар найдётся. Поставка уедет без него.')) return;
     try{
       const r = await apiFetch('/api/supplies/orders/' + encodeURIComponent(invoiceId) + '/remove', { method: 'POST' });
@@ -5613,7 +5653,7 @@
   async function disbandSupply(id){
     const s = (supplyRows || []).find(x => x.id === id);
     const number = s ? s.number : '';
-    if(!confirm('Разобрать поставку «' + number + '»?\n\nЗаказы вернутся в очередь,'
+    if(!await askConfirm('Разобрать поставку «' + number + '»?\n\nЗаказы вернутся в очередь,'
       + ' и поставки с этим номером больше не будет.')) return;
     try{
       const r = await apiFetch('/api/supplies/' + id, { method: 'DELETE' });
@@ -5630,9 +5670,10 @@
   // этого не отменить, поэтому спрашиваем.
   async function shipSupply(id){
     const s = (supplyRows || []).find(x => x.id === id);
-    if(!s || !confirm('Поставка «' + s.number + '» погружена и уехала?\n\n'
+    if(!s || !await askConfirm('Поставка «' + s.number + '» погружена и уехала?\n\n'
       + s.orders + ' ' + pluralRu(s.orders, 'заказ', 'заказа', 'заказов')
-      + ' станут отгруженными. Отменить это нельзя.')) return;
+      + (Number(s.orders) % 10 === 1 && Number(s.orders) % 100 !== 11 ? ' станет отгруженным' : ' станут отгруженными')
+      + '. Отменить это нельзя.')) return;
     try{
       const r = await apiFetch('/api/supplies/' + id + '/ship', { method: 'POST' });
       const mp = r.marketplace || {};
@@ -5743,7 +5784,7 @@
     const place = (point ? point.label : ordersPlace.trim()).slice(0, 120);
     const dayText = ordersShipDate
       ? new Date(ordersShipDate + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : '';
-    if(!confirm(`Составить поставку: ${ready.length} ${pluralRu(ready.length, 'заказ', 'заказа', 'заказов')}`
+    if(!await askConfirm(`Составить поставку: ${ready.length} ${pluralRu(ready.length, 'заказ', 'заказа', 'заказов')}`
       + ` продавца «${partner ? partner.companyName : ''}»` + (place ? ` — ${place}` : '') + (dayText ? `, отгрузка ${dayText}` : '') + `?\n\nОна уйдёт на склад, грузчики начнут сборку.`)) return;
     supplyInFlight = true;
     const button = document.querySelector('.ord-actions button');

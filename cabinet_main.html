@@ -1640,6 +1640,18 @@
     display:flex; align-items:center; gap:10px;}
   .sup-company{font-size:16px; font-weight:600;}
   .sup-meta{font-size:14px; color:var(--muted); margin-top:3px;}
+  .sup-by{font-size:13px; color:var(--muted); margin-top:2px;}
+  /* Своё окно подтверждения вместо браузерного. */
+  .ask-overlay{position:fixed; inset:0; background:rgba(17,19,21,0.72); backdrop-filter:blur(3px);
+    z-index:1000; display:flex; align-items:center; justify-content:center; padding:24px;}
+  .ask-box{width:100%; max-width:520px; background:linear-gradient(165deg, var(--panel) 0%, #1A1C1F 100%);
+    border:1px solid var(--line-soft); border-radius:16px; padding:22px 22px 18px; box-shadow:var(--shadow-lg);
+    animation:fadeInUp 0.2s var(--ease) both;}
+  .ask-title{font-size:17px; font-weight:700; line-height:1.4; white-space:pre-line;}
+  .ask-text{font-size:14px; color:var(--muted); line-height:1.55; white-space:pre-line; margin-top:10px;}
+  .ask-text:empty{display:none;}
+  .ask-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:20px;}
+  .ask-box.danger .ask-ok{background:var(--terracotta); border-color:var(--terracotta); color:#fff;}
   .sup-state{font-size:13px; padding:5px 12px; border-radius:20px; border:1px solid var(--line); color:var(--muted); white-space:nowrap;}
   .sup-acts{display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;}
   .sup-acts .mp-act{font-size:14px; padding:8px 14px; border:1px solid var(--line); border-radius:8px;
@@ -2555,6 +2567,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=315651c8" defer></script>
+<script src="cabinet_main.js?v=d5446058" defer></script>
 </body>
 </html>

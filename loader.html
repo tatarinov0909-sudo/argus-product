@@ -108,21 +108,6 @@
   .invoice-switch.open .invoice-switch-chevron{transform:rotate(180deg);}
   .task-progress-text{font-size:12.5px; color:var(--muted); font-family:var(--mono); margin-bottom:8px;}
 
-  .invoice-popover{
-    display:none; position:absolute; top:calc(100% + 6px); left:50%; transform:translateX(-50%); z-index:60;
-    width:280px; max-width:88vw; background:var(--panel-2); border:1px solid var(--line); border-radius:14px;
-    padding:8px; box-shadow:0 14px 34px rgba(0,0,0,0.5);
-  }
-  .invoice-popover.show{display:block;}
-  .invoice-popover-item{
-    display:flex; justify-content:space-between; align-items:center; padding:13px 14px; border-radius:10px; cursor:pointer;
-  }
-  .invoice-popover-item:active{background:var(--panel);}
-  .invoice-popover-item.active{background:var(--accent-soft);}
-  .invoice-popover-item-name{font-size:14px; font-weight:600;}
-  .invoice-popover-item-sub{font-size:12px; color:var(--muted); margin-top:2px;}
-  .invoice-popover-item-count{font-size:12px; color:var(--muted); font-family:var(--mono); flex-shrink:0; margin-left:10px;}
-  .invoice-popover-item.active .invoice-popover-item-count{color:var(--accent);}
   .task-pause-row{display:flex; justify-content:center; align-items:center; gap:10px; margin-top:8px;}
   .task-pause-btn{
     font-size:12px; color:var(--muted); cursor:pointer; display:flex; align-items:center; gap:5px;
@@ -310,6 +295,40 @@
      задачей, а не внутри неё. */
   .job-screen{display:none; flex:1; flex-direction:column; background:var(--bg);}
   .job-screen.show{display:flex;}
+  /* Главный экран и списки работ: сначала «что делаем», потом «что именно». */
+  .home-tile{display:flex; justify-content:space-between; align-items:center; gap:14px; cursor:pointer;
+    background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:20px 22px;}
+  .home-tile:active{border-color:var(--accent);}
+  .home-tile-name{font-size:18px; font-weight:600;}
+  .home-tile-sub{font-size:13.5px; color:var(--muted); margin-top:4px; line-height:1.45;}
+  .home-tile-count{font-family:var(--mono); font-size:24px; font-weight:700; color:var(--accent-2); flex-shrink:0;}
+  .home-tile-count.zero{color:var(--muted); font-size:16px; font-weight:500;}
+  .job-logout{font-size:13px; color:var(--muted); cursor:pointer; padding:8px 0; margin-left:auto;}
+  .sup-card{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:18px 20px; cursor:pointer;}
+  .sup-card:active{border-color:var(--accent);}
+  .sup-card-top{display:flex; justify-content:space-between; align-items:center; gap:10px;}
+  .sup-card-num{font-family:var(--mono); font-size:24px; font-weight:700; color:var(--accent-2); letter-spacing:0.5px;}
+  .sup-card-state{font-size:12px; padding:4px 10px; border-radius:20px; border:1px solid var(--line); color:var(--muted); white-space:nowrap;}
+  .sup-card-state.collecting{border-color:var(--yellow); color:var(--yellow);}
+  .sup-card-state.ready{border-color:var(--green); color:var(--green);}
+  .sup-card-company{font-size:15px; font-weight:600; margin-top:8px;}
+  .sup-card-dest{font-size:15px; margin-top:4px; line-height:1.4;}
+  .sup-card-meta{font-size:13px; color:var(--muted); margin-top:6px; line-height:1.5;}
+  .sup-card-bar{height:6px; border-radius:3px; background:var(--line); margin-top:12px; overflow:hidden;}
+  .sup-card-bar div{height:100%; background:var(--accent);}
+  .list-group-title{font-size:12.5px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; margin-top:6px;}
+  .order-row{display:flex; justify-content:space-between; align-items:center; gap:12px; cursor:pointer;
+    background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px;}
+  .order-row:active{border-color:var(--accent);}
+  .order-row.done{opacity:0.55;}
+  .order-row-num{font-family:var(--mono); font-size:15px;}
+  .order-row-sub{font-size:12.5px; color:var(--muted); margin-top:3px;}
+  .order-row-state{font-size:12.5px; color:var(--muted); white-space:nowrap;}
+  .order-row-state.open{color:var(--accent-2);}
+  .big-btn{width:100%; padding:16px; border-radius:14px; border:none; background:var(--accent); color:#182422;
+    font-size:15px; font-weight:700; cursor:pointer; font-family:var(--sans);}
+  .supply-title{font-family:var(--mono); color:var(--accent-2); font-size:26px; letter-spacing:0.5px;}
+  .invoice-back{color:var(--muted); margin-right:4px;}
   .job-head{padding:22px 24px 18px; border-bottom:1px solid var(--line-soft); background:var(--panel);}
   .job-title{font-size:21px; font-weight:600; letter-spacing:-0.3px;}
   .job-sub{font-size:14px; color:var(--muted); margin-top:6px;}
@@ -691,7 +710,48 @@
 
   <div class="phone">
 
-    <div id="taskScreen">
+    <!-- Главный экран: сначала человек выбирает, чем занимается. -->
+    <div class="job-screen show" id="homeScreen">
+      <div class="job-head">
+        <div class="job-head-row">
+          <div>
+            <div class="job-title">Что делаем?</div>
+            <div class="job-sub" id="homeSub">Загружаю…</div>
+          </div>
+          <div class="job-logout" onclick="logout()">Выйти</div>
+        </div>
+      </div>
+      <div class="job-body" id="homeBody"></div>
+    </div>
+
+    <div class="job-screen" id="suppliesScreen">
+      <div class="job-head">
+        <div class="job-back" onclick="showHome()">← Что делаем?</div>
+        <div class="job-title">Сборка поставок</div>
+        <div class="job-sub" id="suppliesSub">—</div>
+      </div>
+      <div class="job-body" id="suppliesBody"></div>
+    </div>
+
+    <div class="job-screen" id="supplyScreen">
+      <div class="job-head">
+        <div class="job-back" onclick="openSupplies()">← К поставкам</div>
+        <div class="job-title supply-title" id="supplyTitle">—</div>
+        <div class="job-sub" id="supplySub">—</div>
+      </div>
+      <div class="job-body" id="supplyBody"></div>
+    </div>
+
+    <div class="job-screen" id="docsScreen">
+      <div class="job-head">
+        <div class="job-back" onclick="showHome()">← Что делаем?</div>
+        <div class="job-title" id="docsTitle">—</div>
+        <div class="job-sub" id="docsSub">—</div>
+      </div>
+      <div class="job-body" id="docsBody"></div>
+    </div>
+
+    <div id="taskScreen" style="display:none;">
       <div class="task-head">
         <div class="task-head-top">
           <div class="task-head-row">
@@ -703,11 +763,11 @@
               </div>
             </div>
             <div class="invoice-switch-wrap">
-              <div class="invoice-switch" id="invoiceSwitch" onclick="event.stopPropagation(); toggleInvoicePopover()">
-                <span class="invoice-switch-text"><span class="invoice-switch-word">Накладная </span><b id="invoiceNum">—</b> · <span id="invoiceClient"></span></span>
-                <svg class="invoice-switch-chevron" width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <!-- Назад — к своему списку (поставке, приходам), а не в
+                   выпадающую кучу из работ и сотни заказов. -->
+              <div class="invoice-switch" id="invoiceSwitch" onclick="event.stopPropagation(); goBackFromTask()">
+                <span class="invoice-switch-text"><span class="invoice-back">←</span><b id="invoiceNum">—</b> · <span id="invoiceClient"></span></span>
               </div>
-              <div class="invoice-popover" id="invoicePopover"></div>
             </div>
             <div class="task-head-spacer"></div>
           </div>
@@ -929,10 +989,10 @@
          чтобы работник прошёл склад один раз, а не по разу на заказ. -->
     <div class="job-screen" id="pickListScreen">
       <div class="job-head">
-        <div class="job-back" onclick="closeJob()">← К накладным</div>
+        <div class="job-back" onclick="pickListBack()">← Назад</div>
         <div class="job-head-row">
           <div>
-            <div class="job-title">Лист грузчика</div>
+            <div class="job-title" id="pickListTitle">Лист грузчика</div>
             <div class="job-sub" id="pickListSub">Считаю…</div>
           </div>
           <div class="job-actions">
@@ -954,7 +1014,7 @@
          только после того, как руководитель назначил пересчёт. -->
     <div class="job-screen" id="invScreen">
       <div class="job-head">
-        <div class="job-back" onclick="closeJob()">← К накладным</div>
+        <div class="job-back" onclick="closeJob()">← Что делаем?</div>
         <div class="job-title">Пересчёт ячеек</div>
         <div class="job-sub" id="invSub">—</div>
       </div>
@@ -976,7 +1036,7 @@
     <!-- Перепаковка и перестановка: работа про полку, а не про документ. -->
     <div class="job-screen" id="moveScreen">
       <div class="job-head">
-        <div class="job-back" onclick="closeJob()">← К накладным</div>
+        <div class="job-back" onclick="closeJob()">← Что делаем?</div>
         <div class="job-title">Перепаковка и перестановка</div>
         <div class="job-sub" id="moveSub">Выберите ячейку, из которой берёте товар</div>
       </div>
@@ -1003,7 +1063,8 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 3v13m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Скачать в Excel
         </button>
-        <button class="done-btn" onclick="goToNextInvoice()">К следующей накладной</button>
+        <button class="done-btn" id="doneNextBtn" onclick="goToNextInvoice()">Следующая накладная</button>
+        <button class="done-btn" onclick="goBackFromTask()">← К списку</button>
       </div>
     </div>
 
@@ -1058,18 +1119,6 @@
   let invoices = [];
   let currentInvoice = null;
 
-  // Грузчику нужна работа, а не отчёт о чужой. Список приходит свежими
-  // сверху, и первой запросто оказывается уже собранная накладная —
-  // тогда человек при входе видит экран «собрано» и не понимает, что делать.
-  // Ищем от места, где стоим, по кругу — первую незакрытую.
-  function nextWorkIndex(from){
-    const left = (inv) => inv.status === 'open' || inv.status === 'in_progress';
-    for(let step = 0; step < invoices.length; step += 1){
-      const idx = (from + step) % invoices.length;
-      if(left(invoices[idx])) return idx;
-    }
-    return from % invoices.length;
-  }
   let currentItemIndex = 0;
   let currentQty = 0;
   let selectedCellBlockId = null;
@@ -1126,77 +1175,21 @@
 
   async function init(){
     try{
-      invoices = await apiFetch('/api/invoices');
       cellRows = await apiFetch('/api/cells/rows');
     } catch(e){
-      showToast('Не удалось загрузить данные: ' + e.message);
-      return;
+      showToast('Не удалось загрузить склад: ' + e.message);
     }
-    if(invoices.length === 0){
-      document.querySelector('.task-body').innerHTML = '<div class="item-card" style="text-align:center; color:var(--muted);">Накладных пока нет — попросите руководителя склада добавить их в кабинете.</div>';
-      document.getElementById('confirmBtn').style.display = 'none';
-      return;
-    }
-    await selectInvoice(invoices[nextWorkIndex(0)].id);
-  }
-
-  function toggleInvoicePopover(){
-    const pop = document.getElementById('invoicePopover');
-    const sw = document.getElementById('invoiceSwitch');
-    const opening = !pop.classList.contains('show');
-    if(opening){
-      const statusLabel = {
-        open:'не начата', in_progress:'в процессе', completed:'завершена',
-        ready:'собран', shipped:'отгружен',
-      };
-      const directionLabel = {out:'отгрузка', return:'возврат', in:'приёмка'};
-      // Две работы, не привязанные к документу, живут здесь же: переключатель —
-      // это «что я сейчас делаю», а не только «какая накладная».
-      const jobs = `
-        <div class="invoice-popover-item" onclick="event.stopPropagation(); openPickList()">
-          <div>
-            <div class="invoice-popover-item-name">Лист грузчика</div>
-            <div class="invoice-popover-item-sub">собрать всё по заказам за один обход</div>
-          </div>
-        </div>
-        <div class="invoice-popover-item" onclick="event.stopPropagation(); openMove()">
-          <div>
-            <div class="invoice-popover-item-name">Перепаковка и перестановка</div>
-            <div class="invoice-popover-item-sub">переложить товар или вернуть его в продажу</div>
-          </div>
-        </div>
-        <div class="invoice-popover-item" onclick="event.stopPropagation(); openInventory()">
-          <div>
-            <div class="invoice-popover-item-name">Пересчёт ячеек</div>
-            <div class="invoice-popover-item-sub">только если руководитель назначил</div>
-          </div>
-        </div>`;
-      pop.innerHTML = jobs + invoices.map((inv) => `
-        <div class="invoice-popover-item ${currentInvoice && inv.id === currentInvoice.id ? 'active' : ''}" onclick="event.stopPropagation(); selectInvoice('${inv.id}')">
-          <div>
-            <div class="invoice-popover-item-name">${escapeHTML(inv.company_name)}</div>
-            <div class="invoice-popover-item-sub">${escapeHTML(inv.number)}</div>
-          </div>
-          <div class="invoice-popover-item-count">${directionLabel[inv.direction] || 'приёмка'} · ${statusLabel[inv.status] || inv.status}</div>
-        </div>
-      `).join('');
-      pop.classList.add('show');
-      sw.classList.add('open');
-    } else {
-      pop.classList.remove('show');
-      sw.classList.remove('open');
-    }
+    await showHome();
   }
 
   async function selectInvoice(invoiceId){
-    document.getElementById('invoicePopover').classList.remove('show');
-    document.getElementById('invoiceSwitch').classList.remove('open');
     try{
       currentInvoice = await apiFetch('/api/invoices/' + invoiceId);
     } catch(e){
       showToast('Не удалось загрузить накладную: ' + e.message);
       return;
     }
+    hideAllScreens();
     taskStartTime = new Date();
     startTaskTimer();
     totalPausedMs = 0;
@@ -1222,11 +1215,6 @@
     if(row) row.status = currentInvoice.status;
     return currentInvoice;
   }
-
-  document.addEventListener('click', function(){
-    document.getElementById('invoicePopover').classList.remove('show');
-    document.getElementById('invoiceSwitch').classList.remove('open');
-  });
 
   function findNextUnreceivedIndex(){
     return currentInvoice.items.findIndex(it => !it.receiving_id);
@@ -1880,15 +1868,22 @@
     }
   }
 
+  // Следующая работа — из того же списка, откуда пришли: следующий заказ этой
+  // поставки, следующий приход. Кончились — обратно к списку.
+  function sameListInvoices(){
+    if(backTarget && backTarget.kind === 'supply') return invoices.filter(i => i.supply_id === backTarget.id);
+    if(backTarget && backTarget.kind === 'docs') return invoices.filter(i => i.direction === backTarget.dir);
+    if(backTarget && backTarget.kind === 'supplies') return invoices.filter(i => i.direction === 'out' && !i.supply_id);
+    return invoices;
+  }
+
   async function goToNextInvoice(){
-    const idx = invoices.findIndex(inv => inv.id === currentInvoice.id);
-    const next = nextWorkIndex(idx + 1);
-    const inv = invoices[next];
-    if(inv.status !== 'open' && inv.status !== 'in_progress'){
-      showToast('Незакрытых накладных больше нет');
-      return;
+    const next = sameListInvoices().find(i => isOpenDoc(i) && i.id !== currentInvoice.id);
+    if(!next){
+      showToast(backTarget && backTarget.kind === 'supply' ? 'Все заказы поставки собраны' : 'В этом списке больше нечего делать');
+      return goBackFromTask();
     }
-    await selectInvoice(inv.id);
+    await selectInvoice(next.id);
   }
 
   /* ==================== Работы без документа ====================
@@ -2445,26 +2440,213 @@
     }
   }
 
-  function openJob(id){
-    document.getElementById('invoicePopover').classList.remove('show');
-    document.getElementById('invoiceSwitch').classList.remove('open');
+  const ALL_SCREENS = ['homeScreen', 'suppliesScreen', 'supplyScreen', 'docsScreen',
+    'pickListScreen', 'moveScreen', 'kitScreen', 'invScreen'];
+
+  function hideAllScreens(){
+    ALL_SCREENS.forEach(id => document.getElementById(id).classList.remove('show'));
     document.getElementById('taskScreen').style.display = 'none';
     document.getElementById('doneScreen').classList.remove('show');
-    document.getElementById('pickListScreen').classList.remove('show');
-    document.getElementById('moveScreen').classList.remove('show');
-    document.getElementById('kitScreen').classList.remove('show');
-    document.getElementById('invScreen').classList.remove('show');
+  }
+
+  function openJob(id){
+    hideAllScreens();
     document.getElementById(id).classList.add('show');
   }
 
-  function closeJob(){
-    document.getElementById('pickListScreen').classList.remove('show');
-    document.getElementById('moveScreen').classList.remove('show');
-    document.getElementById('kitScreen').classList.remove('show');
-    document.getElementById('invScreen').classList.remove('show');
-    document.getElementById('taskScreen').style.display = '';
-    if(currentInvoice) renderCurrentItem();
+  // Перепаковка и пересчёт — работы с главного экрана, туда и возвращаемся.
+  function closeJob(){ showHome(); }
+
+  /* ==================== Главный экран и списки ====================
+     Сначала человек выбирает, чем занимается: собирать поставки, принимать,
+     разбирать возвраты, перекладывать, считать. Потом — что именно. Раньше
+     всё лежало одной кучей в выпадающем списке: работы вперемешку с сотней
+     заказов, без прокрутки и без того, куда заказ едет и от кого. */
+  let supplies = [];
+  // Куда вернуться из накладной: {kind:'supply', id} | {kind:'docs', dir} | {kind:'supplies'}.
+  let backTarget = null;
+  // Лист грузчика по конкретным заказам — поставке. null — по всем.
+  let pickListIds = null;
+  let pickListSupply = null;
+
+  const isOpenDoc = (inv) => inv.status === 'open' || inv.status === 'in_progress';
+  const fmtWhen = (iso) => iso ? new Date(iso).toLocaleString('ru-RU',
+    { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+  const fmtDay = (d) => d ? new Date(String(d).length === 10 ? d + 'T12:00:00' : d)
+    .toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }) : '';
+  const DOC_STATE = { open: 'не начат', in_progress: 'в работе', completed: 'готово', ready: 'собран', shipped: 'уехал' };
+
+  // Свежие заказы и поставки: пока человек ходил по складу, их могли собрать
+  // другие или добавить новые.
+  async function refreshWork(){
+    const got = await Promise.all([apiFetch('/api/invoices'), apiFetch('/api/supplies')]);
+    invoices = got[0];
+    supplies = got[1];
   }
+
+  async function showHome(){
+    openJob('homeScreen');
+    document.getElementById('homeSub').textContent = 'Загружаю…';
+    try{ await refreshWork(); }
+    catch(e){ document.getElementById('homeSub').textContent = 'Не удалось обновить: ' + e.message; }
+    let counting = null;
+    try{ counting = (await apiFetch('/api/inventory/tasks')).length; } catch(e){ counting = null; }
+
+    const collecting = supplies.filter(s => s.status === 'collecting');
+    const ordersLeft = invoices.filter(i => i.direction === 'out' && i.supply_id && isOpenDoc(i)).length;
+    const loose = invoices.filter(i => i.direction === 'out' && !i.supply_id && isOpenDoc(i)).length;
+    const receipts = invoices.filter(i => i.direction === 'in' && isOpenDoc(i)).length;
+    const returns = invoices.filter(i => i.direction === 'return' && isOpenDoc(i)).length;
+    document.getElementById('homeSub').textContent = workerName;
+
+    const tile = (onclick, name, sub, count) => '<div class="home-tile" onclick="' + onclick + '">'
+      + '<div><div class="home-tile-name">' + name + '</div><div class="home-tile-sub">' + sub + '</div></div>'
+      + '<div class="home-tile-count' + (count ? '' : ' zero') + '">' + (count == null ? '' : count || 'нет') + '</div></div>';
+    document.getElementById('homeBody').innerHTML =
+      tile('openSupplies()', 'Сборка поставок',
+        collecting.length
+          ? ordersLeft + ' ' + pluralRu(ordersLeft, 'заказ ждёт', 'заказа ждут', 'заказов ждут') + ' сборки'
+            + (loose ? ' · ещё ' + loose + ' ' + pluralRu(loose, 'отгрузка', 'отгрузки', 'отгрузок') + ' из 1С' : '')
+          : (loose ? loose + ' ' + pluralRu(loose, 'отгрузка', 'отгрузки', 'отгрузок') + ' из 1С' : 'поставок на сборку нет'),
+        collecting.length + loose)
+      + tile("openDocs('in')", 'Приёмка товара', 'приходы, которые привезли на склад', receipts)
+      + tile("openDocs('return')", 'Возвраты', 'разобрать вернувшийся товар по состоянию', returns)
+      + tile('openMove()', 'Перепаковка и перестановка', 'переложить товар или вернуть его в продажу', null)
+      + tile('openInventory()', 'Пересчёт ячеек', 'задания руководителя', counting);
+  }
+  window.showHome = showHome;
+
+  function supplyCardHtml(s){
+    const total = Number(s.orders) || 0;
+    const done = Number(s.picked) || 0;
+    const pct = total ? Math.round(done * 100 / total) : 0;
+    return '<div class="sup-card" onclick="openSupply(\'' + jsArg(s.id) + '\')">'
+      + '<div class="sup-card-top"><span class="sup-card-num">' + escapeHTML(s.number) + '</span>'
+      +   '<span class="sup-card-state ' + escapeHTML(s.status) + '">' + (s.status === 'ready' ? 'собрана' : 'собирается') + '</span></div>'
+      + '<div class="sup-card-company">' + escapeHTML(s.company_name || '') + '</div>'
+      + '<div class="sup-card-dest">→ ' + escapeHTML(s.destination || 'куда — не указано') + '</div>'
+      + '<div class="sup-card-meta">'
+      +   (s.ship_date ? 'отгрузка ' + escapeHTML(fmtDay(s.ship_date)) + ' · ' : '')
+      +   'пришла ' + escapeHTML(fmtWhen(s.created_at))
+      +   (s.created_by ? ' · составил ' + escapeHTML(s.created_by) : '') + '</div>'
+      + '<div class="sup-card-meta">собрано ' + done + ' из ' + total + ' '
+      +   pluralRu(total, 'заказа', 'заказов', 'заказов') + '</div>'
+      + '<div class="sup-card-bar"><div style="width:' + pct + '%"></div></div>'
+      + '</div>';
+  }
+
+  function orderRowHtml(inv, sub){
+    const open = isOpenDoc(inv);
+    return '<div class="order-row' + (open ? '' : ' done') + '" onclick="openOrder(\'' + jsArg(inv.id) + '\')">'
+      + '<div><div class="order-row-num">' + escapeHTML(inv.number) + '</div>'
+      +   (sub ? '<div class="order-row-sub">' + escapeHTML(sub) + '</div>' : '') + '</div>'
+      + '<div class="order-row-state' + (open ? ' open' : '') + '">' + escapeHTML(DOC_STATE[inv.status] || inv.status) + '</div>'
+      + '</div>';
+  }
+
+  // Поставки на сборку: те, что собираются, — сверху, по дате отгрузки.
+  async function openSupplies(){
+    openJob('suppliesScreen');
+    try{ await refreshWork(); } catch(e){ showToast('Не удалось обновить: ' + e.message); }
+    backTarget = { kind: 'supplies' };
+    const active = supplies.filter(s => s.status === 'collecting' || s.status === 'ready')
+      .sort((a, b) => (a.status === 'collecting' ? 0 : 1) - (b.status === 'collecting' ? 0 : 1)
+        || new Date(a.ship_date || a.created_at) - new Date(b.ship_date || b.created_at));
+    const loose = invoices.filter(i => i.direction === 'out' && !i.supply_id && isOpenDoc(i));
+    const collecting = active.filter(s => s.status === 'collecting').length;
+    const readyCount = active.length - collecting;
+    document.getElementById('suppliesSub').textContent = !active.length ? 'Поставок на сборку нет'
+      : collecting === 0 ? 'Все собраны · ' + readyCount + ' ' + pluralRu(readyCount, 'ждёт', 'ждут', 'ждут') + ' машину'
+      : collecting + ' ' + pluralRu(collecting, 'поставка собирается', 'поставки собираются', 'поставок собираются')
+        + (readyCount ? ' · ' + readyCount + ' ' + pluralRu(readyCount, 'собрана', 'собраны', 'собраны') + ', ждут машину' : '');
+    document.getElementById('suppliesBody').innerHTML =
+      (collecting > 1 ? '<button class="big-btn" onclick="openAllPickList()">Лист грузчика по всем поставкам</button>' : '')
+      + active.map(supplyCardHtml).join('')
+      + (loose.length
+        ? '<div class="list-group-title">Отгрузки из 1С без поставки · ' + loose.length + '</div>'
+          + loose.map(i => orderRowHtml(i, i.company_name)).join('')
+        : '')
+      + (active.length || loose.length ? '' : '<div class="job-empty">Когда менеджер составит поставку, она появится здесь.</div>');
+  }
+  window.openSupplies = openSupplies;
+
+  async function openSupply(id){
+    openJob('supplyScreen');
+    try{ await refreshWork(); } catch(e){ showToast('Не удалось обновить: ' + e.message); }
+    const s = supplies.find(x => x.id === id);
+    if(!s){ showToast('Поставки больше нет — возможно, её разобрали'); return openSupplies(); }
+    backTarget = { kind: 'supply', id };
+    document.getElementById('supplyTitle').textContent = s.number;
+    document.getElementById('supplySub').textContent = (s.company_name || '')
+      + (s.destination ? ' → ' + s.destination : '')
+      + (s.ship_date ? ' · отгрузка ' + fmtDay(s.ship_date) : '');
+    const orders = invoices.filter(i => i.supply_id === id)
+      .sort((a, b) => (isOpenDoc(a) ? 0 : 1) - (isOpenDoc(b) ? 0 : 1) || String(a.number).localeCompare(String(b.number)));
+    const open = orders.filter(isOpenDoc);
+    document.getElementById('supplyBody').innerHTML =
+      '<div class="sup-card-meta" style="margin-top:0;">пришла ' + escapeHTML(fmtWhen(s.created_at))
+      +   (s.created_by ? ' · составил ' + escapeHTML(s.created_by) : '')
+      +   ' · собрано ' + (orders.length - open.length) + ' из ' + orders.length + '</div>'
+      + (open.length
+        ? '<button class="big-btn" onclick="openSupplyPickList(\'' + jsArg(id) + '\')">Лист грузчика — вся поставка за один обход</button>'
+        : '<div class="job-empty">Все заказы поставки собраны.</div>')
+      + '<div class="list-group-title">Заказы · ' + orders.length + '</div>'
+      + orders.map(i => orderRowHtml(i, null)).join('');
+  }
+  window.openSupply = openSupply;
+
+  const DOC_TITLES = {
+    in: { title: 'Приёмка товара', empty: 'Приходов нет. Когда руководитель заведёт приход, он появится здесь.' },
+    return: { title: 'Возвраты', empty: 'Возвратов нет.' },
+  };
+
+  async function openDocs(dir){
+    openJob('docsScreen');
+    try{ await refreshWork(); } catch(e){ showToast('Не удалось обновить: ' + e.message); }
+    backTarget = { kind: 'docs', dir };
+    const all = invoices.filter(i => i.direction === dir);
+    const open = all.filter(isOpenDoc).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    const done = all.filter(i => !isOpenDoc(i)).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 20);
+    document.getElementById('docsTitle').textContent = DOC_TITLES[dir].title;
+    document.getElementById('docsSub').textContent = open.length ? 'ждут: ' + open.length : 'Всё обработано';
+    document.getElementById('docsBody').innerHTML = (open.length
+      ? open.map(i => orderRowHtml(i, (i.company_name || '') + ' · пришла ' + fmtWhen(i.created_at))).join('')
+      : '<div class="job-empty">' + DOC_TITLES[dir].empty + '</div>')
+      + (done.length ? '<div class="list-group-title">Недавно готовые</div>'
+        + done.map(i => orderRowHtml(i, i.company_name || '')).join('') : '');
+  }
+  window.openDocs = openDocs;
+
+  function openOrder(id){ selectInvoice(id); }
+  window.openOrder = openOrder;
+
+  function goBackFromTask(){
+    if(backTarget && backTarget.kind === 'supply') return openSupply(backTarget.id);
+    if(backTarget && backTarget.kind === 'docs') return openDocs(backTarget.dir);
+    if(backTarget && backTarget.kind === 'supplies') return openSupplies();
+    return showHome();
+  }
+  window.goBackFromTask = goBackFromTask;
+
+  function openSupplyPickList(id){
+    pickListSupply = id;
+    pickListIds = invoices.filter(i => i.supply_id === id && isOpenDoc(i)).map(i => i.id);
+    openPickList();
+  }
+  window.openSupplyPickList = openSupplyPickList;
+
+  function openAllPickList(){
+    pickListSupply = null;
+    pickListIds = null;
+    openPickList();
+  }
+  window.openAllPickList = openAllPickList;
+
+  function pickListBack(){
+    if(pickListSupply) return openSupply(pickListSupply);
+    return openSupplies();
+  }
+  window.pickListBack = pickListBack;
 
   let pickListAll = null;
   let pickFilter = '';
@@ -2581,10 +2763,14 @@
     const body = document.getElementById('pickListBody');
     sub.textContent = 'Считаю…';
     body.innerHTML = '';
+    const forSupply = pickListSupply ? supplies.find(s => s.id === pickListSupply) : null;
+    document.getElementById('pickListTitle').textContent = forSupply
+      ? 'Лист грузчика · ' + forSupply.number : 'Лист грузчика';
 
     let list;
     try{
-      list = await apiFetch('/api/shipping/pick-list');
+      list = await apiFetch('/api/shipping/pick-list'
+        + (pickListIds && pickListIds.length ? '?invoiceIds=' + pickListIds.join(',') : ''));
     } catch(e){
       sub.textContent = 'Не удалось собрать лист';
       body.innerHTML = '<div class="job-empty"></div>';
@@ -2830,6 +3016,8 @@
   function showDone(){
     document.getElementById('taskScreen').style.display = 'none';
     document.getElementById('doneScreen').classList.add('show');
+    document.getElementById('doneNextBtn').textContent = backTarget && backTarget.kind === 'supply'
+      ? 'Следующий заказ поставки' : 'Следующая накладная';
     document.getElementById('invoiceNum').textContent = currentInvoice.number;
     // Экран завершения говорит о том, что человек только что делал: собирать,
     // принимать и разбирать возврат — разные работы, и подписи не должны их
