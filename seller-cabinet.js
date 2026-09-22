@@ -49,6 +49,7 @@
     if(state.owner && state.companyId && path.startsWith('/api/sellers/')) path+=(path.includes('?')?'&':'?')+'companyId='+encodeURIComponent(state.companyId);
     const response = await fetch('https://api.argus-ai.online'+path,{method:options.method||'GET',headers:{'Content-Type':'application/json',...(state.token?{Authorization:'Bearer '+state.token}:{})},body:options.body?JSON.stringify(options.body):undefined,cache:'no-store'});
     const data=await response.json().catch(()=>null);
+    const renewed=response.headers.get('X-Argus-Token');if(renewed){state.token=renewed;localStorage.setItem('argus_token',renewed);}
     if(response.status===401 && !path.includes('/auth/')) {state.viewRun++;state.drawerRun++;state.token=null;localStorage.removeItem('argus_token');localStorage.removeItem('argus_role');$('drawer').close();$('settingsDialog').close();const accountMenu=$('accountMenu');if(accountMenu.matches(':popover-open'))accountMenu.hidePopover();$('app').hidden=true;$('loginScreen').hidden=false;$('loginError').textContent='Сессия завершилась. Войдите ещё раз.';}
     if(!response.ok) throw new Error(data?.error || 'Не удалось получить данные. Попробуйте ещё раз.');
     return data;

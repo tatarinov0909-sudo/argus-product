@@ -1,5 +1,5 @@
   const API_BASE = 'https://api.argus-ai.online';
-  const TOKEN = localStorage.getItem('argus_token');
+  let TOKEN = localStorage.getItem('argus_token');
   const ROLE = localStorage.getItem('argus_role');
   // Кабинет один на владельца и менеджера — по просьбе владельца: у него
   // должны быть те же удобства, а у менеджера урезанные. Урезание делаем
@@ -29,6 +29,10 @@
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN },
       body: options.body ? JSON.stringify(options.body) : undefined,
     });
+    // Сервер продлевает вход, пока человек работает: свежий токен приходит
+    // в заголовке — берём его, и выкидывать каждые 45 минут перестаёт.
+    const renewed = res.headers.get('X-Argus-Token');
+    if(renewed){ TOKEN = renewed; localStorage.setItem('argus_token', renewed); }
     if(res.status === 401){
       localStorage.removeItem('argus_token');
       localStorage.removeItem('argus_role');
@@ -5104,7 +5108,7 @@
           <div class="ord-name">${escapeHTML(p.companyName)}</div>
           <div class="ord-meta">${p.units.toLocaleString('ru-RU')} шт${
             p.marketplace ? ' · ' + escapeHTML(String(p.marketplace).toUpperCase()) : ''
-          }${p.oldest ? ' · с ' + fmtDay(p.oldest) : ''}${
+          }${p.oldest ? ' · самый ранний — ' + fmtDay(p.oldest) + ', ' + formatLastSeen(p.oldest) : ''}${
             p.incomplete > 0
               ? ` · <span class="ord-warn">${p.incomplete} не собрать</span>`
               : ''
@@ -5211,7 +5215,7 @@
       product: (a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ru')
         || String(a.number).localeCompare(String(b.number), 'ru'),
       number: (a, b) => String(a.number).localeCompare(String(b.number), 'ru'),
-      date: (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0),
+      date: (a, b) => new Date(b.orderedAt || b.createdAt || 0) - new Date(a.orderedAt || a.createdAt || 0),
     };
     return [...rows].sort(by[ordersSort] || by.product);
   }
@@ -5219,8 +5223,17 @@
   function matchesOrderSearch(o){
     const q = ordersSearch.trim().toLowerCase();
     if(!q) return true;
-    return [o.number, o.name, o.sku, o.article, o.barcode, o.rid]
+    return [o.number, o.name, o.sku, o.article, o.barcode, o.rid, (o.offices || []).join(' ')]
       .some(v => String(v || '').toLowerCase().includes(q));
+  }
+
+  // Когда заказ оформлен: время у площадки, а если его нет (заказ из 1С
+  // или ещё не дозаполнен обменом) — когда он пришёл в Аргус, с пометкой.
+  function orderWhen(o){
+    const at = o.orderedAt || o.createdAt;
+    if(!at) return '—';
+    return escapeHTML(new Date(at).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))
+      + '<div class="ord-sub">' + escapeHTML(formatLastSeen(at)) + (o.orderedAt ? '' : ' · в Аргусе') + '</div>';
   }
 
   function renderPartnerOrders(companyId){
@@ -5247,19 +5260,21 @@
         <td>${selectable
           ? `<input type="checkbox" ${ordersSelected.has(o.id) ? 'checked' : ''} onchange="toggleOrderPick('${companyId}', '${o.id}')" aria-label="Выбрать заказ">`
           : ''}</td>
-        <td class="ord-mono">${escapeHTML(o.number)}</td>
+        <td class="ord-mono ord-no">${escapeHTML(o.number)}${o.rid
+          ? `<div class="ord-sub" title="${escapeHTML(o.rid)}">${escapeHTML(String(o.rid).slice(0, 14))}…</div>` : ''}</td>
+        <td class="ord-when">${orderWhen(o)}</td>
         <td>${escapeHTML(o.name || '—')}<div class="ord-mono">${escapeHTML(o.sku || 'не сопоставлен')}</div></td>
         <td class="ord-mono">${escapeHTML(o.article || '—')}</td>
         <td class="ord-mono">${escapeHTML(o.barcode || '—')}</td>
-        <td class="ord-mono" title="${escapeHTML(o.rid || '')}">${
-          o.rid ? escapeHTML(String(o.rid).slice(0, 14)) + '…' : '—'}</td>
-        <td class="num">${o.qty === null ? '—' : o.qty}</td>
+        <td>${(o.offices || []).length ? escapeHTML(o.offices.join(', ')) : '<span class="ord-sub">—</span>'}</td>
+        <td class="num">${o.qty === null ? '—' : o.qty}${o.salePriceKopecks != null
+          ? `<div class="ord-sub">${(o.salePriceKopecks / 100).toLocaleString('ru-RU')} ₽</div>` : ''}</td>
       </tr>`;
     const head = (withToggle) => `<thead><tr>
         <th>${withToggle ? `<input type="checkbox" ${allOn ? 'checked' : ''} ${ready.length ? '' : 'disabled'}
           onchange="toggleAllOrders('${companyId}')" aria-label="Выбрать все готовые">` : ''}</th>
-        <th>Заказ</th><th>Товар</th><th>Артикул МП</th><th>Штрихкод</th>
-        <th>Отправление</th><th class="num">Кол-во</th>
+        <th>Заказ</th><th>Оформлен</th><th>Товар</th><th>Артикул МП</th><th>Штрихкод</th>
+        <th>Куда</th><th class="num">Кол-во</th>
       </tr></thead>`;
 
     box.innerHTML = `
