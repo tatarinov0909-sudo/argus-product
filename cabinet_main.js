@@ -174,9 +174,14 @@
     }
     // «?.»: у менеджера части пунктов меню нет вовсе (их убирает блок
     // инициализации), и без проверки кабинет падал при первом же открытии.
-    for(const v of ['chat', 'journal', 'warehouse', 'staff', '1c', 'mp', 'inv', 'orders']){
+    for(const v of ['chat', 'journal', 'warehouse', 'receipts', 'staff', '1c', 'mp', 'inv', 'orders']){
       document.getElementById('view-' + v)?.classList.toggle('active', view === v);
       document.getElementById('nav-' + v)?.classList.toggle('active', view === v);
+    }
+    // Приход: свежий список (грузчик мог принять), каталог выбранного продавца.
+    if(view === 'receipts'){
+      loadInvoicesList();
+      loadReceiptCatalog(document.getElementById('invoiceCompanySelect').value);
     }
     if(view==='journal'){
       journalUnread = 0;
@@ -633,11 +638,14 @@
 
   function renderInvoiceCompanySelect(){
     const select = document.getElementById('invoiceCompanySelect');
+    const keep = select.value;
     if(companies.length === 0){
-      select.innerHTML = '<option value="">Сначала добавьте компанию</option>';
+      select.innerHTML = '<option value="">Сначала добавьте продавца</option>';
       return;
     }
     select.innerHTML = companies.map(c => `<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('');
+    if(keep && companies.some(c => c.id === keep)) select.value = keep;
+    loadReceiptCatalog(select.value);
   }
 
   async function addCompany(){
@@ -675,85 +683,199 @@
     }
   }
 
-  /* ===================== Накладные ===================== */
+  /* ===================== Приход товара ===================== */
+
+  // Каталог продавца для выбора товара в строке. Товар выбирают, а не
+  // вписывают: артикул с опечаткой принимался бы как есть, ложился в ячейку
+  // и никогда не подбирался под заказ.
+  const receiptCatalog = {};   // companyId → [{sku, name}] | 'loading' | 'error'
+  const productLabel = (p) => p.name + ' · ' + p.sku;
+
+  async function loadReceiptCatalog(companyId){
+    const list = document.getElementById('receiptProducts');
+    if(!companyId || !list) return;
+    if(!receiptCatalog[companyId]){
+      receiptCatalog[companyId] = 'loading';
+      try{
+        const rows = await apiFetch('/api/products?companyId=' + encodeURIComponent(companyId));
+        receiptCatalog[companyId] = rows.map(p => ({ sku: p.sku, name: p.name }));
+      } catch(e){
+        receiptCatalog[companyId] = 'error';
+        showWhToast('Не удалось загрузить каталог продавца: ' + e.message);
+      }
+    }
+    // Ответ мог прийти, когда уже выбрали другого продавца.
+    if(document.getElementById('invoiceCompanySelect').value !== companyId) return;
+    const cat = receiptCatalog[companyId];
+    list.innerHTML = Array.isArray(cat)
+      ? cat.map(p => '<option value="' + escapeHTML(productLabel(p)) + '">').join('') : '';
+    document.querySelectorAll('#invoiceItemsInputs .rc-row').forEach(resolveReceiptRow);
+  }
+
+  function receiptCompanyChanged(){
+    loadReceiptCatalog(document.getElementById('invoiceCompanySelect').value);
+  }
+  window.receiptCompanyChanged = receiptCompanyChanged;
+
+  // Что выбрано в строке: подпись из списка, артикул или точное название.
+  function findReceiptProduct(text){
+    const cat = receiptCatalog[document.getElementById('invoiceCompanySelect').value];
+    if(!Array.isArray(cat)) return undefined;
+    const t = String(text || '').trim();
+    if(!t) return null;
+    const low = t.toLowerCase();
+    return cat.find(p => productLabel(p) === t)
+      || cat.find(p => p.sku.toLowerCase() === low)
+      || (cat.filter(p => p.name.toLowerCase() === low).length === 1
+        ? cat.find(p => p.name.toLowerCase() === low) : null);
+  }
+
+  function resolveReceiptRow(row){
+    const input = row.querySelector('.rc-product');
+    const note = row.querySelector('.rc-note');
+    const found = findReceiptProduct(input.value);
+    row.dataset.sku = found ? found.sku : '';
+    row.dataset.name = found ? found.name : '';
+    if(found){
+      note.className = 'rc-note';
+      note.textContent = 'артикул ' + found.sku;
+    } else if(found === null && input.value.trim()){
+      note.className = 'rc-note bad';
+      note.textContent = 'Нет в каталоге продавца — выберите из списка. Новый товар заводят в 1С, в Аргус он придёт сам.';
+    } else {
+      note.className = 'rc-note';
+      note.textContent = found === undefined && input.value.trim() ? 'каталог загружается…' : '';
+    }
+  }
+  window.resolveReceiptRow = resolveReceiptRow;
 
   function addInvoiceItemRow(){
     const wrap = document.getElementById('invoiceItemsInputs');
     const row = document.createElement('div');
-    row.className = 'invoice-item-row';
-    row.style.cssText = 'display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap;';
+    row.className = 'rc-row';
     row.innerHTML = `
-      <input type="text" class="inv-item-name" placeholder="Название товара" style="flex:2; min-width:140px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px 10px; color:var(--text); font-family:var(--sans); font-size:14px;">
-      <input type="text" class="inv-item-sku" placeholder="SKU" style="flex:1; min-width:90px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px 10px; color:var(--text); font-family:var(--mono); font-size:14px;">
-      <input type="number" class="inv-item-qty" placeholder="Кол-во" min="1" style="width:90px; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px 10px; color:var(--text); font-family:var(--mono); font-size:14px;">
-      <button type="button" onclick="this.parentElement.remove()" style="background:none; border:none; color:var(--muted); cursor:pointer; font-size:15px;">✕</button>
+      <input type="text" class="rc-product" list="receiptProducts" autocomplete="off"
+             placeholder="Начните вводить название или артикул" oninput="resolveReceiptRow(this.parentElement)">
+      <input type="text" class="rc-qty" inputmode="numeric" placeholder="Кол-во" aria-label="Количество">
+      <button type="button" class="rc-del" onclick="this.parentElement.remove()" aria-label="Убрать строку">✕</button>
+      <div class="rc-note"></div>
     `;
     wrap.appendChild(row);
   }
 
+  // Номер по умолчанию: ПР-ДДММ-N, следующий свободный за сегодня. Свой номер
+  // (из документов поставщика) можно вписать поверх.
+  function suggestReceiptNumber(){
+    const field = document.getElementById('invoiceNumberInput');
+    if(!field || field.value.trim()) return;
+    const d = new Date();
+    const prefix = 'ПР-' + String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0') + '-';
+    let n = 1;
+    const taken = new Set((lastInvoices || []).map(inv => inv.number));
+    while(taken.has(prefix + n)) n += 1;
+    field.value = prefix + n;
+  }
+
+  let receiptBusy = false;
+
   async function submitInvoice(){
+    if(receiptBusy) return;
     const companyId = document.getElementById('invoiceCompanySelect').value;
     const number = document.getElementById('invoiceNumberInput').value.trim();
-    const rows = Array.from(document.querySelectorAll('#invoiceItemsInputs .invoice-item-row'));
-    const items = rows.map(r => ({
-      name: r.querySelector('.inv-item-name').value.trim(),
-      sku: r.querySelector('.inv-item-sku').value.trim(),
-      declaredQty: Number(r.querySelector('.inv-item-qty').value),
-    })).filter(it => it.name && it.sku && it.declaredQty > 0);
-
-    if(!companyId){ showWhToast('Выберите компанию.'); return; }
-    if(!number){ showWhToast('Введите номер накладной.'); return; }
-    if(items.length === 0){ showWhToast('Добавьте хотя бы одну позицию.'); return; }
-    // Недозаполненная строка раньше молча выбрасывалась, и накладная
-    // создавалась без неё — с сообщением «создана», как будто всё в порядке.
-    const filled = rows.filter(r => [r.querySelector('.inv-item-name').value,
-      r.querySelector('.inv-item-sku').value, r.querySelector('.inv-item-qty').value]
-      .some(v => String(v).trim() !== ''));
-    if(filled.length > items.length){
-      const dropped = filled.length - items.length;
-      showWhToast(dropped + ' ' + pluralRu(dropped, 'строка заполнена', 'строки заполнены', 'строк заполнены')
-        + ' не полностью: нужны название, артикул и количество больше нуля.');
+    const rows = Array.from(document.querySelectorAll('#invoiceItemsInputs .rc-row'));
+    rows.forEach(resolveReceiptRow);
+    if(!companyId){ showWhToast('Выберите продавца.'); return; }
+    if(!number){ showWhToast('Впишите номер прихода.'); return; }
+    // Строка без выбранного товара или без количества — не молча выбросить,
+    // а сказать: иначе приход создавался бы без неё с сообщением «готово».
+    const filled = rows.filter(r => r.querySelector('.rc-product').value.trim() || r.querySelector('.rc-qty').value.trim());
+    const bad = filled.filter(r => {
+      const q = Number(String(r.querySelector('.rc-qty').value).replace(/\s/g, ''));
+      return !r.dataset.sku || !Number.isInteger(q) || q < 1;
+    });
+    if(filled.length === 0){ showWhToast('Добавьте хотя бы один товар.'); return; }
+    if(bad.length){
+      showWhToast(bad.length + ' ' + pluralRu(bad.length, 'строка', 'строки', 'строк')
+        + ': товар не выбран из каталога или количество не целое больше нуля.');
+      bad[0].querySelector(bad[0].dataset.sku ? '.rc-qty' : '.rc-product').focus();
       return;
     }
+    const items = filled.map(r => ({ name: r.dataset.name, sku: r.dataset.sku,
+      declaredQty: Number(String(r.querySelector('.rc-qty').value).replace(/\s/g, '')) }));
+    const units = items.reduce((s, it) => s + it.declaredQty, 0);
 
+    receiptBusy = true;
+    const btn = document.getElementById('receiptSubmitBtn');
+    btn.disabled = true;
     try{
       await apiFetch('/api/invoices', {method:'POST', body:{companyId, number, items}});
       document.getElementById('invoiceNumberInput').value = '';
       document.getElementById('invoiceItemsInputs').innerHTML = '';
       addInvoiceItemRow();
       await loadInvoicesList();
-      showWhToast('Накладная ' + number + ' создана.');
+      suggestReceiptNumber();
+      showWhToast('Приход ' + number + ' создан: ' + units + ' шт. Грузчик увидит его в «Приёмке».');
     } catch(e){
-      showWhToast('Не удалось создать накладную: ' + e.message);
+      showWhToast('Приход не создан: ' + e.message);
     }
+    receiptBusy = false;
+    btn.disabled = false;
   }
+  window.submitInvoice = submitInvoice;
+  window.addInvoiceItemRow = addInvoiceItemRow;
 
   let lastInvoices = [];
 
+  // Только приходы: заказы площадок и возвраты живут на своих экранах, а
+  // здесь их тысячи — список прихода в них тонул.
+  let receiptsShowAll = false;
+
   async function loadInvoicesList(){
-    let invoices = [];
-    try{
-      invoices = await apiFetch('/api/invoices');
-      lastInvoices = invoices;
-    } catch(e){
-      document.getElementById('invoicesList').innerHTML = '<div class="staff-empty">Не удалось загрузить накладные: ' + escapeHTML(e.message) + '</div>';
-      return;
-    }
     const wrap = document.getElementById('invoicesList');
-    if(invoices.length === 0){
-      wrap.innerHTML = '<div class="staff-empty">Накладных пока нет.</div>';
+    if(!wrap) return;
+    try{
+      lastInvoices = await apiFetch('/api/invoices?direction=in');
+    } catch(e){
+      wrap.innerHTML = '<div class="staff-empty">Не удалось загрузить приходы: ' + escapeHTML(e.message) + '</div>';
       return;
     }
-    const statusLabel = {open:'не начата', in_progress:'в процессе', completed:'завершена'};
-    wrap.innerHTML = invoices.map(inv => `
-      <div class="staff-row" data-invoice-id="${inv.id}" style="grid-template-columns:1fr 1.2fr 1fr auto;">
+    suggestReceiptNumber();
+    renderReceiptsList();
+  }
+
+  function renderReceiptsList(){
+    const wrap = document.getElementById('invoicesList');
+    const all = lastInvoices || [];
+    const waiting = all.filter(inv => inv.status !== 'completed').length;
+    document.getElementById('receiptsSummary').textContent = all.length
+      ? 'всего ' + all.length + ' · ждут приёмки ' + waiting : '';
+    if(all.length === 0){
+      wrap.innerHTML = '<div class="staff-empty">Приходов пока нет.</div>';
+      return;
+    }
+    const LIMIT = 30;
+    const shown = receiptsShowAll ? all : all.slice(0, LIMIT);
+    const statusLabel = {open:'не начат', in_progress:'принимается', completed:'принят'};
+    wrap.innerHTML = shown.map(inv => `
+      <div class="staff-row" data-invoice-id="${escapeHTML(inv.id)}" style="grid-template-columns:1fr 1.2fr 130px 130px auto;">
         <div class="staff-key">${escapeHTML(inv.number)}</div>
         <div class="staff-name">${escapeHTML(inv.company_name)}</div>
-        <div><span class="staff-status ${inv.status === 'completed' ? 'active' : ''}">${statusLabel[inv.status] || inv.status}</span></div>
-        <div class="staff-action" data-history-invoice="${inv.id}" data-history-label="${escapeHTML(inv.number)}">История</div>
+        <div class="rc-src">${inv.external_id ? 'из 1С' : 'вручную'} · ${escapeHTML(fmtDay(inv.created_at))}</div>
+        <div><span class="staff-status ${inv.status === 'completed' ? 'active' : ''}">${escapeHTML(statusLabel[inv.status] || inv.status)}</span></div>
+        <div class="staff-action" data-history-invoice="${escapeHTML(inv.id)}" data-history-label="${escapeHTML(inv.number)}">История</div>
       </div>
-    `).join('');
+    `).join('')
+      + (all.length > LIMIT
+        ? '<div style="margin-top:10px;"><span class="mp-act" onclick="toggleReceiptsAll()">'
+          + (receiptsShowAll ? 'Показать последние ' + LIMIT : 'Показать все ' + all.length) + '</span></div>'
+        : '');
   }
+
+  function toggleReceiptsAll(){
+    receiptsShowAll = !receiptsShowAll;
+    renderReceiptsList();
+  }
+  window.toggleReceiptsAll = toggleReceiptsAll;
 
   /* ===================== Подключение 1С ===================== */
 
@@ -4753,11 +4875,11 @@
         'Продавец': inv.company_name,
         'Направление': dirLabel[inv.direction] || inv.direction || '',
         'Статус': statusLabel[inv.status] || inv.status,
-        'Источник': inv.source === 'wb' ? 'Wildberries' : '1С',
+        'Источник': inv.external_id ? (inv.source === 'wb' ? 'Wildberries' : '1С') : 'вручную',
         'Создана': inv.created_at ? new Date(inv.created_at).toLocaleString('ru-RU') : '',
       };
     });
-    saveXlsx('Накладные', 'Накладные', rows, [18, 24, 13, 13, 13, 18]);
+    saveXlsx('Приходы', 'Приходы', rows, [18, 24, 13, 13, 13, 18]);
   }
 
 
