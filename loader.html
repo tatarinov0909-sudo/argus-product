@@ -2492,7 +2492,8 @@
     let counting = null;
     try{ counting = (await apiFetch('/api/inventory/tasks')).length; } catch(e){ counting = null; }
 
-    const collecting = supplies.filter(s => s.status === 'collecting');
+    // Поставка без заказов (их принял WB мимо Аргуса) — собирать нечего.
+    const collecting = supplies.filter(s => s.status === 'collecting' && Number(s.orders) > 0);
     const ordersLeft = invoices.filter(i => i.direction === 'out' && i.supply_id && isOpenDoc(i)).length;
     const loose = invoices.filter(i => i.direction === 'out' && !i.supply_id && isOpenDoc(i)).length;
     const receipts = invoices.filter(i => i.direction === 'in' && isOpenDoc(i)).length;
@@ -2549,7 +2550,7 @@
     openJob('suppliesScreen');
     try{ await refreshWork(); } catch(e){ showToast('Не удалось обновить: ' + e.message); }
     backTarget = { kind: 'supplies' };
-    const active = supplies.filter(s => s.status === 'collecting' || s.status === 'ready')
+    const active = supplies.filter(s => (s.status === 'collecting' || s.status === 'ready') && Number(s.orders) > 0)
       .sort((a, b) => (a.status === 'collecting' ? 0 : 1) - (b.status === 'collecting' ? 0 : 1)
         || new Date(a.ship_date || a.created_at) - new Date(b.ship_date || b.created_at));
     const loose = invoices.filter(i => i.direction === 'out' && !i.supply_id && isOpenDoc(i));
