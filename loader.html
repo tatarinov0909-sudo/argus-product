@@ -568,7 +568,13 @@
   .postpone-btn:active{opacity:0.85;}
 
   /* ---------- Финальный экран ---------- */
-  .done-screen{display:none; flex:1; flex-direction:column; align-items:center; justify-content:center; padding:32px; text-align:center; background:var(--bg);}
+  .done-screen{display:none; flex:1; min-height:0; overflow-y:auto; flex-direction:column; align-items:center;
+    justify-content:center; justify-content:safe center; padding:32px; text-align:center; background:var(--bg);}
+  /* Наверху итога всегда есть дорога назад. Раньше здесь было одно «Выйти», и
+     человек выходил из аккаунта, чтобы просто вернуться к списку. */
+  .done-top{width:100%; display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; flex-shrink:0;}
+  .done-back{font-size:13px; font-weight:600; color:var(--accent); cursor:pointer;}
+  .done-back:active{opacity:0.7;}
   .done-screen.show{display:flex;}
   .done-icon{
     width:64px; height:64px; border-radius:50%; background:var(--green-soft); display:flex; align-items:center;
@@ -1061,7 +1067,10 @@
       </div>
     </div>
     <div class="done-screen" id="doneScreen">
-      <div class="task-logout" style="position:static; margin-bottom:16px;" onclick="logout()">Выйти</div>
+      <div class="done-top">
+        <div class="done-back" onclick="goBackFromTask()">← К списку</div>
+        <div class="task-logout" style="position:static;" onclick="logout()">Выйти</div>
+      </div>
       <div class="done-icon">
         <svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7" stroke="#7FB77E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
