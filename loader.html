@@ -365,6 +365,9 @@
   .pick-line-need span{font-size:12px; color:var(--muted); letter-spacing:0.6px; text-transform:uppercase;}
   .pick-line-codes{display:flex; gap:28px; flex-wrap:wrap; margin-top:18px;}
   .pick-code{font-family:var(--mono); font-size:19px; font-weight:600; letter-spacing:-0.2px; color:var(--text);}
+  /* Хвост штрихкода, который различает товар, — крупно и ярко. */
+  .pick-code .bc-head{color:var(--muted); font-weight:400; font-size:15px;}
+  .pick-code .bc-tail{color:var(--accent-2); font-size:23px; font-weight:700;}
   .pick-code i{display:block; font:400 11px/1.6 var(--sans); color:var(--muted); letter-spacing:0.8px;
     text-transform:uppercase; font-style:normal; margin-bottom:2px;}
   .pick-line-sku{font-family:var(--mono); font-size:13px; color:var(--muted); margin-top:4px;}
@@ -2707,9 +2710,13 @@
       .filter(function(o){ return !pickFilter || o.company === pickFilter; })
       .map(function(o){ return o.id; })
       .filter(Boolean);
-    const query = ids.length && (pickListIds || ids.length < orders.length)
-      ? '?invoiceIds=' + encodeURIComponent(ids.join(','))
-      : '';
+    // Вся поставка — по её номеру: двести номеров заказов в адресе сервер
+    // не принимает. Отбор по клиенту или часть заказов — перечнем.
+    const query = pickListSupply && !pickFilter
+      ? '?supplyId=' + encodeURIComponent(pickListSupply)
+      : ids.length && (pickListIds || ids.length < orders.length)
+        ? '?invoiceIds=' + encodeURIComponent(ids.join(','))
+        : '';
     window.open('pick_print.html' + query, '_blank');
   }
   window.printPickList = printPickList;
@@ -2811,10 +2818,31 @@
 
   // Сами строки листа. Вынесено отдельно, потому что порядок и отбор
   // меняются без похода на сервер.
+  // Сколько последних знаков штрихкода различают товар на этом листе — их
+  // печатаем крупно (как в листах поставки из кабинета). 4, если хватает;
+  // иначе 5–6; не различают и шесть — не выделяем вовсе: крупная цифра,
+  // одинаковая у двух товаров, уводит не к тому.
+  function tailLength(codes){
+    const uniq = [...new Set(codes.map(c => String(c || '')).filter(Boolean))];
+    for(const len of [4, 5, 6]){
+      const seen = new Set();
+      if(uniq.every(c => { const t = c.slice(-len); if(seen.has(t)) return false; seen.add(t); return true; })) return len;
+    }
+    return 0;
+  }
+
+  function barcodeHtml(bc, tail){
+    const s = String(bc || '');
+    if(!s) return '—';
+    if(!tail || s.length <= tail) return escapeHTML(s);
+    return '<span class="bc-head">' + escapeHTML(s.slice(0, -tail)) + '</span><span class="bc-tail">' + escapeHTML(s.slice(-tail)) + '</span>';
+  }
+
   function renderPickBody(){
     const body = document.getElementById('pickListBody');
     const list = pickListAll;
     if(!body || !list) return;
+    const tail = tailLength(list.lines.map(l => l.barcode));
     // Итог не повторяем плашкой: он уже стоит в подзаголовке экрана.
     body.innerHTML = sortedPickLines(list).map(function(entry){
       const l = entry.line;
@@ -2863,7 +2891,7 @@
         + '</div>'
         + '<div class="pick-line-codes">'
         +   '<span class="pick-code"><i>артикул</i>' + escapeHTML(l.article || l.sku) + '</span>'
-        +   '<span class="pick-code"><i>штрихкод</i>' + escapeHTML(l.barcode || '—') + '</span>'
+        +   '<span class="pick-code"><i>штрихкод</i>' + barcodeHtml(l.barcode, tail) + '</span>'
         + '</div>'
         + '<div class="pick-cells">' + cells + '</div>'
         + short

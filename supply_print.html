@@ -178,7 +178,9 @@
   /* Артикул — свой столбец, как штрихкод и количество. Внутри строки он
      тянул на себя всю ширину; столбцом он занимает ровно то, что нужно
      цифрам, и его видно сверху вниз по всему листу. */
-  .goods-art{font-family:var(--mono); font-size:11.5px; font-weight:700; line-height:1.15; text-align:center;}
+  /* Одной строкой: 13-значный артикул переносился посередине
+     («8809576261 / 714») и читался как два числа (владелец 22.09). */
+  .goods-art{font-family:var(--mono); font-size:11px; font-weight:700; line-height:1.15; text-align:center; white-space:nowrap;}
   /* Наш код номенклатуры — на той же строке, мелким. Отдельной строки он
      не стоит: три строки на позицию съедают ровно тот лист, который
      освободил убранный QR. */
@@ -780,7 +782,7 @@
             + ' в ячейках меньше, чем нужно, — они отмечены в списке и собраны в нижнюю группу.</div>'
           : '')
       + '<table>'
-      + cols([4, 4, 9].concat(withPhoto ? [8] : []).concat([13, 0, 11, 6, 8]))
+      + cols([4, 4, 9].concat(withPhoto ? [8] : []).concat([15, 0, 11, 6, 8]))
       + '<thead><tr>'
       +   '<th></th><th></th><th class="mid">Ячейка</th>' + (withPhoto ? '<th></th>' : '')
       +   '<th class="mid">Артикул</th><th>Товар</th>'
@@ -857,7 +859,7 @@
       +   '<div class="fact"><b>' + esc((s.marketplace || '—').toUpperCase()) + '</b><span>площадка</span></div>'
       + '</div>'
       + '<table>'
-      + cols([4, 4].concat(withPhoto ? [7] : []).concat([15, 12, 0, 10, 6])
+      + cols([4, 4].concat(withPhoto ? [7] : []).concat([15, 15, 0, 10, 6])
               .concat(withStick ? [8] : []).concat([7]))
       + '<thead><tr>'
       +   '<th></th><th></th>' + (withPhoto ? '<th></th>' : '')

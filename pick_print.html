@@ -43,6 +43,12 @@
   .orders{font-size:10px;color:#555;margin-top:4px;line-height:1.5;}
   .code{font:700 17px/1.2 ui-monospace,monospace;letter-spacing:-.3px;word-break:break-all;}
   .code small{display:block;font:400 10px/1.4 'Golos Text', system-ui, sans-serif;color:#666;letter-spacing:0;}
+  /* Штрихкод в два яруса: начало мелко, различающий хвост крупно — как в
+     листах поставки. По хвосту товар находят на полке глазами. */
+  .code.bc{font-weight:400;font-size:12px;color:#555;white-space:nowrap;word-break:normal;}
+  .code.bc b{display:block;font:700 22px/1.1 ui-monospace,monospace;color:#111;}
+  /* Артикул не переносим посередине: «8809576261 / 714» читался как два числа. */
+  .code.art{white-space:nowrap;word-break:normal;font-size:15px;}
   .qty{font:700 22px/1 ui-monospace,monospace;text-align:right;white-space:nowrap;}
   /* Фото товара, если площадка его отдала: узнать товар на полке по картинке
      быстрее, чем по названию. Нет фото — колонки нет. */
@@ -111,7 +117,9 @@
   async function load(){
     if(!TOKEN){ fail('Нет входа. Откройте кабинет и войдите заново.'); return; }
     const ids = params.get('invoiceIds');
-    const url = API_BASE + '/api/shipping/pick-list' + (ids ? '?invoiceIds=' + encodeURIComponent(ids) : '');
+    const supplyId = params.get('supplyId');
+    const url = API_BASE + '/api/shipping/pick-list'
+      + (supplyId ? '?supplyId=' + encodeURIComponent(supplyId) : ids ? '?invoiceIds=' + encodeURIComponent(ids) : '');
     let data;
     try{
       const res = await fetch(url, { headers: { Authorization: 'Bearer ' + TOKEN } });
@@ -119,6 +127,19 @@
       if(!res.ok) throw new Error(data && data.error ? data.error : 'Не удалось получить лист');
     } catch(e){ fail(e.message); return; }
     render(data);
+  }
+
+  // Сколько последних знаков штрихкода различают товар на этом листе — их
+  // печатаем крупно (как в листах поставки из кабинета). 4, если хватает;
+  // иначе 5–6; не различают и шесть — не выделяем вовсе: крупная цифра,
+  // одинаковая у двух товаров, уводит не к тому.
+  function tailLength(codes){
+    const uniq = [...new Set(codes.map(c => String(c || '')).filter(Boolean))];
+    for(const len of [4, 5, 6]){
+      const seen = new Set();
+      if(uniq.every(c => { const t = c.slice(-len); if(seen.has(t)) return false; seen.add(t); return true; })) return len;
+    }
+    return 0;
   }
 
   function render(data){
@@ -130,6 +151,12 @@
     const companies = [...new Set(data.orders.map((o) => o.company))];
     const mps = [...new Set(data.orders.map((o) => o.marketplace || '1c'))];
     const withPhoto = lines.some((l) => l.photo);
+    const tail = tailLength(lines.map((l) => l.barcode));
+    const bcCell = (bc) => {
+      const s = String(bc || '');
+      if(!s) return '—';
+      return tail && s.length > tail ? esc(s.slice(0, -tail)) + '<b>' + esc(s.slice(-tail)) + '</b>' : '<b>' + esc(s) + '</b>';
+    };
     // Поставки этого листа — по одной строке: номер, адрес, отгрузка, приход.
     const sups = [];
     data.orders.forEach((o) => {
@@ -176,8 +203,8 @@
                   + '</div>'
                 : '<div class="short">не хватает ' + l.shortfall + '</div>') : '')
         + '</td>'
-        + '<td class="code">' + esc(l.article || l.sku) + '<small>артикул</small></td>'
-        + '<td class="code">' + esc(l.barcode || '—') + '<small>штрихкод</small></td>'
+        + '<td class="code art">' + esc(l.article || l.sku) + '<small>артикул</small></td>'
+        + '<td class="code bc">' + bcCell(l.barcode) + '<small>штрихкод</small></td>'
         + '<td class="qty">' + l.needQty + '</td>'
         + '<td class="mark"><div class="box"></div></td>'
         + '</tr>';
