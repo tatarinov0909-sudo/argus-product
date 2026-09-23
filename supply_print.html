@@ -6,6 +6,7 @@
 <title>Документы поставки — Аргус</title>
 <link rel="stylesheet" href="fonts.css?v=f77584bf">
 <link rel="stylesheet" href="seller-fonts.css?v=d1da12bc">
+<script src="qrcode.min.js?v=e259e455"></script>
 <style>
   /* Документ, а не кабинет.
 
@@ -243,6 +244,10 @@
   /* Клетка для галочки. Лист комплектации — рабочий документ: по нему идут
      и отмечают карандашом, что взято. */
   .tick{width:15px; height:15px; border:1.5px solid var(--ink); border-radius:2px;}
+  /* QR посылки на упаковочном листе: внутри номер заказа. Наводят телефон —
+     и понятно, какая это посылка, без сверки длинных цифр глазами. */
+  td.qr{padding:3px 4px;}
+  .qr svg{display:block; width:14mm; height:14mm; margin:0 auto;}
 
   .short{color:var(--warn); font-weight:600;}
   .short-note{font-size:10.5px; color:var(--warn);}
@@ -801,6 +806,16 @@
   // Построчно, по заказам: здесь одинаковые артикулы НЕ складываются. У
   // каждой посылки свой номер отправления и свой стикер, и сложить две
   // одинаковые позиции значит отправить одну коробку вместо двух.
+  // QR строкой SVG: печатается сразу, без картинок и сети. Нет библиотеки —
+  // пустая клетка, а не упавший лист.
+  function qrSvg(text){
+    if(typeof qrcode !== 'function' || !text) return '';
+    const qr = qrcode(0, 'M');
+    qr.addData(String(text));
+    qr.make();
+    return qr.createSvgTag({ cellSize: 2, margin: 0 });
+  }
+
   function packingSheet(s, t, rows){
     if(!rows || rows.length === 0) return '';
     const tail = tailLength(rows);
@@ -816,6 +831,7 @@
       return '<tr>'
         + '<td class="cellno">' + (i + 1) + '</td>'
         + '<td class="mid"><div class="tick"></div></td>'
+        + '<td class="mid qr">' + qrSvg(r.orderNumber) + '</td>'
         + (withPhoto
               ? '<td class="mid">'
                 + (r.photo
@@ -859,10 +875,10 @@
       +   '<div class="fact"><b>' + esc((s.marketplace || '—').toUpperCase()) + '</b><span>площадка</span></div>'
       + '</div>'
       + '<table>'
-      + cols([4, 4].concat(withPhoto ? [7] : []).concat([15, 15, 0, 10, 6])
+      + cols([4, 4, 10].concat(withPhoto ? [7] : []).concat([15, 15, 0, 10, 6])
               .concat(withStick ? [8] : []).concat([7]))
       + '<thead><tr>'
-      +   '<th></th><th></th>' + (withPhoto ? '<th></th>' : '')
+      +   '<th></th><th></th><th class="mid">QR</th>' + (withPhoto ? '<th></th>' : '')
       +   '<th class="mid">Заказ / отправление</th>'
       +   '<th class="mid">Артикул</th><th>Товар</th>'
       +   '<th class="bc">Штрихкод</th><th class="num">Кол-во</th>'
