@@ -6,7 +6,6 @@
 <title>Документы поставки — Аргус</title>
 <link rel="stylesheet" href="fonts.css?v=f77584bf">
 <link rel="stylesheet" href="seller-fonts.css?v=d1da12bc">
-<script src="qrcode.min.js?v=e259e455"></script>
 <style>
   /* Документ, а не кабинет.
 
@@ -213,8 +212,8 @@
   /* Номер стикера: по нему упаковщик берёт нужную этикетку из пачки.
      Крупно ровно то, что различает, — как и у штрихкода. */
   .stick{font-family:var(--mono); text-align:center; line-height:1.15; white-space:nowrap;}
-  .stick b{display:block; font-size:15px; font-weight:700;}
-  .stick span{display:block; font-size:8.5px; color:var(--ink-soft);}
+  .stick b{display:block; font-size:19px; font-weight:700; letter-spacing:0.5px;}
+  .stick span{display:block; font-size:9px; color:var(--ink-soft);}
 
   /* Клетка под факт. На бумаге всегда нужно место записать, сколько взяли
      на самом деле: «взял 3 из 4» — это то, ради чего лист и возвращается
@@ -244,10 +243,6 @@
   /* Клетка для галочки. Лист комплектации — рабочий документ: по нему идут
      и отмечают карандашом, что взято. */
   .tick{width:15px; height:15px; border:1.5px solid var(--ink); border-radius:2px;}
-  /* QR посылки на упаковочном листе: внутри номер заказа. Наводят телефон —
-     и понятно, какая это посылка, без сверки длинных цифр глазами. */
-  td.qr{padding:3px 4px;}
-  .qr svg{display:block; width:14mm; height:14mm; margin:0 auto;}
 
   .short{color:var(--warn); font-weight:600;}
   .short-note{font-size:10.5px; color:var(--warn);}
@@ -806,21 +801,14 @@
   // Построчно, по заказам: здесь одинаковые артикулы НЕ складываются. У
   // каждой посылки свой номер отправления и свой стикер, и сложить две
   // одинаковые позиции значит отправить одну коробку вместо двух.
-  // QR строкой SVG: печатается сразу, без картинок и сети. Нет библиотеки —
-  // пустая клетка, а не упавший лист.
-  function qrSvg(text){
-    if(typeof qrcode !== 'function' || !text) return '';
-    const qr = qrcode(0, 'M');
-    qr.addData(String(text));
-    qr.make();
-    return qr.createSvgTag({ cellSize: 2, margin: 0 });
-  }
-
   function packingSheet(s, t, rows){
     if(!rows || rows.length === 0) return '';
     const tail = tailLength(rows);
     const withPhoto = MODE === 'photo' && rows.some((r) => r.photo);
-    const withStick = rows.some((r) => r.stickerTail);
+    // Колонка стикера на упаковочном листе есть всегда: по ней сверяют
+    // посылку с этикеткой WB. Пока поставка не передана на WB, этикеток нет —
+    // в клетке прочерк, а не пропавшая колонка.
+    const withStick = true;
     // Два яруса и здесь, там же где у листа комплектации: заказ над номером
     // отправления, артикул над нашим кодом, незначащая часть штрихкода над
     // различающим хвостом. Заказ и отправление были двумя колонками из
@@ -831,7 +819,6 @@
       return '<tr>'
         + '<td class="cellno">' + (i + 1) + '</td>'
         + '<td class="mid"><div class="tick"></div></td>'
-        + '<td class="mid qr">' + qrSvg(r.orderNumber) + '</td>'
         + (withPhoto
               ? '<td class="mid">'
                 + (r.photo
@@ -860,7 +847,9 @@
         + '<td class="num"><span class="qty">' + nf(r.qty) + '</span></td>'
         + (withStick
               ? '<td class="stick">'
-                + (r.stickerTail ? '<b>' + esc(r.stickerTail) + '</b>' : '<span>нет</span>')
+                + (r.stickerTail
+                    ? '<span>' + esc(r.stickerHead || '') + '</span><b>' + esc(r.stickerTail) + '</b>'
+                    : '<span>—</span>')
                 + '</td>'
               : '')
         + '<td class="fact-box"></td>'
@@ -875,10 +864,10 @@
       +   '<div class="fact"><b>' + esc((s.marketplace || '—').toUpperCase()) + '</b><span>площадка</span></div>'
       + '</div>'
       + '<table>'
-      + cols([4, 4, 10].concat(withPhoto ? [7] : []).concat([15, 15, 0, 10, 6])
-              .concat(withStick ? [8] : []).concat([7]))
+      + cols([4, 4].concat(withPhoto ? [7] : []).concat([15, 15, 0, 10, 6])
+              .concat(withStick ? [11] : []).concat([7]))
       + '<thead><tr>'
-      +   '<th></th><th></th><th class="mid">QR</th>' + (withPhoto ? '<th></th>' : '')
+      +   '<th></th><th></th>' + (withPhoto ? '<th></th>' : '')
       +   '<th class="mid">Заказ / отправление</th>'
       +   '<th class="mid">Артикул</th><th>Товар</th>'
       +   '<th class="bc">Штрихкод</th><th class="num">Кол-во</th>'
