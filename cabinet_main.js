@@ -3092,14 +3092,19 @@
       // В поставке у каждого заказа свой товар, и по документу такая сборка
       // не собирается: сорок заказов — сорок групп по одной строке. Владельцу
       // нужна одна запись «собирается поставка» с полосой готовности.
+      // Работа одного человека над одним документом — одна строка: «Иван
+      // собирает поставку ПС-…», «Иван принимает УТОХ…». Два грузчика на
+      // одной поставке — две строки: видно, кто сколько сделал.
+      const who = e.actor_type === 'worker' ? (e.actor_id || '') : '';
       const key = groupable
-        ? (e.invoice_supply_id ? day + '|s|' + e.invoice_supply_id : day + '|' + e.invoice_id)
+        ? (e.invoice_supply_id ? day + '|s|' + e.invoice_supply_id : day + '|' + e.invoice_id) + '|' + who
         : null;
       if(!key){ out.push({ kind: 'entry', day: day, entry: e }); return; }
       if(!buckets.has(key)){
         const node = { kind: 'group', day: day, id: key.replace(/[^a-zA-Z0-9]/g, ''),
           invoiceNumber: e.invoice_number, supplyNumber: e.invoice_supply_number || null,
           supplyDone: e.supply_items_done, supplyTotal: e.supply_items_total,
+          direction: e.invoice_direction, worker: who ? (e.actor_name || 'Грузчик') : null,
           agent: e.agent, entries: [] };
         buckets.set(key, node);
         out.push(node);
@@ -3108,9 +3113,10 @@
     });
     // Группа из одной-двух записей ничего не экономит, только прячет.
     return out.map(function(node){
-      // Сборку поставки сворачиваем всегда, даже когда собран первый товар:
-      // это одна работа, и она только началась.
-      if(node.kind === 'group' && !node.supplyNumber && node.entries.length < GROUP_MIN){
+      // Работу грузчика и сборку поставки сворачиваем всегда, даже когда
+      // сделан первый товар: это одна работа, и начальнику склада не нужна
+      // строка на каждую штуку.
+      if(node.kind === 'group' && !node.supplyNumber && !node.worker && node.entries.length < GROUP_MIN){
         return node.entries.map(function(e){
           return { kind: 'entry', day: node.day, entry: e };
         });
@@ -3128,13 +3134,24 @@
     const total = Number(node.supplyTotal || 0);
     const done = Math.min(Number(node.supplyDone || 0), total);
     const finished = total > 0 && done >= total;
+    const who = escapeHTML(node.worker || node.agent || 'Кладовщик');
     const title = node.supplyNumber
-      ? escapeHTML(node.agent || 'Кладовщик') + (finished ? ' собрал поставку ' : ' собирает поставку ')
-        + escapeHTML(node.supplyNumber)
-      : escapeHTML(node.agent || 'Кладовщик') + ' · ' + escapeHTML(node.invoiceNumber || '');
+      ? who + (finished ? ' собрал поставку ' : ' собирает поставку ') + escapeHTML(node.supplyNumber)
+      : node.worker && node.direction === 'in'
+        ? who + ' принимает ' + escapeHTML(node.invoiceNumber || '')
+        : node.worker && node.direction === 'return'
+          ? who + ' разбирает возврат ' + escapeHTML(node.invoiceNumber || '')
+          : who + ' · ' + escapeHTML(node.invoiceNumber || '');
+    // Сколько длилась работа — от первой записи до последней.
+    const first = new Date(node.entries[node.entries.length - 1].created_at);
+    const last = new Date(node.entries[0].created_at);
+    const minutes = Math.round((last - first) / 60000);
+    const took = node.entries.length > 1 ? ' · ' + (minutes < 1 ? 'меньше минуты' : minutes + ' мин') : '';
     const count = node.supplyNumber && total > 0
       ? 'собрано ' + done + ' из ' + total
-      : node.entries.length + ' ' + pluralRu(node.entries.length, 'запись', 'записи', 'записей');
+      : node.worker
+        ? node.entries.length + ' ' + pluralRu(node.entries.length, 'позиция', 'позиции', 'позиций')
+        : node.entries.length + ' ' + pluralRu(node.entries.length, 'запись', 'записи', 'записей');
     // Полоса — чтобы ход сборки читался с одного взгляда, без арифметики.
     const bar = node.supplyNumber && total > 0
       ? '<span class="j-group-bar"><i style="width:' + Math.round(done / total * 100) + '%"></i></span>'
@@ -3145,7 +3162,7 @@
       +     '<path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
       +   '<span class="j-group-title">' + title + '</span>'
       +   '<span class="j-group-count">' + count + '</span>'
-      +   '<span class="j-group-time">' + escapeHTML(span) + '</span>'
+      +   '<span class="j-group-time">' + escapeHTML(span + took) + '</span>'
       +   bar
       + '</div>'
       + '<div class="j-group-body">'
