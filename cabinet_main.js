@@ -5299,7 +5299,8 @@
         <td class="ord-mono ord-no">${escapeHTML(o.number)}${o.rid
           ? `<div class="ord-sub" title="${escapeHTML(o.rid)}">${escapeHTML(String(o.rid).slice(0, 14))}…</div>` : ''}</td>
         <td class="ord-when">${orderWhen(o)}</td>
-        <td>${escapeHTML(o.name || '—')}<div class="ord-mono">${escapeHTML(o.sku || 'не сопоставлен')}</div></td>
+        <td>${escapeHTML(o.name || '—')}<div class="ord-mono">${escapeHTML(o.sku || 'не сопоставлен')}</div>${o.ready && o.stockShort
+          ? '<div class="ord-short" title="По учёту Аргуса этого товара на полках не хватит — с ним поставку полностью не соберут">на полке не хватает</div>' : ''}</td>
         <td class="ord-mono">${escapeHTML(o.article || '—')}</td>
         <td class="ord-mono">${escapeHTML(o.barcode || '—')}</td>
         <td>${(o.offices || []).length ? escapeHTML(o.offices.join(', ')) : '<span class="ord-sub">—</span>'}</td>
@@ -5340,6 +5341,13 @@
         </button>
         ${isWb && ordersPoints[companyId] === 'error' ? `<span class="ord-meta ord-warn">Список пунктов WB не загрузился —
           поставку можно составить, но передать её в доставку на WB без пункта не выйдет</span>` : ''}
+        ${(() => {
+          // Сколько из выбранного, по учёту, собрать не из чего — видно до
+          // того, как поставка ушла на склад, а не у пустой ячейки.
+          const short = new Set(ordersRows.filter(o => o.stockShort && ordersSelected.has(o.id)).map(o => o.id)).size;
+          return short ? `<span class="ord-meta ord-warn">${short} ${pluralRu(short, 'заказ', 'заказа', 'заказов')}
+            из выбранных — товара на полках не хватит</span>` : '';
+        })()}
         ${stuck > 0 ? `<span class="ord-meta ord-warn">${stuck} ${
           pluralRu(stuck, 'заказ', 'заказа', 'заказов')} не сопоставить с номенклатурой — свяжите артикул на экране «Площадки», и они починятся</span>` : ''}
         <span class="ord-tools">
@@ -5527,12 +5535,16 @@
         : p && p.cells && p.cells.length
           ? p.cells.map(c => escapeHTML(c.label) + (c.take ? ' — ' + c.take : '')).join('<br>')
           : '<span class="warn">не в ячейках Аргуса</span>';
+      // По учёту на полках меньше, чем нужно поставке: этим заказам
+      // собираться не из чего. Решают до сборки — убрать их из поставки.
+      const short = taken < r.qty && p && p.shortfall > 0
+        ? '<div class="warn">не хватает ' + p.shortfall + ' шт</div>' : '';
       return '<tr>'
         + '<td>' + escapeHTML(r.name || '—')
         +   '<div class="sku">' + escapeHTML(r.article || r.sku || '') + '</div></td>'
         + '<td class="num">' + r.orders.size + '</td>'
         + '<td class="num">' + r.qty + (taken > 0 ? '<div class="sku">собрано ' + taken + '</div>' : '') + '</td>'
-        + '<td>' + where + '</td>'
+        + '<td>' + where + short + '</td>'
         + '</tr>';
     }).join('');
     return alerts + '<div class="sup-head">' + orders + ' ' + pluralRu(orders, 'заказ', 'заказа', 'заказов')
@@ -5643,6 +5655,8 @@
         + '</div>'
         + '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">'
         +   (s.missing > 0 ? '<span class="sup-missing" title="Грузчик отметил на сборке — смотрите «Что внутри» и журнал">Нет товара: ' + s.missing + '</span>' : '')
+        // Ещё до сборки: по учёту Аргуса товара на полках не хватит.
+        +   (s.stockShort > 0 && !(s.missing > 0) ? '<span class="sup-missing sup-short" title="По учёту Аргуса на полках не хватает товара для этих заказов">Не хватит товара: ' + s.stockShort + '</span>' : '')
         +   '<div class="sup-state ' + s.status + '">' + escapeHTML(s.statusName || s.status) + '</div>'
         + '</div>'
         + '<div class="sup-acts">'
