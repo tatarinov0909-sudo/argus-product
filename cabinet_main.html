@@ -750,6 +750,14 @@
   .ord-mono{font-family:var(--mono); font-size:14px; color:var(--muted);}
   .ord-sub{font-size:12.5px; color:var(--muted); margin-top:2px; font-family:var(--sans);}
   /* Негромкая отметка, не на пол-экрана: «этот заказ особенный». */
+  .align-table{width:100%; border-collapse:collapse; font-size:13px; margin-top:12px;}
+  .align-table th{text-align:left; font-weight:600; color:var(--muted); font-size:12px; padding:6px 8px; border-bottom:1px solid var(--line);}
+  .align-table td{padding:7px 8px; border-bottom:1px solid var(--line-soft, var(--line)); vertical-align:top;}
+  .align-table td.num{text-align:right; font-family:var(--mono); white-space:nowrap;}
+  .align-table .sub{font-size:11.5px; color:var(--muted); font-family:var(--mono);}
+  .align-summary{display:flex; flex-wrap:wrap; gap:8px 18px; font-size:13.5px; margin:10px 0 4px;}
+  .align-summary b{font-family:var(--mono);}
+  .align-scroll{max-height:52vh; overflow:auto;}
   .ord-short{display:inline-block; margin-top:4px; font-size:12px; font-weight:600; color:var(--yellow);
     border:1px solid rgba(230,190,90,0.35); border-radius:6px; padding:1px 7px;}
   .ord-when, .ord-no, .ord-table th{white-space:nowrap;}
@@ -2147,6 +2155,19 @@
 
       <!-- Загрузка остатков по ячейкам: бланк → обход склада → файл →
            проверка каждой строки → загрузка одним заходом. -->
+      <!-- Сверка остатков продавца с документом (ведомость 1С): что в
+           документе, что в ячейках, что изменится — и только потом запись. -->
+      <div class="wh-modal-overlay" id="alignModal" onclick="if(event.target===this) closeAlign()">
+        <div class="wh-modal">
+          <div class="wh-modal-head">
+            <div class="wh-modal-title">Сверить остатки с документом</div>
+            <button class="panel-close-btn" onclick="closeAlign()" aria-label="Закрыть">✕</button>
+          </div>
+          <div class="wh-modal-body" id="alignBody"></div>
+          <div class="wh-modal-actions" id="alignActions"></div>
+        </div>
+      </div>
+
       <div class="wh-modal-overlay" id="stockLoadModal" onclick="if(event.target===this) closeStockLoad()">
         <div class="wh-modal">
           <div class="wh-modal-head">
@@ -2586,6 +2607,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=1bb8a524" defer></script>
+<script src="cabinet_main.js?v=4e5c103c" defer></script>
 </body>
 </html>

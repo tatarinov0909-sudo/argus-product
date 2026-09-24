@@ -2269,6 +2269,10 @@
                    oninput="onWhSearchInput()" onkeydown="onWhSearchKey(event)">
             <div class="wh-search-drop" id="whSearchDrop" hidden></div>
           </div>
+          ${IS_MANAGER ? '' : `<button class="wh-configure-btn ghost" type="button" onclick="openAlign()">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 5h10M3 11h10M6 2l-3 3 3 3M10 8l3 3-3 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Сверить с документом
+          </button>`}
           ${IS_MANAGER ? '' : `<button class="wh-configure-btn ghost" type="button" onclick="openStockLoad()">
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 11V3m0 0L5 6m3-3l3 3M3 13h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Загрузить остатки
@@ -4667,6 +4671,140 @@
   // busy — что сейчас идёт: 'check' (проверка файла), 'apply' (запись),
   // 'undo' (отмена); пусто — ничего. seq — номер проверки: ответ устаревшей
   // (файл или продавца успели сменить) не должен перетереть свежую.
+  // ---------- Сверка остатков с документом ----------
+  // Документ — ведомость 1С по товару продавца (как присылают склад и сам
+  // продавец). Сервер разбирает её, привязывает товары к продавцу, заводит
+  // артикулы WB и выравнивает ячейки. Сначала — что изменится, потом запись.
+  const align = { companyId: '', grid: null, fileName: '', preview: null, busy: '', error: '', placeNew: false };
+
+  function openAlign(){
+    document.getElementById('alignModal').classList.add('open');
+    if(!align.companyId || !companies.some(c => c.id === align.companyId)){
+      align.companyId = companies.length === 1 ? companies[0].id : '';
+    }
+    align.preview = null;
+    align.error = '';
+    renderAlign();
+    if(align.grid && align.companyId) previewAlign();
+  }
+  window.openAlign = openAlign;
+
+  function closeAlign(){ document.getElementById('alignModal').classList.remove('open'); }
+  window.closeAlign = closeAlign;
+
+  function setAlign(field, value){
+    align[field] = value;
+    align.preview = null;
+    renderAlign();
+    if(align.grid && align.companyId) previewAlign();
+  }
+  window.setAlign = setAlign;
+
+  function onAlignFile(input){
+    const file = input.files && input.files[0];
+    if(!file) return;
+    if(typeof XLSX === 'undefined'){ showWhToast('Модуль Excel ещё загружается — попробуйте через пару секунд'); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      try{
+        const wb = XLSX.read(new Uint8Array(reader.result), { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+        // Отчёт по дням бывает шириной в двести колонок: серверу нужны
+        // подписи слева и последние колонки с итогом.
+        align.grid = rows.map(r => (r.length > 13 ? r.slice(0, 4).concat(r.slice(-9)) : r));
+        align.fileName = file.name;
+        align.error = '';
+        align.preview = null;
+        renderAlign();
+        if(align.companyId) previewAlign();
+      } catch(e){
+        align.error = 'Не удалось прочитать файл: ' + e.message;
+        renderAlign();
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+  window.onAlignFile = onAlignFile;
+
+  async function previewAlign(){
+    align.busy = 'preview';
+    align.error = '';
+    renderAlign();
+    try{
+      align.preview = await apiFetch('/api/cells/stock-align', { method: 'POST', body: {
+        companyId: align.companyId, grid: align.grid, apply: false, placeNew: align.placeNew, source: align.fileName,
+      } });
+    } catch(e){ align.error = e.message; align.preview = null; }
+    align.busy = '';
+    renderAlign();
+  }
+
+  async function applyAlign(){
+    const p = align.preview;
+    if(!p || align.busy) return;
+    if(!await askConfirm('Выровнять остатки «' + p.summary.company + '» по документу?\n\n'
+      + 'Изменится товаров: ' + p.summary.changed + ' (+' + p.summary.added + ' / −' + p.summary.removed + ' шт.). '
+      + 'Каждая правка запишется в журнал. В 1С ничего не отправляется.')) return;
+    align.busy = 'apply';
+    renderAlign();
+    try{
+      const r = await apiFetch('/api/cells/stock-align', { method: 'POST', body: {
+        companyId: align.companyId, grid: align.grid, apply: true, placeNew: align.placeNew, source: align.fileName,
+      } });
+      showWhToast('Остатки «' + r.summary.company + '» выровнены: изменено ' + r.summary.changed + ' товаров.');
+      align.grid = null; align.fileName = ''; align.preview = null;
+      closeAlign();
+      renderWarehouseMap().catch(() => {});
+    } catch(e){ align.error = e.message; }
+    align.busy = '';
+    renderAlign();
+  }
+  window.applyAlign = applyAlign;
+
+  function renderAlign(){
+    const body = document.getElementById('alignBody');
+    const actions = document.getElementById('alignActions');
+    if(!body) return;
+    const p = align.preview;
+    const lines = p ? p.lines.slice().sort((a, b) => (b.sku ? 0 : 1) - (a.sku ? 0 : 1)
+      || Math.abs(b.change) - Math.abs(a.change)) : [];
+    body.innerHTML = '<div class="ord-meta" style="margin-bottom:10px;">Документ — ведомость 1С «Ведомость по товарам на складах» по товару продавца (xls или xlsx). '
+      + 'Аргус привяжет товары из документа к продавцу, заведёт артикулы WB и выровняет ячейки. Сначала покажет, что изменится.</div>'
+      + '<div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">'
+      +   '<select class="mp-field" onchange="setAlign(\'companyId\', this.value)">'
+      +     '<option value="">Продавец…</option>'
+      +     companies.map(c => '<option value="' + escapeHTML(c.id) + '"' + (c.id === align.companyId ? ' selected' : '') + '>' + escapeHTML(c.name) + '</option>').join('')
+      +   '</select>'
+      +   '<label class="wh-configure-btn ghost" style="cursor:pointer;">' + (align.fileName ? escapeHTML(align.fileName) : 'Выбрать файл')
+      +     '<input type="file" accept=".xls,.xlsx" hidden onchange="onAlignFile(this)"></label>'
+      +   '<label class="ord-meta"><input type="checkbox" ' + (align.placeNew ? 'checked' : '')
+      +     ' onchange="setAlign(\'placeNew\', this.checked)"> товар без ячейки класть в свободные ячейки (адрес проверить на полке)</label>'
+      + '</div>'
+      + (align.error ? '<div class="ord-meta ord-warn" style="margin-top:10px;">' + escapeHTML(align.error) + '</div>' : '')
+      + (align.busy === 'preview' ? '<div class="ord-meta" style="margin-top:10px;">Сверяю…</div>' : '')
+      + (p ? '<div class="align-summary">'
+          + '<span>в документе <b>' + p.summary.records + '</b> товаров, <b>' + p.summary.documentTotal.toLocaleString('ru-RU') + '</b> шт.</span>'
+          + '<span>в ячейках Аргуса <b>' + p.summary.cellsTotal.toLocaleString('ru-RU') + '</b> шт.</span>'
+          + '<span>изменится <b>' + p.summary.changed + '</b> товаров: +' + p.summary.added + ' / −' + p.summary.removed + ' шт.</span>'
+          + (p.summary.notFound ? '<span class="ord-warn">не найдено в каталоге: ' + p.summary.notFound + '</span>' : '')
+          + '</div>'
+          + '<div class="align-scroll"><table class="align-table"><thead><tr><th>Товар</th><th class="num">В документе</th>'
+          + '<th class="num">В ячейках</th><th class="num">Разница</th><th>Что будет</th></tr></thead><tbody>'
+          + lines.map(l => '<tr><td>' + escapeHTML(l.productName || l.name || '—')
+            + '<div class="sub">' + escapeHTML([l.article, l.sku || l.code].filter(Boolean).join(' · '))
+            + (l.owner && l.owner !== 'свой' ? ' · ' + escapeHTML(l.owner) : '') + '</div></td>'
+            + '<td class="num">' + l.qty + (l.staged ? '<div class="sub">из них собрано ' + l.staged + '</div>' : '') + '</td>'
+            + '<td class="num">' + (l.sku ? l.inCells : '—') + '</td>'
+            + '<td class="num">' + (l.change > 0 ? '+' : '') + (l.sku ? l.change : '—') + '</td>'
+            + '<td>' + escapeHTML(l.note || (l.change === 0 && l.sku ? 'совпадает' : '')) + '</td></tr>').join('')
+          + '</tbody></table></div>' : '');
+    actions.innerHTML = '<button class="wh-onboarding-btn" type="button" onclick="closeAlign()">Закрыть</button>'
+      + '<button class="wh-onboarding-btn primary" type="button" onclick="applyAlign()" '
+      + (p && !align.busy ? '' : 'disabled') + '>'
+      + (align.busy === 'apply' ? 'Записываю…' : 'Выровнять по документу') + '</button>';
+  }
+
   const stockLoad = { companyId: '', rows: null, blank: 0, fileName: '', preview: null, error: '',
     busy: '', seq: 0, batches: null };
 
