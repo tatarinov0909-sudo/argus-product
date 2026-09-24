@@ -1717,18 +1717,13 @@
     return (meta && meta.label) || rowNum;
   }
 
-  function cellAddr(rowNum, rackNum, tier){
-    return rowLabel(rowNum) + '.' + rackNum + '.' + tier;
-  }
-
+  // Адрес ячейки — «ряд.ярус.ячейка» (решение владельца 24.09.2026): «1.1.2» —
+  // первый ряд, первый ярус, вторая ячейка, как на карте. Имя ячейки из 1С
+  // («01-01-001») не показываем — с картой оно не совпадает.
   function blockAddr(rowNum, block){
-    // Имя со стеллажа сильнее наших координат: работник ищет табличку
-    // «01-10-015», а не «1.15.2», и переводить одно в другое в уме — его
-    // лишняя работа и наша будущая ошибка.
-    if(block.label) return block.label;
     const rackPart = block.r0 === block.r1 ? block.r0 : (block.r0 + '–' + block.r1);
     const tierPart = block.t0 === block.t1 ? block.t0 : (block.t0 + '–' + block.t1);
-    return rowLabel(rowNum) + '.' + rackPart + '.' + tierPart;
+    return rowLabel(rowNum) + '.' + tierPart + '.' + rackPart;
   }
 
   function pluralRu(n, one, few, many){
@@ -2446,11 +2441,9 @@
     // сказать об этом, чем показать адрес, которого на схеме нет.
     const stale = hitCount < product.locations.length;
     const addrs = product.locations.map(l => {
-      // Имя со стеллажа важнее наших координат: человек ищет глазами
-      // табличку, а не пересчитывает ряд-стеллаж-ярус в уме.
       const rack = l.rackFrom === l.rackTo ? l.rackFrom : `${l.rackFrom}–${l.rackTo}`;
       const tier = l.tierFrom === l.tierTo ? l.tierFrom : `${l.tierFrom}–${l.tierTo}`;
-      const name = l.label || `${l.row}.${rack}.${tier}`;
+      const name = `${l.row}.${tier}.${rack}`;
       return `<span class="wh-search-addr" onclick="scrollToWhRow(${l.row})">${escapeHTML(name)}<i>${l.qty.toLocaleString('ru-RU')} шт</i></span>`;
     }).join('');
 

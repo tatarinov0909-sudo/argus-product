@@ -235,6 +235,7 @@
   .cell-option-id{font-family:var(--mono); font-size:16px; font-weight:700;}
   .cell-option.selected .cell-option-id{color:var(--accent);}
   .cell-option-note{font-size:12px; color:var(--muted);}
+  .cell-more{font-size:13px; color:var(--muted); text-align:center; padding:10px; cursor:pointer; text-decoration:underline;}
   .cell-option-check{
     width:22px; height:22px; border-radius:50%; border:1.5px solid var(--line); flex-shrink:0;
   }
@@ -1194,10 +1195,12 @@
     if(mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
     return many;
   }
+  // Адрес ячейки — «ряд.ярус.ячейка», как на карте склада (решение владельца
+  // 24.09.2026). Одна запись на весь экран грузчика.
   function formatBlockLabel(rowNum, block){
     const rackPart = block.rack_start === block.rack_end ? block.rack_start : (block.rack_start + '–' + block.rack_end);
     const tierPart = block.tier_start === block.tier_end ? block.tier_start : (block.tier_start + '–' + block.tier_end);
-    return rowNum + '.' + rackPart + '.' + tierPart;
+    return rowNum + '.' + tierPart + '.' + rackPart;
   }
 
   async function init(){
@@ -1422,6 +1425,7 @@
   window.postponeItem = postponeItem;
 
   async function renderPickItem(){
+    showAllPickCells = false;
     document.getElementById('bucketBlock').classList.remove('show');
     document.getElementById('cellBlock').style.display = '';
     document.getElementById('itemDeclaredLabel').textContent = 'Нужно отобрать';
@@ -1500,27 +1504,35 @@
     }
     const remaining = pickSuggestion.item.remaining;
     // Сколько брать из каждой ячейки по порядку обхода: первая закрывает,
-    // сколько может, остаток — следующая.
+    // сколько может, остаток — следующая. Ячейка, из которой брать нечего
+    // («взять 0»), только сбивает: её показываем лишь по просьбе — вдруг в
+    // первой на полке пусто.
     let left = remaining;
+    let hidden = 0;
     wrap.innerHTML = cells.map((c, i) => {
       const label = blockLabel(c);
       const take = Math.max(0, Math.min(left, Number(c.available)));
       left -= take;
+      if(take === 0 && !showAllPickCells){ hidden += 1; return ''; }
       const short = c.available < remaining;
       return '<div class="cell-option" id="cell-' + i + '" onclick="selectPickCell(' + i + ')">'
         + '<div><div class="cell-option-id">' + label + '</div>'
-        + '<div class="cell-option-note' + (short ? ' short' : '') + '">'
-        + 'взять ' + take
-        + (short ? ' — здесь только ' + c.available + ' из ' + remaining : '')
+        + '<div class="cell-option-note' + (short && take > 0 ? ' short' : '') + '">'
+        + (take > 0
+            ? 'взять ' + take + (short ? ' — здесь только ' + c.available + ' из ' + remaining : '')
+            : 'здесь тоже есть: ' + c.available + ' шт')
         + '</div></div>'
         + '<div class="cell-option-check"></div></div>';
-    }).join('');
+    }).join('')
+      + (hidden
+          ? '<div class="cell-more" onclick="showAllPickCells = true; renderPickCells();">Ещё '
+            + hidden + ' ' + pluralRu(hidden, 'ячейка', 'ячейки', 'ячеек') + ' с этим товаром</div>'
+          : '');
   }
+  let showAllPickCells = false;
 
   function blockLabel(c){
-    const rack = c.rackStart === c.rackEnd ? c.rackStart : c.rackStart + '–' + c.rackEnd;
-    const tier = c.tierStart === c.tierEnd ? c.tierStart : c.tierStart + '–' + c.tierEnd;
-    return c.rowNum + '.' + rack + '.' + tier;
+    return formatBlockLabel(c.rowNum, { rack_start: c.rackStart, rack_end: c.rackEnd, tier_start: c.tierStart, tier_end: c.tierEnd });
   }
 
   function selectPickCell(i){
