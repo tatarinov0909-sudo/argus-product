@@ -758,6 +758,12 @@
   .align-summary{display:flex; flex-wrap:wrap; gap:8px 18px; font-size:13.5px; margin:10px 0 4px;}
   .align-summary b{font-family:var(--mono);}
   .align-scroll{max-height:52vh; overflow:auto;}
+  .acts-cols{display:grid; grid-template-columns:repeat(auto-fit, minmax(340px, 1fr)); gap:18px;}
+  .acts-col h3{font-size:15px; margin:0 0 10px;}
+  .act-row{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 12px;
+    border:1px solid var(--line); border-radius:10px; margin-bottom:8px; background:var(--panel-2);}
+  .act-row b{font-family:var(--mono);}
+  .act-row .ord-sub{margin-top:2px;}
   .ord-short{display:inline-block; margin-top:4px; font-size:12px; font-weight:600; color:var(--yellow);
     border:1px solid rgba(230,190,90,0.35); border-radius:6px; padding:1px 7px;}
   .ord-when, .ord-no, .ord-table th{white-space:nowrap;}
@@ -1923,6 +1929,7 @@
     <div class="nav-item" id="nav-products" onclick="switchView('products')"><span class="nav-dot"></span>Товары</div>
     <div class="nav-item" id="nav-warehouse" onclick="switchView('warehouse')"><span class="nav-dot"></span>Склад и ячейки</div>
     <div class="nav-item" id="nav-inv" onclick="switchView('inv')"><span class="nav-dot"></span>Инвентаризация<span class="nav-badge" id="invBadge"></span></div>
+    <div class="nav-item" id="nav-acts" onclick="switchView('acts')"><span class="nav-dot"></span>Акты</div>
 
     <div class="nav-sep"></div>
     <div class="nav-label">Настройки</div>
@@ -2364,6 +2371,23 @@
     <!-- Поставки — своя вкладка (решение владельца 22.09): составляют их из
          заказов, а живут они дальше своей жизнью — сборка, документы, «нет
          товара», «Уехала». В одном экране с очередью заказов их было не найти. -->
+    <!-- Акты приёмки на хранение и отгрузки с хранения — по шаблонам склада. -->
+    <div class="view" id="view-acts">
+      <div class="staff-wrap">
+        <div class="staff-head">
+          <div>
+            <div class="staff-title">Акты</div>
+            <div class="staff-sub">Акт приёмки на хранение — по приходу: продавец привёз товар, грузчик принял. Акт отгрузки
+              с хранения — по поставке на WB: грузополучатель — сортировочный центр. Номер, продавец, склад, товары,
+              штрихкоды и количество Аргус заполняет сам; короба, паллеты, ФИО и подписи вписывают перед печатью.
+              Хранитель — юрлицо склада: впишите его в первом акте и нажмите «Запомнить хранителя».</div>
+          </div>
+          <button class="wh-onboarding-btn" type="button" onclick="loadActs()">Обновить</button>
+        </div>
+        <div id="actsBody" class="ord-meta">Загружаю…</div>
+      </div>
+    </div>
+
     <div class="view" id="view-supplies">
       <div class="staff-wrap">
         <div class="staff-head">
@@ -2607,6 +2631,6 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=4e5c103c" defer></script>
+<script src="cabinet_main.js?v=d2f3ae89" defer></script>
 </body>
 </html>

@@ -178,7 +178,7 @@
     }
     // «?.»: у менеджера части пунктов меню нет вовсе (их убирает блок
     // инициализации), и без проверки кабинет падал при первом же открытии.
-    for(const v of ['chat', 'journal', 'orders', 'supplies', 'receipts', 'products', 'warehouse', 'mp', 'staff', '1c', 'inv']){
+    for(const v of ['chat', 'journal', 'orders', 'supplies', 'receipts', 'products', 'warehouse', 'mp', 'staff', '1c', 'inv', 'acts']){
       document.getElementById('view-' + v)?.classList.toggle('active', view === v);
       document.getElementById('nav-' + v)?.classList.toggle('active', view === v);
     }
@@ -205,6 +205,7 @@
     if(view==='inv'){ loadInventory(); }
     if(view==='orders'){ loadMpOrders(); }
     if(view==='supplies'){ loadSupplies(); }
+    if(view==='acts'){ loadActs(); }
     if(view==='products'){ loadProducts(); }
     if(view==='chat'){
       loadChatHistory();
@@ -4671,6 +4672,38 @@
   // busy — что сейчас идёт: 'check' (проверка файла), 'apply' (запись),
   // 'undo' (отмена); пусто — ничего. seq — номер проверки: ответ устаревшей
   // (файл или продавца успели сменить) не должен перетереть свежую.
+  // ---------- Акты ----------
+  // Приходы — акт приёмки на хранение, поставки — акт отгрузки с хранения.
+  // Бумага — отдельной страницей act_print.html, как документы поставки.
+  async function loadActs(){
+    const box = document.getElementById('actsBody');
+    if(!box) return;
+    let invoicesAll, suppliesAll;
+    try{
+      [invoicesAll, suppliesAll] = await Promise.all([apiFetch('/api/invoices'), apiFetch('/api/supplies')]);
+    } catch(e){ box.textContent = 'Не удалось загрузить: ' + e.message; return; }
+    const receipts = invoicesAll.filter(i => i.direction === 'in')
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 60);
+    const shipments = suppliesAll.slice(0, 60);
+    const stateOf = { open: 'ждёт приёмки', in_progress: 'принимается', completed: 'принят' };
+    const row = (kind, id, number, sub) => '<div class="act-row"><div><b>' + escapeHTML(number) + '</b>'
+      + '<div class="ord-sub">' + escapeHTML(sub) + '</div></div>'
+      + '<span class="mp-act" onclick="window.open(\'act_print.html?kind=' + kind + '&id=' + encodeURIComponent(id) + '\', \'_blank\')">'
+      + (kind === 'receipt' ? 'Акт приёмки' : 'Акт отгрузки') + '</span></div>';
+    box.innerHTML = '<div class="acts-cols">'
+      + '<div class="acts-col"><h3>Приёмка на хранение</h3>'
+      +   (receipts.length ? receipts.map(i => row('receipt', i.id, i.number,
+            (i.company_name || '') + ' · ' + (stateOf[i.status] || i.status) + ' · ' + new Date(i.created_at).toLocaleDateString('ru-RU'))).join('')
+          : '<div class="ord-meta">Приходов пока нет.</div>')
+      + '</div>'
+      + '<div class="acts-col"><h3>Отгрузка с хранения</h3>'
+      +   (shipments.length ? shipments.map(s => row('shipment', s.id, s.number,
+            (s.company_name || '') + ' · ' + (s.statusName || s.status) + (s.destination ? ' · ' + s.destination : ''))).join('')
+          : '<div class="ord-meta">Поставок пока нет.</div>')
+      + '</div></div>';
+  }
+  window.loadActs = loadActs;
+
   // ---------- Сверка остатков с документом ----------
   // Документ — ведомость 1С по товару продавца (как присылают склад и сам
   // продавец). Сервер разбирает её, привязывает товары к продавцу, заводит

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Акт — Аргус</title>
+<link rel="stylesheet" href="fonts.css?v=f77584bf">
+<link rel="stylesheet" href="seller-fonts.css?v=d1da12bc">
+<style>
+  /* Акты по шаблонам склада (владелец 24.09.2026): «Акт приёмки на хранение»
+     и «Акт отгрузки с хранения». Чёрное на белом, A4. Короба, паллеты,
+     подписи и ФИО Аргус не знает — эти клетки заполняют прямо здесь перед
+     печатью или ручкой на бумаге. */
+  :root{
+    --ink:#000; --ink-soft:#555; --line:#000; --line-soft:#bbb;
+    --sans:'Golos Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono:'IBM Plex Mono', 'Consolas', monospace;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:#e9e9e9; color:var(--ink); font-family:var(--sans); font-size:13px; line-height:1.45;}
+  .bar{position:sticky; top:0; z-index:10; background:#1D2023; color:#EDEBE6; padding:12px 24px;
+    display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+  .bar b{font-size:16px;}
+  .bar .grow{flex:1;}
+  .hint{color:#8D9096; font-size:14px;}
+  .btn{background:#5FAFA6; color:#182422; border:none; border-radius:8px; padding:9px 15px;
+    font-size:14px; font-weight:600; cursor:pointer; font-family:var(--sans);}
+  .btn.ghost{background:transparent; color:#EDEBE6; border:1px solid #32363B;}
+  .sheet{background:#fff; width:210mm; min-height:297mm; margin:18px auto; padding:14mm 12mm;
+    box-shadow:0 2px 14px rgba(0,0,0,.18);}
+  h1{font-size:18px; text-align:center; margin:0 0 14px;}
+  .fields{display:grid; grid-template-columns:auto 1fr; gap:5px 12px; margin-bottom:14px; font-size:13.5px;}
+  .fields .k{font-weight:600; white-space:nowrap;}
+  [contenteditable]{outline:none; border-bottom:1px dashed #999; min-width:60px; display:inline-block;}
+  [contenteditable]:empty::before{content:attr(data-placeholder); color:#aaa;}
+  table{width:100%; border-collapse:collapse; font-size:12.5px;}
+  th, td{border:1px solid var(--line); padding:5px 6px; vertical-align:top;}
+  th{font-weight:600; text-align:center; background:#f3f3f3;}
+  td.num{text-align:right; font-family:var(--mono); white-space:nowrap;}
+  td.code{font-family:var(--mono); font-size:11.5px; word-break:break-all;}
+  td[contenteditable]{display:table-cell; border:1px solid var(--line); min-width:0;}
+  tr.total td{font-weight:700;}
+  .note{font-size:11.5px; color:var(--ink-soft); margin-top:6px;}
+  .sign{display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-top:28px; font-size:13px;}
+  .sign div{line-height:2.1;}
+  .empty{padding:40px; text-align:center; color:var(--ink-soft);}
+  @media print{
+    body{background:#fff;}
+    .bar{display:none;}
+    .sheet{margin:0; box-shadow:none; width:auto; min-height:0; padding:0;}
+    [contenteditable]{border-bottom:none;}
+    [contenteditable]:empty::before{content:'';}
+    @page{size:A4; margin:12mm;}
+  }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <b id="barTitle">Акт</b><span class="hint" id="barStatus">Загружаем…</span>
+    <span class="grow"></span>
+    <button class="btn ghost" type="button" id="saveKeeper" hidden onclick="saveKeeper()">Запомнить хранителя</button>
+    <button class="btn ghost" type="button" onclick="window.close()">Закрыть</button>
+    <button class="btn" type="button" onclick="window.print()">Печать</button>
+  </div>
+  <div class="sheet" id="sheet"><div class="empty">Загружаем…</div></div>
+
+<script>
+(function(){
+  'use strict';
+  const API_BASE = 'https://api.argus-ai.online';
+  const TOKEN = localStorage.getItem('argus_token');
+  const ROLE = localStorage.getItem('argus_role');
+  const params = new URLSearchParams(location.search);
+  const KIND = params.get('kind') === 'shipment' ? 'shipment' : 'receipt';
+  const ID = params.get('id') || '';
+
+  const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ESC[c]);
+  const nf = (n) => Number(n || 0).toLocaleString('ru-RU');
+  const day = (iso) => (iso ? new Date(iso).toLocaleDateString('ru-RU') : '');
+  const edit = (placeholder, value) => '<span contenteditable="true" data-placeholder="' + esc(placeholder) + '">'
+    + esc(value || '') + '</span>';
+
+  async function api(path, options){
+    const res = await fetch(API_BASE + path, Object.assign({
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+    }, options || {}));
+    const data = await res.json().catch(() => null);
+    if(!res.ok) throw new Error((data && data.error) || 'Не удалось получить данные');
+    return data;
+  }
+
+  function render(a){
+    const receipt = a.kind === 'receipt';
+    const title = receipt ? 'Акт приемки на хранение' : 'Акт отгрузки с хранения';
+    document.title = title + ' № ' + a.number;
+    document.getElementById('barTitle').textContent = title + ' № ' + a.number;
+    document.getElementById('barStatus').textContent = receipt
+      ? (a.finished ? 'приход принят' : 'приход ещё принимается — в акте то, что принято, и заявленное по непринятым')
+      : (a.shipped ? 'поставка уехала' : 'поставка ещё не уехала');
+    const total = a.items.reduce((s, i) => s + Number(i.qty || 0), 0);
+    const rows = a.items.map((i, n) => '<tr>'
+      + '<td class="num">' + (n + 1) + '</td>'
+      + '<td class="code">' + esc(i.article) + '</td>'
+      + '<td class="code">' + esc(i.barcode || '') + '</td>'
+      + '<td>' + esc(i.name) + (receipt && !i.accepted ? '<div class="note">заявлено, ещё не принято</div>' : '') + '</td>'
+      + '<td class="num">' + nf(i.qty) + '</td>'
+      + '<td class="num edit" contenteditable="true" data-sum="boxes"></td>'
+      + '<td class="num edit" contenteditable="true" data-sum="pallets"></td>'
+      + '</tr>').join('');
+    document.getElementById('sheet').innerHTML =
+      '<h1>' + esc(title) + ' № ' + esc(a.number) + (receipt ? ' от ' + esc(day(a.date)) : '') + '</h1>'
+      + '<div class="fields">'
+      +   '<span class="k">Хранитель:</span><span id="keeper" contenteditable="true" data-placeholder="юр. лицо склада">'
+      +     esc(a.warehouse.legalName || '') + '</span>'
+      +   '<span class="k">Поклажедатель (юр. лицо):</span><span>' + esc(a.seller) + '</span>'
+      +   '<span class="k">СКЛАД:</span><span>' + esc([a.warehouse.name, a.warehouse.city].filter(Boolean).join(', ')) + '</span>'
+      +   (receipt ? '' :
+            '<span class="k">Грузополучатель:</span><span>' + edit('грузополучатель', a.consignee) + '</span>'
+          + '<span class="k">Адрес грузополучателя:</span><span>' + edit('адрес', a.consigneeAddress) + '</span>'
+          + '<span class="k">Отгрузка на паллетах:</span><span>' + edit('да / нет', '') + '</span>'
+          + '<span class="k">Особые условия и комментарии:</span><span>' + edit('—', '') + '</span>')
+      +   '<span class="k">' + (receipt ? 'Дата приемки на ОХ:' : 'Дата отгрузки со склада ОХ:') + '</span><span>' + esc(day(a.date)) + '</span>'
+      + '</div>'
+      + '<table><colgroup><col style="width:5%"><col style="width:16%"><col style="width:15%"><col>'
+      + '<col style="width:9%"><col style="width:10%"><col style="width:9%"></colgroup>'
+      + '<thead><tr><th>№</th><th>Артикул</th><th>ШК</th><th>Номенклатура</th>'
+      + '<th>Кол-во шт</th><th>Кол-во коробов</th><th>Кол-во палет</th></tr></thead><tbody>'
+      + rows
+      + '<tr class="total"><td colspan="4">ИТОГО</td><td class="num">' + nf(total) + '</td>'
+      + '<td class="num" id="sumBoxes"></td><td class="num" id="sumPallets"></td></tr>'
+      + '</tbody></table>'
+      + '<div class="sign">'
+      +   '<div>Сдал с хранения мест: ' + edit('кол-во', '') + '<br>ФИО: ' + edit('фамилия', '') + '<br>Число/подпись/Печать</div>'
+      +   '<div>Принял с хранения мест: ' + edit('кол-во', '') + '<br>ФИО: ' + edit('фамилия', '') + '<br>Число/подпись/Печать</div>'
+      + '</div>';
+    // Итоги коробов и паллет — по мере заполнения.
+    const recount = () => ['boxes', 'pallets'].forEach((k) => {
+      const sum = [...document.querySelectorAll('[data-sum="' + k + '"]')]
+        .reduce((s, el) => s + (parseFloat(el.textContent.replace(',', '.')) || 0), 0);
+      document.getElementById(k === 'boxes' ? 'sumBoxes' : 'sumPallets').textContent = sum ? nf(sum) : '';
+    });
+    document.getElementById('sheet').addEventListener('input', recount);
+    // Хранителя запоминает владелец — у склада одно юр. лицо на все акты.
+    document.getElementById('saveKeeper').hidden = ROLE !== 'owner';
+  }
+
+  window.saveKeeper = async function(){
+    const value = document.getElementById('keeper').textContent.trim();
+    try{
+      await api('/api/warehouses/me', { method: 'PATCH', body: JSON.stringify({ legalName: value }) });
+      document.getElementById('barStatus').textContent = 'Хранитель запомнен для всех актов склада';
+    } catch(e){ document.getElementById('barStatus').textContent = 'Не сохранилось: ' + e.message; }
+  };
+
+  (async () => {
+    if(!TOKEN){ document.getElementById('sheet').innerHTML = '<div class="empty">Нет входа. Откройте кабинет и войдите заново.</div>'; return; }
+    if(!ID){ document.getElementById('sheet').innerHTML = '<div class="empty">Не указан документ.</div>'; return; }
+    try{
+      render(await api('/api/acts/' + KIND + '/' + encodeURIComponent(ID)));
+    } catch(e){
+      document.getElementById('barStatus').textContent = '';
+      document.getElementById('sheet').innerHTML = '<div class="empty">' + esc(e.message) + '</div>';
+    }
+  })();
+})();
+</script>
+</body>
+</html>
