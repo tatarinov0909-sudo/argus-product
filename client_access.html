@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="ru"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#151a24">
-<title>Аргус · Кабинет продавца</title><link rel="stylesheet" href="fonts.css?v=f77584bf"><link rel="stylesheet" href="seller-fonts.css?v=d1da12bc"><link rel="stylesheet" href="seller-cabinet.css?v=8a53142b">
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script><script defer src="seller-cabinet.js?v=f77207cd"></script>
+<title>Аргус · Кабинет продавца</title><link rel="stylesheet" href="fonts.css?v=f77584bf"><link rel="stylesheet" href="seller-fonts.css?v=d1da12bc"><link rel="stylesheet" href="seller-cabinet.css?v=baf8c362">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script><script defer src="seller-cabinet.js?v=5ac30b83"></script>
 </head><body>
 <a class="skip-link" href="#main">К содержимому</a>
 <section id="loginScreen" class="login-screen" hidden>
@@ -22,7 +22,7 @@
 </section>
 <div id="app" class="app" hidden>
  <aside class="sidebar"><a class="wordmark" href="#products" aria-label="Аргус — товары"><span class="brand-icon" aria-hidden="true"></span>аргус<span class="brand-period">.</span></a>
- <nav aria-label="Основная навигация"><a href="#products" data-nav="products"><span data-icon="box"></span><span>Товары</span></a><a href="#orders" data-nav="orders"><span data-icon="orders"></span><span>Заказы</span><span id="orderBadge" class="nav-count" hidden></span></a><a href="#documents" data-nav="documents"><span data-icon="document"></span><span>Поставки и документы</span></a></nav>
+ <nav aria-label="Основная навигация"><a href="#products" data-nav="products"><span data-icon="box"></span><span>Товары</span></a><a href="#orders" data-nav="orders"><span data-icon="orders"></span><span>Заказы</span><span id="orderBadge" class="nav-count" hidden></span></a><a href="#supplies" data-nav="supplies"><span data-icon="orders"></span><span>Поставки на WB</span></a><a href="#documents" data-nav="documents"><span data-icon="document"></span><span>Приходы и документы</span></a></nav>
  <div class="sidebar-bottom"><span class="small muted">Ваш фулфилмент</span><div class="warehouse-name"><span data-icon="warehouse"></span><strong id="warehouseName">Склад</strong></div><button type="button" class="company-block account-button" id="accountButton" aria-expanded="false" aria-controls="accountMenu"><span id="companyAvatar" class="avatar">С</span><span class="company-identity"><strong id="companyName">Ваш магазин</strong><span>Кабинет продавца</span></span><span data-icon="more"></span></button></div></aside>
  <div class="main-wrap"><header class="topbar"><div><span class="connection-dot"></span><span id="topCompany">Ваш магазин</span><span class="top-divider">/</span><span id="breadcrumb">Товары</span></div><div class="top-actions"><span id="updateTime" class="small muted" role="status"></span><button class="icon-button" id="refreshButton" aria-label="Обновить данные"><span data-icon="refresh"></span></button><button class="icon-button mobile-account" id="mobileAccount" aria-label="Меню кабинета" aria-expanded="false" aria-controls="accountMenu"><span data-icon="user"></span></button></div></header>
  <div class="owner-preview" id="ownerPreview" hidden><span>Просмотр владельца</span><label>Компания <select id="companySelect"></select></label><a href="cabinet_main.html">Вернуться к складу</a><a href="?source=1c#documents">Открыть накладные 1С склада</a><p>Общая компания обмена может содержать товары разных продавцов. Этот просмотр не выдаёт доступ продавцам.</p></div>
