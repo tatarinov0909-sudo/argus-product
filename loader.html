@@ -235,6 +235,16 @@
   .cell-option-id{font-family:var(--mono); font-size:16px; font-weight:700;}
   .cell-option.selected .cell-option-id{color:var(--accent);}
   .cell-option-note{font-size:12px; color:var(--muted);}
+  .all-products-btn{display:none; margin:0 auto 10px; width:max-content; font-size:13px; font-weight:600;
+    color:var(--accent); border:1px solid var(--line); border-radius:10px; padding:7px 14px; cursor:pointer;}
+  .all-products-btn.show{display:block;}
+  .product-row{display:flex; justify-content:space-between; gap:12px; align-items:center; padding:12px 14px;
+    border:1px solid var(--line); border-radius:12px; margin-bottom:8px; cursor:pointer; background:var(--panel-2);}
+  .product-row.current{border-color:var(--accent);}
+  .product-row.done{opacity:0.45; cursor:default;}
+  .product-row-name{font-size:14px; font-weight:600;}
+  .product-row-sub{font-size:12px; color:var(--muted); margin-top:3px; font-family:var(--mono);}
+  .product-row-need{font-family:var(--mono); font-size:18px; font-weight:700; color:var(--accent); white-space:nowrap;}
   .cell-more{font-size:13px; color:var(--muted); text-align:center; padding:10px; cursor:pointer; text-decoration:underline;}
   .cell-option-check{
     width:22px; height:22px; border-radius:50%; border:1.5px solid var(--line); flex-shrink:0;
@@ -345,6 +355,8 @@
   .order-row-sub{font-size:12.5px; color:var(--muted); margin-top:3px;}
   .order-row-state{font-size:12.5px; color:var(--muted); white-space:nowrap;}
   .order-row-state.open{color:var(--accent-2);}
+  .big-btn.secondary{background:var(--panel-2); color:var(--text); border:1px solid var(--line); margin-top:12px;}
+  .supply-products{margin-top:14px;}
   .big-btn{width:100%; padding:16px; border-radius:14px; border:none; background:var(--accent); color:#182422;
     font-size:15px; font-weight:700; cursor:pointer; font-family:var(--sans);}
   .supply-title{font-family:var(--mono); color:var(--accent-2); font-size:26px; letter-spacing:0.5px;}
@@ -813,6 +825,7 @@
       <div class="task-body">
         <div class="item-card">
           <div class="task-progress-text" id="progressText" style="margin-bottom:8px; text-align:center;">—</div>
+          <div class="all-products-btn" id="allProductsBtn" onclick="openProductsSheet()">Все товары поставки</div>
           <div class="item-name" id="itemName">Загрузка…</div>
           <div class="item-sku" id="itemSku"></div>
           <div class="item-declared">
@@ -953,8 +966,8 @@
         <div class="sheet-step" id="sheetStepManual">
           <div class="sheet-back" onclick="goSheetStep('choice')">← Назад</div>
           <div class="sheet-title">Ввести место вручную</div>
-          <div class="sheet-sub">Например: 1.4.2 — ряд, стеллаж, ярус. Ячейка должна быть на складе.</div>
-          <input type="text" class="sheet-input" id="manualCellInput" placeholder="Ряд-стеллаж · ярус" oninput="document.getElementById('manualConfirmBtn').disabled = !this.value.trim();">
+          <div class="sheet-sub">Например: 1.1.2 — ряд, ярус, ячейка. Ячейка должна быть на складе.</div>
+          <input type="text" class="sheet-input" id="manualCellInput" placeholder="Ряд.ярус.ячейка" oninput="document.getElementById('manualConfirmBtn').disabled = !this.value.trim();">
           <button class="sheet-confirm" id="manualConfirmBtn" disabled onclick="confirmManualCell()">Подтвердить место</button>
         </div>
 
@@ -967,6 +980,12 @@
             <div class="map-back" onclick="showMapRowsPicker()">← Другой ряд</div>
             <div class="map-rack-row" id="mapRackRow"></div>
           </div>
+        </div>
+
+        <div class="sheet-step" id="sheetStepProducts">
+          <div class="sheet-title">Все товары поставки</div>
+          <div class="sheet-sub">Стоите у другой ячейки — возьмите этот товар сейчас, а не когда до него дойдёт очередь.</div>
+          <div id="productsList"></div>
         </div>
 
         <div class="sheet-step" id="sheetStepMissing">
@@ -1213,6 +1232,7 @@
   }
 
   async function selectInvoice(invoiceId, keepRun){
+    productRun = null;
     try{
       currentInvoice = await apiFetch('/api/invoices/' + invoiceId);
     } catch(e){
@@ -1280,7 +1300,101 @@
     nextFlashTimer = setTimeout(() => el.classList.remove('show'), 1200);
   }
 
+  // ---------- Сборка поставки по товарам ----------
+  // Решение владельца 24.09.2026: грузчик идёт к ячейке и берёт сразу всё,
+  // что нужно поставке по этому товару, а не по штуке на каждый заказ. Порядок
+  // — по обходу склада; «Все товары поставки» — взять любой, если он рядом.
+  // Аргус сам раскладывает взятое по заказам (POST /api/shipping/product).
+  let productRun = null;       // { supplyId, preferred }
+
+  async function reloadProductRun(){
+    const d = await apiFetch('/api/supplies/' + productRun.supplyId);
+    const bySku = new Map();
+    (d.packing || []).forEach(l => {
+      const p = bySku.get(l.sku) || { id: l.sku, sku: l.sku, name: l.name, declared_qty: 0, left: 0, waiting: 0, openItems: [] };
+      p.declared_qty += Number(l.qty || 0);
+      // Позиции с отметкой «нет товара» ждут решения руководителя: собирать
+      // их нечем, и к ним не возвращаемся, пока он не ответит.
+      if(l.missing) p.waiting += Number(l.left || 0);
+      else {
+        p.left += Number(l.left || 0);
+        if(Number(l.left) > 0) p.openItems.push({ id: l.itemId, left: Number(l.left) });
+      }
+      bySku.set(l.sku, p);
+    });
+    // Порядок — как в листе комплектации: по обходу склада. Собранное — в конец.
+    const route = (d.picking || []).map(x => x.sku);
+    const items = [...bySku.values()].map(p => ({ ...p, closed: p.left <= 0 && p.waiting <= 0,
+        // Остаток товара отмечен «нет товара» — руководитель уже знает.
+        missing_marked: p.left <= 0 && p.waiting > 0 }))
+      .sort((a, b) => {
+        const ia = route.indexOf(a.sku), ib = route.indexOf(b.sku);
+        return (ia < 0 ? 1e9 : ia) - (ib < 0 ? 1e9 : ib);
+      });
+    const sup = d.supply || {};
+    currentInvoice = {
+      id: 'supply:' + productRun.supplyId,
+      number: sup.number || '',
+      direction: 'out',
+      supply_id: productRun.supplyId,
+      supply_number: sup.number || '',
+      company_name: sup.companyName || sup.company_name || '',
+      status: items.every(i => i.closed) ? 'ready' : 'in_progress',
+      items,
+    };
+    // Товар, у которого осталось только отмеченное «нет товара», — отложен.
+    items.forEach(i => { if(i.left <= 0 && i.waiting > 0) postponedItems.add(i.id); });
+    return currentInvoice;
+  }
+
+  async function openProductRun(supplyId, sku){
+    productRun = { supplyId, preferred: sku || null };
+    backTarget = { kind: 'supply', id: supplyId };
+    postponedItems = new Set();
+    try{ await reloadProductRun(); }
+    catch(e){ productRun = null; showToast('Не удалось открыть поставку: ' + e.message); return; }
+    hideAllScreens();
+    taskStartTime = new Date();
+    totalPausedMs = 0;
+    pauseLog = [];
+    results.length = 0;
+    runVisited.clear();
+    startTaskTimer();
+    pauseStart = null;
+    document.getElementById('pauseBanner').classList.remove('show');
+    document.getElementById('doneScreen').classList.remove('show');
+    document.getElementById('taskScreen').style.display = '';
+    renderCurrentItem();
+  }
+  window.openProductRun = openProductRun;
+
+  function openProductsSheet(){
+    if(!productRun || !currentInvoice) return;
+    const current = currentInvoice.items[currentItemIndex];
+    document.getElementById('productsList').innerHTML = currentInvoice.items.map((p, i) =>
+      '<div class="product-row' + (p.closed ? ' done' : '') + (current && p.sku === current.sku ? ' current' : '') + '"'
+      + (p.closed ? '' : ' onclick="pickProductNow(' + i + ')"') + '>'
+      + '<div><div class="product-row-name">' + escapeHTML(p.name) + '</div>'
+      + '<div class="product-row-sub">' + escapeHTML(p.sku) + (p.closed ? ' · собрано' : '') + '</div></div>'
+      + (p.closed ? '' : '<div class="product-row-need">' + p.left + ' шт</div>')
+      + '</div>').join('');
+    document.getElementById('sheetOverlay').classList.add('show');
+    goSheetStep('products');
+  }
+  window.openProductsSheet = openProductsSheet;
+
+  function pickProductNow(i){
+    const p = currentInvoice && currentInvoice.items[i];
+    if(!p || p.closed) return;
+    productRun.preferred = p.sku;
+    postponedItems.delete(p.sku);
+    closeSheet();
+    renderCurrentItem();
+  }
+  window.pickProductNow = pickProductNow;
+
   function renderCurrentItem(){
+    document.getElementById('allProductsBtn').classList.toggle('show', Boolean(productRun));
     document.getElementById('missingBtn').style.display = isPicking() ? '' : 'none';
     const kind = document.getElementById('taskKind');
     if(kind){
@@ -1437,7 +1551,13 @@
     document.getElementById('manualCellBtn').style.display = 'none';
     document.getElementById('customCellDisplay').classList.remove('show');
 
-    const idx = findNextUnpickedIndex();
+    let idx = findNextUnpickedIndex();
+    // По товарам: сперва тот, что человек выбрал сам («Все товары»).
+    if(productRun && productRun.preferred){
+      const chosen = currentInvoice.items.findIndex(it => it.sku === productRun.preferred
+        && !it.closed && !postponedItems.has(it.id));
+      if(chosen !== -1) idx = chosen;
+    }
     if(idx === -1){ showDone(); return; }
     currentItemIndex = idx;
     const item = currentInvoice.items[idx];
@@ -1459,9 +1579,16 @@
     // на экране приёмки оставалась подпись «Товара нет ни в одной ячейке».
     const forItem = item.id;
     try{
-      const suggestion = await apiFetch('/api/shipping/suggest/' + item.id);
+      // По товару ячейки те же, что у любой его позиции в поставке; нужно —
+      // всё, что осталось по товару во всей поставке.
+      const suggestion = await apiFetch('/api/shipping/suggest/' + (productRun ? item.openItems[0].id : item.id));
       const still = currentInvoice && currentInvoice.items[currentItemIndex];
       if(!still || still.id !== forItem) return;
+      if(productRun){
+        suggestion.item = { ...suggestion.item, id: item.id, remaining: item.left,
+          alreadyPicked: item.declared_qty - item.left };
+        suggestion.shortfall = Math.max(0, item.left - suggestion.totalAvailable);
+      }
       pickSuggestion = suggestion;
     } catch(e){
       const still = currentInvoice && currentInvoice.items[currentItemIndex];
@@ -1484,7 +1611,9 @@
       // Говорим о нехватке ДО того, как человек пошёл к стеллажам, а не после.
       note.textContent = 'На складе не хватает ' + pickSuggestion.shortfall
         + ' шт: всего доступно ' + pickSuggestion.totalAvailable + ' из ' + remaining
-        + '. Отберите сколько есть и отметьте последнюю ячейку — расхождение уйдёт владельцу в журнал.';
+        + (productRun
+          ? '. Возьмите сколько есть, а на остаток нажмите «Нет товара» — руководитель уберёт лишние заказы из поставки.'
+          : '. Отберите сколько есть и отметьте последнюю ячейку — расхождение уйдёт владельцу в журнал.');
       note.classList.add('show');
     } else {
       note.classList.remove('show');
@@ -1555,7 +1684,7 @@
     const remaining = pickSuggestion ? pickSuggestion.item.remaining : 0;
     // Галочку «последняя ячейка» показываем только когда отбор не закрывает
     // позицию: если взяли всё, она закроется сама и спрашивать не о чем.
-    toggle.classList.toggle('show', selectedCellBlockId !== null && currentQty < remaining);
+    toggle.classList.toggle('show', !productRun && selectedCellBlockId !== null && currentQty < remaining);
     const nowhere = Boolean(pickSuggestion) && pickSuggestion.cells.length === 0;
     const postpone = document.getElementById('postponeBtn');
     if(postpone) postpone.style.display = nowhere ? '' : 'none';
@@ -1604,7 +1733,41 @@
     if(btn){ btn.disabled = true; btn.textContent = 'Сохранено — обновите страницу'; }
   }
 
+  async function confirmProductPick(){
+    const item = currentInvoice.items[currentItemIndex];
+    const btn = document.getElementById('confirmBtn');
+    btn.disabled = true;
+    btn.textContent = 'Сохраняю…';
+    let saved = false;
+    try{
+      await apiFetch('/api/shipping/product', {
+        method: 'POST',
+        body: {
+          supplyId: productRun.supplyId, sku: item.sku, cellBlockId: selectedCellBlockId,
+          pickedQty: currentQty, pausedMs: totalPausedMs, pauseReasons: pauseLog.map(p => p.reason),
+        },
+      });
+      saved = true;
+      results.push({ name: item.name, sku: item.sku, declared: item.left, accepted: currentQty, cell: selectedCellLabel });
+      const pickedSku = item.sku;
+      await reloadProductRun();
+      cellRows = await apiFetch('/api/cells/rows');
+      // Взяли не всё (в ячейке было меньше) — остаёмся на товаре: следующая
+      // ячейка. Взяли всё — следующий товар по обходу.
+      const same = currentInvoice.items.find(it => it.sku === pickedSku);
+      productRun.preferred = same && !same.closed ? pickedSku : null;
+      const more = findNextUnpickedIndex() !== -1;
+      renderCurrentItem();
+      if(more) flashNext(productRun.preferred ? 'Ещё из другой ячейки' : 'Следующий товар');
+    } catch(e){
+      if(saved){ savedButStale(e); return; }
+      showToast('Не удалось сохранить: ' + e.message);
+      updatePickConfirm();
+    }
+  }
+
   async function confirmPick(){
+    if(productRun) return confirmProductPick();
     const item = currentInvoice.items[currentItemIndex];
     const btn = document.getElementById('confirmBtn');
     btn.disabled = true;
@@ -1942,7 +2105,7 @@
     // поставки и в напечатанном листе, иначе обход получается вразнобой.
     if(backTarget && backTarget.kind === 'supply'){
       return invoices.filter(i => i.supply_id === backTarget.id)
-        .sort((x, y) => String(x.number).localeCompare(String(y.number)));
+        .sort((x, y) => String(x.number).localeCompare(String(y.number), 'ru', { numeric: true }));
     }
     if(backTarget && backTarget.kind === 'docs') return invoices.filter(i => i.direction === backTarget.dir);
     if(backTarget && backTarget.kind === 'supplies') return invoices.filter(i => i.direction === 'out' && !i.supply_id);
@@ -2647,6 +2810,7 @@
   window.openSupplies = openSupplies;
 
   async function openSupply(id){
+    productRun = null;
     openJob('supplyScreen');
     try{ await refreshWork(); } catch(e){ showToast('Не удалось обновить: ' + e.message); }
     const s = supplies.find(x => x.id === id);
@@ -2657,17 +2821,39 @@
       + (s.destination ? ' → ' + s.destination : '')
       + (s.ship_date ? ' · отгрузка ' + fmtDay(s.ship_date) : '');
     const orders = invoices.filter(i => i.supply_id === id)
-      .sort((a, b) => (isOpenDoc(a) ? 0 : 1) - (isOpenDoc(b) ? 0 : 1) || String(a.number).localeCompare(String(b.number)));
+      .sort((a, b) => (isOpenDoc(a) ? 0 : 1) - (isOpenDoc(b) ? 0 : 1)
+        || String(a.number).localeCompare(String(b.number), 'ru', { numeric: true }));
     const open = orders.filter(isOpenDoc);
     document.getElementById('supplyBody').innerHTML =
       '<div class="sup-card-meta" style="margin-top:0;">пришла ' + escapeHTML(fmtWhen(s.created_at))
       +   (s.created_by ? ' · составил ' + escapeHTML(s.created_by) : '')
       +   ' · собрано ' + (orders.length - open.length) + ' из ' + orders.length + '</div>'
       + (open.length
-        ? '<button class="big-btn" onclick="openSupplyPickList(\'' + jsArg(id) + '\')">Лист грузчика — вся поставка за один обход</button>'
+        // Главное — собирать по товарам: к ячейке один раз за всем, что нужно
+        // поставке. Бумажный лист и сборка по заказам — ниже, для особых случаев.
+        ? '<button class="big-btn" onclick="openProductRun(\'' + jsArg(id) + '\')">Собирать по товарам</button>'
+          + '<div id="supplyProducts" class="supply-products"></div>'
+          + '<button class="big-btn secondary" onclick="openSupplyPickList(\'' + jsArg(id) + '\')">Лист грузчика — вся поставка за один обход</button>'
         : '<div class="job-empty">Все заказы поставки собраны.</div>')
       + '<div class="list-group-title">Заказы · ' + orders.length + '</div>'
       + orders.map(i => orderRowHtml(i, null)).join('');
+    if(open.length) renderSupplyProducts(id);
+  }
+
+  // Товары поставки по обходу склада: нажал — сразу к этому товару.
+  async function renderSupplyProducts(id){
+    let d;
+    try{ d = await apiFetch('/api/supplies/' + id); } catch(e){ return; }
+    const box = document.getElementById('supplyProducts');
+    if(!box || !backTarget || backTarget.id !== id) return;
+    const rows = d.picking || [];
+    box.innerHTML = rows.length
+      ? '<div class="list-group-title">Товары · ' + rows.length + ' — по обходу склада</div>'
+        + rows.map(r => '<div class="product-row" onclick="openProductRun(\'' + jsArg(id) + '\', \'' + jsArg(r.sku) + '\')">'
+          + '<div><div class="product-row-name">' + escapeHTML(r.name || r.sku) + '</div>'
+          + '<div class="product-row-sub">' + escapeHTML((r.cells && r.cells[0] ? r.cells[0].label + ' · ' : '') + r.sku) + '</div></div>'
+          + '<div class="product-row-need">' + r.qty + ' шт</div></div>').join('')
+      : '';
   }
   window.openSupply = openSupply;
 
@@ -3116,7 +3302,8 @@
 
   function showDone(){
     // Внутри поставки заказы идут подряд: записали позицию — сразу следующая.
-    if(isPicking() && backTarget && backTarget.kind === 'supply'){
+    // По товарам — вся поставка и есть одна работа, переходить некуда.
+    if(!productRun && isPicking() && backTarget && backTarget.kind === 'supply'){
       runVisited.add(currentInvoice.id);
       const next = sameListInvoices().find(i => isOpenDoc(i) && !runVisited.has(i.id));
       if(next){
@@ -3127,7 +3314,8 @@
     }
     document.getElementById('taskScreen').style.display = 'none';
     document.getElementById('doneScreen').classList.add('show');
-    const hasNext = Boolean(sameListInvoices().find(i => isOpenDoc(i) && i.id !== currentInvoice.id && !runVisited.has(i.id)));
+    // По товарам вся поставка — одна работа: «следующего заказа» нет.
+    const hasNext = !productRun && Boolean(sameListInvoices().find(i => isOpenDoc(i) && i.id !== currentInvoice.id && !runVisited.has(i.id)));
     const nextBtn = document.getElementById('doneNextBtn');
     nextBtn.textContent = backTarget && backTarget.kind === 'supply'
       ? 'Следующий заказ поставки' : 'Следующая накладная';
@@ -3140,7 +3328,7 @@
     // осталось и что с ними делать, иначе экран поздравляет с работой,
     // которую никто не сделал.
     const postponed = currentInvoice.items.filter(function(it){ return !it.closed && postponedItems.has(it.id); }).length;
-    const supplyDone = isPicking() && backTarget && backTarget.kind === 'supply' && !hasNext;
+    const supplyDone = Boolean(productRun) || (isPicking() && backTarget && backTarget.kind === 'supply' && !hasNext);
     document.getElementById('doneTitle').textContent = postponed > 0
       ? 'Собрано, кроме отложенного'
       : supplyDone
@@ -3270,6 +3458,9 @@
     if(step === 'missing'){
       document.getElementById('sheetStepMissing').classList.add('show');
     }
+    if(step === 'products'){
+      document.getElementById('sheetStepProducts').classList.add('show');
+    }
     if(step === 'pause'){
       document.getElementById('sheetStepPause').classList.add('show');
       document.getElementById('pauseCustomInput').value = '';
@@ -3325,13 +3516,36 @@
     btn.disabled = true;   // второе нажатие не шлёт вторую тревогу
     const item = missingState.item;
     try{
-      const r = await apiFetch('/api/shipping/missing', { method: 'POST', body: {
-        invoiceItemId: item.id, missingQty: qty, note: document.getElementById('missingNote').value,
-      } });
+      let r;
+      if(productRun){
+        // Нехватка по товару ложится на самые поздние заказы поставки: ранние
+        // соберутся тем, что есть. Каждому — своя отметка, по ней руководитель
+        // уберёт заказ из поставки.
+        let left = qty;
+        for(const it of [...item.openItems].reverse()){
+          if(left <= 0) break;
+          const part = Math.min(left, it.left);
+          r = await apiFetch('/api/shipping/missing', { method: 'POST', body: {
+            invoiceItemId: it.id, missingQty: part, note: document.getElementById('missingNote').value,
+          } });
+          left -= part;
+        }
+      } else {
+        r = await apiFetch('/api/shipping/missing', { method: 'POST', body: {
+          invoiceItemId: item.id, missingQty: qty, note: document.getElementById('missingNote').value,
+        } });
+      }
       closeSheet();
       missingState = null;
-      item.missing_marked = true;
-      postponedItems.add(item.id);
+      if(productRun){
+        // Отметили не всё — остаток товара собирается дальше; всё — товар
+        // отложен до решения руководителя.
+        await reloadProductRun();
+        productRun.preferred = null;
+      } else {
+        item.missing_marked = true;
+        postponedItems.add(item.id);
+      }
       showToast(r.repeated ? 'Уже отмечено — руководитель знает' : 'Отправлено руководителю с пометкой «очень важно»');
       renderCurrentItem();
     } catch(e){
