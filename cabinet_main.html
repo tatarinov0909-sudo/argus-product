@@ -101,6 +101,14 @@
   .account-menu-item:hover{background:var(--panel);}
   .account-menu-item.danger{color:var(--terracotta);}
   .account-menu-sep{height:1px; background:var(--line); margin:5px 4px;}
+  .logo-target-head{display:flex; flex-direction:column; gap:2px;}
+  .logo-target-head span{font-size:12px; color:var(--muted);}
+  .logo-target-head b{font-weight:600;}
+  .logo-target-list{display:none; padding:2px 0 4px;}
+  .logo-target-list.open{display:block;}
+  .logo-target-list .account-menu-item{padding:7px 10px 7px 22px; font-size:13px; position:relative;}
+  .logo-target-list .account-menu-item.on{color:var(--accent);}
+  .logo-target-list .account-menu-item.on::before{content:"✓"; position:absolute; left:8px;}
   .nav-badge{margin-left:auto; background:var(--terracotta); color:#241a15; font-size:12px; font-weight:700; padding:1px 6px; border-radius:8px; display:none;}
   .nav-badge.show{display:inline-block;}
 
@@ -1898,9 +1906,11 @@
 <div class="app">
 
   <div class="sidebar">
-    <div class="logo" role="button" tabindex="0" title="В чат с агентом"
-         onclick="switchView('chat')"
-         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); switchView('chat');}">
+    <!-- Куда ведёт логотип, человек выбирает сам в меню профиля (владелец
+         26.09.2026); по умолчанию — журнал действий. -->
+    <div class="logo" id="logoLink" role="button" tabindex="0" title="В журнал действий"
+         onclick="goLogo()"
+         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); goLogo();}">
       <svg class="logo-mark" viewBox="0 0 32 20" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M3 11C7 3 12 0.5 16 0.5S25 3 29 11" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round"/>
         <path d="M4 9C8 16 12 19 16 19S24 16 28 9" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round"/>
@@ -1939,6 +1949,11 @@
 
     <div class="sidebar-footer">
       <div class="account-menu" id="accountMenu">
+        <div class="account-menu-item logo-target-head" onclick="toggleLogoTargets()">
+          <span>Логотип ведёт в</span><b id="logoTargetName">Журнал действий</b>
+        </div>
+        <div class="logo-target-list" id="logoTargetList"></div>
+        <div class="account-menu-sep"></div>
         <a class="account-menu-item" id="leadAdminLink" href="leads.html" style="display:none">Заявки с лендинга</a>
         <div class="account-menu-item danger" onclick="logout()">Выйти</div>
       </div>
@@ -2631,6 +2646,7 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="cabinet_main.js?v=64302423" defer></script>
+<script src="back.js?v=4901b838" defer></script>
+<script src="cabinet_main.js?v=2ca5d7ae" defer></script>
 </body>
 </html>

@@ -367,7 +367,7 @@
   .job-body{flex:1; min-height:0; padding:20px 24px 28px; display:flex; flex-direction:column; gap:16px; overflow-y:auto;}
   .job-back{font-size:14px; color:var(--muted); cursor:pointer; padding:0 0 12px;}
   .job-actions{display:flex; align-items:center; gap:12px; width:100%; margin-top:14px;
-    justify-content:space-between;}
+    justify-content:space-between; flex-wrap:wrap;}
   .job-back:active{color:var(--accent);}
   .job-head-row{display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;}
   .job-print{margin-left:auto; border:1px solid var(--line); border-radius:10px; padding:11px 18px;
@@ -377,11 +377,38 @@
   .pick-chip{border:1px solid var(--line); border-radius:999px; padding:9px 16px; font-size:14px;
     color:var(--muted); cursor:pointer;}
   .pick-chip.on{border-color:var(--accent); color:var(--accent);}
+  /* Порядок строк листа — переключатель, а не выпадающий список браузера
+     (владелец 22.09.2026): все варианты видны сразу, нажал — готово. */
+  #pickListSort{flex:1 1 100%; min-width:0;}
+  #pickListSort + .job-print{margin-left:0;}
+  .pick-seg{display:flex; gap:4px; padding:4px; border:1px solid var(--line); border-radius:12px;
+    background:var(--panel-2); overflow-x:auto; scrollbar-width:none; max-width:100%;}
+  .pick-seg::-webkit-scrollbar{display:none;}
+  .pick-seg button{flex:1 0 auto; border:none; background:none; color:var(--muted); font:inherit;
+    font-size:13.5px; padding:9px 12px; border-radius:9px; cursor:pointer; white-space:nowrap;}
+  .pick-seg button.on{background:var(--panel); color:var(--text); box-shadow:0 0 0 1px var(--line);}
+  .pick-dest{font-size:13.5px; color:var(--text); margin-top:6px;}
+  .pick-dest b{font-weight:600;}
+
+  /* Сборка по бумажному листу: строка на товар, «Не нашёл» — отметка. */
+  .paper-line{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:14px 16px;}
+  .paper-line.miss{border-color:var(--yellow);}
+  .paper-top{display:flex; justify-content:space-between; gap:12px; align-items:flex-start;}
+  .paper-name{font-size:15px; font-weight:600; line-height:1.35;}
+  .paper-sku{font-family:var(--mono); font-size:12px; color:var(--muted); margin-top:3px;}
+  .paper-need{font-family:var(--mono); font-size:18px; font-weight:700; color:var(--accent); white-space:nowrap;}
+  .paper-cells{font-family:var(--mono); font-size:13px; color:var(--muted); margin-top:8px;}
+  .paper-miss-btn{margin-top:10px; border:1px solid var(--line); background:none; color:var(--muted);
+    font:inherit; font-size:13px; padding:8px 12px; border-radius:9px; cursor:pointer;}
+  .paper-line.miss .paper-miss-btn{color:var(--yellow); border-color:var(--yellow);}
+  .paper-found{display:none; align-items:center; gap:10px; margin-top:10px; font-size:13.5px;}
+  .paper-line.miss .paper-found{display:flex;}
+  .paper-found input{width:72px; padding:9px 10px; border-radius:9px; border:1px solid var(--line);
+    background:var(--panel-2); color:var(--text); font:inherit; font-family:var(--mono); font-size:15px; text-align:center;}
+  .paper-note{font-size:12.5px; color:var(--muted); line-height:1.5;}
   /* Ужимается именно обёртка: в строке действий flex-элемент — она, а не
      сам <select>, и без min-width:0 кнопка печати уезжает за край экрана. */
   #pickListSort{flex:1 1 auto; min-width:0; display:flex; max-width:260px;}
-  .pick-sort{width:100%; background:var(--panel-2); border:1px solid var(--line); border-radius:10px;
-    color:var(--text); font-family:var(--sans); font-size:14px; padding:11px 14px;}
 
   /* Строка листа. Сверху — что брать и сколько, потом коды, по которым
      товар ищут на полке, потом адреса ячеек. Порядок ровно такой, в каком
@@ -776,6 +803,30 @@
       <div class="job-body" id="supplyBody"></div>
     </div>
 
+    <!-- Сборка по бумажному листу: открывается сканом QR на листе или
+         кнопкой в поставке. Лист в руках, а отметку «собрал» и «не нашёл»
+         грузчик ставит сам, без начальника (владелец 22.09.2026). -->
+    <div class="job-screen" id="paperScreen">
+      <div class="job-head">
+        <div class="job-back" onclick="paperBack()">← К поставке</div>
+        <div class="job-head-row">
+          <div>
+            <div class="job-title" id="paperTitle">По бумажному листу</div>
+            <div class="job-sub" id="paperSub">—</div>
+          </div>
+          <div class="task-pause-row" style="margin:0;">
+            <div class="task-timer running" id="paperTimer"><span class="task-timer-dot"></span><span id="paperTimerValue">0:00</span></div>
+            <div class="task-pause-btn" onclick="openPauseSheet()">Пауза</div>
+          </div>
+        </div>
+      </div>
+      <div class="pause-banner" id="paperPauseBanner">
+        <div class="pause-banner-text">На паузе: <b id="paperPauseReason"></b></div>
+        <button class="pause-resume-btn" onclick="paperResume()">Возобновить</button>
+      </div>
+      <div class="job-body" id="paperBody"></div>
+    </div>
+
     <div class="job-screen" id="docsScreen">
       <div class="job-head">
         <div class="job-back" onclick="showHome()">← Что делаем?</div>
@@ -1115,11 +1166,14 @@
 
   <div class="toast" id="toast"></div>
 
+<script src="back.js?v=4901b838"></script>
 <script>
   const API_BASE = 'https://api.argus-ai.online';
   let TOKEN = localStorage.getItem('argus_token');
   const ROLE = localStorage.getItem('argus_role');
   if(!TOKEN || ROLE !== 'worker'){
+    // Скан QR листа до входа: адрес с поставкой дождётся входа.
+    try{ if(location.hash) sessionStorage.setItem('argus_after_login', location.hash); } catch(e){}
     window.location.href = 'login.html';
     throw new Error('not authenticated');
   }
@@ -1228,10 +1282,26 @@
     } catch(e){
       showToast('Не удалось загрузить склад: ' + e.message);
     }
+    // QR на бумажном листе ведёт сюда с #paper=<поставка>: сразу к сборке
+    // по листу. Если телефон был не залогинен, адрес дождался входа.
+    let hash = location.hash;
+    try{
+      if(!hash) hash = sessionStorage.getItem('argus_after_login') || '';
+      sessionStorage.removeItem('argus_after_login');
+    } catch(e){}
+    const m = /^#paper=([0-9a-f-]{36})$/i.exec(hash);
+    if(location.hash) history.replaceState(null, '', location.pathname);
+    if(m){
+      try{ await refreshWork(); } catch(e){}
+      return openPaper(m[1]);
+    }
     await showHome();
   }
 
   async function selectInvoice(invoiceId, keepRun){
+    // Ушёл с паузы на другую работу — пауза кончилась: так и пишем
+    // руководителю, а не бросаем её висеть без конца.
+    if(pauseStart) resumeTask();
     productRun = null;
     try{
       currentInvoice = await apiFetch('/api/invoices/' + invoiceId);
@@ -1255,8 +1325,7 @@
     // уже отправлено «нет товара» и руководитель ещё не ответил, сразу
     // отложены: иначе после перезагрузки грузчик пошёл бы за ними снова.
     postponedItems = new Set(currentInvoice.items.filter(it => it.missing_marked && !it.closed).map(it => it.id));
-    pauseStart = null;
-    document.getElementById('pauseBanner').classList.remove('show');
+    setPauseLock(false);
     document.getElementById('doneScreen').classList.remove('show');
     document.getElementById('taskScreen').style.display = '';
     renderCurrentItem();
@@ -1348,6 +1417,9 @@
   }
 
   async function openProductRun(supplyId, sku){
+    // Ушёл с паузы на другую работу — пауза кончилась: так и пишем
+    // руководителю, а не бросаем её висеть без конца.
+    if(pauseStart) resumeTask();
     productRun = { supplyId, preferred: sku || null };
     backTarget = { kind: 'supply', id: supplyId };
     postponedItems = new Set();
@@ -1360,8 +1432,7 @@
     results.length = 0;
     runVisited.clear();
     startTaskTimer();
-    pauseStart = null;
-    document.getElementById('pauseBanner').classList.remove('show');
+    setPauseLock(false);
     document.getElementById('doneScreen').classList.remove('show');
     document.getElementById('taskScreen').style.display = '';
     renderCurrentItem();
@@ -1679,6 +1750,7 @@
   }
 
   function updatePickConfirm(){
+    if(pauseStart){ document.getElementById('confirmBtn').disabled = true; return; }
     const btn = document.getElementById('confirmBtn');
     const toggle = document.getElementById('lastCellToggle');
     const remaining = pickSuggestion ? pickSuggestion.item.remaining : 0;
@@ -1934,6 +2006,7 @@
   }
 
   function updateReturnConfirm(){
+    if(pauseStart){ document.getElementById('confirmBtn').disabled = true; return; }
     const btn = document.getElementById('confirmBtn');
     if(!selectedBucket){
       btn.disabled = true;
@@ -2045,6 +2118,7 @@
   // Ячейку выбирают из трёх мест — подсказка, ручной ввод и карта, — и все три
   // зовут сюда. Ветка возврата стоит один раз здесь, а не в каждом из них.
   function updateConfirmState(){
+    if(pauseStart){ document.getElementById('confirmBtn').disabled = true; return; }
     if(isReturn()){ return updateReturnConfirm(); }
     const postpone = document.getElementById('postponeBtn');
     if(postpone) postpone.style.display = 'none';
@@ -2675,7 +2749,7 @@
     }
   }
 
-  const ALL_SCREENS = ['homeScreen', 'suppliesScreen', 'supplyScreen', 'docsScreen',
+  const ALL_SCREENS = ['homeScreen', 'suppliesScreen', 'supplyScreen', 'paperScreen', 'docsScreen',
     'pickListScreen', 'moveScreen', 'kitScreen', 'invScreen'];
 
   function hideAllScreens(){
@@ -2834,6 +2908,7 @@
         ? '<button class="big-btn" onclick="openProductRun(\'' + jsArg(id) + '\')">Собирать по товарам</button>'
           + '<div id="supplyProducts" class="supply-products"></div>'
           + '<button class="big-btn secondary" onclick="openSupplyPickList(\'' + jsArg(id) + '\')">Лист грузчика — вся поставка за один обход</button>'
+          + '<button class="big-btn secondary" onclick="openPaper(\'' + jsArg(id) + '\')">Собираю по бумажному листу</button>'
         : '<div class="job-empty">Все заказы поставки собраны.</div>')
       + '<div class="list-group-title">Заказы · ' + orders.length + '</div>'
       + orders.map(i => orderRowHtml(i, null)).join('');
@@ -2995,25 +3070,30 @@
     });
     const sortHost = document.getElementById('pickListSort');
     if(sortHost){
-      sortHost.innerHTML = sortSelect();
-      const sort = sortHost.querySelector('.pick-sort');
-      if(sort) sort.onchange = function(){ setPickSort(sort.value); };
+      sortHost.innerHTML = sortSwitch();
+      sortHost.querySelectorAll('[data-sort]').forEach(function(b){
+        b.onclick = function(){ setPickSort(b.dataset.sort); renderPickFilter(pickListAll); };
+      });
     }
   }
 
-  function sortSelect(){
-    const option = function(value, label){
-      return '<option value="' + value + '"' + (pickSort === value ? ' selected' : '') + '>'
-        + label + '</option>';
-    };
+  function sortSwitch(){
     const places = (pickListAll && pickListAll.orders || []).some(function(o){ return o.destination; });
-    return '<select class="pick-sort" aria-label="Порядок строк">'
-      + option('route', 'Обход склада')
-      + option('name', 'По товару')
-      + option('company', 'По клиенту')
-      // Порядок по точке доставки предлагаем только тогда, когда она вообще есть.
-      + (places ? option('place', 'По точке доставки') : '')
-      + '</select>';
+    const opts = [['route', 'Обход склада'], ['name', 'По товару'], ['company', 'По клиенту']]
+      // Порядок по точке доставки — только когда точек больше одной.
+      .concat(places && destinations().length > 1 ? [['place', 'По точке']] : []);
+    return '<div class="pick-seg" role="group" aria-label="Порядок строк">'
+      + opts.map(function(o){
+        return '<button type="button" data-sort="' + o[0] + '" class="' + (pickSort === o[0] ? 'on' : '') + '">'
+          + o[1] + '</button>';
+      }).join('') + '</div>';
+  }
+
+  // Куда едут заказы листа. Одна точка на всех — пишем её раз в шапке, а не
+  // под каждой строкой (владелец 22.09.2026).
+  function destinations(){
+    const all = (pickListAll && pickListAll.orders || []).map(function(o){ return o.destination || ''; });
+    return all.filter(function(d, i){ return all.indexOf(d) === i; });
   }
 
   function setPickFilter(name){
@@ -3053,6 +3133,15 @@
     sub.textContent = list.orders.length + ' ' + pluralRu(list.orders.length, 'заказ', 'заказа', 'заказов')
       + ' · ' + list.totalUnits + ' шт · ' + list.cellsToVisit + ' '
       + pluralRu(list.cellsToVisit, 'ячейка', 'ячейки', 'ячеек');
+    pickListAll = list;
+    const dest = destinations();
+    if(dest.length === 1 && dest[0]){
+      const line = document.createElement('div');
+      line.className = 'pick-dest';
+      line.innerHTML = 'Куда: <b></b>';
+      line.querySelector('b').textContent = dest[0];
+      sub.appendChild(line);
+    }
     const printBtn = document.getElementById('pickListPrint');
     if(printBtn) printBtn.style.display = '';
 
@@ -3105,7 +3194,7 @@
       }).join('');
       const orders = l.perOrder.map(function(o){
         const own = list.orders.find(function(x){ return x.number === o.invoiceNumber; });
-        const place = own && own.destination
+        const place = own && own.destination && destinations().length > 1
           ? '<b class="pick-place">' + escapeHTML(own.destination) + '</b>' : '';
         return '<span>' + escapeHTML(String(o.invoiceNumber)) + ' — ' + o.qty + ' шт' + place + '</span>';
       }).join('');
@@ -3149,6 +3238,181 @@
         + '<div class="pick-orders">' + orders + '</div>'
         + '</div>';
     }).join('');
+  }
+
+  /* ---------- Сборка по бумажному листу ----------
+     Скан QR на листе (или кнопка в поставке) — начало и таймер: сервер пишет
+     в журнал «начал по листу». Грузчик собирает по бумаге, здесь отмечает
+     только то, чего не нашёл, и жмёт «Собрал по листу» — Аргус записывает
+     взятое по ячейкам листа и шлёт руководителю «нет товара» на ненайденное.
+     Начатая сборка переживает перезагрузку телефона: она в памяти браузера. */
+  const PAPER_KEY = 'argus_paper';
+  let paper = null;          // { supplyId, number, startedAt, pausedMs, pauseAt, pauseReason, miss: {sku: found} }
+  let paperLines = [];
+  let paperTimer = null;
+
+  function savePaper(){
+    try{ paper ? localStorage.setItem(PAPER_KEY, JSON.stringify(paper)) : localStorage.removeItem(PAPER_KEY); } catch(e){}
+  }
+  function loadPaper(){
+    try{ return JSON.parse(localStorage.getItem(PAPER_KEY) || 'null'); } catch(e){ return null; }
+  }
+
+  async function openPaper(supplyId){
+    if(pauseStart) resumeTask();
+    openJob('paperScreen');
+    backTarget = { kind: 'supply', id: supplyId };
+    document.getElementById('paperSub').textContent = 'Загружаю…';
+    document.getElementById('paperBody').innerHTML = '';
+    let d;
+    try{ d = await apiFetch('/api/supplies/' + supplyId); }
+    catch(e){ document.getElementById('paperSub').textContent = 'Не удалось загрузить поставку: ' + e.message; return; }
+    // Сколько ещё собирать по каждому товару — без позиций, по которым уже
+    // ушло «нет товара»: их ждёт решение руководителя, а не грузчик.
+    const open = new Map();
+    (d.packing || []).forEach(l => { if(!l.missing) open.set(l.sku, (open.get(l.sku) || 0) + Number(l.left || 0)); });
+    paperLines = (d.picking || []).map(r => Object.assign({}, r, { qty: open.get(r.sku) || 0 }))
+      .filter(r => r.qty > 0);
+    const saved = loadPaper();
+    if(saved && saved.supplyId === supplyId){
+      paper = saved;
+    } else if(paperLines.length){
+      // Начало сборки — в журнал и таймер, только если собирать есть что.
+      try{
+        const r = await apiFetch('/api/shipping/paper/start', { method: 'POST', body: { supplyId } });
+        paper = { supplyId, number: r.number, startedAt: r.startedAt, pausedMs: 0, pauseAt: null, pauseReason: '', miss: {} };
+        savePaper();
+      } catch(e){
+        document.getElementById('paperSub').textContent = e.message;
+        return;
+      }
+    }
+    document.getElementById('paperTitle').textContent = 'По листу · ' + (d.supply && d.supply.number || '');
+    document.getElementById('paperSub').textContent = (d.supply && d.supply.companyName || '')
+      + (d.supply && d.supply.destination ? ' → ' + d.supply.destination : '');
+    renderPaper();
+    renderPaperTimer();
+    if(!paperTimer) paperTimer = setInterval(renderPaperTimer, 1000);
+  }
+  window.openPaper = openPaper;
+
+  function paperBack(){
+    const id = paper ? paper.supplyId : backTarget && backTarget.id;
+    return id ? openSupply(id) : openSupplies();
+  }
+  window.paperBack = paperBack;
+
+  function renderPaperTimer(){
+    if(!paper || !document.getElementById('paperScreen').classList.contains('show')) return;
+    const now = paper.pauseAt ? new Date(paper.pauseAt).getTime() : Date.now();
+    const sec = Math.max(0, Math.floor((now - new Date(paper.startedAt).getTime() - paper.pausedMs) / 1000));
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    document.getElementById('paperTimerValue').textContent = h > 0
+      ? h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0')
+      : m + ':' + String(s).padStart(2, '0');
+    const box = document.getElementById('paperTimer');
+    box.classList.toggle('paused', !!paper.pauseAt);
+    box.classList.toggle('running', !paper.pauseAt);
+    document.getElementById('paperPauseBanner').classList.toggle('show', !!paper.pauseAt);
+    document.getElementById('paperPauseReason').textContent = paper.pauseReason || '';
+  }
+
+  function paperPause(reason){
+    if(!reason || !paper || paper.pauseAt) return;
+    closeSheet();
+    paper.pauseAt = new Date().toISOString();
+    paper.pauseReason = reason;
+    savePaper();
+    renderPaperTimer();
+    reportPause({ reason });
+  }
+
+  function paperResume(){
+    if(!paper || !paper.pauseAt) return;
+    const ms = Date.now() - new Date(paper.pauseAt).getTime();
+    paper.pausedMs += ms;
+    const reason = paper.pauseReason;
+    paper.pauseAt = null;
+    paper.pauseReason = '';
+    savePaper();
+    renderPaperTimer();
+    reportPause({ reason, resumed: true, pausedMs: ms });
+  }
+  window.paperResume = paperResume;
+
+  function renderPaper(){
+    const body = document.getElementById('paperBody');
+    if(!paperLines.length){
+      body.innerHTML = '<div class="job-empty">Собирать больше нечего: всё собрано '
+        + 'или ждёт решения руководителя по «нет товара».</div>';
+      paper = null;
+      savePaper();
+      return;
+    }
+    const missCount = Object.keys(paper.miss).length;
+    body.innerHTML = '<div class="paper-note">Собирайте по бумаге. Здесь отметьте только то, чего не нашли или не хватило, '
+      + 'и в конце нажмите «Собрал по листу».</div>'
+      + paperLines.map(function(r, i){
+        const miss = Object.prototype.hasOwnProperty.call(paper.miss, r.sku);
+        const cells = (r.cells || []).filter(c => c.take > 0)
+          .map(c => c.label + ' — взять ' + c.take).join(' · ') || 'в ячейках Аргуса нет';
+        return '<div class="paper-line' + (miss ? ' miss' : '') + '">'
+          + '<div class="paper-top"><div><div class="paper-name">' + escapeHTML(r.name || r.sku) + '</div>'
+          +   '<div class="paper-sku">' + escapeHTML(r.article || r.sku) + '</div></div>'
+          +   '<div class="paper-need">' + r.qty + ' шт</div></div>'
+          + '<div class="paper-cells">' + escapeHTML(cells) + '</div>'
+          + '<button type="button" class="paper-miss-btn" data-paper-miss="' + i + '">'
+          +   (miss ? 'Не нашёл — отмечено' : 'Не нашёл / не хватило') + '</button>'
+          + '<label class="paper-found">Нашёл <input type="text" inputmode="numeric" pattern="[0-9]*" data-paper-found="' + i + '" value="'
+          +   (miss ? paper.miss[r.sku] : 0) + '"> из ' + r.qty + ' шт</label>'
+          + '</div>';
+      }).join('')
+      + '<button class="big-btn" id="paperDoneBtn">Собрал по листу'
+      + (missCount ? ' · не нашёл ' + missCount : '') + '</button>';
+    body.querySelectorAll('[data-paper-miss]').forEach(function(b){
+      b.onclick = function(){
+        const r = paperLines[Number(b.dataset.paperMiss)];
+        if(Object.prototype.hasOwnProperty.call(paper.miss, r.sku)) delete paper.miss[r.sku];
+        else paper.miss[r.sku] = 0;
+        savePaper();
+        renderPaper();
+      };
+    });
+    body.querySelectorAll('[data-paper-found]').forEach(function(inp){
+      inp.onfocus = function(){ inp.select(); };
+      inp.oninput = function(){
+        const r = paperLines[Number(inp.dataset.paperFound)];
+        const n = parseInt(String(inp.value).replace(/\D/g, ''), 10) || 0;
+        paper.miss[r.sku] = Math.min(n, Number(r.qty));
+        savePaper();
+      };
+    });
+    document.getElementById('paperDoneBtn').onclick = finishPaper;
+  }
+
+  async function finishPaper(){
+    if(!paper) return;
+    if(paper.pauseAt) paperResume();
+    const btn = document.getElementById('paperDoneBtn');
+    btn.disabled = true;
+    btn.textContent = 'Записываю…';
+    try{
+      const r = await apiFetch('/api/shipping/paper/finish', { method: 'POST', body: {
+        supplyId: paper.supplyId, startedAt: paper.startedAt, pausedMs: paper.pausedMs,
+        notFound: Object.keys(paper.miss).map(sku => ({ sku, found: paper.miss[sku] })),
+      } });
+      const supplyId = paper.supplyId;
+      paper = null;
+      savePaper();
+      const missed = r.report.filter(x => x.missing > 0);
+      showToast('Записано: взято ' + r.taken + ' шт' + (r.minutes ? ' за ' + r.minutes + ' мин' : '')
+        + (missed.length ? ' · руководителю ушло «нет товара»: ' + missed.length : ''));
+      openSupply(supplyId);
+    } catch(e){
+      btn.disabled = false;
+      btn.textContent = 'Собрал по листу';
+      showToast('Не записано: ' + e.message);
+    }
   }
 
   /* ---------- Перепаковка и перестановка ----------
@@ -3565,26 +3829,50 @@
   let totalPausedMs = 0;
   let pauseLog = [];
 
+  // Пауза видна руководителю сразу — записью в журнале, а не только в итоге
+  // накладной (владелец 26.09.2026). Не дошла — работа не встаёт, но человек
+  // должен знать, что начальник не в курсе.
+  function reportPause(body){
+    const onPaper = paper && document.getElementById('paperScreen').classList.contains('show');
+    const doc = onPaper ? { supplyId: paper.supplyId }
+      : productRun ? { supplyId: productRun.supplyId }
+      : currentInvoice ? { invoiceId: currentInvoice.id } : {};
+    apiFetch('/api/journal/pause', { method: 'POST', body: Object.assign(doc, body) })
+      .catch(e => showToast('Руководитель не получил отметку о паузе: ' + e.message));
+  }
+
+  // На паузе работа заперта целиком: раньше кнопки гасли, а поле количества
+  // оставалось живым — набрал число, и «Принять» снова нажималось.
+  function setPauseLock(on){
+    document.getElementById('pauseBanner').classList.toggle('show', on);
+    document.querySelectorAll('.qty-btn, .cell-option, .cell-manual, .bucket-option, .missing-btn')
+      .forEach(el => { el.style.pointerEvents = on ? 'none' : ''; });
+    document.querySelectorAll('#taskScreen input').forEach(el => { el.disabled = on; });
+    if(on) document.getElementById('confirmBtn').disabled = true;
+  }
+
   function pauseTask(reason){
-    if(!reason) return;
+    if(paper && document.getElementById('paperScreen').classList.contains('show')) return paperPause(reason);
+    if(!reason || pauseStart) return;
     pauseStart = new Date();
     pauseLog.push({reason: reason, start: pauseStart, end: null});
     closeSheet();
     document.getElementById('pauseReasonLabel').textContent = reason;
-    document.getElementById('pauseBanner').classList.add('show');
-    document.getElementById('confirmBtn').disabled = true;
-    document.querySelectorAll('.qty-btn, .cell-option, .cell-manual, .bucket-option, .missing-btn').forEach(el => el.style.pointerEvents = 'none');
+    setPauseLock(true);
+    reportPause({ reason });
   }
 
   function resumeTask(){
     if(!pauseStart) return;
     const now = new Date();
-    totalPausedMs += (now - pauseStart);
-    pauseLog[pauseLog.length - 1].end = now;
+    const ms = now - pauseStart;
+    totalPausedMs += ms;
+    const last = pauseLog[pauseLog.length - 1];
+    last.end = now;
     pauseStart = null;
-    document.getElementById('pauseBanner').classList.remove('show');
-    document.querySelectorAll('.qty-btn, .cell-option, .cell-manual, .bucket-option, .missing-btn').forEach(el => el.style.pointerEvents = '');
-    updateConfirmState();
+    setPauseLock(false);
+    reportPause({ reason: last.reason, resumed: true, pausedMs: ms });
+    if(isPicking()) updatePickConfirm(); else updateConfirmState();
   }
 
   function formatDuration(ms){
@@ -3692,6 +3980,9 @@
   taskStartTime = new Date();
 
   startTaskTimer();
+  // «Назад» браузера — то же, что стрелка «←» на экране (back.js).
+  argusBackButton({ buttons: '.job-back, .done-back, .sheet-back, .map-back, #invoiceSwitch' });
+
   init();
 </script>
 

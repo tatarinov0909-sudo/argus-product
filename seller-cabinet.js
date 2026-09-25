@@ -25,7 +25,9 @@
   const state = {token:localStorage.getItem('argus_token'),owner:localStorage.getItem('argus_role')==='owner',companyId:null,profile:null,catalog:{},orderPage:1,sourceMode:false,sourceDocuments:null,
     pageSize:30,textSize:'normal',view:'products',stock:null,stockSummary:null,orders:null,documents:null,fetchedAt:{},search:'',filter:'all',page:1,orderSearch:'',orderFilter:'all',docSearch:'',docFilter:'all',viewRun:0,drawerRun:0,exportRows:[]};
   const statusClass = {open:'waiting',in_progress:'working',ready:'ready',shipped:''};
-  const orderActive = r => r.status!=='shipped'&&!r.mp_closed_at;
+  // Отменённый на WB заказ, товар которого уже взят в сборку, — ещё в работе:
+  // склад должен вернуть товар на полку, и продавец видит это под «В работе».
+  const orderActive = r => r.status!=='shipped'&&(!r.mp_closed_at||!!r.stock_conflict);
   // Order state as the seller can check it against the WB cabinet: new ones wait
   // for a supply; one confirmed in the WB cabinet is handled there; once the
   // warehouse takes an order into a supply it is in assembly.
@@ -119,6 +121,9 @@
   const pageInfo={products:['Ваши остатки','Товары','Актуальное количество ваших товаров.'],orders:['От заказа до отгрузки','Заказы','Следите за тем, как склад готовит ваши заказы.'],supplies:['От склада до сортировочного центра','Поставки на WB','Поставки, которые склад собирает из ваших заказов и везёт на Wildberries. Видны с той минуты, как менеджер составил поставку.'],documents:['Привоз на склад и возвраты','Приходы и документы','Товар, который вы привезли на хранение: приходы, результаты приёмки и возвраты.']};
   async function navigate(refresh=false){
     if(!state.profile||!state.token)return;
+    // «Назад» браузера при открытой карточке: карточка закрывается вместе с
+    // уходом со страницы, а не висит поверх другого раздела.
+    document.querySelectorAll('dialog[open]').forEach(d=>d.close());
     const name=location.hash.slice(1);state.view=pageInfo[name]?name:'products';const run=++state.viewRun;
     const [eyebrow,title,subtitle]=pageInfo[state.view];$('pageEyebrow').textContent=eyebrow;$('pageTitle').textContent=$('breadcrumb').textContent=title;$('pageSubtitle').textContent=subtitle;
     document.querySelectorAll('[data-nav]').forEach(a=>{if(a.dataset.nav===state.view)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');});

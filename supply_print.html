@@ -79,6 +79,12 @@
     margin-bottom:9px;
   }
   .fact{text-align:center; padding:7px 6px 6px;}
+  /* QR сборки по листу: грузчик сканирует его телефоном — начинается сборка
+     и таймер, в конце он сам отмечает «собрал» и что не нашёл. Маленький:
+     в 2026-09 крупный код отнимал треть листа. */
+  .fact.qr{display:flex; align-items:center; gap:6px; text-align:left; padding:4px 6px;}
+  .fact.qr svg{width:19mm; height:19mm; flex:none;}
+  .fact.qr span{text-transform:none; font-size:9px; line-height:1.3;}
   .fact + .fact{border-left:1px solid var(--rule-hair);}
   .fact b{display:block; font-family:var(--mono); font-size:16px; line-height:1.15;
     overflow-wrap:anywhere;}
@@ -311,6 +317,7 @@
     <button class="btn ghost" type="button" onclick="togglePicker()">Товары для печати</button>
     <span class="grow"></span>
     <span class="hint">Печать:</span>
+    <button class="btn" type="button" id="printAllPick" hidden onclick="printOnly('pickall')">Сводный лист</button>
     <button class="btn" type="button" onclick="printOnly('pick')">Лист комплектации</button>
     <button class="btn ghost" type="button" onclick="printOnly('pack')">Упаковочный</button>
     <button class="btn ghost" type="button" onclick="printOnly('stickers')">Этикетки WB</button>
@@ -333,6 +340,7 @@
 
 <div id="docs"></div>
 
+<script src="qrcode.min.js?v=e259e455"></script>
 <script>
 (function(){
   'use strict';
@@ -471,10 +479,12 @@
       list.forEach((d) => productsOf(d).forEach((r) => SELECTED.add(keyOf(d, r))));
     }
 
-    // Каждая поставка — свой комплект листов, подряд. Складывать товар
-    // разных поставок в один лист нельзя: уезжают они по отдельности, и
-    // собранное надо разложить по машинам, а не в общую кучу.
-    document.getElementById('docs').innerHTML = list.map((data) => {
+    // Каждая поставка — свой комплект листов, подряд: уезжают они по
+    // отдельности. А при нескольких поставках сверху — сводный лист: один
+    // проход по складу за всеми сразу, в строке — сколько в какую поставку
+    // (как у Кирсти, владелец 09.09.2026).
+    document.getElementById('printAllPick').hidden = !many;
+    document.getElementById('docs').innerHTML = (many ? consolidatedSheet(list) : '') + list.map((data) => {
       const s = data.supply;
       const picking = data.picking.filter((r) => SELECTED.has(keyOf(data, r)));
       const packing = data.packing.filter((r) => SELECTED.has(keyOf(data, r)));
@@ -492,6 +502,58 @@
     }).join('');
     renderPicker(list);
     paintModeButtons();
+  }
+
+  // Сводный лист комплектации по нескольким поставкам. Один и тот же артикул
+  // у двух продавцов — разные товары, поэтому складываем по продавцу и
+  // артикулу. Ячейки у одного товара одного продавца одни и те же — «взять»
+  // пересчитываем на общее количество тем же правилом: сколько есть в первой
+  // по обходу, остаток — во второй.
+  function consolidatedSheet(list){
+    const by = new Map();
+    list.forEach((data) => data.picking.filter((r) => SELECTED.has(keyOf(data, r))).forEach((r) => {
+      const key = data.supply.companyName + '|' + r.sku;
+      const m = by.get(key) || Object.assign({}, r, {
+        qty: 0, total: 0, picked: 0, perSupply: [], companyName: data.supply.companyName,
+        cells: (r.cells || []).map((c) => Object.assign({}, c)),
+      });
+      m.qty += Number(r.qty || 0);
+      m.total += Number(r.total || 0);
+      m.picked += Number(r.picked || 0);
+      m.perSupply.push({ number: data.supply.number, qty: Number(r.qty || 0) });
+      by.set(key, m);
+    }));
+    const rows = [...by.values()];
+    rows.forEach((m) => {
+      let left = m.qty;
+      m.cells.forEach((c) => { c.take = Math.max(0, Math.min(left, c.qty)); left -= c.take; });
+    });
+    rows.sort((a, b) => {
+      const A = a.cells[0], B = b.cells[0];
+      if(!A && !B) return String(a.name).localeCompare(String(b.name), 'ru');
+      if(!A) return 1;
+      if(!B) return -1;
+      return A.rowNum - B.rowNum || A.rack - B.rack || A.tier - B.tier
+        || String(a.name).localeCompare(String(b.name), 'ru');
+    });
+    // Продавца в строке пишем, только когда их в листе несколько.
+    const companies = [...new Set(list.map((d) => d.supply.companyName))];
+    if(companies.length < 2) rows.forEach((m) => { m.companyName = ''; });
+    const dests = [...new Set(list.map((d) => d.supply.destination || ''))];
+    const s = {
+      number: list.length + ' ' + plural(list.length, 'поставка', 'поставки', 'поставок'),
+      companyName: companies.join(', '),
+      destination: dests.length === 1 ? dests[0] : 'разные точки — см. строки',
+      shipDate: null, createdAt: new Date().toISOString(), status: 'many',
+    };
+    const t = {
+      supplies: list.length,
+      orders: list.reduce((sum, d) => sum + new Set(d.packing.filter((r) => SELECTED.has(keyOf(d, r))).map((r) => r.orderNumber)).size, 0),
+      units: rows.reduce((sum, r) => sum + r.qty, 0),
+      uniqueSkus: rows.length,
+    };
+    return pickingSheet(s, t, rows, true, { key: 'pickall', title: 'Сводный лист комплектации',
+      sub: 'Один проход по складу за всеми поставками. В строке — сколько в какую поставку.' });
   }
 
   // ---------- Выбор товаров ----------
@@ -665,9 +727,22 @@
     return '<colgroup>' + widths.map((w) => '<col' + (w ? ' style="width:' + w + '%"' : '') + '>').join('') + '</colgroup>';
   }
 
-  function pickingSheet(s, t, rows, hasGoods){
+  // Код ведёт на экран грузчика: «сборка по листу» этой поставки. Только у
+  // собирающейся поставки — у собранной отмечать уже нечего.
+  function paperQr(s){
+    if(s.status !== 'collecting' || typeof qrcode !== 'function') return '';
+    const qr = qrcode(0, 'M');
+    qr.addData(location.origin + '/loader.html#paper=' + s.id, 'Byte');
+    qr.make();
+    return '<div class="fact qr">' + qr.createSvgTag({ cellSize: 2, margin: 0, scalable: true })
+      + '<span>Сканируйте телефоном — сборка по листу и таймер</span></div>';
+  }
+
+  function pickingSheet(s, t, rows, hasGoods, doc){
+    doc = doc || { key: 'pick', title: 'Лист комплектации',
+      sub: 'Собрать со склада. Одинаковые артикулы сложены — за товаром идём один раз, по рядам.' };
     if(!rows || rows.length === 0){
-      return '<div class="sheet" data-doc="pick">' + head(s, 'Лист комплектации', '')
+      return '<div class="sheet" data-doc="' + doc.key + '">' + head(s, doc.title, '')
         + '<div class="empty">'
         + (hasGoods ? 'Всё по этой поставке уже собрано — идти больше некуда.' : 'В поставке нет позиций.')
         + '</div></div>';
@@ -742,6 +817,13 @@
           + '</td>'
           + '<td class="goods">'
           +   '<div class="goods-line">' + esc(r.name) + '</div>'
+          // Сводный лист: сколько из взятого в какую поставку — уезжают они
+          // по отдельности, и собранное раскладывают по поставкам у стола.
+          +   (r.perSupply
+                ? '<div class="short-note" style="color:var(--ink);">' + r.perSupply.map((x) =>
+                    esc(x.number) + ' — ' + nf(x.qty)).join(' · ')
+                  + (r.companyName ? ' · ' + esc(r.companyName) : '') + '</div>'
+                : '')
           // Лист печатают и посреди работы: если часть уже снята с полки,
           // в «Взять» стоит остаток, и об этом надо сказать прямо.
           +   (r.picked > 0
@@ -767,14 +849,17 @@
       return band + lines;
     }).join('');
 
-    return '<div class="sheet" data-doc="pick">'
-      + head(s, 'Лист комплектации', 'Собрать со склада. Одинаковые артикулы сложены — за товаром идём один раз, по рядам.')
+    return '<div class="sheet" data-doc="' + doc.key + '">'
+      + head(s, doc.title, doc.sub)
       + '<div class="facts">'
       +   '<div class="fact"><b>' + nf(t.uniqueSkus) + '</b><span>'
       +     plural(t.uniqueSkus, 'позиция', 'позиции', 'позиций') + '</span></div>'
       +   '<div class="fact"><b>' + nf(t.units) + '</b><span>штук всего</span></div>'
       +   '<div class="fact"><b>' + nf(t.orders) + '</b><span>' + plural(t.orders, 'заказ', 'заказа', 'заказов') + '</span></div>'
-      +   '<div class="fact"><b>' + day(s.createdAt) + '</b><span>создана в ' + clock(s.createdAt) + '</span></div>'
+      +   (t.supplies
+            ? '<div class="fact"><b>' + nf(t.supplies) + '</b><span>' + plural(t.supplies, 'поставка', 'поставки', 'поставок') + '</span></div>'
+            : '<div class="fact"><b>' + day(s.createdAt) + '</b><span>создана в ' + clock(s.createdAt) + '</span></div>')
+      +   paperQr(s)
       + '</div>'
       + (short > 0
           ? '<div class="short-note" style="margin-bottom:8px;">По ' + short + ' '
@@ -792,7 +877,7 @@
       +   '<div><div class="sign-line"></div><div class="sign-label">Собрал — фамилия, подпись</div></div>'
       +   '<div><div class="sign-line"></div><div class="sign-label">Дата и время</div></div>'
       + '</div>'
-      + foot(s, 'Лист комплектации')
+      + foot(s, doc.title)
       + '</div>';
   }
 

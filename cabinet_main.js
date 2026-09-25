@@ -168,11 +168,22 @@
   }
   window.showPane = showPane;
 
-  function switchView(view){
+  // Вкладки, по которым человек прошёл: кнопка «назад» браузера возвращает
+  // на прошлую, а не уводит из кабинета на вход (см. back.js).
+  const viewTrail = [];
+  let currentView = null;
+
+  function switchView(view, fromBack){
+    if(!fromBack && currentView && currentView !== view){
+      viewTrail.push(currentView);
+      if(viewTrail.length > 50) viewTrail.shift();
+    }
+    currentView = view;
     // Экран может жить внутри другого: открываем хозяина и нужную вкладку.
     const inner = INNER_PANES[view];
     if(inner && document.getElementById('view-' + inner[0])?.dataset.panes){
-      switchView(inner[0]);
+      switchView(inner[0], true);
+      currentView = view;
       showPane(inner[0], inner[1]);
       return;
     }
@@ -212,6 +223,51 @@
       const badge = document.getElementById('chatBadge');
       if(badge) badge.classList.remove('show');
     }
+  }
+
+  argusBackButton({
+    buttons: '.wh-panel-back',
+    fallback: function(){
+      const prev = viewTrail.pop();
+      if(!prev) return false;
+      switchView(prev, true);
+      return true;
+    },
+  });
+
+  // Логотип «Аргус» ведёт туда, куда человек выбрал в меню профиля;
+  // по умолчанию — в журнал действий (владелец 26.09.2026). Выбор хранится в
+  // этом браузере: это удобство человека, а не настройка склада.
+  const LOGO_TARGETS = ['journal', 'chat', 'orders', 'supplies', 'receipts', 'products', 'warehouse'];
+  const LOGO_KEY = 'argus_logo_target';
+  const navName = (v) => {
+    const el = document.getElementById('nav-' + v);
+    return el ? el.firstChild.nextSibling.textContent.trim() : v;
+  };
+  function logoTarget(){
+    let v = null;
+    try{ v = localStorage.getItem(LOGO_KEY); } catch(e){}
+    if(v && document.getElementById('nav-' + v)) return v;
+    return document.getElementById('nav-journal') ? 'journal' : 'orders';
+  }
+  function goLogo(){ switchView(logoTarget()); }
+  function renderLogoTargets(){
+    const now = logoTarget();
+    document.getElementById('logoTargetName').textContent = navName(now);
+    document.getElementById('logoLink').title = 'Перейти: ' + navName(now);
+    document.getElementById('logoTargetList').innerHTML = LOGO_TARGETS
+      .filter(v => document.getElementById('nav-' + v))
+      .map(v => '<div class="account-menu-item' + (v === now ? ' on' : '') + '" onclick="setLogoTarget(\'' + v + '\')">'
+        + escapeHTML(navName(v)) + '</div>').join('');
+  }
+  function toggleLogoTargets(){
+    renderLogoTargets();
+    document.getElementById('logoTargetList').classList.toggle('open');
+  }
+  function setLogoTarget(v){
+    try{ localStorage.setItem(LOGO_KEY, v); } catch(e){}
+    renderLogoTargets();
+    document.getElementById('logoTargetList').classList.remove('open');
   }
 
   let whToastTimer = null;
@@ -771,13 +827,14 @@
     wrap.appendChild(row);
   }
 
-  // Номер по умолчанию: ПР-ДДММ-N, следующий свободный за сегодня. Свой номер
+  // Номер по умолчанию: ПР-ДДММГГ-N, следующий свободный за сегодня. Свой номер
   // (из документов поставщика) можно вписать поверх.
   function suggestReceiptNumber(){
     const field = document.getElementById('invoiceNumberInput');
     if(!field || field.value.trim()) return;
     const d = new Date();
-    const prefix = 'ПР-' + String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0') + '-';
+    const prefix = 'ПР-' + String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0')
+      + String(d.getFullYear()).slice(2) + '-';
     let n = 1;
     const taken = new Set((lastInvoices || []).map(inv => inv.number));
     while(taken.has(prefix + n)) n += 1;
@@ -3093,7 +3150,8 @@
     const buckets = new Map();
     entries.forEach(function(e){
       const day = journalDayKey(e.created_at);
-      const groupable = !isWaiting(e) && e.invoice_id;
+      // Пауза грузчика — отдельной строкой: её и должны заметить.
+      const groupable = !isWaiting(e) && e.invoice_id && e.entity_type !== 'worker_pause';
       // В поставке у каждого заказа свой товар, и по документу такая сборка
       // не собирается: сорок заказов — сорок групп по одной строке. Владельцу
       // нужна одна запись «собирается поставка» с полосой готовности.
@@ -3578,7 +3636,9 @@
   async function confirmSelected(){
     const checked = document.querySelectorAll('.j-check:checked');
     if(checked.length === 0) return;
-    if(!await askConfirm('Подтвердить ' + checked.length + ' запис' + (checked.length===1?'ь':'и') + '? Правки будут проведены в 1С.')) return;
+    // Аргус в 1С не пишет (1С склада только читается) — и обещать этого нельзя.
+    if(!await askConfirm('Подтвердить ' + checked.length + ' запис' + (checked.length===1?'ь':'и') + '?\n\n'
+      + 'Решение запишется в журнал. В 1С ничего не отправляется.')) return;
     const ids = Array.from(checked).map(cb => cb.closest('.j-entry').dataset.entryId);
     try{
       for(const id of ids){
@@ -6144,6 +6204,7 @@
 
   // Менеджер начинает с заказов — это его работа. Владелец с чата.
   switchView(IS_MANAGER ? 'orders' : 'chat');
+  renderLogoTargets();
 
   addInvoiceItemRow();
   loadWarehouseInfo();

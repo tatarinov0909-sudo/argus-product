@@ -26,6 +26,9 @@
   .sub{font-size:12px;color:#444;margin-top:3px;}
   .totals{display:flex;gap:18px;font-size:12px;color:#222;text-align:right;}
   .totals b{display:block;font:700 19px/1.1 ui-monospace,monospace;}
+  /* QR сборки по листу — только у листа одной поставки. */
+  .totals .qr{display:flex;align-items:center;gap:6px;text-align:left;font-size:9px;line-height:1.3;max-width:42mm;}
+  .totals .qr svg{width:18mm;height:18mm;flex:none;}
   /* Куда везти и когда — сразу под заголовком: по адресу собранное
      раскладывают по машинам. */
   .sups{border:1.5px solid #111;border-radius:4px;padding:8px 10px;margin-bottom:10px;}
@@ -89,6 +92,7 @@
 
 <div id="sheet"></div>
 
+<script src="qrcode.min.js?v=e259e455"></script>
 <script>
 (function(){
   'use strict';
@@ -112,6 +116,17 @@
   function fail(text){
     document.getElementById('status').textContent = '';
     document.getElementById('sheet').innerHTML = '<div class="sheet"><div class="empty">' + esc(text) + '</div></div>';
+  }
+
+  // Код ведёт на экран грузчика: «сборка по листу» этой поставки.
+  function paperQr(){
+    const supplyId = params.get('supplyId');
+    if(!supplyId || typeof qrcode !== 'function') return '';
+    const qr = qrcode(0, 'M');
+    qr.addData(location.origin + '/loader.html#paper=' + supplyId, 'Byte');
+    qr.make();
+    return '<div class="qr">' + qr.createSvgTag({ cellSize: 2, margin: 0, scalable: true })
+      + '<span>Сканируйте телефоном — сборка по листу и таймер</span></div>';
   }
 
   async function load(){
@@ -222,6 +237,7 @@
       +       plural(data.totalUnits, 'штука', 'штуки', 'штук') + '</div>'
       +     '<div><b>' + data.cellsToVisit + '</b>'
       +       plural(data.cellsToVisit, 'ячейка', 'ячейки', 'ячеек') + '</div>'
+      +     paperQr()
       +   '</div>'
       + '</div>'
       + supsHtml
