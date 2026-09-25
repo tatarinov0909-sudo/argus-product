@@ -350,3 +350,4 @@ dialog::backdrop{background:#090e1bcc;backdrop-filter:none}.drawer,.export-dialo
 .supply-qr-big{display:flex;gap:16px;align-items:center;margin:0 0 18px;}
 .supply-qr-big img{width:160px;height:160px;background:#fff;border-radius:8px;padding:6px;}
 .supply-qr-big b{font-family:var(--mono, ui-monospace, monospace);font-size:18px;}
+.inbound-form input{width:100%;padding:0 12px;background:#1a2130;border:1px solid #64728b}.inbound-form input[type=file]{padding:10px 12px}.inbound-form .table-scroll{margin-top:16px;max-height:none}

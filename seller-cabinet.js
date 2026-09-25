@@ -249,8 +249,9 @@
     return state.sourceMode?state.sourceDocuments:state.documents;
   }
   function renderDocuments(){
-    $('view').innerHTML=`${!state.owner&&new URLSearchParams(location.search).get('source')==='1c'?notice('Просмотр документов 1С доступен владельцу склада','Вы вошли как продавец. Для просмотра исходных документов войдите через «Вход для владельца склада», затем вернитесь по этой ссылке.')+'<a class="button" href="login.html" target="_blank" rel="noopener" style="margin-bottom:20px">Вход для владельца склада</a>':''}${state.owner?`<div class="document-mode"><button class="chip" data-document-mode="seller" aria-pressed="${!state.sourceMode}">Документы продавца</button><button class="chip" data-document-mode="source" aria-pressed="${state.sourceMode}">Документы 1С склада</button></div>`:''}${state.sourceMode?notice('Исходные документы 1С склада','Общий просмотр для владельца. Компания из обмена указана под номером документа; это не назначение документов выбранному продавцу.'):''}<section class="table-panel"><div class="table-toolbar">${searchBox('documentSearch',state.docSearch,'Номер документа')}${chips([['all','Все'],['in','Приходы'],['return','Возвраты']],state.docFilter,'data-doc-filter')}</div><div class="table-scroll"><table class="data-table documents-table"><thead><tr><th>Документ</th><th>Тип</th><th>Загружен в Аргус</th><th class="num">Заявлено, шт.</th><th>Статус</th></tr></thead><tbody id="documentsBody"></tbody></table></div><div class="table-footer">Заявленное количество — по документу. Фактическую приёмку подтверждает склад.${documentData().hasMore?' Показаны первые 1 000 документов.':''}</div></section>`;
+    $('view').innerHTML=`${!state.owner&&new URLSearchParams(location.search).get('source')==='1c'?notice('Просмотр документов 1С доступен владельцу склада','Вы вошли как продавец. Для просмотра исходных документов войдите через «Вход для владельца склада», затем вернитесь по этой ссылке.')+'<a class="button" href="login.html" target="_blank" rel="noopener" style="margin-bottom:20px">Вход для владельца склада</a>':''}${state.owner?`<div class="document-mode"><button class="chip" data-document-mode="seller" aria-pressed="${!state.sourceMode}">Документы продавца</button><button class="chip" data-document-mode="source" aria-pressed="${state.sourceMode}">Документы 1С склада</button></div>`:''}${state.sourceMode?notice('Исходные документы 1С склада','Общий просмотр для владельца. Компания из обмена указана под номером документа; это не назначение документов выбранному продавцу.'):''}<section class="table-panel"><div class="table-toolbar">${state.sourceMode?'':`<button class="button primary" id="inboundButton">${icon('box')}Привезти товар</button>`}${searchBox('documentSearch',state.docSearch,'Номер документа')}${chips([['all','Все'],['in','Приходы'],['return','Возвраты']],state.docFilter,'data-doc-filter')}</div><div class="table-scroll"><table class="data-table documents-table"><thead><tr><th>Документ</th><th>Тип</th><th>Загружен в Аргус</th><th class="num">Заявлено, шт.</th><th>Статус</th></tr></thead><tbody id="documentsBody"></tbody></table></div><div class="table-footer">Заявленное количество — по документу. Фактическую приёмку подтверждает склад.${documentData().hasMore?' Показаны первые 1 000 документов.':''}</div></section>`;
     document.querySelectorAll('[data-document-mode]').forEach(b=>b.onclick=()=>{state.sourceMode=b.dataset.documentMode==='source';state.docSearch='';state.docFilter='all';navigate();});
+    if($('inboundButton'))$('inboundButton').onclick=openInbound;
     $('documentSearch').oninput=e=>{state.docSearch=e.target.value;renderDocumentRows();};document.querySelectorAll('[data-doc-filter]').forEach(b=>b.onclick=()=>{state.docFilter=b.dataset.docFilter;renderDocuments();});renderDocumentRows();
   }
   function renderDocumentRows(){
@@ -258,6 +259,53 @@
     $('documentsBody').innerHTML=rows.map(r=>`<tr><td><button class="product-link" data-document="${h(r.id)}">${h(r.number)}</button><span class="product-meta">${counted(r.item_count,'позиция','позиции','позиций')}${state.sourceMode?' · '+h(r.company_name):''}</span>${state.sourceMode&&r.source==='1c'?`<span class="product-meta">Дата в 1С: ${h(sourceDocumentDate(r.source_document_date))}</span>`:''}</td><td>${h(documentType(r))}</td><td class="small muted">${h(when(r.created_at))}</td><td class="num">${n(r.declared_qty)}</td><td>${badge(documentStatus(r),r.status==='completed'?'ready':r.status==='open'?'waiting':'working')}</td></tr>`).join('')||`<tr><td colspan="5">${empty('Документов пока нет','Здесь появятся ваши документы и результаты приёмки после передачи данных складом.','document')}</td></tr>`;
     $('documentsBody').querySelectorAll('[data-document]').forEach(b=>b.onclick=()=>openDocument(b.dataset.document));
     state.exportRows=rows.map(r=>({'Документ':r.number,...(state.sourceMode?{'Компания в 1С':r.company_name,'Источник':r.source==='1c'?'1С':'Склад','Дата в 1С':r.source==='1c'?sourceDocumentDate(r.source_document_date):''}:{}),'Тип':documentType(r),'Загружен в Аргус':when(r.created_at),'Заявлено, шт.':Number(r.declared_qty),'Статус':documentStatus(r)}));$('excelButton').disabled=!rows.length;
+  }
+  // Привоз на склад файлом (решение владельца 25.09.2026): продавец грузит ту
+  // таблицу, с которой собирает товар, сервер узнаёт в ней его товары, и
+  // склад получает приход «ждёт приёмки». Что не узнали — показываем строкой.
+  function openInbound(){
+    const run=openDrawer('Привезти товар на склад','Новый приход');const f={grid:null,name:'',preview:null,busy:false,error:''};
+    const tomorrow=new Date(Date.now()+864e5).toLocaleDateString('sv-SE');
+    $('drawerBody').innerHTML=`<form class="settings-form inbound-form" id="inboundForm"><p class="export-description">Загрузите таблицу, по которой собираете товар: шаблон поставки WB, свою таблицу или выгрузку из 1С. В ней нужна колонка количества и штрихкод, артикул или название товара.</p>
+      <label for="inboundFile">Файл Excel или CSV</label><input type="file" id="inboundFile" accept=".xlsx,.xls,.csv"><p class="export-description" id="inboundFileName"></p>
+      <label for="inboundDate">Когда привезёте</label><input type="date" id="inboundDate" value="${tomorrow}">
+      <label for="inboundComment">Комментарий складу</label><input id="inboundComment" maxlength="300" placeholder="Машина, количество коробов">
+      <div id="inboundPreview"></div></form>`;
+    function draw(){
+      if(run!==state.drawerRun)return;const p=f.preview;
+      $('inboundFileName').textContent=f.name?'Загружен: '+f.name:'';
+      $('inboundPreview').innerHTML=f.error?notice('Файл не принят',f.error,true):f.busy&&!p?loading:!p?'':`<div class="mini-metrics">${mini('Товаров',p.summary.products).replace(' шт.','')}${mini('Всего',p.summary.units)}${mini('Не узнали строк',p.summary.notMatched).replace(' шт.','')}</div>
+        ${p.summary.notMatched?notice('Часть строк не узнали','Этих товаров нет в вашем каталоге на складе, в приход они не попадут. Проверьте штрихкод или артикул; новый товар склад заведёт при приёмке.',true):''}
+        <div class="table-scroll"><table class="data-table"><thead><tr><th>Строка файла</th><th>Товар на складе</th><th class="num">Шт.</th></tr></thead><tbody>${p.lines.map(l=>`<tr><td class="small">${h([l.barcode,l.article,l.name].filter(Boolean).join(' · '))}<span class="product-meta">строка ${l.row}</span></td><td>${l.sku?h(l.productName)+`<span class="product-meta">узнали по: ${h(l.by)}</span>`:'<span class="row-note negative">Не узнали</span>'}</td><td class="num">${n(l.qty)}</td></tr>`).join('')}</tbody></table></div>
+        <button class="button primary" type="submit" style="margin-top:20px" ${f.busy||!p.summary.products?'disabled':''}>${f.busy?'Отправляем…':'Отправить на склад'}</button>`;
+    }
+    async function send(apply){
+      f.busy=true;f.error='';draw();
+      try{
+        const r=await api('/api/sellers/inbound',{method:'POST',body:{grid:f.grid,apply,plannedDate:$('inboundDate').value||null,comment:$('inboundComment').value}});
+        if(run!==state.drawerRun)return;
+        if(apply){$('drawer').close();state.documents=null;toast('Приход '+r.invoice.number+' отправлен на склад');navigate(true);return;}
+        f.preview=r;
+      }catch(e){f.error=e.message;}
+      f.busy=false;draw();
+    }
+    $('inboundFile').onchange=e=>{
+      // Поле очищаем сразу: иначе исправленный и заново выбранный тот же файл браузер не пришлёт.
+      const file=e.target.files[0];e.target.value='';if(!file)return;f.preview=null;f.error='';f.name=file.name;
+      if(typeof XLSX==='undefined'){f.error='Не загрузился модуль Excel. Обновите страницу.';draw();return;}
+      const reader=new FileReader();
+      reader.onload=()=>{
+        try{
+          const book=XLSX.read(new Uint8Array(reader.result),{type:'array'});
+          const rows=XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]],{header:1,raw:true,defval:null});
+          // Ведомость 1С бывает в двести колонок: серверу нужны подписи слева и итог справа.
+          const wide=rows.slice(0,25).some(r=>r.some(v=>/^конечный остаток$/i.test(String(v??'').trim())));
+          f.grid=rows.slice(0,20000).map(r=>wide&&r.length>13?r.slice(0,4).concat(r.slice(-9)):r.slice(0,40));send(false);
+        }catch(err){f.error='Не удалось прочитать файл: '+err.message;draw();}
+      };
+      reader.readAsArrayBuffer(file);
+    };
+    $('inboundForm').onsubmit=e=>{e.preventDefault();if(f.preview&&!f.busy)send(true);};
   }
   function openDrawer(title,eyebrow){state.drawerRun++;$('drawerTitle').textContent=title;$('drawerEyebrow').textContent=eyebrow;$('drawerBody').innerHTML=loading;if(!$('drawer').open)$('drawer').showModal();return state.drawerRun;}
   $('closeDrawer').onclick=()=>$('drawer').close();$('drawer').addEventListener('close',()=>state.drawerRun++);
@@ -310,7 +358,7 @@
         <div class="mini-metrics">${mini('Заявлено',total)}${mini(order?'Собрано':'Принято',items.some(r=>r.accepted!==null)?accepted:null)}${mini('Расхождение',complete?accepted-total:null)}</div>
         ${!complete?'<p class="export-description">Обработка ещё не завершена. Показано уже обработанное количество; расхождение появится после завершения.</p>':''}
         <section class="detail-section"><h3>Позиции документа · ${items.length}</h3><div class="receipt-lines">${items.map(r=>{const declared=Number(r.declared_qty),different=r.finalized&&r.accepted!==declared,scale=Math.max(1,declared,r.accepted||0);return `<article class="receipt-item ${different?'issue':''}"><h3>${h(r.name)}</h3><span class="product-meta">${h(articleText(r.sku,order?state.orders.rows.find(x=>x.id===id&&x.item_id===r.id)?.mp_nm_id:null))}</span>${different?`<span class="row-note negative">Расхождение: ${n(r.accepted-declared)} шт.</span>`:''}<div class="receipt-bars"><div class="receipt-bar"><span>Заявлено</span><div class="track"><i style="width:${Math.max(0,declared/scale*100)}%"></i></div><span class="num">${n(declared)}</span></div><div class="receipt-bar"><span>${order?'Собрано':'Принято'}</span><div class="track accepted"><i style="width:${Math.max(0,(r.accepted||0)/scale*100)}%"></i></div><span class="num">${r.accepted==null?'—':n(r.accepted)}</span></div></div>${(r.buckets||[]).map(b=>`<p class="row-note">${h(({good:'Годное',defective:'Брак',packaging_defect:'Повреждена упаковка'})[b.qualityBucket]||b.qualityBucket)}: ${n(b.qty)} шт. ${h(b.defectNote||'')}</p>`).join('')}</article>`;}).join('')}</div></section>
-        <button class="button" id="exportDocument" style="margin-top:24px">${icon('download')}Выгрузить этот документ</button>`;
+        <button class="button" id="exportDocument" style="margin-top:24px">${icon('download')}Выгрузить этот документ</button>${!order&&data.direction==='in'?`<a class="button" href="act_print.html?kind=receipt&id=${encodeURIComponent(id)}" target="_blank" rel="noopener" style="margin:24px 0 0 10px">${icon('document')}Акт приёмки</a>`:''}`;
       $('exportDocument').onclick=()=>saveExcel(items.map(r=>({'Товар':r.name,'Артикул WB':order?(state.orders.rows.find(x=>x.id===id&&x.item_id===r.id)?.mp_nm_id||wbIds(r.sku).join(', ')):wbIds(r.sku).join(', '),'Штрихкод':state.stock?.find(x=>x.sku===r.sku)?.barcode||'','Заявлено, шт.':Number(r.declared_qty),[order?'Собрано, шт.':'Принято, шт.']:r.accepted??'Не завершено','Расхождение, шт.':!r.finalized?'Не завершено':r.accepted-Number(r.declared_qty)})),'Документ');
     }catch(e){if(run===state.drawerRun)$('drawerBody').innerHTML=empty('Не удалось открыть документ',e.message);}
   }
