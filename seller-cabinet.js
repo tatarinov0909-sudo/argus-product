@@ -216,7 +216,7 @@
     const rows=state.supplies||[];
     const style={collecting:'working',ready:'waiting',shipped:'ready'};
     const qrCell=r=>r.mpBarcodeFile?`<img class="supply-qr-thumb" src="data:image/svg+xml;base64,${h(r.mpBarcodeFile)}" alt="QR поставки">`:`<span class="small muted">${r.mpSupplyId?'после «Уехала»':'—'}</span>`;
-    $('view').innerHTML=rows.length?`<section class="table-panel"><div class="table-scroll"><table class="data-table"><thead><tr><th>Поставка</th><th>Куда и когда</th><th class="num">Заказов</th><th class="num">Штук</th><th>Статус</th><th>QR</th></tr></thead><tbody>${rows.map(r=>`<tr><td><button class="product-link" data-supply="${h(r.id)}">${h(r.number)}</button><span class="product-meta">составлена ${h(when(r.createdAt))}</span></td><td>${h(r.destination||'пункт ещё не выбран')}${r.shipDate?`<span class="product-meta">отгрузка ${h(new Date(r.shipDate).toLocaleDateString('ru-RU',{day:'numeric',month:'long'}))}</span>`:''}</td><td class="num">${n(r.orders)}${r.status==='collecting'?`<span class="product-meta">собрано ${n(r.ordersReady)}</span>`:''}</td><td class="num">${n(r.units)}</td><td>${badge(r.statusName,style[r.status]||'')}</td><td>${qrCell(r)}</td></tr>`).join('')}</tbody></table></div><div class="table-footer">QR поставки выдаёт Wildberries, когда склад передаёт её в доставку. Его показывают на воротах сортировочного центра.</div></section>`
+    $('view').innerHTML=rows.length?`<section class="table-panel"><div class="table-scroll"><table class="data-table"><thead><tr><th>Поставка</th><th>Куда и когда</th><th class="num">Заказов</th><th class="num">Штук</th><th>Статус</th><th>QR</th></tr></thead><tbody>${rows.map(r=>`<tr><td><button class="product-link" data-supply="${h(r.id)}">${h(r.number)}</button><span class="product-meta">составлена ${h(when(r.createdAt))}</span></td><td>${h(r.destination||'пункт ещё не выбран')}${r.shipDate?`<span class="product-meta">отгрузка ${h(new Date(r.shipDate+'T00:00').toLocaleDateString('ru-RU',{day:'numeric',month:'long'}))}</span>`:''}</td><td class="num">${n(r.orders)}${r.status==='collecting'?`<span class="product-meta">собрано ${n(r.ordersReady)}</span>`:''}</td><td class="num">${n(r.units)}</td><td>${badge(r.statusName,style[r.status]||'')}</td><td>${qrCell(r)}</td></tr>`).join('')}</tbody></table></div><div class="table-footer">QR поставки выдаёт Wildberries, когда склад передаёт её в доставку. Его показывают на воротах сортировочного центра.</div></section>`
       :empty('Поставок пока нет','Как только менеджер склада составит поставку из ваших заказов, она появится здесь.','orders');
     $('view').querySelectorAll('[data-supply]').forEach(b=>b.onclick=()=>openSupply(b.dataset.supply));
     state.exportRows=rows.map(r=>({'Поставка':r.number,'Составлена':when(r.createdAt),'Куда':r.destination||'','Заказов':r.orders,'Штук':r.units,'Статус':r.statusName,'Поставка на WB':r.mpSupplyId||''}));$('excelButton').disabled=!rows.length;
@@ -275,8 +275,8 @@
       if(run!==state.drawerRun)return;const p=f.preview;
       $('inboundFileName').textContent=f.name?'Загружен: '+f.name:'';
       $('inboundPreview').innerHTML=f.error?notice('Файл не принят',f.error,true):f.busy&&!p?loading:!p?'':`<div class="mini-metrics">${mini('Товаров',p.summary.products).replace(' шт.','')}${mini('Всего',p.summary.units)}${mini('Не узнали строк',p.summary.notMatched).replace(' шт.','')}</div>
-        ${p.summary.notMatched?notice('Часть строк не узнали','Этих товаров нет в вашем каталоге на складе, в приход они не попадут. Проверьте штрихкод или артикул; новый товар склад заведёт при приёмке.',true):''}
-        <div class="table-scroll"><table class="data-table"><thead><tr><th>Строка файла</th><th>Товар на складе</th><th class="num">Шт.</th></tr></thead><tbody>${p.lines.map(l=>`<tr><td class="small">${h([l.barcode,l.article,l.name].filter(Boolean).join(' · '))}<span class="product-meta">строка ${l.row}</span></td><td>${l.sku?h(l.productName)+`<span class="product-meta">узнали по: ${h(l.by)}</span>`:'<span class="row-note negative">Не узнали</span>'}</td><td class="num">${n(l.qty)}</td></tr>`).join('')}</tbody></table></div>
+        ${p.summary.notMatched?notice('Часть строк не попадёт в приход','Товара нет в вашем каталоге на складе или количество не целое. Проверьте штрихкод, артикул и количество; новый товар склад заведёт при приёмке.',true):''}
+        <div class="table-scroll"><table class="data-table"><thead><tr><th>Строка файла</th><th>Товар на складе</th><th class="num">Шт.</th></tr></thead><tbody>${p.lines.map(l=>`<tr><td class="small">${h([l.barcode,l.article,l.name].filter(Boolean).join(' · '))}<span class="product-meta">строка ${l.row}</span></td><td>${l.sku?h(l.productName)+`<span class="product-meta">узнали по: ${h(l.by)}</span>`:`<span class="row-note negative">${h(l.error||'Не узнали')}</span>`}</td><td class="num">${l.error?'—':n(l.qty)}</td></tr>`).join('')}</tbody></table></div>
         <button class="button primary" type="submit" style="margin-top:20px" ${f.busy||!p.summary.products?'disabled':''}>${f.busy?'Отправляем…':'Отправить на склад'}</button>`;
     }
     async function send(apply){
@@ -296,7 +296,10 @@
       const reader=new FileReader();
       reader.onload=()=>{
         try{
-          const book=XLSX.read(new Uint8Array(reader.result),{type:'array'});
+          // CSV — только как текст: разбор по умолчанию сам делает из «1,5» число 15, и сервер уже не видит дробь. Русский Excel пишет CSV в Windows-1251.
+          let book;
+          if(/\.(csv|txt)$/i.test(file.name)){let text;try{text=new TextDecoder('utf-8',{fatal:true}).decode(reader.result);}catch{text=new TextDecoder('windows-1251').decode(reader.result);}book=XLSX.read(text.replace(/^\uFEFF/,''),{type:'string',raw:true});}
+          else book=XLSX.read(new Uint8Array(reader.result),{type:'array'});
           const rows=XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]],{header:1,raw:true,defval:null});
           // Ведомость 1С бывает в двести колонок: серверу нужны подписи слева и итог справа.
           const wide=rows.slice(0,25).some(r=>r.some(v=>/^конечный остаток$/i.test(String(v??'').trim())));

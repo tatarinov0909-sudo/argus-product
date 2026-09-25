@@ -77,7 +77,8 @@
   const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
   const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ESC[c]);
   const nf = (n) => Number(n || 0).toLocaleString('ru-RU');
-  const day = (iso) => (iso ? new Date(iso).toLocaleDateString('ru-RU') : '');
+  // Дата без времени («2026-09-27») — местная полночь, иначе западнее Гринвича выйдет на день раньше.
+  const day = (iso) => (iso ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso + 'T00:00' : iso).toLocaleDateString('ru-RU') : '');
   const edit = (placeholder, value) => '<span contenteditable="true" data-placeholder="' + esc(placeholder) + '">'
     + esc(value || '') + '</span>';
 

@@ -4740,7 +4740,7 @@
     const reader = new FileReader();
     reader.onload = () => {
       try{
-        const wb = XLSX.read(new Uint8Array(reader.result), { type: 'array' });
+        const wb = readBook(reader.result, file.name, { type: 'array' });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
         // Отчёт по дням бывает шириной в двести колонок: серверу нужны
@@ -5005,19 +5005,23 @@
   }
 
   async function readStockWorkbook(file){
-    const buf = await file.arrayBuffer();
-    if(/\.(csv|txt)$/i.test(file.name)){
+    // cellDates — чтобы адрес, который Excel успел превратить в дату, пришёл
+    // датой и был пойман, а не уехал на сервер числом 40574.
+    return readBook(await file.arrayBuffer(), file.name, { type: 'array', cellDates: true, cellNF: true });
+  }
+
+  function readBook(buf, name, options){
+    if(/\.(csv|txt)$/i.test(name)){
       // CSV — только как текст: разбор по умолчанию сам превращает «01-03-011»
-      // и даже «1.3.11» в даты, и адрес ячейки пропадает. Русский Excel
+      // и даже «1.3.11» в даты, а «1,5» — в 15, и сервер уже не видит, что
+      // было в файле (проверка 25.09.2026). Русский Excel
       // сохраняет CSV в Windows-1251, поэтому пробуем и её.
       let text;
       try{ text = new TextDecoder('utf-8', { fatal: true }).decode(buf); }
       catch(e){ text = new TextDecoder('windows-1251').decode(buf); }
       return XLSX.read(text.replace(/^\uFEFF/, ''), { type: 'string', raw: true });
     }
-    // cellDates — чтобы адрес, который Excel успел превратить в дату, пришёл
-    // датой и был пойман, а не уехал на сервер числом 40574.
-    return XLSX.read(buf, { type: 'array', cellDates: true, cellNF: true });
+    return XLSX.read(new Uint8Array(buf), options);
   }
 
   async function onStockLoadFile(input){
