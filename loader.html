@@ -1119,7 +1119,7 @@
          Открывается из листа грузчика, где нехватка набора и обнаруживается. -->
     <div class="job-screen" id="kitScreen">
       <div class="job-head">
-        <div class="job-back" onclick="openPickList()">← К листу грузчика</div>
+        <div class="job-back" onclick="kitBack()">← Назад</div>
         <div class="job-title">Сборка набора</div>
         <div class="job-sub" id="kitSub">—</div>
       </div>
@@ -2265,7 +2265,17 @@
   let pickListLines = [];
   let kitState = null;
 
-  async function openKitAssembly(index){
+  // Набор собирают и со своего листа, и при сборке по бумажному листу —
+  // вернуться надо туда, откуда пришли.
+  let kitFromPaper = false;
+  function kitBack(){
+    if(kitFromPaper && paper) return openPaper(paper.supplyId);
+    return openPickList();
+  }
+  window.kitBack = kitBack;
+
+  async function openKitAssembly(index, fromPaper){
+    kitFromPaper = !!fromPaper;
     const line = pickListLines[index];
     if(!line || !line.kit) return;
     kitState = {
@@ -2451,14 +2461,14 @@
       });
       showToast('Собрано ' + kitState.qty + ' — в ячейке ' + kitState.cellLabel);
       kitState = null;
-      openPickList();
+      kitBack();
     } catch(e){
       // Сервер отказал — почти всегда потому, что компонент кто-то забрал,
       // пока работник шёл. Показываем его слова целиком: там названо, чего
       // именно не хватило. И обязательно перечитываем лист: остатки на экране
       // после такого отказа уже неправда, а работник по ним решает, что делать.
       showToast(e.message);
-      openPickList();
+      kitBack();
     }
   }
 
@@ -3249,6 +3259,7 @@
   const PAPER_KEY = 'argus_paper';
   let paper = null;          // { supplyId, number, startedAt, pausedMs, pauseAt, pauseReason, miss: {sku: found} }
   let paperLines = [];
+  let paperKits = new Map();   // артикул набора → строка листа грузчика
   let paperTimer = null;
 
   function savePaper(){
@@ -3273,6 +3284,15 @@
     (d.packing || []).forEach(l => { if(!l.missing) open.set(l.sku, (open.get(l.sku) || 0) + Number(l.left || 0)); });
     paperLines = (d.picking || []).map(r => Object.assign({}, r, { qty: open.get(r.sku) || 0 }))
       .filter(r => r.qty > 0);
+    // Наборы: артикула набора на полке нет, пока его не собрали из
+    // компонентов. Без этого «Собрал по листу» превращал каждый несобранный
+    // набор в «нет товара» — а у продавцов наборов половина заказов.
+    paperKits = new Map();
+    try{
+      const list = await apiFetch('/api/shipping/pick-list?supplyId=' + encodeURIComponent(supplyId));
+      pickListLines = list.lines;
+      list.lines.forEach((l, i) => { if(l.kit && l.kit.canBuild > 0) paperKits.set(l.sku, i); });
+    } catch(e){ /* без подсказки про наборы лист всё равно работает */ }
     const saved = loadPaper();
     if(saved && saved.supplyId === supplyId){
       paper = saved;
@@ -3361,6 +3381,11 @@
           +   '<div class="paper-sku">' + escapeHTML(r.article || r.sku) + '</div></div>'
           +   '<div class="paper-need">' + r.qty + ' шт</div></div>'
           + '<div class="paper-cells">' + escapeHTML(cells) + '</div>'
+          + (paperKits.has(r.sku)
+              ? '<button type="button" class="paper-miss-btn" style="color:var(--accent); border-color:var(--accent);" '
+                + 'onclick="openKitAssembly(' + paperKits.get(r.sku) + ', true)">Это набор — собрать '
+                + pickListLines[paperKits.get(r.sku)].kit.canBuild + ' из компонентов →</button> '
+              : '')
           + '<button type="button" class="paper-miss-btn" data-paper-miss="' + i + '">'
           +   (miss ? 'Не нашёл — отмечено' : 'Не нашёл / не хватило') + '</button>'
           + '<label class="paper-found">Нашёл <input type="text" inputmode="numeric" pattern="[0-9]*" data-paper-found="' + i + '" value="'

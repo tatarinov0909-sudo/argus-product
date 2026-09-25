@@ -239,7 +239,8 @@
   // по умолчанию — в журнал действий (владелец 26.09.2026). Выбор хранится в
   // этом браузере: это удобство человека, а не настройка склада.
   const LOGO_TARGETS = ['journal', 'chat', 'orders', 'supplies', 'receipts', 'products', 'warehouse'];
-  const LOGO_KEY = 'argus_logo_target';
+  // По роли: владелец и менеджер за одним компьютером выбирают каждый своё.
+  const LOGO_KEY = 'argus_logo_target_' + ROLE;
   const navName = (v) => {
     const el = document.getElementById('nav-' + v);
     return el ? el.firstChild.nextSibling.textContent.trim() : v;

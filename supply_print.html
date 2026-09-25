@@ -512,7 +512,8 @@
   function consolidatedSheet(list){
     const by = new Map();
     list.forEach((data) => data.picking.filter((r) => SELECTED.has(keyOf(data, r))).forEach((r) => {
-      const key = data.supply.companyName + '|' + r.sku;
+      // По продавцу, а не по названию: у двух продавцов название может совпасть.
+      const key = (data.supply.companyId || data.supply.companyName) + '|' + r.sku;
       const m = by.get(key) || Object.assign({}, r, {
         qty: 0, total: 0, picked: 0, perSupply: [], companyName: data.supply.companyName,
         cells: (r.cells || []).map((c) => Object.assign({}, c)),
