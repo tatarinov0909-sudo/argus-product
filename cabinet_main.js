@@ -5367,47 +5367,66 @@
   let ordersPlace = '';
   window.setOrdersPlace = (value) => { ordersPlace = value; };
   // Поставка на WB: пункт приёма из списка WB и плановая дата. Без них WB не
-  // примет поставку в доставку. Склад возит сам, Москва (решение 19.09.2026).
-  const ordersPoints = {};  // companyId -> список пунктов | 'loading' | 'error'
+  // примет поставку в доставку. Пункт — любой из тех, что WB показывает
+  // продавцу (решение владельца 25.09.2026): их десятки тысяч, поэтому выбор —
+  // поиском по городу и адресу, сервер отвечает совпадениями.
+  const ordersPoints = {};  // companyId -> найденные пункты | 'loading' | 'error'
   let ordersPointId = '';
+  let ordersPoint = null;
   let ordersPointText = '';
   let ordersShipDate = '';
-  // Пунктов в Москве у WB тысячи, и название у всех одно — «Москва».
-  // Различает их только адрес, поэтому выбор — поиском по адресу.
+  let pointsSearchTimer = null;
+  const pointLabel = (p) => (p.officeType === 'sc' ? 'Сортировочный центр WB — ' : '')
+    + String(p.address || p.name || p.id).trim() + ' · №' + p.id;
+  function fillPointsList(companyId, list){
+    list.forEach(p => { p.label = pointLabel(p); });
+    ordersPoints[companyId] = list;
+    let dl = document.getElementById('wbPoints-' + companyId);
+    if(!dl){ dl = document.createElement('datalist'); dl.id = 'wbPoints-' + companyId; document.body.appendChild(dl); }
+    dl.innerHTML = list.map(p => `<option value="${escapeHTML(p.label)}">`).join('');
+  }
   window.setOrdersPointText = (companyId, value) => {
     ordersPointText = value;
     const list = Array.isArray(ordersPoints[companyId]) ? ordersPoints[companyId] : [];
     const hit = list.find(p => p.label === value);
-    const id = hit ? String(hit.id) : '';
-    if(id === ordersPointId) return;
-    ordersPointId = id;
-    renderPartnerOrders(companyId);
-    const el = document.getElementById('ordPointText');
-    if(el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+    if(hit){
+      if(String(hit.id) === ordersPointId) return;
+      ordersPointId = String(hit.id);
+      ordersPoint = hit;
+      renderPartnerOrders(companyId);
+      const el = document.getElementById('ordPointText');
+      if(el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+      return;
+    }
+    const hadPoint = Boolean(ordersPointId);
+    ordersPointId = '';
+    ordersPoint = null;
+    if(hadPoint){
+      renderPartnerOrders(companyId);
+      const el = document.getElementById('ordPointText');
+      if(el){ el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+    }
+    // Ищем на сервере, когда человек перестал печатать.
+    clearTimeout(pointsSearchTimer);
+    pointsSearchTimer = setTimeout(() => {
+      const q = value.trim();
+      if(q.length < 2) return;
+      apiFetch('/api/supplies/shipping-points/' + encodeURIComponent(companyId) + '?q=' + encodeURIComponent(q))
+        .then(r => { if(ordersPointText === value) fillPointsList(companyId, r.points || []); })
+        .catch(() => {});
+    }, 300);
   };
   window.setOrdersShipDate = (companyId, value) => { ordersShipDate = value; renderPartnerOrders(companyId); };
   const moscowToday = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Moscow' });
   function loadShippingPoints(companyId){
     if(ordersPoints[companyId]) return;
     ordersPoints[companyId] = 'loading';
+    // Сперва — сортировочные центры; остальное ищется по вводу.
     apiFetch('/api/supplies/shipping-points/' + encodeURIComponent(companyId))
-      .then(list => {
-        if(!Array.isArray(list) || list.length === 0){ ordersPoints[companyId] = 'error'; return; }
-        // Сортировочные центры — первыми: большие поставки везут туда.
-        const rank = p => (p.officeType === 'sc' ? 0 : p.fulfillment ? 1 : 2);
-        list.forEach(p => {
-          p.label = (p.officeType === 'sc' ? 'Сортировочный центр WB — ' : '') + String(p.address || p.name || p.id).trim();
-        });
-        list.sort((a, b) => rank(a) - rank(b) || a.label.localeCompare(b.label, 'ru'));
-        const seen = {};
-        list.forEach(p => { seen[p.label] = (seen[p.label] || 0) + 1; });
-        list.forEach(p => { if(seen[p.label] > 1) p.label += ' · №' + p.id; });
-        // Подсказки строим один раз: перерисовка заказов их не трогает.
-        const dl = document.createElement('datalist');
-        dl.id = 'wbPoints-' + companyId;
-        dl.innerHTML = list.map(p => `<option value="${escapeHTML(p.label)}">`).join('');
-        document.body.appendChild(dl);
-        ordersPoints[companyId] = list;
+      .then(r => {
+        const list = r && Array.isArray(r.points) ? r.points : [];
+        if(list.length === 0){ ordersPoints[companyId] = 'error'; return; }
+        fillPointsList(companyId, list);
       })
       .catch(() => { ordersPoints[companyId] = 'error'; })
       .then(() => {
@@ -5493,7 +5512,7 @@
         ${points ? `
         <input class="ord-place ord-point" id="ordPointText"
                list="wbPoints-${companyId}" value="${escapeHTML(ordersPointText)}"
-               placeholder="Пункт WB: начните вводить адрес" aria-label="Пункт отгрузки WB"
+               placeholder="Пункт WB: город или адрес — любой из кабинета WB" aria-label="Пункт отгрузки WB"
                oninput="setOrdersPointText('${companyId}', this.value)">
         <input class="ord-place ord-date" id="ordShipDate" type="date" min="${moscowToday()}"
                value="${escapeHTML(ordersShipDate)}" onchange="setOrdersShipDate('${companyId}', this.value)"
@@ -6015,7 +6034,7 @@
     if(ready.length === 0){ showWhToast('Отметьте заказы, которые войдут в поставку.'); return; }
     const partner = ordersPartners.find(p => p.companyId === companyId);
     const points = Array.isArray(ordersPoints[companyId]) ? ordersPoints[companyId] : null;
-    const point = points && points.find(p => String(p.id) === ordersPointId);
+    const point = ordersPoint && String(ordersPoint.id) === ordersPointId ? ordersPoint : null;
     if(points && (!point || !ordersShipDate)){ showWhToast('Выберите пункт WB и дату отгрузки.'); return; }
     const place = (point ? point.label : ordersPlace.trim()).slice(0, 120);
     const dayText = ordersShipDate
@@ -6035,6 +6054,7 @@
       });
       ordersPlace = '';
       ordersPointId = '';
+      ordersPoint = null;
       ordersPointText = '';
       ordersShipDate = '';
       const mp = supply.marketplace;
