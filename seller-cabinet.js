@@ -359,6 +359,11 @@
     });
   }
   async function boot() {
+    // Роль в самом входе должна совпадать с подписью (27.09.2026): иначе
+    // кабинет работал бы чужим входом из соседней вкладки.
+    if (state.token && jwtOf(state.token).role !== (state.owner ? 'owner' : 'seller')) {
+      state.token = null; localStorage.removeItem('argus_token'); localStorage.removeItem('argus_role');
+    }
     if (!state.token) { $('loginScreen').hidden = false; return; }
     $('loginScreen').hidden = true; $('app').hidden = false; $('view').innerHTML = loading;
     try {

@@ -1179,7 +1179,11 @@
   const API_BASE = 'https://api.argus-ai.online';
   let TOKEN = localStorage.getItem('argus_token');
   const ROLE = localStorage.getItem('argus_role');
-  if(!TOKEN || ROLE !== 'worker'){
+  // Роль в самом входе должна совпадать с подписью: до 27.09.2026 соседняя
+  // вкладка могла положить сюда вход владельца под подписью «работник».
+  if(!TOKEN || ROLE !== 'worker' || (function(){
+    try{ return JSON.parse(atob(TOKEN.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).role; } catch(e){ return null; }
+  })() !== 'worker'){
     // Скан QR листа до входа: адрес с поставкой дождётся входа.
     try{ if(location.hash) sessionStorage.setItem('argus_after_login', location.hash); } catch(e){}
     window.location.href = 'login.html';

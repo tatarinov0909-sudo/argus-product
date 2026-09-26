@@ -6,7 +6,11 @@
   // здесь ЛИШЬ визуально: то, чего ему нельзя, сервер всё равно не отдаст.
   // Прятать в интерфейсе и не проверять на сервере — вот это было бы дырой.
   const IS_MANAGER = ROLE === 'manager';
-  if(!TOKEN || (ROLE !== 'owner' && !IS_MANAGER)){
+  // Роль в самом входе должна совпадать с подписью: до 27.09.2026 соседняя
+  // вкладка могла положить сюда чужой вход.
+  if(!TOKEN || (ROLE !== 'owner' && !IS_MANAGER) || (function(){
+    try{ return JSON.parse(atob(TOKEN.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).role; } catch(e){ return null; }
+  })() !== ROLE){
     window.location.href = 'login.html';
     throw new Error('not authenticated');
   }
