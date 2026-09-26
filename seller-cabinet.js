@@ -208,7 +208,10 @@
   }
   const inPeriod = (iso, period) => {
     if (period === 'all' || !iso) return period === 'all';
-    const t = new Date(iso).getTime(); const now = new Date(); const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    // День — московский (склад работает по Москве), а не по часам компьютера
+    // продавца: у продавца в Новосибирске «сегодня» наступало на 4 часа раньше.
+    const t = new Date(iso).getTime(); const MSK = 3 * 3600e3;
+    const start = Math.floor((Date.now() + MSK) / 864e5) * 864e5 - MSK;
     if (period === 'today') return t >= start;
     if (period === 'yesterday') return t >= start - 864e5 && t < start;
     if (period === '7d') return t >= Date.now() - 7 * 864e5;
@@ -267,7 +270,7 @@
     rows.forEach((r, k) => {
       const row = ws.getRow(head + 1 + k);
       columns.forEach((c, i) => {
-        const cell = row.getCell(i + 1); const v = c.get(r);
+        const cell = row.getCell(i + 1); const v = c.get(r, k);
         if (c.type === 'num') { cell.value = v == null || v === '' ? null : Number(v); cell.numFmt = '#,##0'; }
         // Excel не знает часовых поясов: пишем время таким, каким его видит человек.
         else if (c.type === 'date') { const d = v ? new Date(v) : null; cell.value = d ? new Date(d.getTime() - d.getTimezoneOffset() * 60000) : null; cell.numFmt = c.dayOnly ? 'dd.mm.yyyy' : 'dd.mm.yyyy hh:mm'; }
@@ -282,7 +285,10 @@
       const row = ws.getRow(head + 1 + rows.length);
       columns.forEach((c, i) => {
         const cell = row.getCell(i + 1);
-        cell.value = i === 0 ? 'Итого' : c.total ? rows.reduce((s, r) => s + Number(c.get(r) || 0), 0) : null;
+        // Если у части строк число неизвестно, итог — «—», как в кабинете, а не
+        // сумма, где неизвестное посчитано нулём.
+        const unknown = c.total && rows.some((r, k) => c.get(r, k) == null);
+        cell.value = i === 0 ? 'Итого' : !c.total ? null : unknown ? '—' : rows.reduce((s, r, k) => s + Number(c.get(r, k) || 0), 0);
         if (c.total) cell.numFmt = '#,##0';
         cell.font = { bold: true };
         cell.alignment = { vertical: 'middle', horizontal: i === 0 || c.type === 'text' ? 'left' : 'center' };
@@ -290,7 +296,7 @@
       });
     }
     columns.forEach((c, i) => {
-      const lens = rows.map((r) => { const v = c.get(r); return c.type === 'date' ? 16 : c.type === 'link' ? 14 : String(v ?? '').length; });
+      const lens = rows.map((r, k) => { const v = c.get(r, k); return c.type === 'date' ? 16 : c.type === 'link' ? 14 : String(v ?? '').length; });
       const longest = Math.max(...String(c.header).split(' ').map((w) => w.length), ...lens);
       ws.getColumn(i + 1).width = Math.max(c.min || 8, Math.min(c.max || 48, longest + 3));
     });
@@ -435,7 +441,9 @@
       if (refresh) { try { const c = await api('/api/sellers/catalog'); if (run !== state.viewRun) return; state.catalog = Object.fromEntries(c.products.map((r) => [r.sku, r])); } catch { toast('Каталог не обновился — показаны прошлые данные.'); } }
       if (refresh || !state.data[key]) {
         const payload = await api(API_PATH[key] + (key === 'stock' && state.owner ? '?view=seller' : ''));
-        if (key === 'stock') { state.data.stock = payload.rows || []; state.summary = payload.summary || null; } else state.data[key] = payload;
+        if (key === 'stock') { state.data.stock = payload.rows || []; state.summary = payload.summary || null; }
+        else if (key === 'supplies') { state.data.supplies = payload.rows || []; state.suppliesMore = !!payload.hasMore; }
+        else state.data[key] = payload;
         state.fetchedAt[key] = new Date();
       }
       if (!state.data.orders && key !== 'orders') api(API_PATH.orders).then((o) => { state.data.orders = o; state.fetchedAt.orders = new Date(); renderNav(); }).catch(() => {});
@@ -509,7 +517,8 @@
       const avail = availableQty(r);
       if (ui.stock === 'available' && !(avail > 0)) return false;
       if (ui.stock === 'low' && !(avail > 0 && avail <= 5)) return false;
-      if (ui.stock === 'none' && avail > 0) return false;
+      // «Остаток ещё не получен» — не «нет к продаже»: для него свой фильтр.
+      if (ui.stock === 'none' && (avail == null || avail > 0)) return false;
       const any = orderedQty(r) + assemblyQty(r);
       if (ui.orders === 'any' && !any) return false;
       if (ui.orders === 'ordered' && !orderedQty(r)) return false;
@@ -586,7 +595,7 @@
   const exportProducts = () => exportExcel({
     file: 'Остатки', sheet: 'Остатки', title: `Остатки товаров — ${state.profile.name}`, filterText: productsFilterText(), rows: filteredProducts(),
     columns: [
-      { header: '№', type: 'num', get: (r) => filteredProducts().indexOf(r) + 1, min: 5, max: 6 },
+      { header: '№', type: 'num', get: (r, k) => k + 1, min: 5, max: 6 },
       { header: 'Товар', type: 'text', get: (r) => productName(r), min: 30, max: 60 },
       { header: 'Артикул продавца', type: 'text', get: (r) => vendorCodes(r.sku).join(', ') },
       { header: 'Артикул WB', type: 'text', get: (r) => wbIds(r.sku).join(', ') },
@@ -610,7 +619,7 @@
     return state.data.documents.rows.filter((r) => r.direction === 'return'
       && matches(ui.q, [r.number, ...(r.received_by || [])])
       && (ui.status === 'all' || r.status === ui.status)
-      && (ui.quality === 'all' || (ui.quality === 'defect' ? Number(r.bad_qty) > 0 : !(Number(r.bad_qty) > 0)))
+      && (ui.quality === 'all' || (ui.quality === 'defect' ? Number(r.bad_qty) > 0 : r.status === 'completed' && !(Number(r.bad_qty) > 0)))
       && inPeriod(r.first_at || r.created_at, ui.period));
   }
   const RETURN_COLUMNS = [
@@ -632,7 +641,7 @@
     wireView(ui, renderReturns, renderReturnRows, () => exportExcel({
       file: 'Возвраты', sheet: 'Возвраты', title: `Возвраты — ${state.profile.name}`, filterText: '', rows: filteredReturns(),
       columns: [
-        { header: '№', type: 'num', get: (r) => filteredReturns().indexOf(r) + 1, min: 5, max: 6 },
+        { header: '№', type: 'num', get: (r, k) => k + 1, min: 5, max: 6 },
         { header: 'Возврат', type: 'text', get: (r) => r.number, min: 12 },
         { header: 'Когда разобрали', type: 'date', get: (r) => r.last_at || r.created_at },
         { header: 'Позиций', type: 'num', get: (r) => r.item_count },
@@ -665,8 +674,8 @@
   function orderMatchesStatus(r, s) {
     if (s === 'all') return true;
     if (s === 'active') return orderActive(r);
-    if (s === 'queued') return !r.in_supply && r.status !== 'shipped' && !r.mp_closed_at;
-    if (s === 'assembly') return r.in_supply && ['open', 'in_progress'].includes(r.status) && !r.mp_closed_at;
+    if (s === 'queued') return !r.in_supply && r.status === 'open' && !r.mp_closed_at;
+    if (s === 'assembly') return !r.mp_closed_at && r.status !== 'shipped' && (r.in_supply || ['in_progress', 'ready'].includes(r.status));
     if (s === 'ready') return r.status === 'ready' && !r.mp_closed_at;
     if (s === 'transit') return r.status === 'shipped' && !r.mp_closed_at;
     if (s === 'shipped') return r.status === 'shipped';
@@ -709,7 +718,7 @@
     wireView(ui, renderOrders, renderOrderRows, () => exportExcel({
       file: 'Заказы', sheet: 'Заказы', title: `Заказы — ${state.profile.name}`, filterText: ui.status !== 'all' ? 'статус: ' + ORDER_STATUS.find((o) => o.value === ui.status).text.toLowerCase() : '', rows: filteredOrders(),
       columns: [
-        { header: '№', type: 'num', get: (r) => filteredOrders().indexOf(r) + 1, min: 5, max: 6 },
+        { header: '№', type: 'num', get: (r, k) => k + 1, min: 5, max: 6 },
         { header: 'Заказ', type: 'text', get: (r) => r.number, min: 14 },
         { header: 'Отправление', type: 'text', get: (r) => r.mp_rid || '' },
         { header: 'Товар', type: 'text', get: (r) => productName(r), min: 30, max: 60 },
@@ -755,7 +764,8 @@
   ];
   function renderSupplies() {
     const ui = state.ui.supplies; const dests = [...new Set((state.data.supplies || []).map((r) => r.destination || '').filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
-    $('view').innerHTML = toolbar(searchBox('Номер поставки', ui.q),
+    $('view').innerHTML = (state.suppliesMore ? notice('Показана часть поставок', 'Загружены последние 1 000 поставок.', true) : '')
+      + toolbar(searchBox('Номер поставки', ui.q),
       dropdown('s-status', { label: 'Статус', value: ui.status, options: [{ value: 'all', text: 'Все' }, { value: 'collecting', text: 'Собирается' }, { value: 'ready', text: 'Собрана, ждёт машину' }, { value: 'shipped', text: 'Уехала' }], onPick: (v) => { ui.status = v; ui.shown = state.prefs.rows; renderSupplies(); } })
       + dropdown('s-dest', { label: 'Куда', value: ui.dest, options: [{ value: 'all', text: 'Любой пункт' }, ...dests.map((d) => ({ value: d, text: d }))], onPick: (v) => { ui.dest = v; ui.shown = state.prefs.rows; renderSupplies(); } })
       + dropdown('s-sort', { label: 'Сортировка', value: ui.sort, options: [{ value: 'new', text: 'Сначала новые' }, { value: 'old', text: 'Сначала старые' }, { value: 'ship', text: 'По дате отгрузки' }, { value: 'unitsDesc', text: 'Больше штук' }, { value: 'unitsAsc', text: 'Меньше штук' }, { value: 'ordersDesc', text: 'Больше заказов' }, { value: 'ordersAsc', text: 'Меньше заказов' }], onPick: (v) => { ui.sort = v; renderSupplies(); } })
@@ -853,6 +863,7 @@
         { title: 'Брак', cls: 'n', cell: (r) => num(r.defective) },
         { title: 'Повреждена упаковка', cls: 'n', cell: (r) => num(r.packaging) },
       ], d.now) : '<div class="table-wrap">' + empty('Брака на складе нет', 'Если склад признает ваш товар браком, он появится здесь.', 'check') + '</div>')
+      + (d.hasMore ? notice('Показана часть случаев', 'Загружены последние 1 000 случаев брака.', true) : '')
       + `<div class="section-title"><h2>Когда признан браком</h2><span>${counted(d.events.length, 'случай', 'случая', 'случаев')}</span></div>`
       + toolbar(searchBox('Товар, артикул WB, описание', ui.q),
         dropdown('f-source', { label: 'Откуда', value: ui.source, options: [{ value: 'all', text: 'Отовсюду' }, ...sources.map((x) => ({ value: x, text: x }))], onPick: (v) => { ui.source = v; ui.shown = state.prefs.rows; renderDefects(); } })
