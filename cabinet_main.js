@@ -23,6 +23,14 @@
     } catch(e){ return {}; }
   }
 
+  // Продлённый вход берём, только если он того же человека: чужой (из кэша
+  // браузера или от другой вкладки) подменил бы вход (27.09.2026).
+  function sameUser(a, b){
+    const x = decodeJwtPayload(a || ''), y = decodeJwtPayload(b || '');
+    const id = (p) => p.staffKeyId || p.sellerKeyId || p.ownerId || '';
+    return !!x.role && x.role === y.role && id(x) === id(y) && x.warehouseId === y.warehouseId;
+  }
+
   async function apiFetch(path, options = {}){
     const res = await fetch(API_BASE + path, {
       method: options.method || 'GET',
@@ -32,7 +40,10 @@
     // Сервер продлевает вход, пока человек работает: свежий токен приходит
     // в заголовке — берём его, и выкидывать каждые 45 минут перестаёт.
     const renewed = res.headers.get('X-Argus-Token');
-    if(renewed){ TOKEN = renewed; localStorage.setItem('argus_token', renewed); }
+    if(renewed && sameUser(renewed, TOKEN)){
+      if(sameUser(localStorage.getItem('argus_token'), TOKEN)) localStorage.setItem('argus_token', renewed);
+      TOKEN = renewed;
+    }
     if(res.status === 401){
       localStorage.removeItem('argus_token');
       localStorage.removeItem('argus_role');
@@ -189,7 +200,7 @@
     }
     // «?.»: у менеджера части пунктов меню нет вовсе (их убирает блок
     // инициализации), и без проверки кабинет падал при первом же открытии.
-    for(const v of ['chat', 'journal', 'orders', 'supplies', 'receipts', 'products', 'warehouse', 'mp', 'staff', '1c', 'inv', 'acts']){
+    for(const v of ['chat', 'journal', 'orders', 'supplies', 'receipts', 'products', 'warehouse', 'mp', 'staff', '1c', 'inv', 'acts', 'billing']){
       document.getElementById('view-' + v)?.classList.toggle('active', view === v);
       document.getElementById('nav-' + v)?.classList.toggle('active', view === v);
     }
@@ -6367,6 +6378,8 @@
   if(IS_MANAGER){
     const hidden = ['nav-chat', 'nav-staff', 'nav-1c', 'nav-mp'];
     if(!CAN_WAREHOUSE) hidden.push('nav-warehouse', 'nav-inv');
+    // Расчёты — право «Тариф и деньги».
+    if(!(authPayload.grants || []).includes('billing')) hidden.push('nav-billing');
     hidden.forEach(id => {
       const el = document.getElementById(id);
       if(el) el.remove();

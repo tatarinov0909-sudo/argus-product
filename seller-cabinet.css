@@ -379,6 +379,10 @@ dialog::backdrop { background: rgba(8, 11, 18, .6); }
 .check-line { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 16px; font-size: 15px; cursor: pointer; }
 .check-line input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--accent); flex: none; }
 .check-line small { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+.bill-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.bill-card { border: 1px dashed var(--line-2); border-radius: 12px; padding: 18px; display: grid; gap: 6px; }
+.bill-card strong { font-size: 16px; font-weight: 600; }
+.bill-card span { font-size: 14px; color: var(--muted); }
 .account-menu { margin: 0; padding: 6px; width: 260px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--panel-2); color: var(--text); box-shadow: 0 16px 40px rgba(0, 0, 0, .45); }
 .account-menu button { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 10px 12px; border: 0; border-radius: 7px; background: none; text-align: left; font-size: 15px; }
 .account-menu button:hover { background: var(--hover); }
@@ -402,7 +406,7 @@ dialog::backdrop { background: rgba(8, 11, 18, .6); }
   main { padding: 20px var(--page-x) calc(96px + env(safe-area-inset-bottom)); }
   .page-head h1 { font-size: 24px; }
   .tabbar {
-    display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+    display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
     padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); background: var(--panel); border-top: 1px solid var(--line);
   }
   .tabbar a { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 2px; border-radius: 8px; font-size: 11px; color: var(--muted); text-align: center; position: relative; }

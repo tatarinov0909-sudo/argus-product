@@ -31,13 +31,13 @@
     logout: 'M9 4H4v16h5m5-12 4 4-4 4m-6-4h10', refresh: 'M20 7v5h-5M20 12a8 8 0 1 0-2.34 5.66',
     download: 'M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5', close: 'm6 6 12 12M6 18 18 6',
     search: 'M10 3a7 7 0 1 0 0 14 7 7 0 0 0 0-14Zm5 12 6 6', info: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 7v6m0-9v.1',
-    check: 'm5 12 4 4L19 6', chevron: 'm6 9 6 6 6-6', columns: 'M4 4h16v16H4zM10 4v16M16 4v16', left: 'm14 5-7 7 7 7',
+    wallet: 'M3 7h18v13H3V7Zm0 0 3-4h12l3 4M16 13.5h2', check: 'm5 12 4 4L19 6', chevron: 'm6 9 6 6 6-6', columns: 'M4 4h16v16H4zM10 4v16M16 4v16', left: 'm14 5-7 7 7 7',
   };
   const icon = (name, cls = '') => `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${PATHS[name] || PATHS.box}"/></svg>`;
   const paintIcons = (root = document) => root.querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = icon(el.dataset.icon); });
 
   const NAV = [['products', 'Товары', 'box'], ['orders', 'Заказы', 'orders'], ['supplies', 'Поставки на WB', 'truck'],
-    ['documents', 'Приходы', 'inbox'], ['defects', 'Брак', 'alert']];
+    ['documents', 'Приходы', 'inbox'], ['defects', 'Брак', 'alert'], ['billing', 'Расчёты', 'wallet']];
   const PAGES = {
     products: { title: 'Товары', subtitle: 'Сколько вашего товара на складе и сколько можно продавать.', data: 'stock', nav: 'products' },
     returns: { title: 'Товары', subtitle: 'Что вернулось на склад и в каком состоянии.', data: 'documents', nav: 'products' },
@@ -45,6 +45,9 @@
     supplies: { title: 'Поставки на WB', subtitle: 'Склад собирает их из ваших заказов и везёт на Wildberries.', data: 'supplies', nav: 'supplies' },
     documents: { title: 'Приходы', subtitle: 'Товар, который вы привозите на склад на хранение.', data: 'documents', nav: 'documents' },
     defects: { title: 'Брак', subtitle: 'Что склад признал браком. Решение по нему — вместе с менеджером склада.', data: 'defects', nav: 'defects' },
+    // Заглушка (владелец 27.09.2026): расчёт за хранение и упаковку появится,
+    // когда склад утвердит прайс. Данных у страницы пока нет.
+    billing: { title: 'Расчёты', subtitle: 'Сколько стоит работа склада с вашим товаром.', data: null, nav: 'billing' },
   };
   const API_PATH = { stock: '/api/sellers/stock', orders: '/api/sellers/orders', supplies: '/api/sellers/supplies',
     documents: '/api/sellers/documents', defects: '/api/sellers/defects' };
@@ -73,6 +76,13 @@
   const badge = (text, style = '') => `<span class="badge ${style}">${h(text)}</span>`;
 
   // ---------- Сервер ----------
+  // Продлённый вход берём, только если он того же человека: чужой (из кэша
+  // браузера или от другой вкладки) подменил бы вход (27.09.2026).
+  const jwtOf = (t) => { try { return JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)))); } catch { return {}; } };
+  const sameUser = (a, b) => {
+    const x = jwtOf(a || ''); const y = jwtOf(b || ''); const id = (p) => p.staffKeyId || p.sellerKeyId || p.ownerId || '';
+    return !!x.role && x.role === y.role && id(x) === id(y) && x.warehouseId === y.warehouseId;
+  };
   async function api(path, options = {}) {
     if (state.owner && state.companyId && path.startsWith('/api/sellers/')) path += (path.includes('?') ? '&' : '?') + 'companyId=' + encodeURIComponent(state.companyId);
     const response = await fetch('https://api.argus-ai.online' + path, {
@@ -82,7 +92,10 @@
     });
     const data = await response.json().catch(() => null);
     const renewed = response.headers.get('X-Argus-Token');
-    if (renewed) { state.token = renewed; localStorage.setItem('argus_token', renewed); }
+    if (renewed && sameUser(renewed, state.token)) {
+      if (sameUser(localStorage.getItem('argus_token'), state.token)) localStorage.setItem('argus_token', renewed);
+      state.token = renewed;
+    }
     if (response.status === 401 && !path.includes('/auth/')) {
       state.viewRun += 1; state.drawerRun += 1; state.token = null;
       localStorage.removeItem('argus_token'); localStorage.removeItem('argus_role');
@@ -435,6 +448,7 @@
     $('pageTitle').textContent = page.title; $('pageSubtitle').textContent = page.subtitle;
     renderNav();
     $('view').setAttribute('aria-busy', 'true'); $('refreshButton').disabled = true;
+    if (!page.data) { renderBilling(); $('view').setAttribute('aria-busy', 'false'); $('refreshButton').disabled = false; return; }
     if (refresh || !state.data[page.data]) $('view').innerHTML = '<div class="skeleton skeleton-strip"></div>' + '<div class="skeleton skeleton-row"></div>'.repeat(5);
     try {
       const key = page.data;
@@ -864,6 +878,16 @@
     if ($('showAnswer')) $('showAnswer').onclick = () => { ui.diff = 'answer'; ui.shown = state.prefs.rows; renderDocuments(); };
     host.querySelectorAll('[data-doc-row]').forEach((tr) => { tr.onclick = () => openDocument(tr.dataset.docRow); });
     wireRows(host, ui, renderDocumentRows);
+  }
+
+  // ---------- Расчёты (заглушка) ----------
+  function renderBilling() {
+    const card = (title, text) => `<div class="bill-card"><strong>${h(title)}</strong><span>${h(text)}</span></div>`;
+    $('view').innerHTML = notice('Раздел в разработке', 'Склад ещё не включил расчёты в Аргусе. Когда включит, здесь появится счёт за каждый месяц с расшифровкой — без таблиц по почте.')
+      + `<div class="bill-grid">${card('Хранение', 'за каждый день: сколько места занимал ваш товар на складе')}`
+      + card('Упаковка', 'пакет, ВПП, короб — по каждому заказу и поставке на WB')
+      + card('Приёмка и операции', 'приёмка, сборка, маркировка, стикеровка, возвраты')
+      + card('Счёт за период', 'итог за месяц с расшифровкой по дням и операциям, выгрузка в Excel') + '</div>';
   }
 
   // ---------- Брак ----------
