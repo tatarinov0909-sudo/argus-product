@@ -37,3 +37,15 @@
   ExpiresByType application/javascript "access plus 1 year"
   ExpiresByType font/woff2 "access plus 1 year"
 </IfModule>
+
+# Один адрес сайта (27.09.2026). Сайт открывался и как www.argus-ai.online, и
+# по http://, а сервер Аргуса пускает вход только с https://argus-ai.online —
+# с других адресов страница грузилась, а вход писал «Не удалось подключиться
+# к серверу». Поэтому все варианты ведём на основной. HTTPS проверяем и по
+# заголовку прокси: на reg.ru перед Apache стоит nginx.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTP_HOST} ^www\. [NC,OR]
+  RewriteCond %{HTTP:X-Forwarded-Proto} =http [NC]
+  RewriteRule ^ https://argus-ai.online%{REQUEST_URI} [R=301,L]
+</IfModule>
