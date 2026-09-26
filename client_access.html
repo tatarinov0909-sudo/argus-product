@@ -1,35 +1,51 @@
 <!doctype html>
 <html lang="ru"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#151a24">
-<title>Аргус · Кабинет продавца</title><link rel="stylesheet" href="fonts.css?v=f77584bf"><link rel="stylesheet" href="seller-fonts.css?v=d1da12bc"><link rel="stylesheet" href="seller-cabinet.css?v=c775e327">
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script><script defer src="seller-cabinet.js?v=fe95e7fe"></script>
+<title>Аргус · Кабинет продавца</title>
+<link rel="stylesheet" href="seller-fonts.css?v=d1da12bc"><link rel="stylesheet" href="seller-cabinet.css?v=6b22a0e1">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script><script defer src="seller-cabinet.js?v=e8b1c2b1"></script>
 </head><body>
 <a class="skip-link" href="#main">К содержимому</a>
+
 <section id="loginScreen" class="login-screen" hidden>
- <header class="login-head"><div class="wordmark"><span class="brand-icon" aria-hidden="true"></span>аргус<span class="brand-period">.</span></div><a class="login-owner" href="login.html" target="_blank" rel="noopener" aria-label="Вход для владельца склада — в новой вкладке">Вход для владельца склада <span aria-hidden="true">→</span></a></header>
+ <header class="login-head"><div class="wordmark"><span class="brand-icon" aria-hidden="true"></span>аргус<span class="brand-period">.</span></div><a class="login-owner" href="login.html">Вход для владельца склада →</a></header>
  <div class="login-main">
-  <div class="login-intro"><p class="login-caption">Кабинет продавца</p><h1>Ваши товары <span>под рукой</span></h1><p class="login-subtitle">Остатки, заказы и документы — в одном кабинете.</p></div>
-  <form id="loginForm" class="login-form" aria-labelledby="loginFormTitle"><h2 id="loginFormTitle">Войти в кабинет</h2><p class="form-note muted">Используйте ключ доступа, который выдал ваш склад.</p>
+  <div class="login-intro"><p class="login-caption">Кабинет продавца</p><h1>Ваши товары <span>под рукой</span></h1><p class="login-subtitle">Остатки, заказы, поставки и приходы на склад — в одном кабинете.</p></div>
+  <form id="loginForm" class="login-form" aria-labelledby="loginFormTitle"><h2 id="loginFormTitle">Войти в кабинет</h2><p class="form-note muted">Ключ доступа выдаёт ваш склад.</p>
    <div class="form-fields">
     <label class="field" for="loginName"><span>Ваше имя</span><input id="loginName" name="name" autocomplete="name" maxlength="60" required placeholder="Как к вам обращаться"></label>
     <label class="field" for="loginKey"><span>Ключ доступа</span><input id="loginKey" name="key" autocomplete="off" spellcheck="false" maxlength="40" required placeholder="Ключ от склада" aria-describedby="loginError"></label>
-    <button class="button primary" type="submit" id="loginSubmit">Войти <span aria-hidden="true">→</span></button>
+    <button class="button primary" type="submit" id="loginSubmit">Войти</button>
    </div>
    <p id="loginError" class="error-text" role="alert"></p>
-   <p class="access-help"><strong>Ещё нет доступа?</strong> Запросите ключ у менеджера вашего склада.</p>
+   <p class="access-help"><strong>Нет ключа?</strong> Попросите его у менеджера вашего склада.</p>
   </form>
  </div>
 </section>
+
 <div id="app" class="app" hidden>
- <aside class="sidebar"><a class="wordmark" href="#products" aria-label="Аргус — товары"><span class="brand-icon" aria-hidden="true"></span>аргус<span class="brand-period">.</span></a>
- <nav aria-label="Основная навигация"><a href="#products" data-nav="products"><span data-icon="box"></span><span>Товары</span></a><a href="#orders" data-nav="orders"><span data-icon="orders"></span><span>Заказы</span><span id="orderBadge" class="nav-count" hidden></span></a><a href="#supplies" data-nav="supplies"><span data-icon="orders"></span><span>Поставки на WB</span></a><a href="#documents" data-nav="documents"><span data-icon="document"></span><span>Приходы и документы</span></a></nav>
- <div class="sidebar-bottom"><span class="small muted">Ваш фулфилмент</span><div class="warehouse-name"><span data-icon="warehouse"></span><strong id="warehouseName">Склад</strong></div><button type="button" class="company-block account-button" id="accountButton" aria-expanded="false" aria-controls="accountMenu"><span id="companyAvatar" class="avatar">С</span><span class="company-identity"><strong id="companyName">Ваш магазин</strong><span>Кабинет продавца</span></span><span data-icon="more"></span></button></div></aside>
- <div class="main-wrap"><header class="topbar"><div><span class="connection-dot"></span><span id="topCompany">Ваш магазин</span><span class="top-divider">/</span><span id="breadcrumb">Товары</span></div><div class="top-actions"><span id="updateTime" class="small muted" role="status"></span><button class="icon-button" id="refreshButton" aria-label="Обновить данные"><span data-icon="refresh"></span></button><button class="icon-button mobile-account" id="mobileAccount" aria-label="Меню кабинета" aria-expanded="false" aria-controls="accountMenu"><span data-icon="user"></span></button></div></header>
- <div class="owner-preview" id="ownerPreview" hidden><span>Просмотр владельца</span><label>Компания <select id="companySelect"></select></label><a href="cabinet_main.html">Вернуться к складу</a><a href="?source=1c#documents">Открыть накладные 1С склада</a><p>Общая компания обмена может содержать товары разных продавцов. Этот просмотр не выдаёт доступ продавцам.</p></div>
- <main id="main" tabindex="-1"><div class="page-heading"><div><p class="eyebrow" id="pageEyebrow">Ваши остатки</p><h1 id="pageTitle">Товары</h1><p id="pageSubtitle" class="muted">Актуальное количество ваших товаров.</p></div><div class="heading-actions"><button class="button" id="excelButton" disabled><span data-icon="download"></span>Excel</button></div></div><div id="view" aria-busy="false"></div></main></div>
+ <aside class="sidebar">
+  <a class="wordmark" href="#products" aria-label="Аргус — товары"><span class="brand-icon" aria-hidden="true"></span>аргус<span class="brand-period">.</span></a>
+  <nav class="nav" aria-label="Разделы кабинета" data-nav-list></nav>
+  <button type="button" class="account" id="accountButton" aria-expanded="false" aria-controls="accountMenu"><span id="companyAvatar" class="avatar">—</span><span class="account-text"><strong id="companyName">Ваш магазин</strong><span>Кабинет продавца</span></span><span data-icon="more"></span></button>
+ </aside>
+ <div class="main-wrap">
+  <header class="topbar">
+   <div class="fulfilment"><strong id="warehouseName">Фулфилмент</strong><span>фулфилмент</span></div>
+   <div class="top-actions">
+    <div class="owner-switch" id="ownerSwitch" hidden></div>
+    <span id="updateTime" class="update-time" role="status"></span>
+    <button class="icon-button" id="refreshButton" aria-label="Обновить данные"><span data-icon="refresh"></span></button>
+    <button class="icon-button mobile-only" id="mobileAccount" aria-label="Меню кабинета" aria-expanded="false" aria-controls="accountMenu"><span data-icon="user"></span></button>
+   </div>
+  </header>
+  <main id="main" tabindex="-1"><div class="page-head"><div><h1 id="pageTitle">Товары</h1><p id="pageSubtitle"></p></div></div><div id="view" aria-busy="false"></div></main>
+ </div>
+ <nav class="tabbar" aria-label="Разделы кабинета" data-nav-list></nav>
 </div>
-<dialog id="drawer" class="drawer" aria-labelledby="drawerTitle"><div class="drawer-head"><div><p class="eyebrow" id="drawerEyebrow">Товар</p><h2 id="drawerTitle"></h2></div><button class="icon-button" id="closeDrawer" aria-label="Закрыть подробности"><span data-icon="close"></span></button></div><div id="drawerBody" class="drawer-body"></div></dialog>
-<div id="accountMenu" class="account-menu" popover="auto" aria-label="Меню кабинета"><button type="button" id="accountSettings"><span data-icon="settings"></span>Настройки кабинета</button><button type="button" id="logoutButton"><span data-icon="logout"></span>Выйти из кабинета</button></div>
-<dialog id="settingsDialog" class="export-dialog" aria-labelledby="settingsTitle"><div class="drawer-head"><h2 id="settingsTitle">Настройки кабинета</h2><button type="button" class="icon-button" id="closeSettings" aria-label="Закрыть настройки"><span data-icon="close"></span></button></div><form id="settingsForm" class="drawer-body settings-form"><p id="settingsCompany"></p><label for="rowsPerPage">Строк на странице</label><select id="rowsPerPage"><option value="15">15</option><option value="30">30</option><option value="50">50</option></select><label for="textSize">Размер текста в таблицах</label><select id="textSize"><option value="normal">Крупный</option><option value="large">Очень крупный</option></select><p class="export-description">Настройки отображения сохраняются в этом браузере.</p><button class="button primary" type="submit">Сохранить настройки</button></form></dialog>
+
+<dialog id="drawer" class="drawer" aria-labelledby="drawerTitle"><div class="drawer-head"><div><p class="eyebrow" id="drawerEyebrow"></p><h2 id="drawerTitle"></h2></div><button class="icon-button" id="closeDrawer" aria-label="Закрыть"><span data-icon="close"></span></button></div><div id="drawerBody" class="drawer-body"></div></dialog>
+<div id="accountMenu" class="account-menu" popover="auto" aria-label="Меню кабинета"><button type="button" id="accountSettings"><span data-icon="settings"></span>Настройки кабинета</button><div class="menu-sep"></div><button type="button" id="logoutButton"><span data-icon="logout"></span>Выйти из кабинета</button></div>
+<dialog id="settingsDialog" class="modal" aria-labelledby="settingsTitle"><div class="drawer-head"><h2 id="settingsTitle">Настройки кабинета</h2><button type="button" class="icon-button" id="closeSettings" aria-label="Закрыть настройки"><span data-icon="close"></span></button></div><div class="drawer-body"><form id="settingsForm" class="settings-form"><p id="settingsCompany" class="help"></p><div id="settingsFields" class="settings-form"></div><p class="help">Настройки сохраняются в этом браузере.</p><button class="button primary" type="submit">Сохранить</button></form></div></dialog>
 <div id="toast" class="toast" role="status" hidden></div>
 </body></html>

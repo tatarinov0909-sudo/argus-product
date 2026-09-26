@@ -5342,6 +5342,8 @@
   async function loadMpOrders(){
     const host = document.getElementById('ordersContent');
     if(!host) return;
+    // Заказы могли уйти в поставку — поиск по остальным перечитаем заново.
+    ordersAll = { companyId: null, rows: null, loading: false };
     try{
       ordersPartners = await apiFetch('/api/supplies/pending');
       const total = ordersPartners.reduce((s, p) => s + p.orders, 0);
@@ -5514,8 +5516,47 @@
   function matchesOrderSearch(o){
     const q = ordersSearch.trim().toLowerCase();
     if(!q) return true;
-    return [o.number, o.name, o.sku, o.article, o.barcode, o.rid, (o.offices || []).join(' ')]
+    // nmId — «Артикул WB» в кабинете продавца: по нему продавец и ищет.
+    return [o.number, o.name, o.sku, o.article, o.nmId, o.barcode, o.rid, (o.offices || []).join(' ')]
       .some(v => String(v || '').toLowerCase().includes(q));
+  }
+
+  // Здесь — только заказы, которые ждут поставки. Заказ, который уже в
+  // поставке, уехал или отменён, поиск раньше не находил вовсе, хотя продавец
+  // видит его у себя (владелец 26.09.2026). Ищем и по всем заказам продавца.
+  let ordersAll = { companyId: null, rows: null, loading: false };
+  function loadAllOrders(companyId){
+    if(ordersAll.companyId === companyId && (ordersAll.rows || ordersAll.loading)) return;
+    ordersAll = { companyId, rows: null, loading: true };
+    apiFetch('/api/sellers/orders?companyId=' + encodeURIComponent(companyId))
+      .then(r => { if(ordersAll.companyId === companyId){ ordersAll.rows = r.rows || []; ordersAll.loading = false; renderPartnerOrders(companyId); } })
+      .catch(() => { if(ordersAll.companyId === companyId) ordersAll.loading = false; });
+  }
+  function otherOrderState(r){
+    if(r.status === 'shipped') return 'отгружен' + (r.supply_number ? ' · ' + r.supply_number : '');
+    if(r.mp_closed_at) return r.mp_close_reason === 'canceled' ? 'отменён на WB' : 'завершён на WB';
+    if(r.supply_number) return 'в поставке ' + r.supply_number;
+    return 'в работе';
+  }
+  function otherOrdersHtml(companyId){
+    const q = ordersSearch.trim().toLowerCase();
+    if(q.length < 3) return '';
+    loadAllOrders(companyId);
+    if(!ordersAll.rows) return ordersAll.loading ? '<div class="ord-meta" style="margin-top:18px;">Ищу среди остальных заказов продавца…</div>' : '';
+    const pending = new Set(ordersRows.map(o => o.id));
+    const hits = ordersAll.rows.filter(r => !pending.has(r.id) && [r.number, r.name, r.sku, r.mp_article, r.mp_nm_id,
+      r.mp_barcode, r.mp_rid, r.supply_number].some(v => String(v || '').toLowerCase().includes(q)));
+    if(!hits.length) return '';
+    return `<div class="ord-meta" style="margin:24px 0 10px;"><b>Среди остальных заказов продавца — ${new Set(hits.map(r => r.id)).size}.</b>
+        Они уже в поставке, уехали или закрыты на WB.</div>
+      <div class="ord-scroll"><table class="ord-table"><thead><tr><th>Заказ</th><th>Товар</th><th>Артикул WB</th>
+        <th>Штрихкод</th><th>Где сейчас</th><th class="num">Кол-во</th></tr></thead><tbody>${hits.slice(0, 200).map(r => `<tr>
+        <td class="ord-mono ord-no">${escapeHTML(r.number)}</td>
+        <td>${escapeHTML(r.name || '—')}<div class="ord-mono">${escapeHTML(r.sku || '')}</div></td>
+        <td class="ord-mono">${escapeHTML(r.mp_nm_id || '—')}${r.mp_article ? `<div class="ord-sub">${escapeHTML(r.mp_article)}</div>` : ''}</td>
+        <td class="ord-mono">${escapeHTML(r.mp_barcode || '—')}</td>
+        <td>${escapeHTML(otherOrderState(r))}</td>
+        <td class="num">${Number(r.qty)}</td></tr>`).join('')}</tbody></table></div>`;
   }
 
   // Когда заказ оформлен: время у площадки, а если его нет (заказ из 1С
@@ -5556,7 +5597,7 @@
         <td class="ord-when">${orderWhen(o)}</td>
         <td>${escapeHTML(o.name || '—')}<div class="ord-mono">${escapeHTML(o.sku || 'не сопоставлен')}</div>${o.ready && o.stockShort
           ? '<div class="ord-short" title="По учёту Аргуса этого товара на полках не хватит — с ним поставку полностью не соберут">на полке не хватает</div>' : ''}</td>
-        <td class="ord-mono">${escapeHTML(o.article || '—')}</td>
+        <td class="ord-mono">${escapeHTML(o.article || '—')}${o.nmId ? `<div class="ord-sub">WB ${escapeHTML(o.nmId)}</div>` : ''}</td>
         <td class="ord-mono">${escapeHTML(o.barcode || '—')}</td>
         <td>${(o.offices || []).length ? escapeHTML(o.offices.join(', ')) : '<span class="ord-sub">—</span>'}</td>
         <td class="num">${o.qty === null ? '—' : o.qty}${o.salePriceKopecks != null
@@ -5606,7 +5647,7 @@
         ${stuck > 0 ? `<span class="ord-meta ord-warn">${stuck} ${
           pluralRu(stuck, 'заказ', 'заказа', 'заказов')} не сопоставить с номенклатурой — свяжите артикул на экране «Площадки», и они починятся</span>` : ''}
         <span class="ord-tools">
-          <input class="ord-search" type="search" placeholder="Товар, артикул или номер заказа"
+          <input class="ord-search" type="search" placeholder="Товар, артикул WB, штрихкод или номер заказа"
                  value="${escapeHTML(ordersSearch)}" oninput="setOrdersSearch('${companyId}', this.value)">
           <select class="ord-sort" onchange="setOrdersSort('${companyId}', this.value)">
             <option value="product"${ordersSort === 'product' ? ' selected' : ''}>По товару</option>
@@ -5626,6 +5667,7 @@
         <div class="ord-scroll">
           <table class="ord-table">${head(false)}<tbody>${confirmed.map(o => row(o, false)).join('')}</tbody></table>
         </div>` : ''}
+      ${otherOrdersHtml(companyId)}
       <div class="ord-meta" style="margin-top:14px;">
         Продавец: ${escapeHTML(partner ? partner.companyName : '')}. Поставка уходит на склад, грузчики
         собирают её по листу. Пока для продавца не разрешено «Менять статусы» на экране «Площадки», поставку и статусы в кабинете WB делают вручную — после того как поставка составлена здесь.
