@@ -355,6 +355,13 @@
   .order-row-num{font-family:var(--mono); font-size:15px;}
   .order-row-sub{font-size:12.5px; color:var(--muted); margin-top:3px;}
   .order-row-state{font-size:12.5px; color:var(--muted); white-space:nowrap;}
+  .arrive-wrap{display:flex; flex-direction:column; gap:6px;}
+  .arrive-row{padding-left:4px;}
+  .arrive-btn{background:none; border:1px solid var(--accent); color:var(--accent); border-radius:10px; padding:10px 14px; font:inherit; font-size:14px; font-weight:600; cursor:pointer;}
+  .arrive-btn.primary{background:var(--accent); color:#182422;}
+  .arrive-btn:disabled{opacity:0.5;}
+  .arrive-form{display:flex; flex-wrap:wrap; gap:10px; align-items:center; font-size:14px; color:var(--muted);}
+  .arrive-form input{width:70px; margin-left:6px; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px; font:inherit; font-size:16px;}
   .order-row-state.open{color:var(--accent-2);}
   .big-btn.secondary{background:var(--panel-2); color:var(--text); border:1px solid var(--line); margin-top:12px;}
   .supply-products{margin-top:14px;}
@@ -2864,7 +2871,7 @@
     return '<div class="order-row' + (open ? '' : ' done') + '" onclick="openOrder(\'' + jsArg(inv.id) + '\')">'
       + '<div><div class="order-row-num">' + escapeHTML(inv.number) + '</div>'
       +   (sub ? '<div class="order-row-sub">' + escapeHTML(sub) + '</div>' : '') + '</div>'
-      + '<div class="order-row-state' + (open ? ' open' : '') + '">' + escapeHTML(DOC_STATE[inv.status] || inv.status) + '</div>'
+      + '<div class="order-row-state' + (open ? ' open' : '') + '">' + escapeHTML(inv.direction === 'in' && inv.status === 'open' && inv.arrived_at ? 'приехала' : DOC_STATE[inv.status] || inv.status) + '</div>'
       + '</div>';
   }
 
@@ -2958,12 +2965,56 @@
     document.getElementById('docsTitle').textContent = DOC_TITLES[dir].title;
     document.getElementById('docsSub').textContent = open.length ? 'ждут: ' + open.length : 'Всё обработано';
     document.getElementById('docsBody').innerHTML = (open.length
-      ? open.map(i => orderRowHtml(i, (i.company_name || '') + ' · пришла ' + fmtWhen(i.created_at))).join('')
+      ? open.map(i => dir === 'in' ? inboundRowHtml(i) : orderRowHtml(i, (i.company_name || '') + ' · пришла ' + fmtWhen(i.created_at))).join('')
       : '<div class="job-empty">' + DOC_TITLES[dir].empty + '</div>')
       + (done.length ? '<div class="list-group-title">Недавно готовые</div>'
         + done.map(i => orderRowHtml(i, i.company_name || '')).join('') : '');
   }
   window.openDocs = openDocs;
+
+  // Привоз продавца (владелец 26.09.2026): когда и в какое окно привезут,
+  // сколько мест, кто везёт. «Машина приехала» грузчик отмечает у ворот,
+  // пересчитав места; первая принятая строка отметит приезд и сама.
+  function inboundPlaces(boxes, pallets){
+    return [boxes ? boxes + ' ' + pluralRu(boxes, 'короб', 'короба', 'коробов') : '',
+      pallets ? pallets + ' ' + pluralRu(pallets, 'паллета', 'паллеты', 'паллет') : ''].filter(Boolean).join(', ');
+  }
+  function inboundRowHtml(i){
+    const parts = [i.company_name || ''];
+    if(i.source_document_type === 'seller_inbound' && i.source_document_date){
+      const f = i.planned_from ? String(i.planned_from).slice(0, 5) : ''; const t = i.planned_to ? String(i.planned_to).slice(0, 5) : '';
+      parts.push('привезут ' + fmtDay(String(i.source_document_date).slice(0, 10)) + (f && t ? ', ' + f + '–' + t : f ? ', с ' + f : t ? ', до ' + t : ''));
+    } else parts.push('пришла ' + fmtWhen(i.created_at));
+    parts.push(inboundPlaces(i.boxes, i.pallets));
+    parts.push([i.carrier, i.vehicle].filter(Boolean).join(', '));
+    if(i.arrived_at) parts.push('машина приехала ' + fmtWhen(i.arrived_at));
+    if(i.inbound_comment) parts.push('«' + i.inbound_comment + '»');
+    const row = orderRowHtml(i, parts.filter(Boolean).join(' · '));
+    if(i.arrived_at || i.status !== 'open') return row;
+    return '<div class="arrive-wrap">' + row + '<div class="arrive-row" id="arrive-' + escapeHTML(i.id) + '">'
+      + '<button class="arrive-btn" onclick="startArrive(\'' + jsArg(i.id) + '\')">Машина приехала</button></div></div>';
+  }
+  function startArrive(id){
+    const i = invoices.find(x => x.id === id);
+    const box = document.getElementById('arrive-' + id);
+    if(!i || !box) return;
+    box.innerHTML = '<div class="arrive-form">Сколько мест выгрузили?'
+      + '<label>Коробов <input id="arrB-' + escapeHTML(id) + '" inputmode="numeric" maxlength="6" value="' + escapeHTML(i.boxes ?? '') + '"></label>'
+      + '<label>Паллет <input id="arrP-' + escapeHTML(id) + '" inputmode="numeric" maxlength="6" value="' + escapeHTML(i.pallets ?? '') + '"></label>'
+      + '<button class="arrive-btn primary" onclick="confirmArrive(\'' + jsArg(id) + '\', this)">Отметить приезд</button></div>';
+  }
+  window.startArrive = startArrive;
+  async function confirmArrive(id, btn){
+    btn.disabled = true;
+    try{
+      await apiFetch('/api/inbound/' + encodeURIComponent(id) + '/arrived', { method: 'POST', body: {
+        boxes: document.getElementById('arrB-' + id).value.trim() || null,
+        pallets: document.getElementById('arrP-' + id).value.trim() || null } });
+      showToast('Приезд машины отмечен');
+      openDocs('in');
+    } catch(e){ btn.disabled = false; showToast('Не отмечено: ' + e.message); }
+  }
+  window.confirmArrive = confirmArrive;
 
   function openOrder(id){ selectInvoice(id); }
   window.openOrder = openOrder;

@@ -921,6 +921,26 @@
     padding:8px 12px; font-size:14px; cursor:pointer; font-family:var(--sans);}
   .rc-list-head{display:flex; align-items:baseline; gap:12px; margin-bottom:10px; flex-wrap:wrap;}
   .rc-src{font-size:12px; color:var(--muted);}
+  .rc-acts{display:flex; gap:14px; justify-content:flex-end; flex-wrap:wrap;}
+  .rc-flag-bad{color:var(--terracotta);}
+  .rc-facts{display:grid; grid-template-columns:max-content 1fr; gap:6px 18px; margin:0 0 16px; font-size:14px;}
+  .rc-facts dt{color:var(--muted);}
+  .rc-facts dd{margin:0; overflow-wrap:anywhere;}
+  .rc-card-note{padding:10px 12px; border:1px solid var(--line); border-radius:10px; margin-bottom:12px; font-size:14px;}
+  .rc-card-note.bad{border-color:var(--terracotta); color:var(--terracotta);}
+  .rc-diff{font-size:13px; color:var(--muted); margin:-4px 0 12px 2px;}
+  .rc-arrive{padding:12px; border:1px solid var(--accent); border-radius:10px; margin-bottom:12px; font-size:14px;}
+  .rc-arrive-row{display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:10px;}
+  .rc-arrive-row input{width:80px; margin-left:6px; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:7px 9px; font:inherit;}
+  .rc-section{font-size:15px; font-weight:700; margin:20px 0 10px;}
+  .rc-doc{display:flex; justify-content:space-between; gap:12px; align-items:center; padding:10px 0; border-bottom:1px solid var(--line-soft);}
+  .rc-msg{padding:10px 12px; border:1px solid var(--line); border-radius:10px; margin:0 40px 8px 0; font-size:14px; white-space:pre-wrap; overflow-wrap:anywhere;}
+  .rc-msg.mine{margin:0 0 8px 40px; background:var(--accent-soft); border-color:transparent;}
+  .rc-msg .rc-src{white-space:normal; margin-bottom:4px;}
+  .rc-reply{display:grid; gap:8px; margin-top:10px;}
+  .rc-reply select, .rc-reply textarea{background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:inherit;}
+  .rc-reply .wh-onboarding-btn{justify-self:start;}
+  .rc-bottom{display:flex; gap:18px; margin-top:20px; flex-wrap:wrap;}
   /* Товары */
   .pr-bar{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
   .pr-bar select{max-width:280px;}
@@ -2647,6 +2667,18 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <script src="back.js?v=4901b838" defer></script>
-<script src="cabinet_main.js?v=2e174622" defer></script>
+<script src="cabinet_main.js?v=2092dc56" defer></script>
+  <!-- Карточка прихода: привоз продавца, приезд машины, документы,
+       переписка с продавцом, его ответ на акт расхождений. Вне разделов:
+       открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->
+  <div class="wh-modal-overlay" id="receiptModal" onclick="if(event.target===this) closeReceipt()">
+    <div class="wh-modal" style="max-width:720px">
+      <div class="wh-modal-head">
+        <div class="wh-modal-title" id="receiptTitle">Приход</div>
+        <button class="panel-close-btn" onclick="closeReceipt()" aria-label="Закрыть">✕</button>
+      </div>
+      <div class="wh-modal-body" id="receiptBody"></div>
+    </div>
+  </div>
 </body>
 </html>

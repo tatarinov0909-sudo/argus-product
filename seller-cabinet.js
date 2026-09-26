@@ -108,7 +108,7 @@
     const active = !neutral && (multi ? value.size > 0 : choices.length > 0 && value !== choices[0].value);
     return `<div class="dd${multi ? ' dd-multi' : ''}${active ? ' active' : ''}" data-dd="${h(key)}">`
       + `<button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false">`
-      + `<span class="dd-label">${h(label)}</span>`
+      + (label ? `<span class="dd-label">${h(label)}</span>` : '')
       + (multi ? (value.size && !neutral ? `<span class="dd-count">${value.size}</span>` : '')
         : showValue ? `<span class="dd-value">${h(current)}</span>` : '')
       + `${icon('chevron', 'dd-chev')}</button>`
@@ -794,51 +794,74 @@
   }
 
   // ---------- Приходы ----------
-  const INBOUND_STATUS = { open: ['Ждёт приёмки', 'waiting'], in_progress: ['Принимается', 'working'], completed: ['Принят', 'ready'] };
+  // Путь привоза (владелец 26.09.2026): ждёт приёмки → машина приехала →
+  // принимается → принят и размещён по ячейкам.
+  const hm = (t) => (t ? String(t).slice(0, 5) : '');
+  const windowText = (from, to) => (from && to ? `${hm(from)}–${hm(to)}` : from ? `с ${hm(from)}` : to ? `до ${hm(to)}` : '');
+  const placesText = (boxes, pallets) => [boxes > 0 && counted(boxes, 'короб', 'короба', 'коробов'),
+    pallets > 0 && counted(pallets, 'паллета', 'паллеты', 'паллет')].filter(Boolean).join(', ');
+  function inboundState(r) {
+    if (r.status === 'completed') return Number(r.unplaced_qty) > 0 ? ['Не всё в ячейках', 'waiting'] : ['Принят', 'ready'];
+    if (r.status === 'in_progress') return ['Принимается', 'working'];
+    return r.arrived_at ? ['Машина приехала', 'working'] : ['Ждёт приёмки', 'waiting'];
+  }
   const diffOf = (r) => (r.status === 'completed' && r.done_qty != null ? Number(r.done_qty) - Number(r.declared_qty) : null);
+  // Акт с расхождением ждёт ответа продавца: «согласен» или «не согласен».
+  const awaitsVerdict = (r) => diffOf(r) != null && diffOf(r) !== 0 && !r.seller_verdict;
   function filteredInbound() {
     const ui = state.ui.documents;
+    const statusOk = (r) => ui.status === 'all' || (ui.status === 'open' ? r.status === 'open' && !r.arrived_at
+      : ui.status === 'arrived' ? r.status === 'open' && !!r.arrived_at : r.status === ui.status);
     const rows = state.data.documents.rows.filter((r) => r.direction === 'in'
       && matches(ui.q, [r.number, r.carrier, r.vehicle, r.inbound_comment, ...(r.received_by || [])])
-      && (ui.status === 'all' || r.status === ui.status)
-      && (ui.diff === 'all' || (ui.diff === 'with' ? diffOf(r) != null && diffOf(r) !== 0 : diffOf(r) === 0))
+      && statusOk(r)
+      && (ui.diff === 'all' || (ui.diff === 'answer' ? awaitsVerdict(r) : ui.diff === 'with' ? diffOf(r) != null && diffOf(r) !== 0 : diffOf(r) === 0))
       && inPeriod(r.first_at || r.created_at, ui.period));
     const by = { new: (a, b) => new Date(b.created_at) - new Date(a.created_at), old: (a, b) => new Date(a.created_at) - new Date(b.created_at), units: (a, b) => Number(b.declared_qty) - Number(a.declared_qty) };
     return rows.sort(by[ui.sort]);
   }
   const INBOUND_COLUMNS = [
     { key: 'doc', title: 'Приход', locked: true, cell: (r) => `<button class="link-button nowrap" data-doc="${h(r.id)}">${h(r.number)}</button><span class="cell-sub">${counted(r.item_count, 'позиция', 'позиции', 'позиций')}</span>` },
-    { key: 'planned', title: 'Привезут', cls: 'n', hidden: true, cell: (r) => (r.source_document_type === 'seller_inbound' && r.source_document_date ? h(day(dateOnly(String(r.source_document_date).slice(0, 10)))) : '—') },
+    // Окно выгрузки и места — подписью под датой: отдельными столбцами
+    // таблица не помещалась в экран.
+    { key: 'planned', title: 'Привезут', cls: 'n', cell: (r) => (r.source_document_type === 'seller_inbound' && r.source_document_date ? `${h(day(dateOnly(String(r.source_document_date).slice(0, 10))))}${windowText(r.planned_from, r.planned_to) ? `<span class="cell-sub">${h(windowText(r.planned_from, r.planned_to))}</span>` : ''}${placesText(r.boxes, r.pallets) ? `<span class="cell-sub">${h(placesText(r.boxes, r.pallets))}</span>` : ''}` : '<span class="zero">—</span>') },
+    { key: 'places', title: 'Мест', hidden: true, cell: (r) => (placesText(r.boxes, r.pallets) ? `<span class="cell-main" style="font-weight:400">${h(placesText(r.boxes, r.pallets))}</span>${r.weight_kg != null ? `<span class="cell-sub">${n(r.weight_kg)} кг</span>` : ''}` : '<span class="zero">—</span>') },
+    { key: 'came', title: 'Машина приехала', cls: 'n', hidden: true, cell: (r) => (r.arrived_at ? h(when(r.arrived_at)) : '<span class="zero">ещё нет</span>') },
     { key: 'arrived', title: 'Начали выгрузку', cls: 'n', cell: (r) => (r.first_at ? h(when(r.first_at)) : '<span class="zero">ещё нет</span>') },
     { key: 'carrier', title: 'Кто привёз', cell: (r) => (r.carrier ? `<span class="cell-main">${h(r.carrier)}</span>${r.vehicle ? `<span class="cell-sub">машина ${h(r.vehicle)}</span>` : ''}` : '<span class="zero">—</span>') },
     { key: 'vehicle', title: 'Машина', cls: 'n', hidden: true, cell: (r) => h(r.vehicle || '—') },
     { key: 'declared', title: 'Заявлено', cls: 'n', cell: (r) => num(r.declared_qty) },
     { key: 'accepted', title: 'Принято', cls: 'n', cell: (r) => num(r.done_qty ?? null) },
-    { key: 'diff', title: 'Расхождение', cls: 'n', cell: (r) => { const d = diffOf(r); return d == null ? '<span class="zero">—</span>' : d === 0 ? '<span class="zero">нет</span>' : `<span class="row-note bad" style="margin:0">${d > 0 ? '+' : '−'}${n(Math.abs(d))}</span>`; } },
+    { key: 'diff', title: 'Расхождение', cls: 'n', cell: (r) => { const d = diffOf(r); if (d == null) return '<span class="zero">—</span>'; if (d === 0) return '<span class="zero">нет</span>'; return `<span class="row-note bad" style="margin:0">${d > 0 ? '+' : '−'}${n(Math.abs(d))}</span><span class="cell-sub">${r.seller_verdict === 'agreed' ? 'вы согласны' : r.seller_verdict === 'disputed' ? 'вы не согласны' : 'ждёт ответа'}</span>`; } },
     { key: 'who', title: 'Принимали', hidden: true, cell: (r) => h((r.received_by || []).join(', ') || '—') },
     { key: 'finished', title: 'Приёмка закончена', cls: 'n', hidden: true, cell: (r) => (r.status === 'completed' && r.last_at ? h(when(r.last_at)) : '—') },
-    { key: 'status', title: 'Статус', cls: 'c', cell: (r) => badge(...(INBOUND_STATUS[r.status] || [r.status])) },
+    { key: 'status', title: 'Статус', cls: 'c', cell: (r) => badge(...inboundState(r)) },
+    { key: 'talk', title: 'Переписка', cls: 'n', hidden: true, cell: (r) => (r.comment_count ? counted(r.comment_count, 'сообщение', 'сообщения', 'сообщений') : '<span class="zero">—</span>') },
+    { key: 'papers', title: 'Документы', cls: 'n', hidden: true, cell: (r) => (r.document_count ? n(r.document_count) : '<span class="zero">—</span>') },
     { key: 'created', title: 'Оформлен', cls: 'n', hidden: true, cell: (r) => h(when(r.created_at)) },
     { key: 'comment', title: 'Комментарий', hidden: true, cell: (r) => h(r.inbound_comment || '—') },
   ];
   function renderDocuments() {
     const ui = state.ui.documents;
     $('view').innerHTML = toolbar(searchBox('Номер, перевозчик, машина', ui.q),
-      dropdown('d-status', { label: 'Статус', value: ui.status, options: [{ value: 'all', text: 'Все' }, { value: 'open', text: 'Ждут приёмки' }, { value: 'in_progress', text: 'Принимаются' }, { value: 'completed', text: 'Приняты' }], onPick: (v) => { ui.status = v; ui.shown = state.prefs.rows; renderDocuments(); } })
-      + dropdown('d-diff', { label: 'Расхождение', value: ui.diff, options: [{ value: 'all', text: 'Любое' }, { value: 'with', text: 'Есть расхождение' }, { value: 'none', text: 'Без расхождения' }], onPick: (v) => { ui.diff = v; ui.shown = state.prefs.rows; renderDocuments(); } })
+      dropdown('d-status', { label: 'Статус', value: ui.status, options: [{ value: 'all', text: 'Все' }, { value: 'open', text: 'Ждут приёмки' }, { value: 'arrived', text: 'Машина приехала' }, { value: 'in_progress', text: 'Принимаются' }, { value: 'completed', text: 'Приняты' }], onPick: (v) => { ui.status = v; ui.shown = state.prefs.rows; renderDocuments(); } })
+      + dropdown('d-diff', { label: 'Расхождение', value: ui.diff, options: [{ value: 'all', text: 'Любое' }, { value: 'answer', text: 'Ждут вашего ответа' }, { value: 'with', text: 'Есть расхождение' }, { value: 'none', text: 'Без расхождения' }], onPick: (v) => { ui.diff = v; ui.shown = state.prefs.rows; renderDocuments(); } })
       + dropdown('d-period', { label: 'Период', value: ui.period, options: PERIODS, onPick: (v) => { ui.period = v; ui.shown = state.prefs.rows; renderDocuments(); } })
       + dropdown('d-sort', { label: 'Сортировка', value: ui.sort, options: [{ value: 'new', text: 'Сначала новые' }, { value: 'old', text: 'Сначала старые' }, { value: 'units', text: 'Больше штук' }], onPick: (v) => { ui.sort = v; renderDocuments(); } })
       + resetLink('documents'),
       columnChooser('documents', INBOUND_COLUMNS, renderDocuments) + `<button class="button primary" type="button" id="inboundButton">${icon('box')}Привезти товар</button>`)
       + '<div id="rows"></div>';
-    $('inboundButton').onclick = openInbound;
+    $('inboundButton').onclick = () => openInbound();
     wireView(ui, renderDocuments, renderDocumentRows);
     renderDocumentRows();
   }
   function renderDocumentRows() {
     const ui = state.ui.documents; const rows = filteredInbound(); const host = $('rows');
-    host.innerHTML = rows.length ? table(visibleColumns('documents', INBOUND_COLUMNS), rows.slice(0, ui.shown), { rowAttrs: (r) => `class="clickable" data-doc-row="${h(r.id)}"` }) + moreFooter(ui, rows.length, ['приход', 'прихода', 'приходов'])
-      : empty('Приходов нет', state.data.documents.rows.some((r) => r.direction === 'in') ? 'Под выбранные фильтры приходов нет.' : 'Нажмите «Привезти товар» и загрузите таблицу, по которой собираете товар для склада.', 'inbox');
+    const answer = state.data.documents.rows.filter((r) => r.direction === 'in' && awaitsVerdict(r)).length;
+    host.innerHTML = (answer && ui.diff !== 'answer' && !state.owner ? `<div class="notice warning">${icon('info')}<div><strong>${counted(answer, 'акт ждёт', 'акта ждут', 'актов ждут')} вашего ответа</strong><p>Склад принял не столько, сколько вы заявили. Откройте приход и ответьте: согласны или нет. <button class="link-button" id="showAnswer">Показать их</button></p></div></div>` : '')
+      + (rows.length ? table(visibleColumns('documents', INBOUND_COLUMNS), rows.slice(0, ui.shown), { rowAttrs: (r) => `class="clickable" data-doc-row="${h(r.id)}"` }) + moreFooter(ui, rows.length, ['приход', 'прихода', 'приходов'])
+      : empty('Приходов нет', state.data.documents.rows.some((r) => r.direction === 'in') ? 'Под выбранные фильтры приходов нет.' : 'Нажмите «Привезти товар» и загрузите таблицу, по которой собираете товар для склада.', 'inbox'));
+    if ($('showAnswer')) $('showAnswer').onclick = () => { ui.diff = 'answer'; ui.shown = state.prefs.rows; renderDocuments(); };
     host.querySelectorAll('[data-doc-row]').forEach((tr) => { tr.onclick = () => openDocument(tr.dataset.docRow); });
     wireRows(host, ui, renderDocumentRows);
   }
@@ -937,6 +960,7 @@
   async function openDocument(id, order = false) {
     const list = order ? state.data.orders.rows : state.data.documents.rows;
     const selected = list.find((r) => r.id === id); if (!selected) return;
+    if (!order && selected.direction === 'in') return openInboundCard(id);
     const kind = order ? 'Заказ' : selected.direction === 'return' ? 'Возврат' : 'Приход';
     const run = openDrawer(selected.number, kind);
     try {
@@ -949,15 +973,9 @@
       const declared = items.reduce((s, r) => s + Number(r.declared_qty), 0); const complete = items.every((r) => r.finalized); const done = items.reduce((s, r) => s + Number(r.accepted || 0), 0);
       const doneWord = order ? 'Собрано' : data.direction === 'return' ? 'Разобрано' : 'Принято';
       const statusBadge = order ? badge(orderStatus(detail), orderStyle(detail))
-        : badge(...((data.direction === 'return' ? RETURN_STATUS : INBOUND_STATUS)[data.status] || [data.status]));
-      const facts = !order && data.direction === 'in' ? [
-        selected.carrier && `<span>Вёз <b>${h(selected.carrier)}</b>${selected.vehicle ? `, машина <b>${h(selected.vehicle)}</b>` : ''}</span>`,
-        selected.first_at && `<span>Начали выгрузку <b>${h(when(selected.first_at))}</b></span>`,
-        (selected.received_by || []).length && `<span>Принимали <b>${h(selected.received_by.join(', '))}</b></span>`,
-        selected.inbound_comment && `<span>Комментарий: ${h(selected.inbound_comment)}</span>`,
-      ].filter(Boolean).join('') : '';
+        : badge(...(RETURN_STATUS[data.status] || [data.status]));
       items.sort((a, b) => Number(b.finalized && b.accepted !== Number(b.declared_qty)) - Number(a.finalized && a.accepted !== Number(a.declared_qty)));
-      $('drawerBody').innerHTML = `<div class="drawer-meta"><span>Загружено ${h(when(data.created_at))}</span>${statusBadge}${facts}</div>`
+      $('drawerBody').innerHTML = `<div class="drawer-meta"><span>Загружено ${h(when(data.created_at))}</span>${statusBadge}</div>`
         + (order && detail.stock_conflict ? notice('Заказ закрыт на Wildberries', detail.mp_close_reason === 'fulfilled' ? 'WB сообщил о завершении, а отгрузка в Аргусе ещё не подтверждена. До сверки количество остаётся в сборке.' : 'Товар уже был собран. Склад возвращает его на полку; до этого он учтён в сборке.', true) : '')
         + `<div class="mini-stats">${mini('Заявлено', declared)}${mini(doneWord, items.some((r) => r.accepted !== null) ? done : null)}${mini('Расхождение', complete ? done - declared : null)}</div>`
         + (!complete ? '<p class="help" style="margin-bottom:16px">Работа ещё идёт: показано уже сделанное, расхождение появится в конце.</p>' : '')
@@ -967,7 +985,7 @@
             + `<div class="receipt-bars"><div class="receipt-bar"><span>Заявлено</span><div class="track"><i style="width:${dec / scale * 100}%"></i></div><span class="num">${n(dec)}</span></div><div class="receipt-bar"><span>${doneWord}</span><div class="track accepted"><i style="width:${(r.accepted || 0) / scale * 100}%"></i></div><span class="num">${r.accepted == null ? '—' : n(r.accepted)}</span></div></div>`
             + (r.buckets || []).map((b) => `<p class="row-note ${b.qualityBucket === 'good' ? '' : 'bad'}">${h(BUCKET[b.qualityBucket] || b.qualityBucket)}: ${n(b.qty)} шт.${b.defectNote ? ' — ' + h(b.defectNote) : ''}</p>`).join('') + '</article>';
         }).join('')}</div></section>`
-        + `<div class="drawer-actions">${!order && data.direction === 'in' ? `<a class="button" href="act_print.html?kind=receipt&id=${encodeURIComponent(id)}" target="_blank" rel="noopener">${icon('document')}Акт приёмки</a>` : ''}${!order && data.direction === 'return' ? `<button class="button" id="exportDocument">${icon('download')}Excel этого возврата</button>` : ''}</div>`;
+        + `<div class="drawer-actions">${!order && data.direction === 'return' ? `<button class="button" id="exportDocument">${icon('download')}Excel этого возврата</button>` : ''}</div>`;
       const xl = $('exportDocument');
       if (xl) xl.onclick = () => runExport(xl, () => exportExcel({
         file: 'Возврат ' + selected.number, sheet: 'Возврат', title: `Возврат ${selected.number} — ${state.profile.name}`, filterText: '', rows: items,
@@ -984,58 +1002,306 @@
     } catch (e) { if (run === state.drawerRun) $('drawerBody').innerHTML = empty('Не удалось открыть', e.message); }
   }
 
+  // ---------- Карточка привоза ----------
+  // Всё о привозе в одном месте (владелец 26.09.2026): где он сейчас, что
+  // заявлено и что приехало, документы поставщика, переписка со складом и
+  // ответ на акт расхождений. Изменить и отменить — пока машина не приехала.
+  const DOC_KINDS = ['УПД', 'ТТН', 'ТОРГ-12', 'Счёт-фактура', 'Накладная ТК', 'Другое'];
+  const FILE_TYPES = { pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic' };
+  const FILE_ACCEPT = '.pdf,.jpg,.jpeg,.png,.webp,.heic';
+  const fileType = (file) => (Object.values(FILE_TYPES).includes(file.type) ? file.type : FILE_TYPES[(file.name.split('.').pop() || '').toLowerCase()] || '');
+  const fileSize = (b) => (b >= 1048576 ? (b / 1048576).toLocaleString('ru-RU', { maximumFractionDigits: 1 }) + ' МБ' : Math.max(1, Math.round(b / 1024)) + ' КБ');
+  function checkFile(file) {
+    if (!fileType(file)) return 'Файл — PDF или фото (JPG, PNG, WEBP, HEIC)';
+    if (file.size > 10 * 1048576) return 'Файл больше 10 МБ — сожмите скан или разбейте на части';
+    return '';
+  }
+  async function uploadFile(invoiceId, docId, file) {
+    const response = await fetch('https://api.argus-ai.online/api/inbound/' + encodeURIComponent(invoiceId) + '/documents/' + encodeURIComponent(docId) + '/file', {
+      method: 'PUT', body: file,
+      headers: { 'Content-Type': fileType(file), 'X-File-Name': encodeURIComponent(file.name), Authorization: 'Bearer ' + state.token },
+    });
+    if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || 'Файл не загрузился');
+  }
+  // Реквизиты документа и файл: сначала строка документа, потом файл к ней.
+  async function saveDocument(invoiceId, doc) {
+    const created = await api('/api/inbound/' + encodeURIComponent(invoiceId) + '/documents', { method: 'POST', body: { kind: doc.kind, number: doc.number, date: doc.date, supplier: doc.supplier } });
+    if (doc.file) await uploadFile(invoiceId, created.id, doc.file);
+  }
+  // Поля документа поставщика — в форме привоза и в карточке. prefix — чтобы
+  // не спутать поля двух форм; files — выбранный файл по prefix.
+  const docState = {};
+  function docKindPicker(prefix) {
+    return dropdown(prefix + '-kind', { label: '', value: docState[prefix].kind, neutral: true,
+      options: DOC_KINDS.map((k) => ({ value: k, text: k })),
+      onPick: (v) => { docState[prefix].kind = v; const el = document.querySelector(`.dd[data-dd="${prefix}-kind"]`); if (el) el.outerHTML = docKindPicker(prefix); } });
+  }
+  function docFields(prefix) {
+    docState[prefix] = { kind: 'УПД', file: null };
+    return `<div class="doc-fields"><div class="two"><div class="field"><span>Вид документа</span>${docKindPicker(prefix)}</div><label class="field"><span>Номер</span><input id="${prefix}Number" maxlength="60" placeholder="123"></label></div>`
+      + `<div class="two"><label class="field"><span>Дата документа</span><input type="date" id="${prefix}Date"></label><label class="field"><span>От кого — поставщик</span><input id="${prefix}Supplier" maxlength="200" placeholder="ООО «Поставщик»"></label></div>`
+      + `<div class="field"><span>Файл — скан или PDF, до 10 МБ</span><label class="file-pick"><input type="file" id="${prefix}File" accept="${FILE_ACCEPT}"><span class="button">${icon('document')}Выбрать файл</span><span class="help" id="${prefix}FileName">Можно без файла</span></label></div></div>`;
+  }
+  function wireDocFields(prefix, onError) {
+    $(prefix + 'File').onchange = (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      const bad = checkFile(file); e.target.value = '';
+      if (bad) { docState[prefix].file = null; $(prefix + 'FileName').textContent = 'Можно без файла'; onError(bad); return; }
+      docState[prefix].file = file; $(prefix + 'FileName').textContent = file.name + ' · ' + fileSize(file.size); onError('');
+    };
+  }
+  function readDocFields(prefix) {
+    const doc = { kind: docState[prefix].kind, number: $(prefix + 'Number').value.trim(), date: $(prefix + 'Date').value || null,
+      supplier: $(prefix + 'Supplier').value.trim(), file: docState[prefix].file };
+    return doc.number || doc.date || doc.supplier || doc.file ? doc : null;
+  }
+
+  async function openInboundCard(id, refresh = false) {
+    const row = (state.data.documents?.rows || []).find((r) => r.id === id);
+    const run = refresh ? state.drawerRun : openDrawer(row ? row.number : 'Приход', 'Приход');
+    const scroll = $('drawerBody').scrollTop;
+    try {
+      const [c, data] = await Promise.all([api('/api/inbound/' + encodeURIComponent(id)), api('/api/invoices/' + encodeURIComponent(id))]);
+      if (run !== state.drawerRun) return;
+      $('drawerTitle').textContent = c.number;
+      $('drawerBody').innerHTML = inboundCardHtml(c, data);
+      wireInboundCard(c);
+      if (refresh) $('drawerBody').scrollTop = scroll;
+    } catch (e) { if (run === state.drawerRun) $('drawerBody').innerHTML = empty('Не удалось открыть', e.message); }
+  }
+  const cardUi = { about: '' };
+  function aboutPicker(c) {
+    return dropdown('comment-about', { label: 'О чём', value: cardUi.about, neutral: true,
+      options: [{ value: '', text: 'Весь приход' }, ...c.lines.map((l) => ({ value: l.sku, text: productName(l) }))],
+      onPick: (v) => { cardUi.about = v; const el = document.querySelector('.dd[data-dd="comment-about"]'); if (el) el.outerHTML = aboutPicker(c); } });
+  }
+  function inboundCardHtml(c, data) {
+    const who = state.owner ? 'Продавец' : 'Вы';
+    const steps = [
+      ['Оформлен', c.createdAt, ''],
+      ['Машина приехала', c.arrivedAt, placesText(c.arrivedBoxes, c.arrivedPallets) ? 'Мест: ' + placesText(c.arrivedBoxes, c.arrivedPallets) : ''],
+      ['Начали приёмку', c.firstAt, ''],
+      ['Принят', c.status === 'completed' ? c.lastAt : null, c.status === 'completed' && c.accepted != null ? `${n(c.accepted)} шт. из ${n(c.declared)} заявленных` : ''],
+      ['Размещён по ячейкам', c.status === 'completed' && !c.unplaced ? c.lastAt : null, c.unplaced ? `${n(c.unplaced)} шт. приняты без ячейки` : ''],
+    ];
+    const current = steps.findIndex((x) => !x[1]);
+    const stepsHtml = `<ol class="steps">${steps.map(([t, at, note], i) => `<li class="${at ? 'done' : i === current ? 'now' : ''}"><strong>${h(t)}</strong><time>${at ? h(when(at)) : 'ещё нет'}</time>${note ? `<p>${h(note)}</p>` : ''}</li>`).join('')}</ol>`;
+    const facts = [
+      c.plannedDate && ['Привезут', day(dateOnly(c.plannedDate)) + (windowText(c.plannedFrom, c.plannedTo) ? ', ' + windowText(c.plannedFrom, c.plannedTo) : '')],
+      placesText(c.boxes, c.pallets) && ['Мест заявлено', placesText(c.boxes, c.pallets)],
+      c.weightKg != null && ['Вес', n(c.weightKg) + ' кг'],
+      (c.carrier || c.vehicle) && ['Кто везёт', [c.carrier, c.vehicle && 'машина ' + c.vehicle].filter(Boolean).join(', ')],
+      c.comment && ['Комментарий складу', c.comment],
+    ].filter(Boolean);
+    const factsHtml = facts.length ? `<dl class="facts">${facts.map(([k, v]) => `<dt>${h(k)}</dt><dd>${h(v)}</dd>`).join('')}</dl>` : '';
+    const edit = c.editable ? `<div class="drawer-actions" id="editActions"><button class="button" type="button" id="inboundEdit">Изменить привоз</button><button class="button ghost" type="button" id="inboundCancel">Отменить привоз</button></div><p class="help" style="margin-top:8px">Изменить или отменить можно, пока машина не приехала.</p>` : '';
+
+    let verdict = '';
+    if (c.status === 'completed' && c.discrepancy) {
+      const what = `Склад принял ${n(c.accepted)} шт. из ${n(c.declared)} заявленных — на ${n(Math.abs(c.discrepancy))} ${c.discrepancy > 0 ? 'больше' : 'меньше'}.`;
+      if (c.verdict) {
+        verdict = notice(c.verdict.value === 'agreed' ? `${who} согласились с актом расхождений` : `${who} не согласились с актом расхождений`,
+          [c.verdict.note, when(c.verdict.at)].filter(Boolean).join(' · '), c.verdict.value !== 'agreed');
+      } else if (state.owner) {
+        verdict = notice('Продавец ещё не ответил на акт расхождений', what, true);
+      } else {
+        verdict = `<section class="verdict"><h3>Акт расхождений</h3><p>${h(what)} Согласны с актом?</p>`
+          + `<label class="field"><span>Комментарий — обязателен, если не согласны</span><textarea id="verdictNote" rows="3" maxlength="1000" placeholder="Например: отгружали 7 шт., есть видео упаковки"></textarea></label>`
+          + `<div class="drawer-actions"><button class="button primary" type="button" id="verdictAgree">Согласен</button><button class="button" type="button" id="verdictDispute">Не согласен</button></div><p class="error-text" id="verdictError"></p></section>`;
+      }
+    }
+
+    const items = data.items.map((r) => ({ ...r, finalized: r.accepted_qty != null, accepted: r.accepted_qty == null ? null : Number(r.accepted_qty) }));
+    items.sort((a, b) => Number(b.finalized && b.accepted !== Number(b.declared_qty)) - Number(a.finalized && a.accepted !== Number(a.declared_qty)));
+    const complete = items.every((r) => r.finalized);
+    const lines = `<div class="mini-stats">${mini('Заявлено', c.declared)}${mini('Принято', c.accepted)}${mini('Расхождение', complete ? c.discrepancy : null)}</div>`
+      + (!complete ? '<p class="help" style="margin-bottom:16px">Приёмка ещё не закончена: расхождение появится в конце.</p>' : '')
+      + `<section class="detail-section" style="margin-top:0"><h3>Позиции · ${items.length}</h3><div class="receipt-lines">${items.map((r) => {
+        const dec = Number(r.declared_qty); const diff = r.finalized && r.accepted !== dec; const scale = Math.max(1, dec, r.accepted || 0);
+        return `<article class="receipt-item ${diff ? 'issue' : ''}"><h3>${h(productName(r))}</h3><span class="cell-sub">Артикул WB: ${h(wbIds(r.sku).join(', ') || 'не передан')}</span>${diff ? `<span class="row-note bad">Расхождение: ${n(r.accepted - dec)} шт.</span>` : ''}`
+          + `<div class="receipt-bars"><div class="receipt-bar"><span>Заявлено</span><div class="track"><i style="width:${dec / scale * 100}%"></i></div><span class="num">${n(dec)}</span></div><div class="receipt-bar"><span>Принято</span><div class="track accepted"><i style="width:${(r.accepted || 0) / scale * 100}%"></i></div><span class="num">${r.accepted == null ? '—' : n(r.accepted)}</span></div></div></article>`;
+      }).join('')}</div></section>`;
+
+    const canEditDoc = (d) => state.owner || (d.addedBy === 'seller' && c.status !== 'completed');
+    const docs = `<section class="detail-section"><h3>Документы поставщика · ${c.documents.length}</h3>`
+      + (c.documents.length ? `<div class="doc-list">${c.documents.map((d) => `<div class="doc-row"><div><span class="cell-main">${h([d.kind, d.number && '№ ' + d.number, d.date && 'от ' + d.date].filter(Boolean).join(' '))}</span>`
+        + `<span class="cell-sub">${h([d.supplier, d.addedBy === 'seller' ? (state.owner ? 'добавил продавец' : 'добавили вы') : 'добавил склад', d.fileName ? d.fileName + ', ' + fileSize(d.fileSize) : 'без файла'].filter(Boolean).join(' · '))}</span></div>`
+        + `<div class="doc-actions">${d.fileName ? `<button class="button" type="button" data-doc-open="${h(d.id)}">Открыть</button>` : ''}`
+        + (canEditDoc(d) ? `<label class="button">${d.fileName ? 'Заменить файл' : 'Приложить файл'}<input type="file" accept="${FILE_ACCEPT}" data-doc-file="${h(d.id)}" hidden></label><button class="button ghost" type="button" data-doc-del="${h(d.id)}">Убрать</button>` : '')
+        + '</div></div>').join('')}</div>` : '<p class="help">УПД, ТТН или другой документ, с которым едет товар: склад принимает груз по нему.</p>')
+      + `<div id="docForm"></div><div class="drawer-actions" id="docAddRow"><button class="button" type="button" id="docAdd">${icon('document')}Добавить документ</button></div><p class="error-text" id="docError"></p></section>`;
+
+    const mine = (m) => (state.owner ? m.authorRole !== 'seller' : m.authorRole === 'seller');
+    const talk = `<section class="detail-section"><h3>${state.owner ? 'Переписка с продавцом' : 'Переписка со складом'} · ${c.comments.length}</h3>`
+      + (c.comments.length ? `<div class="comments">${c.comments.map((m) => `<article class="comment ${mine(m) ? 'mine' : ''}"><div class="comment-head"><b>${h(m.authorName || (m.authorRole === 'seller' ? 'Продавец' : 'Склад'))}</b><time>${h(when(m.createdAt))}</time></div>${m.productName ? `<span class="cell-sub">О товаре: ${h(m.productName)}</span>` : ''}<p>${h(m.body)}</p></article>`).join('')}</div>`
+        : `<p class="help">${state.owner ? 'Продавец пока ничего не писал.' : 'Напишите складу, если что-то не так с документами или товаром — например, в УПД нет кода товара. Можно про весь приход или про один товар.'}</p>`)
+      + `<div class="comment-form"><div class="field">${aboutPicker(c)}</div><label class="field"><span>Сообщение</span><textarea id="commentBody" rows="3" maxlength="1000"></textarea></label><div class="drawer-actions"><button class="button primary" type="button" id="commentSend">Отправить</button></div><p class="error-text" id="commentError"></p></div></section>`;
+
+    return `<div class="drawer-meta">${badge(...inboundState({ status: c.status, arrived_at: c.arrivedAt, unplaced_qty: c.unplaced }))}<span>Оформлен ${h(when(c.createdAt))}</span></div>`
+      + verdict + stepsHtml + factsHtml + edit + `<div style="margin-top:24px">${lines}</div>` + docs + talk
+      + `<div class="drawer-actions"><a class="button" href="act_print.html?kind=receipt&id=${encodeURIComponent(c.id)}" target="_blank" rel="noopener">${icon('document')}Акт приёмки${c.discrepancy ? ' и расхождений' : ''}</a></div>`;
+  }
+  function wireInboundCard(c) {
+    const again = () => { state.inboundDirty = true; return openInboundCard(c.id, true); };
+    const busy = (btn, on) => { if (btn) btn.disabled = on; };
+    if ($('inboundEdit')) $('inboundEdit').onclick = () => openInbound(c);
+    if ($('inboundCancel')) $('inboundCancel').onclick = () => {
+      $('editActions').innerHTML = `<span class="help">Отменить привоз ${h(c.number)}? Склад перестанет его ждать.</span><button class="button" type="button" id="cancelYes">Да, отменить</button><button class="button ghost" type="button" id="cancelNo">Нет</button>`;
+      $('cancelNo').onclick = () => openInboundCard(c.id, true);
+      $('cancelYes').onclick = async () => {
+        busy($('cancelYes'), true);
+        try { await api('/api/inbound/' + encodeURIComponent(c.id), { method: 'DELETE' }); state.inboundDirty = true; $('drawer').close(); toast('Привоз ' + c.number + ' отменён'); }
+        catch (e) { toast(e.message); openInboundCard(c.id, true); }
+      };
+    };
+    const verdict = async (value) => {
+      const note = $('verdictNote').value.trim();
+      if (value === 'disputed' && note.length < 3) { $('verdictError').textContent = 'Напишите, с чем вы не согласны'; $('verdictNote').focus(); return; }
+      busy($('verdictAgree'), true); busy($('verdictDispute'), true);
+      try { await api('/api/inbound/' + encodeURIComponent(c.id) + '/verdict', { method: 'POST', body: { verdict: value, note } }); toast(value === 'agreed' ? 'Ответ отправлен: вы согласны с актом' : 'Склад получил ваше несогласие'); again(); }
+      catch (e) { $('verdictError').textContent = e.message; busy($('verdictAgree'), false); busy($('verdictDispute'), false); }
+    };
+    if ($('verdictAgree')) { $('verdictAgree').onclick = () => verdict('agreed'); $('verdictDispute').onclick = () => verdict('disputed'); }
+    $('drawerBody').querySelectorAll('[data-doc-open]').forEach((b) => { b.onclick = async () => {
+      // Окно открываем сразу, по нажатию: иначе браузер примет его за всплывающее.
+      const w = window.open('', '_blank'); busy(b, true);
+      try {
+        const response = await fetch('https://api.argus-ai.online/api/inbound/' + encodeURIComponent(c.id) + '/documents/' + encodeURIComponent(b.dataset.docOpen) + '/file', { headers: { Authorization: 'Bearer ' + state.token }, cache: 'no-store' });
+        if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || 'Файл не открылся');
+        const url = URL.createObjectURL(await response.blob());
+        if (w) w.location.href = url; else location.href = url;
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      } catch (e) { if (w) w.close(); $('docError').textContent = e.message; }
+      busy(b, false);
+    }; });
+    $('drawerBody').querySelectorAll('[data-doc-file]').forEach((input) => { input.onchange = async () => {
+      const file = input.files[0]; input.value = ''; if (!file) return;
+      const bad = checkFile(file); if (bad) { $('docError').textContent = bad; return; }
+      $('docError').textContent = 'Загружаем файл…';
+      try { await uploadFile(c.id, input.dataset.docFile, file); again(); } catch (e) { $('docError').textContent = e.message; }
+    }; });
+    $('drawerBody').querySelectorAll('[data-doc-del]').forEach((b) => { b.onclick = async () => {
+      busy(b, true);
+      try { await api('/api/inbound/' + encodeURIComponent(c.id) + '/documents/' + encodeURIComponent(b.dataset.docDel), { method: 'DELETE' }); again(); }
+      catch (e) { $('docError').textContent = e.message; busy(b, false); }
+    }; });
+    $('docAdd').onclick = () => {
+      $('docAddRow').hidden = true;
+      $('docForm').innerHTML = `<div class="doc-form">${docFields('card')}<div class="drawer-actions"><button class="button primary" type="button" id="docSave">Сохранить документ</button><button class="button ghost" type="button" id="docCancel">Отмена</button></div></div>`;
+      wireDocFields('card', (m) => { $('docError').textContent = m; });
+      $('docCancel').onclick = () => { $('docForm').innerHTML = ''; $('docAddRow').hidden = false; $('docError').textContent = ''; };
+      $('docSave').onclick = async () => {
+        const doc = readDocFields('card') || { kind: docState.card.kind, file: null };
+        busy($('docSave'), true); $('docError').textContent = '';
+        try { await saveDocument(c.id, doc); again(); } catch (e) { $('docError').textContent = e.message; busy($('docSave'), false); }
+      };
+    };
+    $('commentSend').onclick = async () => {
+      const body = $('commentBody').value.trim();
+      if (!body) { $('commentError').textContent = 'Напишите сообщение'; $('commentBody').focus(); return; }
+      busy($('commentSend'), true);
+      try { await api('/api/inbound/' + encodeURIComponent(c.id) + '/comments', { method: 'POST', body: { body, sku: cardUi.about || null } }); cardUi.about = ''; again(); }
+      catch (e) { $('commentError').textContent = e.message; busy($('commentSend'), false); }
+    };
+  }
+  $('drawer').addEventListener('close', () => {
+    // Что-то поменялось в карточке — список приходов перечитать.
+    if (state.inboundDirty) { state.inboundDirty = false; state.data.documents = null; if (['documents', 'returns'].includes(state.view)) navigate(); }
+  });
+
   // Привоз на склад файлом (владелец 25.09.2026) — кто везёт и на чём
   // (26.09.2026) пишут здесь же: это и есть документы на выгрузку.
-  function openInbound() {
-    const run = openDrawer('Привезти товар на склад', 'Новый приход'); const f = { grid: null, name: '', preview: null, busy: false, error: '' };
+  // edit — карточка привоза (GET /api/inbound/:id): правка до приезда машины.
+  function openInbound(edit = null) {
+    const run = openDrawer(edit ? 'Изменить привоз ' + edit.number : 'Привезти товар на склад', edit ? 'Привоз' : 'Новый приход');
+    const f = { grid: null, name: '', preview: null, busy: false, error: '', errorTitle: '', createNew: true };
     const tomorrow = new Date(Date.now() + 864e5).toLocaleDateString('sv-SE');
-    $('drawerBody').innerHTML = `<form class="inbound-form" id="inboundForm"><p class="help">Загрузите таблицу, по которой собираете товар: шаблон поставки WB, свою таблицу или выгрузку из 1С. Нужны количество и штрихкод, артикул или название.</p>
-      <div class="field"><span>Файл Excel или CSV</span><label class="file-pick"><input type="file" id="inboundFile" accept=".xlsx,.xls,.csv"><span class="button">${icon('document')}Выбрать файл</span><span class="help" id="inboundFileName">Файл не выбран</span></label></div>
-      <div class="two"><label class="field"><span>Когда привезёте</span><input type="date" id="inboundDate" value="${tomorrow}"></label><label class="field"><span>Номер машины</span><input id="inboundVehicle" maxlength="20" placeholder="А123ВС 77"></label></div>
-      <label class="field"><span>Кто везёт — транспортная компания или водитель</span><input id="inboundCarrier" maxlength="120" placeholder="ТК «Деловые линии» или Иван, +7 900 …"></label>
-      <label class="field"><span>Комментарий складу</span><input id="inboundComment" maxlength="300" placeholder="Сколько коробов и паллет"></label>
-      <div id="inboundPreview"></div></form>`;
+    const v = (x) => h(x ?? '');
+    $('drawerBody').innerHTML = `<form class="inbound-form" id="inboundForm"><p class="help">${edit ? 'Поменяйте, что изменилось. Список товаров меняется новым файлом — без файла останется прежний.' : 'Загрузите таблицу, по которой собираете товар: шаблон поставки WB, свою таблицу или выгрузку из 1С. Нужны количество и штрихкод, артикул или название.'}</p>
+      <div class="field"><span>${edit ? 'Новый список товаров — если поменялся' : 'Файл Excel или CSV'}</span><label class="file-pick"><input type="file" id="inboundFile" accept=".xlsx,.xls,.csv"><span class="button">${icon('document')}Выбрать файл</span><span class="help" id="inboundFileName">Файл не выбран</span></label></div>
+      <div class="three"><label class="field"><span>Когда привезёте</span><input type="date" id="inboundDate" value="${edit ? v(edit.plannedDate) : tomorrow}"></label><label class="field"><span>Окно выгрузки: с</span><input type="time" id="inboundFrom" value="${v(edit?.plannedFrom)}"></label><label class="field"><span>до</span><input type="time" id="inboundTo" value="${v(edit?.plannedTo)}"></label></div>
+      <div class="three"><label class="field"><span>Коробов</span><input id="inboundBoxes" inputmode="numeric" maxlength="6" value="${v(edit?.boxes)}"></label><label class="field"><span>Паллет</span><input id="inboundPallets" inputmode="numeric" maxlength="6" value="${v(edit?.pallets)}"></label><label class="field"><span>Вес всего, кг</span><input id="inboundWeight" inputmode="decimal" maxlength="10" value="${v(edit?.weightKg)}"></label></div>
+      <div class="two"><label class="field"><span>Кто везёт — транспортная компания или водитель</span><input id="inboundCarrier" maxlength="120" placeholder="ТК «Деловые линии» или Иван, +7 900 …" value="${v(edit?.carrier)}"></label><label class="field"><span>Номер машины</span><input id="inboundVehicle" maxlength="20" placeholder="А123ВС 77" value="${v(edit?.vehicle)}"></label></div>
+      <label class="field"><span>Комментарий складу</span><input id="inboundComment" maxlength="300" value="${v(edit?.comment)}"></label>
+      ${edit ? '' : `<details class="doc-box"><summary>Документ поставщика — УПД, ТТН (можно добавить и потом)</summary>${docFields('inb')}</details>`}
+      <div id="inboundPreview"></div>
+      ${edit ? `<div class="drawer-actions" id="editSaveRow"><button class="button primary" type="button" id="inboundSave">Сохранить</button><button class="button ghost" type="button" id="inboundBack">Назад к привозу</button></div>` : ''}</form>`;
+    if (!edit) wireDocFields('inb', (m) => { f.error = m; f.errorTitle = 'Документ не подходит'; draw(); });
+    const details = () => ({
+      plannedDate: $('inboundDate').value || null, plannedFrom: $('inboundFrom').value || null, plannedTo: $('inboundTo').value || null,
+      boxes: $('inboundBoxes').value.trim() || null, pallets: $('inboundPallets').value.trim() || null,
+      weightKg: $('inboundWeight').value.trim().replace(',', '.') || null,
+      carrier: $('inboundCarrier').value, vehicle: $('inboundVehicle').value, comment: $('inboundComment').value,
+    });
     function draw() {
       if (run !== state.drawerRun) return; const p = f.preview;
       $('inboundFileName').textContent = f.name || 'Файл не выбран';
-      $('inboundPreview').innerHTML = f.error ? notice('Файл не принят', f.error, true) : f.busy && !p ? loading : !p ? ''
-        : `<div class="mini-stats">${mini('Товаров', p.summary.products)}${mini('Штук', p.summary.units)}${mini('Не узнали строк', p.summary.notMatched)}</div>`
-          + (p.summary.notMatched ? notice('Часть строк не попадёт в приход', 'Товара нет в вашем каталоге на складе или количество не целое. Проверьте штрихкод, артикул и количество.', true) : '')
-          + table([{ title: 'Строка файла', cell: (l) => `<span class="cell-main" style="font-weight:400">${h([l.barcode, l.article, l.name].filter(Boolean).join(' · '))}</span><span class="cell-sub">строка ${l.row}</span>` },
-            { title: 'Товар на складе', cell: (l) => (l.sku ? `<span class="cell-main" style="font-weight:400">${h(l.productName)}</span><span class="cell-sub">узнали по: ${h(l.by)}</span>` : `<span class="row-note bad" style="margin:0">${h(l.error || 'Не узнали')}</span>`) },
-            { title: 'Шт.', cls: 'n', cell: (l) => (l.error ? '—' : n(l.qty)) }], p.lines)
-          + `<button class="button primary" type="submit" style="margin-top:16px;width:100%" ${f.busy || !p.summary.products ? 'disabled' : ''}>${f.busy ? 'Отправляем…' : 'Отправить на склад'}</button>`;
+      if (edit) $('editSaveRow').hidden = !!p;
+      const err = f.error ? notice(f.errorTitle || 'Не получилось', f.error, true) : '';
+      if (!p) { $('inboundPreview').innerHTML = err || (f.busy ? loading : ''); return; }
+      const s = p.summary; const newLines = p.lines.filter((l) => l.isNew).length;
+      const products = s.products + (f.createNew ? s.newProducts : 0); const units = s.units + (f.createNew ? s.newUnits : 0);
+      const lost = s.notMatched + (f.createNew ? 0 : newLines);
+      $('inboundPreview').innerHTML = err
+        + `<div class="mini-stats">${mini('Товаров', products)}${mini('Штук', units)}${mini('Не попадут строк', lost)}</div>`
+        + (s.newProducts ? `<label class="check-line"><input type="checkbox" id="createNew" ${f.createNew ? 'checked' : ''}><span>Завести новые товары в каталог — ${counted(s.newProducts, 'товар', 'товара', 'товаров')}, ${n(s.newUnits)} шт.<small>Название, артикул и штрихкод возьмём из файла. Склад проверит карточки при приёмке.</small></span></label>` : '')
+        + (lost ? notice('Часть строк не попадёт в приход', 'Товара нет в вашем каталоге на складе, а для нового не хватает названия и артикула или штрихкода, или количество не целое.', true) : '')
+        + table([{ title: 'Строка файла', cell: (l) => `<span class="cell-main" style="font-weight:400">${h([l.barcode, l.article, l.name].filter(Boolean).join(' · '))}</span><span class="cell-sub">строка ${l.row}</span>` },
+          { title: 'Товар на складе', cell: (l) => (l.sku ? `<span class="cell-main" style="font-weight:400">${h(l.productName)}</span><span class="cell-sub">узнали по: ${h(l.by)}</span>`
+            : l.isNew ? `<span class="row-note ${f.createNew ? 'warn' : 'bad'}" style="margin:0">${f.createNew ? 'Новый товар — заведём в каталог' : 'Нет в каталоге — не попадёт'}</span>`
+              : `<span class="row-note bad" style="margin:0">${h(l.error || 'Не узнали')}</span>`) },
+          { title: 'Шт.', cls: 'n', cell: (l) => (l.error ? '—' : n(l.qty)) }], p.lines)
+        + `<button class="button primary" type="submit" style="margin-top:16px;width:100%" ${f.busy || !products ? 'disabled' : ''}>${f.busy ? 'Отправляем…' : edit ? 'Сохранить с новым списком' : 'Отправить на склад'}</button>`;
+      if ($('createNew')) $('createNew').onchange = (e) => { f.createNew = e.target.checked; draw(); };
     }
     async function send(apply) {
       f.busy = true; f.error = ''; draw();
       try {
-        const r = await api('/api/sellers/inbound', { method: 'POST', body: { grid: f.grid, apply, plannedDate: $('inboundDate').value || null,
-          comment: $('inboundComment').value, carrier: $('inboundCarrier').value, vehicle: $('inboundVehicle').value } });
+        const r = await api('/api/sellers/inbound', { method: 'POST', body: { grid: f.grid, apply, createNew: f.createNew, ...(edit ? { invoiceId: edit.id } : {}), ...details() } });
         if (run !== state.drawerRun) return;
-        if (apply) { $('drawer').close(); state.data.documents = null; toast('Приход ' + r.invoice.number + ' отправлен на склад'); navigate(true); return; }
+        if (apply) {
+          let docNote = '';
+          const doc = edit ? null : readDocFields('inb');
+          if (doc) { try { await saveDocument(r.invoice.id, doc); } catch (e) { docNote = ` Документ не сохранился (${e.message}) — добавьте его в карточке прихода.`; } }
+          state.data.documents = null;
+          toast((edit ? 'Привоз ' + r.invoice.number + ' изменён' : 'Приход ' + r.invoice.number + ' отправлен на склад') + (r.created ? `. Новых товаров в каталоге: ${r.created}` : '') + '.' + docNote);
+          if (edit) { state.inboundDirty = true; openInboundCard(edit.id); } else navigate(true);
+          return;
+        }
         f.preview = r;
-      } catch (e) { f.error = e.message; }
+      } catch (e) { f.error = e.message; f.errorTitle = apply ? 'Не отправилось' : 'Файл не принят'; }
       f.busy = false; draw();
     }
     $('inboundFile').onchange = (e) => {
       const file = e.target.files[0]; e.target.value = ''; if (!file) return; f.preview = null; f.error = ''; f.name = file.name;
-      if (typeof XLSX === 'undefined') { f.error = 'Не загрузился модуль чтения Excel. Обновите страницу.'; draw(); return; }
+      if (typeof XLSX === 'undefined') { f.error = 'Не загрузился модуль чтения Excel. Обновите страницу.'; f.errorTitle = 'Файл не принят'; draw(); return; }
       const reader = new FileReader();
       reader.onload = () => {
         try {
           // CSV — только как текст: иначе «1,5» превращается в 15. Русский Excel пишет CSV в Windows-1251.
           let book;
-          if (/\.(csv|txt)$/i.test(file.name)) { let text; try { text = new TextDecoder('utf-8', { fatal: true }).decode(reader.result); } catch { text = new TextDecoder('windows-1251').decode(reader.result); } book = XLSX.read(text.replace(/^﻿/, ''), { type: 'string', raw: true }); }
+          if (/\.(csv|txt)$/i.test(file.name)) { let text; try { text = new TextDecoder('utf-8', { fatal: true }).decode(reader.result); } catch { text = new TextDecoder('windows-1251').decode(reader.result); } book = XLSX.read(text.replace(/^\uFEFF/, ''), { type: 'string', raw: true }); }
           else book = XLSX.read(new Uint8Array(reader.result), { type: 'array' });
           const rows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { header: 1, raw: true, defval: null });
           // Ведомость 1С бывает в двести колонок: серверу нужны подписи слева и итог справа.
-          const wide = rows.slice(0, 25).some((r) => r.some((v) => /^конечный остаток$/i.test(String(v ?? '').trim())));
+          const wide = rows.slice(0, 25).some((r) => r.some((x) => /^конечный остаток$/i.test(String(x ?? '').trim())));
           f.grid = rows.slice(0, 20000).map((r) => (wide && r.length > 13 ? r.slice(0, 4).concat(r.slice(-9)) : r.slice(0, 40))); send(false);
-        } catch (err) { f.error = 'Не удалось прочитать файл: ' + err.message; draw(); }
+        } catch (err) { f.error = 'Не удалось прочитать файл: ' + err.message; f.errorTitle = 'Файл не принят'; draw(); }
       };
       reader.readAsArrayBuffer(file);
     };
     $('inboundForm').onsubmit = (e) => { e.preventDefault(); if (f.preview && !f.busy) send(true); };
+    if (edit) {
+      $('inboundBack').onclick = () => openInboundCard(edit.id);
+      $('inboundSave').onclick = async () => {
+        f.busy = true; f.error = ''; $('inboundSave').disabled = true;
+        try {
+          await api('/api/inbound/' + encodeURIComponent(edit.id), { method: 'PATCH', body: details() });
+          if (run !== state.drawerRun) return;
+          toast('Привоз ' + edit.number + ' изменён'); state.inboundDirty = true; openInboundCard(edit.id);
+        } catch (e) { f.busy = false; f.error = e.message; f.errorTitle = 'Не сохранилось'; $('inboundSave').disabled = false; draw(); }
+      };
+    }
   }
 
   // Кнопка названия товара в таблицах тоже открывает карточку.

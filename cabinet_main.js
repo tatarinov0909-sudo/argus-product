@@ -921,21 +921,175 @@
     }
     const LIMIT = 30;
     const shown = receiptsShowAll ? all : all.slice(0, LIMIT);
-    const statusLabel = {open:'не начат', in_progress:'принимается', completed:'принят'};
-    wrap.innerHTML = shown.map(inv => `
-      <div class="staff-row" data-invoice-id="${escapeHTML(inv.id)}" style="grid-template-columns:1fr 1.2fr 130px 130px auto;">
-        <div class="staff-key">${escapeHTML(inv.number)}</div>
+    wrap.innerHTML = shown.map(inv => {
+      const seller = inv.source_document_type === 'seller_inbound';
+      const src = seller
+        ? 'от продавца' + (inv.source_document_date ? ' · привезут ' + escapeHTML(receiptWhen(inv.source_document_date, inv.planned_from, inv.planned_to)) : '')
+          + (receiptPlaces(inv.boxes, inv.pallets) ? ' · ' + escapeHTML(receiptPlaces(inv.boxes, inv.pallets)) : '')
+        : (inv.external_id ? 'из 1С' : 'вручную') + ' · ' + escapeHTML(fmtDay(inv.created_at));
+      const flags = [
+        inv.comment_count ? 'переписка: ' + inv.comment_count : '',
+        inv.seller_verdict === 'disputed' ? '<span class="rc-flag-bad">продавец не согласен с актом</span>' : '',
+      ].filter(Boolean).join(' · ');
+      return `
+      <div class="staff-row" data-invoice-id="${escapeHTML(inv.id)}" style="grid-template-columns:1fr 1.1fr 1.6fr 150px auto;">
+        <div class="staff-key">${escapeHTML(inv.number)}${flags ? '<div class="rc-src">' + flags + '</div>' : ''}</div>
         <div class="staff-name">${escapeHTML(inv.company_name)}</div>
-        <div class="rc-src">${inv.external_id ? 'из 1С' : 'вручную'} · ${escapeHTML(fmtDay(inv.created_at))}</div>
-        <div><span class="staff-status ${inv.status === 'completed' ? 'active' : ''}">${escapeHTML(statusLabel[inv.status] || inv.status)}</span></div>
-        <div class="staff-action" data-history-invoice="${escapeHTML(inv.id)}" data-history-label="${escapeHTML(inv.number)}">История</div>
-      </div>
-    `).join('')
+        <div class="rc-src">${src}</div>
+        <div><span class="staff-status ${inv.status === 'completed' ? 'active' : ''}">${escapeHTML(receiptState(inv))}</span></div>
+        <div class="rc-acts"><span class="staff-action" data-receipt-open="${escapeHTML(inv.id)}">Открыть</span>
+          <span class="staff-action" data-history-invoice="${escapeHTML(inv.id)}" data-history-label="${escapeHTML(inv.number)}">История</span></div>
+      </div>`;
+    }).join('')
       + (all.length > LIMIT
         ? '<div style="margin-top:10px;"><span class="mp-act" onclick="toggleReceiptsAll()">'
           + (receiptsShowAll ? 'Показать последние ' + LIMIT : 'Показать все ' + all.length) + '</span></div>'
         : '');
   }
+
+  /* ===================== Карточка прихода =====================
+     Привоз продавца (владелец 26.09.2026): когда и сколько мест, отметка
+     «машина приехала», документы поставщика, переписка с продавцом и его
+     ответ на акт расхождений. Данные — /api/inbound/:id. */
+  function receiptPlaces(boxes, pallets){
+    return [boxes ? boxes + ' ' + pluralRu(boxes, 'короб', 'короба', 'коробов') : '',
+      pallets ? pallets + ' ' + pluralRu(pallets, 'паллета', 'паллеты', 'паллет') : ''].filter(Boolean).join(', ');
+  }
+  function receiptWhen(date, from, to){
+    const d = date ? String(date).slice(0, 10).split('-').reverse().slice(0, 2).join('.') : '';
+    const f = from ? String(from).slice(0, 5) : ''; const t = to ? String(to).slice(0, 5) : '';
+    return d + (f && t ? ', ' + f + '–' + t : f ? ', с ' + f : t ? ', до ' + t : '');
+  }
+  function receiptState(inv){
+    if(inv.status === 'completed') return 'принят';
+    if(inv.status === 'in_progress') return 'принимается';
+    if(inv.arrived_at) return 'машина приехала';
+    return inv.source_document_type === 'seller_inbound' ? 'ждёт машину' : 'не начат';
+  }
+  const rcWhen = (d) => (d ? new Date(d).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
+
+  let receiptOpenId = null;
+  async function openReceipt(id){
+    receiptOpenId = id;
+    document.getElementById('receiptModal').classList.add('open');
+    document.getElementById('receiptTitle').textContent = 'Приход';
+    document.getElementById('receiptBody').innerHTML = '<div class="staff-empty">Загружаем…</div>';
+    await renderReceipt();
+  }
+  window.openReceipt = openReceipt;
+  function closeReceipt(){
+    document.getElementById('receiptModal').classList.remove('open');
+    receiptOpenId = null;
+    loadInvoicesList();
+  }
+  window.closeReceipt = closeReceipt;
+
+  async function renderReceipt(){
+    const id = receiptOpenId;
+    const box = document.getElementById('receiptBody');
+    let c;
+    try{ c = await apiFetch('/api/inbound/' + encodeURIComponent(id)); }
+    catch(e){ if(id === receiptOpenId) box.innerHTML = '<div class="staff-empty">Не удалось открыть: ' + escapeHTML(e.message) + '</div>'; return; }
+    if(id !== receiptOpenId) return;
+    const keep = box.scrollTop;
+    document.getElementById('receiptTitle').textContent = 'Приход ' + c.number + ' · ' + c.companyName;
+    const facts = [
+      ['Статус', receiptState({ status: c.status, arrived_at: c.arrivedAt, source_document_type: c.sellerInbound ? 'seller_inbound' : '' })],
+      c.plannedDate ? ['Привезут', receiptWhen(c.plannedDate, c.plannedFrom, c.plannedTo)] : null,
+      receiptPlaces(c.boxes, c.pallets) ? ['Мест заявлено', receiptPlaces(c.boxes, c.pallets)] : null,
+      c.weightKg != null ? ['Вес', c.weightKg.toLocaleString('ru-RU') + ' кг'] : null,
+      c.carrier || c.vehicle ? ['Кто везёт', [c.carrier, c.vehicle ? 'машина ' + c.vehicle : ''].filter(Boolean).join(', ')] : null,
+      c.comment ? ['Комментарий продавца', c.comment] : null,
+      ['Заявлено', c.declared.toLocaleString('ru-RU') + ' шт.'],
+      c.accepted != null ? ['Принято', c.accepted.toLocaleString('ru-RU') + ' шт.' + (c.unplaced ? ' (без ячейки: ' + c.unplaced.toLocaleString('ru-RU') + ')' : '')] : null,
+    ].filter(Boolean);
+    let arrival = '';
+    if(c.arrivedAt){
+      arrival = '<div class="rc-card-note">Машина приехала ' + escapeHTML(rcWhen(c.arrivedAt))
+        + (receiptPlaces(c.arrivedBoxes, c.arrivedPallets) ? ' · мест: ' + escapeHTML(receiptPlaces(c.arrivedBoxes, c.arrivedPallets)) : '') + '</div>';
+    } else if(c.status !== 'completed'){
+      arrival = '<div class="rc-arrive"><b>Машина приехала?</b> Пересчитайте места при выгрузке.'
+        + '<div class="rc-arrive-row"><label>Коробов <input id="arrBoxes" inputmode="numeric" maxlength="6" value="' + escapeHTML(c.boxes ?? '') + '"></label>'
+        + '<label>Паллет <input id="arrPallets" inputmode="numeric" maxlength="6" value="' + escapeHTML(c.pallets ?? '') + '"></label>'
+        + '<button type="button" class="wh-onboarding-btn primary" onclick="markReceiptArrived()">Отметить приезд</button></div></div>';
+    }
+    const diffLines = c.lines.filter(l => l.accepted != null && l.accepted !== l.declared);
+    let verdict = '';
+    if(c.status === 'completed' && c.discrepancy){
+      verdict = '<div class="rc-card-note ' + (c.verdict && c.verdict.value === 'agreed' ? '' : 'bad') + '">Расхождение '
+        + (c.discrepancy > 0 ? '+' : '−') + Math.abs(c.discrepancy).toLocaleString('ru-RU') + ' шт. — '
+        + (c.verdict ? (c.verdict.value === 'agreed' ? 'продавец согласен с актом' : 'продавец НЕ согласен с актом')
+            + (c.verdict.note ? ': «' + escapeHTML(c.verdict.note) + '»' : '') + ' (' + escapeHTML(rcWhen(c.verdict.at)) + ')'
+          : 'продавец ещё не ответил на акт')
+        + '</div>'
+        + (diffLines.length ? '<div class="rc-diff">' + diffLines.map(l => escapeHTML(l.name) + ': заявлено ' + l.declared + ', принято ' + l.accepted).join('<br>') + '</div>' : '');
+    }
+    const docs = c.documents.length
+      ? c.documents.map(d => '<div class="rc-doc"><div><b>' + escapeHTML([d.kind, d.number ? '№ ' + d.number : '', d.date ? 'от ' + d.date : ''].filter(Boolean).join(' ')) + '</b>'
+          + '<div class="rc-src">' + escapeHTML([d.supplier, d.addedBy === 'seller' ? 'добавил продавец' : 'добавил склад', d.fileName || 'без файла'].filter(Boolean).join(' · ')) + '</div></div>'
+          + '<div class="rc-acts">' + (d.fileName ? '<span class="staff-action" onclick="openReceiptFile(\'' + d.id + '\')">Открыть файл</span>' : '')
+          + '<span class="staff-action" onclick="removeReceiptDoc(\'' + d.id + '\')">Убрать</span></div></div>').join('')
+      : '<div class="rc-src">Продавец не приложил документов поставщика.</div>';
+    const talk = (c.comments.length
+      ? c.comments.map(m => '<div class="rc-msg ' + (m.authorRole === 'seller' ? '' : 'mine') + '"><div class="rc-src"><b>' + escapeHTML(m.authorName || '') + '</b> · '
+          + escapeHTML(rcWhen(m.createdAt)) + (m.productName ? ' · о товаре «' + escapeHTML(m.productName) + '»' : '') + '</div>' + escapeHTML(m.body) + '</div>').join('')
+      : '<div class="rc-src">Переписки пока нет.</div>')
+      + '<div class="rc-reply"><select id="rcAbout"><option value="">Весь приход</option>'
+      + c.lines.map(l => '<option value="' + escapeHTML(l.sku) + '">' + escapeHTML(l.name) + '</option>').join('') + '</select>'
+      + '<textarea id="rcBody" rows="3" maxlength="1000" placeholder="Ответ продавцу — он увидит его в своём кабинете"></textarea>'
+      + '<button type="button" class="wh-onboarding-btn primary" onclick="sendReceiptComment()">Отправить продавцу</button></div>';
+    box.innerHTML = '<dl class="rc-facts">' + facts.map(f => '<dt>' + escapeHTML(f[0]) + '</dt><dd>' + escapeHTML(f[1]) + '</dd>').join('') + '</dl>'
+      + arrival + verdict
+      + '<div class="rc-section">Документы поставщика</div>' + docs
+      + '<div class="rc-section">Переписка с продавцом</div>' + talk
+      + '<div class="rc-bottom"><span class="staff-action" onclick="window.open(\'act_print.html?kind=receipt&id=' + encodeURIComponent(c.id) + '\', \'_blank\')">Акт приёмки' + (c.discrepancy ? ' и расхождений' : '') + '</span>'
+      + '<span class="staff-action" data-history-invoice="' + escapeHTML(c.id) + '" data-history-label="' + escapeHTML(c.number) + '" onclick="closeReceipt()">История в журнале</span></div>';
+    box.scrollTop = keep;
+  }
+
+  async function markReceiptArrived(){
+    try{
+      await apiFetch('/api/inbound/' + encodeURIComponent(receiptOpenId) + '/arrived', { method: 'POST',
+        body: { boxes: document.getElementById('arrBoxes').value.trim() || null, pallets: document.getElementById('arrPallets').value.trim() || null } });
+      showWhToast('Приезд машины отмечен');
+      renderReceipt();
+    } catch(e){ showWhToast('Не отмечено: ' + e.message); }
+  }
+  window.markReceiptArrived = markReceiptArrived;
+
+  async function sendReceiptComment(){
+    const body = document.getElementById('rcBody').value.trim();
+    if(!body){ showWhToast('Напишите ответ продавцу.'); return; }
+    try{
+      await apiFetch('/api/inbound/' + encodeURIComponent(receiptOpenId) + '/comments', { method: 'POST',
+        body: { body, sku: document.getElementById('rcAbout').value || null } });
+      renderReceipt();
+    } catch(e){ showWhToast('Не отправлено: ' + e.message); }
+  }
+  window.sendReceiptComment = sendReceiptComment;
+
+  // Файл документа — с входом, поэтому не ссылкой: забираем и открываем.
+  // Окно открываем сразу по нажатию, иначе браузер сочтёт его всплывающим.
+  async function openReceiptFile(docId){
+    const w = window.open('', '_blank');
+    try{
+      const res = await fetch(API_BASE + '/api/inbound/' + encodeURIComponent(receiptOpenId) + '/documents/' + encodeURIComponent(docId) + '/file',
+        { headers: { Authorization: 'Bearer ' + TOKEN }, cache: 'no-store' });
+      if(!res.ok) throw new Error(((await res.json().catch(() => null)) || {}).error || 'Файл не открылся');
+      const url = URL.createObjectURL(await res.blob());
+      if(w) w.location.href = url; else window.location.href = url;
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch(e){ if(w) w.close(); showWhToast(e.message); }
+  }
+  window.openReceiptFile = openReceiptFile;
+
+  async function removeReceiptDoc(docId){
+    try{
+      await apiFetch('/api/inbound/' + encodeURIComponent(receiptOpenId) + '/documents/' + encodeURIComponent(docId), { method: 'DELETE' });
+      renderReceipt();
+    } catch(e){ showWhToast('Не убран: ' + e.message); }
+  }
+  window.removeReceiptDoc = removeReceiptDoc;
 
   /* ===================== Товары ===================== */
 
@@ -3374,6 +3528,8 @@
       showJournalFor('cell', hist.dataset.historyCell, hist.dataset.historyLabel || 'ячейка');
       return;
     }
+    const rcOpen = e.target.closest && e.target.closest('[data-receipt-open]');
+    if(rcOpen){ e.stopPropagation(); openReceipt(rcOpen.dataset.receiptOpen); return; }
     const histInv = e.target.closest && e.target.closest('[data-history-invoice]');
     if(histInv){
       e.stopPropagation();

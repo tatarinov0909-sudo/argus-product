@@ -131,6 +131,7 @@
       + '<tr class="total"><td colspan="4">ИТОГО</td><td class="num">' + nf(total) + '</td>'
       + '<td class="num" id="sumBoxes"></td><td class="num" id="sumPallets"></td></tr>'
       + '</tbody></table>'
+      + (receipt ? discrepancyHtml(a) : '')
       + '<div class="sign">'
       +   '<div>Сдал с хранения мест: ' + edit('кол-во', '') + '<br>ФИО: ' + edit('фамилия', '') + '<br>Число/подпись/Печать</div>'
       +   '<div>Принял с хранения мест: ' + edit('кол-во', '') + '<br>ФИО: ' + edit('фамилия', '') + '<br>Число/подпись/Печать</div>'
@@ -144,6 +145,47 @@
     document.getElementById('sheet').addEventListener('input', recount);
     // Хранителя запоминает владелец — у склада одно юр. лицо на все акты.
     document.getElementById('saveKeeper').hidden = ROLE !== 'owner';
+  }
+
+  // Акт о расхождении (владелец 26.09.2026): что заявлено и что принято по
+  // строкам, переписка склада с продавцом и ответ продавца на акт.
+  function discrepancyHtml(a){
+    const pl = (n, one, few, many) => { const m10 = n % 10, m100 = n % 100;
+      return n + ' ' + (m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many); };
+    const places = (b, p) => [b > 0 && pl(b, 'короб', 'короба', 'коробов'), p > 0 && pl(p, 'паллета', 'паллеты', 'паллет')].filter(Boolean).join(', ');
+    const P = a.places || {};
+    const said = places(P.boxes, P.pallets); const came = places(P.arrivedBoxes, P.arrivedPallets);
+    const diffs = a.items.filter((i) => i.accepted && i.qty !== i.declared);
+    const about = (sku) => (a.comments || []).filter((m) => m.sku === sku);
+    const general = (a.comments || []).filter((m) => !m.sku || !a.items.some((i) => i.sku === m.sku && i.accepted && i.qty !== i.declared));
+    const when = (d) => new Date(d).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const line = (m) => esc(m.author || '') + ', ' + esc(when(m.at)) + ': ' + esc(m.body);
+    let out = '';
+    if (said || came) {
+      out += '<p class="note" style="font-size:13px;color:#000;margin-top:10px">Грузомест заявлено: ' + esc(said || '—')
+        + '; приехало: ' + esc(came || 'не отмечено') + '.</p>';
+    }
+    if (diffs.length) {
+      out += '<h1 style="margin-top:22px">Акт о расхождении</h1>'
+        + '<table><colgroup><col style="width:5%"><col style="width:15%"><col><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:26%"></colgroup>'
+        + '<thead><tr><th>№</th><th>Артикул</th><th>Номенклатура</th><th>Заявлено</th><th>Принято</th><th>Разница</th><th>Комментарии</th></tr></thead><tbody>'
+        + diffs.map((i, n) => '<tr><td class="num">' + (n + 1) + '</td><td class="code">' + esc(i.article) + '</td><td>' + esc(i.name) + '</td>'
+          + '<td class="num">' + nf(i.declared) + '</td><td class="num">' + nf(i.qty) + '</td>'
+          + '<td class="num">' + (i.qty > i.declared ? '+' : '−') + nf(Math.abs(i.qty - i.declared)) + '</td>'
+          + '<td>' + about(i.sku).map(line).join('<br>') + '</td></tr>').join('')
+        + '</tbody></table>';
+    }
+    if (general.length) {
+      out += '<p style="margin:14px 0 4px;font-weight:600">Комментарии к приходу</p>'
+        + general.map((m) => '<div class="note" style="color:#000">' + (m.sku ? 'О товаре ' + esc((a.items.find((i) => i.sku === m.sku) || {}).name || m.sku) + '. ' : '') + line(m) + '</div>').join('');
+    }
+    if (diffs.length) {
+      const v = a.verdict;
+      out += '<p style="margin-top:12px"><b>Ответ поклажедателя:</b> '
+        + (v ? (v.value === 'agreed' ? 'с актом согласен' : 'с актом не согласен') + (v.note ? ' — ' + esc(v.note) : '') + ' (' + esc(when(v.at)) + ')'
+          : 'ещё не ответил') + '</p>';
+    }
+    return out;
   }
 
   window.saveKeeper = async function(){
