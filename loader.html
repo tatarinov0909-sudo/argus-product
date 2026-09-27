@@ -24,7 +24,10 @@
     --green-soft:#263429;
     --text:#EDEBE6;
     --muted:#8D9096;
-    --mono:'IBM Plex Mono', ui-monospace, monospace;
+    /* Моноширинного шрифта на экранах грузчика нет (владелец 26–27.09.2026:
+       «шестёрки и пятёрки выглядят ужасно»): номера, ячейки и артикулы —
+       тем же Golos, цифры одной ширины задаёт font-variant-numeric у body. */
+    --mono:'Golos Text', 'Inter', system-ui, sans-serif;
     /* Golos Text — тот шрифт, который владелец выбрал для продукта.
        Inter стоял здесь по инерции и выдавал в интерфейсе ту самую
        одинаковую «сгенерированную» гладкость. */
@@ -46,6 +49,7 @@
       radial-gradient(circle at bottom left, rgba(95,175,166,0.09), transparent 50%),
       var(--bg);
     color:var(--text); font-family:var(--sans); -webkit-font-smoothing:antialiased;
+    font-variant-numeric:tabular-nums;
     min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;
   }
   body::before{
@@ -773,6 +777,166 @@
        ширина в 100% растянула бы её в овал. */
     .done-screen > *:not(.done-icon){max-width:640px; width:100%;}
   }
+
+  /* ===================== Сборка поставки (задание 27.09.2026) ===================== */
+  /* Экран поставки: номер по центру, две равные кнопки, товары по обходу —
+     крупно: ячейка, название, артикул продавца, штрихкод, артикул WB, сколько. */
+  .supply-head{text-align:center;}
+  .supply-head .job-back{text-align:left;}
+  .supply-title{font-family:var(--sans); font-weight:700; font-size:30px; letter-spacing:0.3px; color:var(--accent-2);}
+  .supply-sub{font-size:15px;}
+  .asm-line{font-size:15px; line-height:1.45; padding:12px 14px; border-radius:12px; border:1px solid var(--line);
+    background:var(--panel); color:var(--text);}
+  .asm-line.paused{border-color:rgba(201,166,107,0.6); background:var(--yellow-soft); color:var(--yellow);}
+  .asm-line.active{border-color:rgba(95,175,166,0.5); background:var(--accent-soft); color:var(--accent-2);}
+  .asm-line.abandoned{border-color:rgba(217,142,110,0.5); background:var(--terracotta-soft); color:var(--terracotta);}
+  .asm-line b{color:var(--text); font-weight:600;}
+  .asm-buttons{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .asm-buttons .big-btn{margin:0; min-height:62px; font-size:16px; line-height:1.25; padding:12px 10px;}
+  .asm-buttons .big-btn.secondary{margin:0;}
+  .asm-link{background:none; border:0; color:var(--muted); font:inherit; font-size:14px; text-decoration:underline;
+    cursor:pointer; padding:4px 0; align-self:center;}
+  .asm-panel{background:var(--panel); border:1px solid var(--yellow); border-radius:16px; padding:18px 18px 16px;
+    display:flex; flex-direction:column; gap:12px;}
+  .asm-panel.mine-active{border-color:var(--accent);}
+  .asm-panel-title{font-size:19px; font-weight:700;}
+  .asm-panel-sub{font-size:14.5px; color:var(--muted); line-height:1.45;}
+  .asm-comment-label{font-size:14px; color:var(--muted);}
+  .asm-actions{display:flex; flex-direction:column; gap:10px;}
+  .asm-actions .big-btn{margin:0;}
+  .big-btn.danger{color:var(--terracotta); border-color:rgba(217,142,110,0.5);}
+  .sp-list{display:flex; flex-direction:column; gap:10px;}
+  /* Строка товара: сверху «ячейка … взять N» — куда идти и сколько, ниже
+     название и коды, по которым товар ищут на полке. */
+  .sp-row{display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px 14px; cursor:pointer;
+    background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:14px 16px;}
+  .sp-row:active{border-color:var(--accent);}
+  .sp-cell{grid-column:1; grid-row:1; font-size:28px; font-weight:700; letter-spacing:0.5px; color:var(--accent-2); line-height:1.15; align-self:center;}
+  .sp-cell small{display:block; font-size:14px; font-weight:500; color:var(--muted); letter-spacing:0; margin-top:2px;}
+  .sp-cell.none{font-size:16px; color:var(--terracotta); font-weight:600;}
+  .sp-name{grid-column:1 / -1; font-size:18px; font-weight:600; line-height:1.35; overflow-wrap:anywhere;}
+  .sp-take{grid-row:1; grid-column:2; text-align:right; align-self:center; line-height:1.05; white-space:nowrap;}
+  .sp-take b{font-size:30px; font-weight:700; color:var(--accent);}
+  .sp-take span{font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; margin-right:6px;}
+  .sp-codes{grid-column:1 / -1; display:flex; flex-wrap:wrap; gap:4px 18px; font-size:17px; font-weight:600;}
+  .sp-codes span{overflow-wrap:anywhere;}
+  .sp-codes i{font-style:normal; font-weight:400; font-size:13px; color:var(--muted); margin-right:5px;}
+  .bc-tail{color:var(--accent-2); font-size:1.18em;}
+  .sp-summary{font-size:14px; color:var(--muted);}
+  .asm-line.in-card{margin-top:10px; padding:9px 12px; font-size:14.5px;}
+
+  /* Экран сборки по товарам: номер поставки один раз по центру, без имени
+     грузчика; ячейка, штрихкод и артикулы крупно; «нужно · взял» одной
+     строкой рядом с названием; «Все товары поставки» — заметной кнопкой. */
+  .run-title{display:none;}
+  .run-all-btn{display:none;}
+  .run-need, .run-codes{display:none;}
+  #taskScreen.run .worker-chip, #taskScreen.run #taskKind, #taskScreen.run .task-head-spacer,
+  #taskScreen.run #invoiceNum, #taskScreen.run #invoiceClient, #taskScreen.run .invoice-switch-dot,
+  #taskScreen.run #allProductsBtn, #taskScreen.run #progressText, #taskScreen.run #itemSku,
+  #taskScreen.run .item-declared, #taskScreen.run .qty-block{display:none !important;}
+  #taskScreen.run .invoice-switch-wrap{flex:0 0 auto;}
+  #taskScreen.run .invoice-switch{padding:10px 16px; font-size:20px;}
+  #taskScreen.run .invoice-back{margin:0; font-size:20px; color:var(--text);}
+  #taskScreen.run .run-title{display:block; flex:1; min-width:0; text-align:center; font-size:22px; font-weight:700;
+    color:var(--accent-2); letter-spacing:0.3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  #taskScreen.run .run-title small{display:block; font-size:13px; font-weight:500; color:var(--muted); letter-spacing:0;}
+  #taskScreen.run .task-head-row::after{content:''; flex:0 0 56px;}
+  #taskScreen.run .task-head-top{margin-bottom:10px;}
+  #taskScreen.run .task-body{gap:14px; padding-top:16px;}
+  #taskScreen.run .run-all-btn{display:flex; order:-3; align-items:center; justify-content:space-between; gap:12px; width:100%;
+    padding:14px 18px; border-radius:14px; border:1.5px solid var(--accent); background:var(--accent-soft);
+    color:var(--accent-2); font:inherit; font-size:16px; font-weight:700; cursor:pointer;}
+  #taskScreen.run .run-all-btn span{font-weight:500; color:var(--text); white-space:nowrap;}
+  #taskScreen.run #cellBlock{order:-2; padding:14px 16px;}
+  #taskScreen.run #cellLabel{margin-bottom:8px; font-size:13px; text-transform:uppercase; letter-spacing:0.06em;}
+  #taskScreen.run .cell-option{padding:14px 16px;}
+  #taskScreen.run .cell-option-id{font-size:32px; letter-spacing:0.5px; line-height:1.1;}
+  #taskScreen.run .cell-option-note{font-size:15px; margin-top:2px;}
+  #taskScreen.run .item-card{padding:18px 18px 16px;}
+  #taskScreen.run .item-name{font-size:20px; margin-bottom:10px;}
+  #taskScreen.run .run-need{display:flex; align-items:center; flex-wrap:wrap; gap:8px 10px; font-size:17px; color:var(--muted);}
+  #taskScreen.run .run-need b{color:var(--text); font-size:22px; font-weight:700;}
+  #taskScreen.run .run-need .qty-stepper{gap:6px;}
+  #taskScreen.run .run-need .qty-btn{width:42px; height:42px; border-radius:11px; font-size:22px;}
+  #taskScreen.run .run-need input.qty-value{font-size:26px; width:54px; min-width:0;}
+  #taskScreen.run #qtyDiff{margin-top:6px; font-size:14px;}
+  #taskScreen.run .run-codes{display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px 18px;
+    margin-top:14px; padding-top:14px; border-top:1px solid var(--line);}
+  .run-code i{display:block; font-style:normal; font-size:12.5px; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:2px;}
+  .run-code b{font-size:21px; font-weight:700; letter-spacing:0.2px; overflow-wrap:anywhere;}
+  .run-code.bc{grid-column:1 / -1;}
+  .run-code.bc b{font-size:24px;}
+  .run-code .bc-head{color:var(--muted); font-weight:500;}
+  #taskScreen.run .task-footer{display:flex; flex-direction:column; gap:10px;}
+  #taskScreen.run .task-footer .postpone-btn{margin-top:0;}
+  /* На паузе — сразу три действия и комментарий, а не одна кнопка. */
+  .pause-extra{display:none;}
+  #taskScreen.run .pause-banner.show{flex-direction:column; align-items:stretch;}
+  #taskScreen.run .pause-banner .pause-banner-text{font-size:15px;}
+  #taskScreen.run .pause-extra{display:flex; flex-direction:column; gap:8px;}
+  #taskScreen.run .pause-resume-btn{padding:12px 16px; font-size:15px;}
+  .pause-extra .pause-row{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .pause-extra button{padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:var(--panel-2);
+    color:var(--text); font:inherit; font-size:14px; font-weight:600; cursor:pointer;}
+  .pause-extra button.danger{color:var(--terracotta); border-color:rgba(217,142,110,0.5);}
+  .pause-extra textarea{min-height:44px;}
+
+  /* Окна старта, завершения, отказа и печати. */
+  .sheet-note{font-size:14px; color:var(--muted); line-height:1.5; margin:0 0 12px;}
+  .sheet-note b{color:var(--text);}
+  .sheet-two{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px;}
+  .sheet-cancel{width:100%; padding:14px; border-radius:12px; border:1px solid var(--line); background:var(--panel-2);
+    color:var(--text); font:inherit; font-size:14px; font-weight:700; cursor:pointer;}
+  .sheet-confirm.danger{background:var(--terracotta); color:#241a15; box-shadow:none;}
+  .print-choice{display:flex; flex-direction:column; gap:10px;}
+  .print-choice button{text-align:left; padding:15px 16px; border-radius:12px; border:1.5px solid var(--line);
+    background:var(--panel-2); color:var(--text); font:inherit; font-size:15px; font-weight:700; cursor:pointer;}
+  .print-choice button span{display:block; font-size:13px; font-weight:400; color:var(--muted); margin-top:3px;}
+  .print-choice button.primary{border-color:var(--accent); background:var(--accent-soft);}
+
+  /* «Поставка собрана»: без пустоты сверху, крупнее, комментарий на виду. */
+  .done-screen.asm{justify-content:flex-start; padding:22px 20px 28px;}
+  .done-screen.asm .done-icon{width:56px; height:56px; margin-bottom:12px;}
+  .done-screen.asm .done-title{font-size:24px;}
+  .done-screen.asm .done-sub{font-size:16px; color:var(--text); margin-bottom:16px; line-height:1.5;}
+  .done-screen.asm .done-time{font-size:15px;}
+  .done-screen.asm .done-time-row span:last-child{font-family:var(--sans); font-size:16px;}
+  .nowrap{white-space:nowrap;}
+  .done-comment{display:none; width:100%; text-align:left; background:var(--panel); border:1px solid var(--line);
+    border-radius:14px; padding:14px 18px; margin-bottom:16px; font-size:16px; line-height:1.45;}
+  .done-comment.show{display:block;}
+  .done-comment span{display:block; font-size:13px; color:var(--muted); margin-bottom:4px;}
+  .done-screen.asm .done-row-name{font-size:16px;}
+  .done-screen.asm .done-row-meta{font-size:15px;}
+  .done-miss{font-size:15px; color:var(--muted); line-height:1.45;}
+  .done-miss b{color:var(--terracotta); font-weight:600;}
+  .done-screen.asm .done-btn{font-size:15px; padding:16px;}
+  .done-print{display:none;}
+  .done-screen.asm .done-print{display:block; background:var(--accent); color:#182422; border-color:var(--accent);}
+  .done-screen.asm #doneNextBtn, .done-screen.asm #shipBtn, .done-screen.asm #shipDoneNote{display:none !important;}
+  /* Телефон: экран грузчика во всю ширину. Рамка «телефона» с полями по
+     24 px отнимала у списка товаров почти шестую часть экрана. */
+  @media(max-width:480px){
+    body{padding:0; align-items:stretch;}
+    .phone{border-radius:0; border:0; min-height:100dvh; box-shadow:none;}
+    .job-head{padding:18px 16px 14px;}
+    .job-body{padding:16px 14px 24px;}
+    .task-head{padding:14px 16px 12px;}
+    .task-body{padding:16px 14px;}
+    .task-footer{padding:12px 14px 18px;}
+    .asm-buttons .big-btn{font-size:15px;}
+  }
+  @media(min-width:1000px){
+    .asm-buttons .big-btn{min-height:68px; font-size:17px;}
+    .sp-list{display:grid; grid-template-columns:repeat(auto-fill, minmax(460px, 1fr)); gap:12px;}
+    .supply-body-grid > *{max-width:none;}
+    #taskScreen.run .task-head{padding-bottom:14px;}
+    #taskScreen.run .task-footer{flex-direction:row; justify-content:center;}
+    #taskScreen.run .task-footer .confirm-btn{margin:0; flex:1 1 auto; max-width:560px;}
+    #taskScreen.run .task-footer .postpone-btn{flex:0 1 260px; width:auto;}
+    .done-screen.asm{padding:26px 34px 34px;}
+  }
 </style>
 </head>
 <body>
@@ -803,10 +967,10 @@
     </div>
 
     <div class="job-screen" id="supplyScreen">
-      <div class="job-head">
+      <div class="job-head supply-head">
         <div class="job-back" onclick="openSupplies()">← К поставкам</div>
         <div class="job-title supply-title" id="supplyTitle">—</div>
-        <div class="job-sub" id="supplySub">—</div>
+        <div class="job-sub supply-sub" id="supplySub">—</div>
       </div>
       <div class="job-body" id="supplyBody"></div>
     </div>
@@ -859,10 +1023,12 @@
             <div class="invoice-switch-wrap">
               <!-- Назад — к своему списку (поставке, приходам), а не в
                    выпадающую кучу из работ и сотни заказов. -->
-              <div class="invoice-switch" id="invoiceSwitch" onclick="event.stopPropagation(); goBackFromTask()">
-                <span class="invoice-switch-text"><span class="invoice-back">←</span><b id="invoiceNum">—</b> · <span id="invoiceClient"></span></span>
+              <div class="invoice-switch" id="invoiceSwitch" onclick="event.stopPropagation(); goBackFromTask()" aria-label="Назад">
+                <span class="invoice-switch-text"><span class="invoice-back">←</span><b id="invoiceNum">—</b><span class="invoice-switch-dot"> · </span><span id="invoiceClient"></span></span>
               </div>
             </div>
+            <!-- Сборка поставки: номер один раз и по центру (владелец 27.09.2026). -->
+            <div class="run-title" id="runTitle"></div>
             <div class="task-head-spacer"></div>
           </div>
         </div>
@@ -877,11 +1043,21 @@
       </div>
 
       <div class="pause-banner" id="pauseBanner">
-        <div class="pause-banner-text">На паузе: <b id="pauseReasonLabel"></b></div>
-        <button class="pause-resume-btn" onclick="resumeTask()">Возобновить</button>
+        <div class="pause-banner-text" id="pauseBannerText">На паузе: <b id="pauseReasonLabel"></b></div>
+        <button class="pause-resume-btn" id="pauseResumeBtn" onclick="resumeTask()">Возобновить</button>
+        <!-- Сборка поставки на паузе: сразу все три действия и комментарий. -->
+        <div class="pause-extra">
+          <textarea class="defect-input" id="pauseComment" rows="2" maxlength="300"
+                    placeholder="Комментарий: где оставил, что осталось — например, «2 короба у ворот 3»"></textarea>
+          <div class="pause-row">
+            <button type="button" onclick="asmFinishAsk()">Закончить сборку</button>
+            <button type="button" class="danger" onclick="asmAbandonAsk()">Отказаться от сборки</button>
+          </div>
+        </div>
       </div>
 
       <div class="task-body">
+        <button type="button" class="run-all-btn" id="runAllBtn" onclick="openProductsSheet()">Все товары поставки <span id="runAllCount"></span></button>
         <div class="item-card">
           <div class="task-progress-text" id="progressText" style="margin-bottom:8px; text-align:center;">—</div>
           <div class="all-products-btn" id="allProductsBtn" onclick="openProductsSheet()">Все товары поставки</div>
@@ -891,6 +1067,9 @@
             <span id="itemDeclaredLabel">Заявлено по накладной</span>
             <b id="itemDeclared">—</b>
           </div>
+          <!-- «нужно 3 · взял [− 3 +]» — одной строкой под названием. -->
+          <div class="run-need" id="runNeed">нужно <b id="runNeedQty">—</b> · взял <span id="runQtySlot"></span></div>
+          <div class="run-codes" id="runCodes"></div>
         </div>
 
         <div class="shortfall-note" id="shortfallNote"></div>
@@ -1063,6 +1242,50 @@
           <button class="sheet-confirm missing-confirm" id="missingConfirmBtn" onclick="sendMissing()" style="margin-top:14px;">Отправить руководителю — очень важно</button>
         </div>
 
+        <!-- Старт сборки: таймер и запись «начал» — только после «Начать». -->
+        <div class="sheet-step" id="sheetStepStart">
+          <div class="sheet-title" id="startTitle">Сейчас запустится таймер сборки</div>
+          <div class="sheet-sub" id="startSub"></div>
+          <p class="sheet-note" id="startNote"></p>
+          <div class="sheet-two">
+            <button class="sheet-confirm" id="startGoBtn" type="button">Начать</button>
+            <button class="sheet-cancel" type="button" onclick="closeSheet()">Отмена</button>
+          </div>
+        </div>
+
+        <div class="sheet-step" id="sheetStepFinish">
+          <div class="sheet-title" id="finishTitle">Закончить сборку</div>
+          <p class="sheet-note" id="finishNote"></p>
+          <div class="missing-label">Комментарий: где оставил, что осталось (необязательно)</div>
+          <textarea class="defect-input" id="finishComment" rows="2" maxlength="300"
+                    placeholder="Например: 2 короба собраны, стоят у ворот 3"></textarea>
+          <div class="sheet-two">
+            <button class="sheet-confirm" id="finishGoBtn" type="button" onclick="asmFinish()">Закончить сборку</button>
+            <button class="sheet-cancel" id="finishCancelBtn" type="button" onclick="asmFinishCancel()">Назад</button>
+          </div>
+        </div>
+
+        <div class="sheet-step" id="sheetStepAbandon">
+          <div class="sheet-title" id="abandonTitle">Отказаться от сборки?</div>
+          <p class="sheet-note" id="abandonNote"></p>
+          <div class="missing-label">Комментарий: где оставил, что осталось (необязательно)</div>
+          <textarea class="defect-input" id="abandonComment" rows="2" maxlength="300"
+                    placeholder="Например: 2 короба собраны, стоят у ворот 3"></textarea>
+          <div class="sheet-two">
+            <button class="sheet-confirm danger" id="abandonGoBtn" type="button" onclick="asmAbandon()">Отказаться</button>
+            <button class="sheet-cancel" type="button" onclick="closeSheet()">Назад</button>
+          </div>
+        </div>
+
+        <div class="sheet-step" id="sheetStepPrint">
+          <div class="sheet-title">Печать листа сборки</div>
+          <div class="sheet-sub" id="printSub">Лист всей поставки откроется в новой вкладке — там кнопка «Печать».</div>
+          <div class="print-choice">
+            <button type="button" class="primary" onclick="printAssemblySheet(true)">С отметками<span>где что взято: галочки и ячейки</span></button>
+            <button type="button" onclick="printAssemblySheet(false)">Пустой<span>тот же лист без отметок</span></button>
+          </div>
+        </div>
+
         <div class="sheet-step" id="sheetStepPause">
           <div class="sheet-title">Причина паузы</div>
           <div class="sheet-sub">Начальник склада увидит это в отчёте по накладной</div>
@@ -1079,6 +1302,9 @@
             Жду уточнения по товару
           </div>
           <input type="text" class="sheet-input" id="pauseCustomInput" placeholder="Своя причина" oninput="document.getElementById('pauseCustomBtn').disabled = !this.value.trim();" style="margin-top:6px;">
+          <!-- Комментарий к паузе уходит в журнал одной записью с ней. -->
+          <textarea class="defect-input" id="pauseSheetComment" rows="2" maxlength="300" style="margin-bottom:12px;"
+                    placeholder="Комментарий, если нужно: где оставил, что осталось"></textarea>
           <button class="sheet-confirm" id="pauseCustomBtn" disabled onclick="pauseTask(document.getElementById('pauseCustomInput').value.trim())">Поставить на паузу</button>
         </div>
 
@@ -1155,9 +1381,11 @@
       </div>
       <div class="done-title" id="doneTitle">Приёмка завершена</div>
       <div class="done-sub" id="doneSub">Накладная полностью обработана. Владелец склада увидит расхождения в журнале, если они есть.</div>
+      <div class="done-comment" id="doneComment"></div>
       <div class="done-time" id="doneTime"></div>
       <div class="done-summary" id="doneSummary"></div>
       <div class="done-actions">
+        <button class="done-btn done-print" id="donePrintBtn" onclick="openPrintChoice()">🖨 Печать листа сборки</button>
         <button class="ship-btn" id="shipBtn" style="display:none;" onclick="confirmShipped()">Отгрузили — машина уехала</button>
         <div class="ship-done-note" id="shipDoneNote">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -1315,8 +1543,9 @@
     const m = /^#paper=([0-9a-f-]{36})$/i.exec(hash);
     if(location.hash) history.replaceState(null, '', location.pathname);
     if(m){
+      // Скан QR листа — это и есть «начал сборку по листу» (владелец 27.09.2026).
       try{ await refreshWork(); } catch(e){}
-      return openPaper(m[1]);
+      return openPaper(m[1], { start: true });
     }
     await showHome();
   }
@@ -1326,6 +1555,8 @@
     // руководителю, а не бросаем её висеть без конца.
     if(pauseStart) resumeTask();
     productRun = null;
+    runState = null;
+    layoutRun(false);
     try{
       currentInvoice = await apiFetch('/api/invoices/' + invoiceId);
     } catch(e){
@@ -1403,7 +1634,12 @@
     const d = await apiFetch('/api/supplies/' + productRun.supplyId);
     const bySku = new Map();
     (d.packing || []).forEach(l => {
-      const p = bySku.get(l.sku) || { id: l.sku, sku: l.sku, name: l.name, declared_qty: 0, left: 0, waiting: 0, openItems: [] };
+      const p = bySku.get(l.sku) || { id: l.sku, sku: l.sku, name: l.name, declared_qty: 0, left: 0, waiting: 0, openItems: [],
+        // Коды, по которым товар ищут на полке, — как в печатном листе.
+        article: null, barcode: null, nmId: null };
+      if(!p.article && l.article) p.article = l.article;
+      if(!p.barcode && l.barcode) p.barcode = l.barcode;
+      if(!p.nmId && l.nmId) p.nmId = l.nmId;
       p.declared_qty += Number(l.qty || 0);
       // Позиции с отметкой «нет товара» ждут решения руководителя: собирать
       // их нечем, и к ним не возвращаемся, пока он не ответит.
@@ -1413,6 +1649,13 @@
         if(Number(l.left) > 0) p.openItems.push({ id: l.itemId, left: Number(l.left) });
       }
       bySku.set(l.sku, p);
+    });
+    (d.picking || []).forEach(x => {
+      const p = bySku.get(x.sku);
+      if(!p) return;
+      if(!p.article && x.article) p.article = x.article;
+      if(!p.barcode && x.barcode) p.barcode = x.barcode;
+      if(!p.nmId && x.nmId) p.nmId = x.nmId;
     });
     // Порядок — как в листе комплектации: по обходу склада. Собранное — в конец.
     const route = (d.picking || []).map(x => x.sku);
@@ -1439,28 +1682,52 @@
     return currentInvoice;
   }
 
+  // Сборка по товарам открывается только идущей сборкой: её начали кнопкой
+  // «Начать» (или продолжили) — таймер и паузы живут на сервере (runState).
   async function openProductRun(supplyId, sku){
-    // Ушёл с паузы на другую работу — пауза кончилась: так и пишем
-    // руководителю, а не бросаем её висеть без конца.
-    if(pauseStart) resumeTask();
+    pauseStart = null;
     productRun = { supplyId, preferred: sku || null };
     backTarget = { kind: 'supply', id: supplyId };
     postponedItems = new Set();
     try{ await reloadProductRun(); }
     catch(e){ productRun = null; showToast('Не удалось открыть поставку: ' + e.message); return; }
     hideAllScreens();
-    taskStartTime = new Date();
-    totalPausedMs = 0;
+    taskStartTime = runState && runState.startedAt ? new Date(runState.startedAt) : new Date();
+    totalPausedMs = runState ? Number(runState.pausedMs || 0) : 0;
     pauseLog = [];
     results.length = 0;
     runVisited.clear();
+    layoutRun(true);
     startTaskTimer();
     setPauseLock(false);
-    document.getElementById('doneScreen').classList.remove('show');
+    document.getElementById('doneScreen').classList.remove('show', 'asm');
     document.getElementById('taskScreen').style.display = '';
+    const title = document.getElementById('runTitle');
+    title.innerHTML = escapeHTML(currentInvoice.supply_number || '')
+      + (currentInvoice.company_name ? '<small>' + escapeHTML(currentInvoice.company_name) + '</small>' : '');
     renderCurrentItem();
+    // Сборка на паузе (вышел и вернулся) — сразу «Вы вышли — сборка на паузе».
+    if(runState && runState.status === 'paused') showRunPaused();
   }
   window.openProductRun = openProductRun;
+
+  // Экран задачи общий у приёмки, возврата и сборки. У сборки поставки свой
+  // вид: поле количества встаёт в строку «нужно · взял» под названием.
+  function layoutRun(on){
+    const screen = document.getElementById('taskScreen');
+    screen.classList.toggle('run', on);
+    const stepper = document.getElementById('qtyValue').parentElement;
+    const diff = document.getElementById('qtyDiff');
+    if(on){
+      document.getElementById('runQtySlot').appendChild(stepper);
+      document.getElementById('runNeed').insertAdjacentElement('afterend', diff);
+    } else if(stepper.parentElement.id === 'runQtySlot'){
+      const block = document.querySelector('#taskScreen .qty-block');
+      block.appendChild(stepper);
+      block.appendChild(diff);
+    }
+    if(!on) document.getElementById('runTitle').textContent = '';
+  }
 
   function openProductsSheet(){
     if(!productRun || !currentInvoice) return;
@@ -1638,7 +1905,7 @@
     document.getElementById('cellBlock').style.display = '';
     document.getElementById('itemDeclaredLabel').textContent = 'Нужно отобрать';
     document.getElementById('qtyLabel').textContent = 'Сколько взяли из ячейки';
-    document.getElementById('cellLabel').textContent = 'Откуда взять — по порядку обхода';
+    document.getElementById('cellLabel').textContent = productRun ? 'Ячейка — откуда взять' : 'Откуда взять — по порядку обхода';
     // Своё место при отборе не предлагаем: брать можно только оттуда, где
     // товар действительно лежит, а это сервер и так перечисляет.
     cancelCellOptions();
@@ -1652,7 +1919,12 @@
         && !it.closed && !postponedItems.has(it.id));
       if(chosen !== -1) idx = chosen;
     }
-    if(idx === -1){ showDone(); return; }
+    if(idx === -1){
+      // Собирать больше нечего: сборку заканчивает человек — одной записью
+      // с комментарием, а не молчаливым «готово» (владелец 27.09.2026).
+      if(productRun) return runNothingLeft();
+      showDone(); return;
+    }
     currentItemIndex = idx;
     const item = currentInvoice.items[idx];
 
@@ -1661,6 +1933,7 @@
     document.getElementById('progressFill').style.width = Math.round(((idx + 1) / total) * 100) + '%';
     document.getElementById('itemName').textContent = item.name;
     document.getElementById('itemSku').textContent = item.sku;
+    if(productRun) renderRunCodes(item);
 
     selectedCellBlockId = null;
     selectedCellLabel = null;
@@ -1697,6 +1970,7 @@
 
     const remaining = pickSuggestion.item.remaining;
     document.getElementById('itemDeclared').textContent = remaining + ' шт';
+    document.getElementById('runNeedQty').textContent = remaining;
     currentQty = Math.min(remaining, pickSuggestion.cells[0] ? pickSuggestion.cells[0].available : remaining);
     document.getElementById('qtyValue').value = currentQty;
 
@@ -1714,7 +1988,26 @@
     }
 
     renderPickCells();
+    // По товарам ячейка выбрана сразу — первая по обходу, откуда брать:
+    // человеку остаётся подойти, взять и подтвердить.
+    if(productRun){
+      const first = document.querySelector('#cellOptions .cell-option');
+      if(first) selectPickCell(Number(first.id.replace('cell-', '')));
+    }
     updatePickConfirm();
+  }
+
+  // Штрихкод, артикул продавца и артикул WB — крупно, как в печатном листе.
+  function renderRunCodes(item){
+    const tail = tailLength(currentInvoice.items.map(p => p.barcode));
+    const code = (label, value, cls) => '<div class="run-code' + (cls ? ' ' + cls : '') + '"><i>' + label + '</i><b>'
+      + (value || '<span class="bc-head">не передан</span>') + '</b></div>';
+    document.getElementById('runCodes').innerHTML =
+      code('Штрихкод', item.barcode ? barcodeHtml(item.barcode, tail || 4) : '', 'bc')
+      + code('Артикул продавца', item.article ? escapeHTML(item.article) : '')
+      + code('Артикул WB', item.nmId ? escapeHTML(item.nmId) : '');
+    const open = currentInvoice.items.filter(p => !p.closed).length;
+    document.getElementById('runAllCount').textContent = 'осталось ' + open + ' ›';
   }
 
   function renderPickCells(){
@@ -2259,10 +2552,17 @@
     const box = document.getElementById('taskTimer');
     const val = document.getElementById('taskTimerValue');
     if(!box || !val || !taskStartTime) return;
-    const paused = pauseStart !== null;
+    let paused = pauseStart !== null;
     // На паузе часы стоят: время замирает на моменте, когда её поставили.
-    const now = paused ? pauseStart.getTime() : Date.now();
-    const seconds = Math.max(0, Math.floor((now - taskStartTime.getTime() - totalPausedMs) / 1000));
+    let now = paused ? pauseStart.getTime() : Date.now();
+    let seconds = Math.max(0, Math.floor((now - taskStartTime.getTime() - totalPausedMs) / 1000));
+    // Сборка поставки: время — по заходу на сервере. Вышел и вернулся —
+    // таймер продолжает с того же места, а не с нуля.
+    if(productRun && runState && runState.startedAt){
+      paused = Boolean(runState.pausedAt);
+      now = paused ? new Date(runState.pausedAt).getTime() : Date.now() + runState.skewMs;
+      seconds = Math.max(0, Math.floor((now - new Date(runState.startedAt).getTime() - Number(runState.pausedMs || 0)) / 1000));
+    }
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = seconds % 60;
@@ -2877,6 +3177,8 @@
       +   (s.created_by ? ' · составил ' + escapeHTML(s.created_by) : '') + '</div>'
       + '<div class="sup-card-meta">собрано ' + done + ' из ' + total + ' '
       +   pluralRu(total, 'заказа', 'заказов', 'заказов') + '</div>'
+      // Кто собирает и что с ней сейчас — видно всем грузчикам (п. 20).
+      + assemblyLine(s.assembly, s.status).replace('class="asm-line', 'class="asm-line in-card')
       + '<div class="sup-card-bar"><div style="width:' + pct + '%"></div></div>'
       + '</div>';
   }
@@ -2923,45 +3225,104 @@
     const s = supplies.find(x => x.id === id);
     if(!s){ showToast('Поставки больше нет — возможно, её разобрали'); return openSupplies(); }
     backTarget = { kind: 'supply', id };
+    // Номер поставки — по центру шапки, один раз (владелец 27.09.2026).
     document.getElementById('supplyTitle').textContent = s.number;
     document.getElementById('supplySub').textContent = (s.company_name || '')
       + (s.destination ? ' → ' + s.destination : '')
       + (s.ship_date ? ' · отгрузка ' + fmtDay(s.ship_date) : '');
-    const orders = invoices.filter(i => i.supply_id === id)
-      .sort((a, b) => (isOpenDoc(a) ? 0 : 1) - (isOpenDoc(b) ? 0 : 1)
-        || String(a.number).localeCompare(String(b.number), 'ru', { numeric: true }));
-    const open = orders.filter(isOpenDoc);
+    const st = s.assembly || null;
+    const live = liveOf(st);
+    const collecting = s.status === 'collecting';
+    const arg = jsArg(id);
+    let actions = '';
+    if(live && live.mine){
+      // Вернулся к своей сборке: «Вы вышли — сборка на паузе» и три действия.
+      actions = '<div class="asm-panel' + (live.status === 'active' ? ' mine-active' : '') + '">'
+        + '<div class="asm-panel-title">' + (live.status === 'paused' ? 'Вы вышли — сборка на паузе' : 'Вы собираете эту поставку') + '</div>'
+        + '<div class="asm-panel-sub">' + escapeHTML(takenText(st))
+        +   (live.pausedAt ? ' · на паузе с ' + escapeHTML(formatClock(new Date(live.pausedAt))) : '')
+        +   ' · работали ' + escapeHTML(formatDuration(Number(live.workMs || 0))) + '</div>'
+        + '<label class="asm-comment-label" for="asmComment">Комментарий: где оставил, что осталось (необязательно)</label>'
+        + '<textarea class="defect-input" id="asmComment" rows="2" maxlength="300" placeholder="Например: 2 короба собраны, стоят у ворот 3"></textarea>'
+        + '<div class="asm-actions">'
+        // Сборка по листу продолжается на экране листа и заканчивается там
+        // же — «Собрал по листу»: взятое по бумаге записывается только тогда.
+        +   (live.mode === 'paper'
+          ? '<button class="big-btn" onclick="openPaper(\'' + arg + '\')">▶ Продолжить по листу</button>'
+          : '<button class="big-btn" onclick="asmContinue(\'' + arg + '\')">▶ Продолжить</button>'
+            + '<button class="big-btn secondary" onclick="asmFinishAsk()">Закончить сборку</button>')
+        +   '<button class="big-btn secondary danger" onclick="asmAbandonAsk()">Отказаться от сборки</button>'
+        + '</div></div>'
+        + '<button class="big-btn secondary" onclick="printSupplySheet(\'' + arg + '\')">🖨 Распечатать лист сборки</button>';
+    } else if(collecting){
+      // Две равные кнопки: собирать в приложении или по бумажному листу.
+      actions = '<div class="asm-buttons">'
+        + '<button class="big-btn" onclick="beginAssembly(\'' + arg + '\')">' + (live ? '▶ Забрать сборку себе' : '▶ Начать сборку в приложении') + '</button>'
+        + '<button class="big-btn secondary" onclick="printSupplySheet(\'' + arg + '\')">🖨 Распечатать лист сборки</button>'
+        + '</div>'
+        + (live ? '' : '<button class="asm-link" type="button" onclick="beginPaper(\'' + arg + '\')">Собираю по бумажному листу — начать без скана QR</button>');
+    } else {
+      actions = '<div class="job-empty" style="padding:14px 12px;">Все заказы поставки собраны.</div>'
+        + '<button class="big-btn" onclick="openPrintChoice(\'' + arg + '\')">🖨 Печать листа сборки</button>';
+    }
     document.getElementById('supplyBody').innerHTML =
-      '<div class="sup-card-meta" style="margin-top:0;">пришла ' + escapeHTML(fmtWhen(s.created_at))
-      +   (s.created_by ? ' · составил ' + escapeHTML(s.created_by) : '')
-      +   ' · собрано ' + (orders.length - open.length) + ' из ' + orders.length + '</div>'
-      + (open.length
-        // Главное — собирать по товарам: к ячейке один раз за всем, что нужно
-        // поставке. Бумажный лист и сборка по заказам — ниже, для особых случаев.
-        ? '<button class="big-btn" onclick="openProductRun(\'' + jsArg(id) + '\')">Собирать по товарам</button>'
-          + '<div id="supplyProducts" class="supply-products"></div>'
-          + '<button class="big-btn secondary" onclick="openSupplyPickList(\'' + jsArg(id) + '\')">Лист грузчика — вся поставка за один обход</button>'
-          + '<button class="big-btn secondary" onclick="openPaper(\'' + jsArg(id) + '\')">Собираю по бумажному листу</button>'
-        : '<div class="job-empty">Все заказы поставки собраны.</div>')
-      + '<div class="list-group-title">Заказы · ' + orders.length + '</div>'
-      + orders.map(i => orderRowHtml(i, null)).join('');
-    if(open.length) renderSupplyProducts(id);
+      // Своя сборка — всё сказано в панели ниже; строка состояния — для чужой.
+      (live && live.mine ? '' : assemblyLine(st, s.status))
+      + actions
+      + (collecting ? '<div id="supplyProducts" class="supply-products"></div>' : '')
+      + '<div class="sup-card-meta">пришла ' + escapeHTML(fmtWhen(s.created_at))
+      +   (s.created_by ? ' · составил ' + escapeHTML(s.created_by) : '') + '</div>';
+    if(collecting) renderSupplyProducts(id);
   }
 
-  // Товары поставки по обходу склада: нажал — сразу к этому товару.
+  // Бумажный лист до сборки — только то, что осталось взять, с QR «начать
+  // по листу». Открыть лист — не начать сборку.
+  function printSupplySheet(id){
+    window.open('pick_print.html?supplyId=' + encodeURIComponent(id), '_blank');
+  }
+  window.printSupplySheet = printSupplySheet;
+
+  // Без скана QR — то же окно «Сейчас запустится таймер», что и в приложении.
+  function beginPaper(id){
+    const s = supplies.find(x => x.id === id);
+    if(!s) return;
+    openStartSheet({ supplyId: id, number: s.number, other: null, st: s.assembly, mode: 'paper' });
+  }
+  window.beginPaper = beginPaper;
+
+  // Товары поставки по обходу склада — крупно и явно, как в печатном листе:
+  // ячейка, название, артикул продавца, штрихкод, артикул WB, сколько взять.
+  // Нажал — сборка с этого товара.
   async function renderSupplyProducts(id){
     let d;
     try{ d = await apiFetch('/api/supplies/' + id); } catch(e){ return; }
     const box = document.getElementById('supplyProducts');
     if(!box || !backTarget || backTarget.id !== id) return;
     const rows = d.picking || [];
+    const tail = tailLength(rows.map(r => r.barcode));
+    const left = rows.reduce((sum, r) => sum + Number(r.qty || 0), 0);
+    const all = (d.packing || []).reduce((sum, l) => sum + Number(l.qty || 0), 0);
     box.innerHTML = rows.length
-      ? '<div class="list-group-title">Товары · ' + rows.length + ' — по обходу склада</div>'
-        + rows.map(r => '<div class="product-row" onclick="openProductRun(\'' + jsArg(id) + '\', \'' + jsArg(r.sku) + '\')">'
-          + '<div><div class="product-row-name">' + escapeHTML(r.name || r.sku) + '</div>'
-          + '<div class="product-row-sub">' + escapeHTML((r.cells && r.cells[0] ? r.cells[0].label + ' · ' : '') + r.sku) + '</div></div>'
-          + '<div class="product-row-need">' + r.qty + ' шт</div></div>').join('')
-      : '';
+      ? '<div class="list-group-title">Товары по обходу склада · ' + rows.length + '</div>'
+        + '<div class="sp-summary">Осталось взять ' + left + ' из ' + all + ' шт.</div>'
+        + '<div class="sp-list">' + rows.map(r => {
+          const cells = (r.cells || []).filter(c => c.take > 0);
+          const cellHtml = cells.length
+            ? escapeHTML(cells[0].label) + (cells.length > 1
+              ? '<small>+ ' + cells.slice(1).map(c => escapeHTML(c.label) + ' — ' + c.take).join(', ') + '</small>' : '')
+            : '';
+          const code = (label, value) => value ? '<span><i>' + label + '</i>' + value + '</span>' : '';
+          return '<div class="sp-row" onclick="beginAssembly(\'' + jsArg(id) + '\', \'' + jsArg(r.sku) + '\')">'
+            + (cellHtml ? '<div class="sp-cell">' + cellHtml + '</div>' : '<div class="sp-cell none">в ячейках Аргуса нет</div>')
+            + '<div class="sp-take"><span>взять</span><b>' + r.qty + '</b></div>'
+            + '<div class="sp-name">' + escapeHTML(r.name || r.sku) + '</div>'
+            + '<div class="sp-codes">'
+            +   code('Арт. продавца', r.article ? escapeHTML(r.article) : '')
+            +   code('Штрихкод', r.barcode ? barcodeHtml(r.barcode, tail) : '')
+            +   code('Арт. WB', r.nmId ? escapeHTML(r.nmId) : '')
+            + '</div></div>';
+        }).join('') + '</div>'
+      : '<div class="job-empty">Всё, что можно взять, уже взято — осталось ждать решения руководителя по «нет товара».</div>';
   }
   window.openSupply = openSupply;
 
@@ -3034,7 +3395,17 @@
   function openOrder(id){ selectInvoice(id); }
   window.openOrder = openOrder;
 
-  function goBackFromTask(){
+  async function goBackFromTask(){
+    // Ушёл со сборки поставки — таймер встаёт на паузу сам, руководитель
+    // видит «вышел из сборки» (владелец 27.09.2026).
+    if(productRun){
+      const id = productRun.supplyId;
+      await exitRun();
+      productRun = null;
+      pauseStart = null;
+      layoutRun(false);
+      return openSupply(id);
+    }
     if(backTarget && backTarget.kind === 'supply') return openSupply(backTarget.id);
     if(backTarget && backTarget.kind === 'docs') return openDocs(backTarget.dir);
     if(backTarget && backTarget.kind === 'supplies') return openSupplies();
@@ -3317,6 +3688,370 @@
     }).join('');
   }
 
+
+  /* ==================== Сборка поставки: состояние на сервере ====================
+     Владелец 27.09.2026: сборка начинается только кнопкой «Начать» в окне с
+     таймером (или сканом QR бумажного листа). Вышел из сборки — стрелкой,
+     «назад» браузера, в другую вкладку, закрыл страницу — таймер сам встаёт
+     на паузу, и руководитель видит это в журнале. Вернулся — «Вы вышли —
+     сборка на паузе» и три действия: продолжить, закончить с тем, что взято,
+     отказаться (поставка свободна, любой грузчик продолжит с того же места).
+     Всё это хранит сервер: /api/shipping/assembly/:id, пауза — через
+     /api/journal/pause, как и раньше. */
+  let runState = null;
+  // Сколько вкладка может быть скрыта, прежде чем это считается выходом:
+  // короткий взгляд в уведомление — не выход.
+  const HIDDEN_GRACE_MS = 15000;
+  const EXIT_REASON = 'Вышел из сборки';
+
+  function applyAssemblyState(st){
+    if(!st || !st.supply) return runState;
+    const a = st.assembly || {};
+    runState = {
+      supplyId: st.supply.id, number: st.supply.number, supplyStatus: st.supply.status,
+      status: a.status || null, mine: Boolean(a.mine), mode: a.mode || 'app', workerName: a.workerName || '',
+      startedAt: a.startedAt || null, pausedAt: a.pausedAt || null, pausedMs: Number(a.pausedMs || 0),
+      pauseReason: a.pauseReason || '', endedAt: a.endedAt || null, workMs: Number(a.workMs || 0),
+      comment: a.comment || '', taken: Number(st.taken || 0), total: Number(st.total || 0),
+      lastComment: st.lastComment || null,
+      // Часы телефона бывают неточны: таймер считается по часам сервера.
+      skewMs: st.serverNow ? new Date(st.serverNow).getTime() - Date.now() : 0,
+    };
+    return runState;
+  }
+  const runActive = () => Boolean(productRun && runState && runState.mine && runState.status === 'active'
+    && runState.supplyId === productRun.supplyId);
+  const takenText = (st) => 'взято ' + st.taken + ' из ' + st.total + ' шт.';
+  const liveOf = (st) => st && st.assembly && (st.assembly.status === 'active' || st.assembly.status === 'paused') ? st.assembly : null;
+
+  // Строка состояния у поставки — у всех грузчиков одинаковая (п. 20):
+  // «На паузе · Дима · взято 3 из 7 · «коробы у ворот 3»».
+  function assemblyLine(st, supplyStatus){
+    const a = st && st.assembly;
+    if(!a || supplyStatus === 'shipped') return '';
+    const note = st.lastComment ? ' · «' + escapeHTML(st.lastComment.text) + '»' : '';
+    const taken = escapeHTML(takenText(st));
+    const paper = a.mode === 'paper' ? ' по листу' : '';
+    if(a.status === 'active') return '<div class="asm-line active">' + (a.mine ? '<b>Вы</b> собираете' : 'Собирает <b>' + escapeHTML(a.workerName) + '</b>')
+      + paper + ' · ' + taken + note + '</div>';
+    if(a.status === 'paused') return '<div class="asm-line paused">На паузе · <b>' + (a.mine ? 'ваша сборка' : escapeHTML(a.workerName)) + '</b> · ' + taken + note + '</div>';
+    if(a.status === 'abandoned') return supplyStatus === 'collecting'
+      ? '<div class="asm-line abandoned">Свободна · ' + taken + note + '</div>' : '';
+    return supplyStatus === 'collecting'
+      ? '<div class="asm-line">Сборку закончил ' + escapeHTML(a.workerName) + ' · ' + taken + note + '</div>'
+      : (note ? '<div class="asm-line">Собрал ' + escapeHTML(a.workerName) + note + '</div>' : '');
+  }
+
+  // «Начать сборку в приложении» и нажатие на товар в списке: свою сборку —
+  // продолжить, свободную — начать после окна с таймером, чужую — забрать.
+  function beginAssembly(supplyId, sku){
+    const s = supplies.find(x => x.id === supplyId);
+    if(!s) return openSupplies();
+    const live = liveOf(s.assembly);
+    if(live && live.mine) return asmContinue(supplyId, sku);
+    openStartSheet({ supplyId, sku, number: s.number, other: live, st: s.assembly, mode: 'app' });
+  }
+  window.beginAssembly = beginAssembly;
+
+  function openStartSheet({ supplyId, sku, number, other, st, mode }){
+    const paper = mode === 'paper';
+    document.getElementById('startTitle').textContent = other
+      ? 'Поставку ' + number + ' собирает ' + other.workerName
+      : 'Сейчас запустится таймер сборки поставки ' + number;
+    document.getElementById('startSub').textContent = other
+      ? (other.status === 'paused' ? 'Сборка на паузе. ' : 'Сборка идёт. ') + 'Забрать её себе? ' + other.workerName + ' больше не сможет её продолжить — руководитель увидит это в журнале.'
+      : paper ? 'Сборка по бумажному листу: отмечайте здесь только то, чего не нашли, и в конце — «Собрал по листу».'
+        : 'Таймер и отметка «начал сборку» — только после «Начать».';
+    const prior = st && st.assembly && !other && st.taken > 0;
+    document.getElementById('startNote').innerHTML = (prior || other
+      ? 'Продолжите с того же места: <b>' + escapeHTML(takenText(st)) + '</b>' : '')
+      + (st && st.lastComment ? (prior || other ? '<br>' : '') + 'Комментарий ' + escapeHTML(st.lastComment.by || '')
+        + ': <b>«' + escapeHTML(st.lastComment.text) + '»</b>' : '');
+    const go = document.getElementById('startGoBtn');
+    go.textContent = other ? 'Забрать и начать' : 'Начать';
+    go.disabled = false;
+    go.onclick = () => startAssembly(supplyId, sku, { takeOver: Boolean(other), mode });
+    document.getElementById('sheetOverlay').classList.add('show');
+    goSheetStep('start');
+  }
+
+  async function startAssembly(supplyId, sku, { takeOver = false, mode = 'app' } = {}){
+    const go = document.getElementById('startGoBtn');
+    go.disabled = true;
+    try{
+      if(mode === 'paper'){
+        closeSheet();
+        return openPaper(supplyId, { start: true, takeOver });
+      }
+      const r = await apiFetch('/api/shipping/assembly/' + supplyId + '/start', { method: 'POST', body: { takeOver } });
+      applyAssemblyState(r);
+      closeSheet();
+      await openProductRun(supplyId, sku);
+    } catch(e){
+      go.disabled = false;
+      // Пока окно было открыто, сборку начал другой грузчик — предложим забрать.
+      showToast('Не началось: ' + e.message);
+      await refreshWork().catch(() => {});
+      const s = supplies.find(x => x.id === supplyId);
+      if(s && liveOf(s.assembly) && !liveOf(s.assembly).mine && !takeOver){
+        openStartSheet({ supplyId, sku, number: s.number, other: liveOf(s.assembly), st: s.assembly, mode });
+      }
+    }
+  }
+
+  // «Продолжить» — своя сборка: с паузы сервер снимает её сам (запись
+  // «вернулся» — одна, с комментарием).
+  async function asmContinue(supplyId, sku){
+    const box = document.getElementById('asmComment');
+    const comment = box ? box.value.trim() : '';
+    try{
+      const r = await apiFetch('/api/shipping/assembly/' + supplyId + '/start', { method: 'POST', body: { comment } });
+      applyAssemblyState(r);
+      await openProductRun(supplyId, sku);
+    } catch(e){ showToast('Не продолжилось: ' + e.message); }
+  }
+  window.asmContinue = asmContinue;
+
+  const currentSupplyId = () => (productRun && productRun.supplyId)
+    || (backTarget && backTarget.kind === 'supply' && backTarget.id) || (runState && runState.supplyId) || null;
+
+  // Собирать больше нечего — окно «Закончить сборку» само.
+  function runNothingLeft(){
+    document.getElementById('cellOptions').innerHTML = '';
+    document.getElementById('confirmBtn').disabled = true;
+    document.getElementById('confirmBtn').textContent = 'Собирать больше нечего';
+    asmFinishAsk({ auto: true });
+  }
+
+  let finishAuto = false;
+  async function asmFinishAsk(opts = {}){
+    const id = currentSupplyId();
+    if(!id) return;
+    finishAuto = Boolean(opts.auto);
+    let st;
+    try{ st = await apiFetch('/api/shipping/assembly/' + id); } catch(e){ showToast('Не удалось: ' + e.message); return; }
+    const left = Math.max(0, st.total - st.taken);
+    document.getElementById('finishTitle').textContent = left > 0
+      ? (finishAuto ? 'Больше собирать нечего' : 'Закончить сборку с тем, что взято?')
+      : 'Всё взято — закончить сборку';
+    document.getElementById('finishNote').innerHTML = 'Поставка ' + escapeHTML(st.supply.number) + ': <b>' + escapeHTML(takenText(st)) + '</b>'
+      + (left > 0 ? '<br>Не взятое — ' + left + ' шт. — уходит руководителю отметкой «нет товара», как при бумажном листе.' : '');
+    const typed = [document.getElementById('pauseComment'), document.getElementById('asmComment')]
+      .map(el => el && el.value.trim()).find(Boolean) || '';
+    document.getElementById('finishComment').value = typed;
+    document.getElementById('finishGoBtn').disabled = false;
+    document.getElementById('finishCancelBtn').textContent = finishAuto ? 'К поставке' : 'Назад';
+    document.getElementById('sheetOverlay').classList.add('show');
+    goSheetStep('finish');
+  }
+  window.asmFinishAsk = asmFinishAsk;
+
+  function asmFinishCancel(){
+    closeSheet();
+    // Взять больше нечего — оставаться на пустом экране незачем.
+    if(finishAuto && productRun) goBackFromTask();
+  }
+  window.asmFinishCancel = asmFinishCancel;
+
+  async function asmFinish(){
+    const id = currentSupplyId();
+    const btn = document.getElementById('finishGoBtn');
+    btn.disabled = true;
+    try{
+      const r = await apiFetch('/api/shipping/assembly/' + id + '/finish', { method: 'POST',
+        body: { comment: document.getElementById('finishComment').value.trim() } });
+      closeSheet();
+      productRun = null;
+      applyAssemblyState(r);
+      showAssemblyDone({ supplyId: id, number: r.supply.number, assembly: r.assembly, taken: r.taken, total: r.total,
+        notTaken: r.notTaken || [], minutes: r.minutes });
+    } catch(e){ btn.disabled = false; showToast('Не закончилось: ' + e.message); }
+  }
+  window.asmFinish = asmFinish;
+
+  async function asmAbandonAsk(){
+    const id = currentSupplyId();
+    if(!id) return;
+    let st;
+    try{ st = await apiFetch('/api/shipping/assembly/' + id); } catch(e){ showToast('Не удалось: ' + e.message); return; }
+    document.getElementById('abandonTitle').textContent = 'Отказаться от сборки ' + st.supply.number + '?';
+    document.getElementById('abandonNote').innerHTML = 'Взятое — <b>' + escapeHTML(takenText(st)) + '</b> — останется записанным. '
+      + 'Поставка вернётся в общий список: любой грузчик продолжит с того же места.';
+    const typed = [document.getElementById('pauseComment'), document.getElementById('asmComment')]
+      .map(el => el && el.value.trim()).find(Boolean) || '';
+    document.getElementById('abandonComment').value = typed;
+    document.getElementById('abandonGoBtn').disabled = false;
+    document.getElementById('sheetOverlay').classList.add('show');
+    goSheetStep('abandon');
+  }
+  window.asmAbandonAsk = asmAbandonAsk;
+
+  async function asmAbandon(){
+    const id = currentSupplyId();
+    const btn = document.getElementById('abandonGoBtn');
+    btn.disabled = true;
+    try{
+      await apiFetch('/api/shipping/assembly/' + id + '/abandon', { method: 'POST',
+        body: { comment: document.getElementById('abandonComment').value.trim() } });
+      closeSheet();
+      productRun = null;
+      runState = null;
+      pauseStart = null;
+      layoutRun(false);
+      showToast('Вы отказались от сборки — поставка свободна, её продолжат с того же места');
+      await openSupplies();
+    } catch(e){ btn.disabled = false; showToast('Не получилось: ' + e.message); }
+  }
+  window.asmAbandon = asmAbandon;
+
+  // Вышел из сборки стрелкой или «назад» — пауза сразу, с ответом сервера.
+  async function exitRun(){
+    if(!runActive()) return;
+    try{
+      const r = await apiFetch('/api/journal/pause', { method: 'POST',
+        body: { supplyId: productRun.supplyId, reason: EXIT_REASON, exit: true } });
+      if(r && r.assembly) applyAssemblyState(r.assembly);
+    } catch(e){ showToast('Руководитель не получил отметку о выходе: ' + e.message); }
+  }
+
+  // Вкладку скрыли или страницу закрывают — ответа ждать некогда: запрос
+  // уходит с keepalive и доедет, даже если страница уже закрылась. at — когда
+  // ушли на самом деле (по часам сервера).
+  function exitBeacon(atClientMs){
+    if(!runActive()) return;
+    const at = new Date((atClientMs || Date.now()) + runState.skewMs).toISOString();
+    try{
+      fetch(API_BASE + '/api/journal/pause', {
+        method: 'POST', keepalive: true,
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN },
+        body: JSON.stringify({ supplyId: productRun.supplyId, reason: EXIT_REASON, exit: true, at }),
+      }).catch(() => {});
+    } catch(e){ /* страница уже уходит */ }
+    runState.status = 'paused';
+    runState.pausedAt = at;
+    runState.pauseReason = 'вышел из сборки';
+  }
+
+  let hiddenAt = 0;
+  let hiddenTimer = null;
+  let exitedWhileHidden = false;
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden){
+      if(!runActive()) return;
+      hiddenAt = Date.now();
+      clearTimeout(hiddenTimer);
+      hiddenTimer = setTimeout(function(){
+        if(document.hidden && runActive()){ exitBeacon(hiddenAt); exitedWhileHidden = true; }
+      }, HIDDEN_GRACE_MS);
+      return;
+    }
+    clearTimeout(hiddenTimer);
+    // Телефон мог «заморозить» страницу в фоне — тогда уход записываем сейчас,
+    // временем, когда его свернули.
+    if(!exitedWhileHidden && hiddenAt && runActive() && Date.now() - hiddenAt >= HIDDEN_GRACE_MS){
+      exitBeacon(hiddenAt); exitedWhileHidden = true;
+    }
+    hiddenAt = 0;
+    if(exitedWhileHidden){
+      exitedWhileHidden = false;
+      showRunPaused();
+      // Сверим с сервером, что пауза записана (и сколько взято).
+      setTimeout(() => refreshRunState(), 800);
+    }
+  });
+  window.addEventListener('pagehide', function(){ exitBeacon(); });
+
+  async function refreshRunState(){
+    const id = productRun && productRun.supplyId;
+    if(!id) return;
+    try{ applyAssemblyState(await apiFetch('/api/shipping/assembly/' + id)); renderTaskTimer(); } catch(e){ return; /* покажем при следующем шаге */ }
+    // Пока телефон лежал, сборку забрал другой грузчик — продолжать её здесь
+    // нельзя: говорим прямо и возвращаем к поставке.
+    const live = runState && (runState.status === 'active' || runState.status === 'paused');
+    if(!live || !runState.mine){
+      showToast(live ? 'Сборку забрал ' + runState.workerName : 'Эту сборку уже закончили или от неё отказались');
+      productRun = null;
+      pauseStart = null;
+      layoutRun(false);
+      openSupply(id);
+    }
+  }
+
+  // «Вы вышли — сборка на паузе» на самом экране сборки: работа заперта,
+  // под рукой «Продолжить», «Закончить сборку», «Отказаться от сборки».
+  function showRunPaused(){
+    if(!productRun) return;
+    if(!pauseStart){
+      pauseStart = runState && runState.pausedAt ? new Date(new Date(runState.pausedAt).getTime() - runState.skewMs) : new Date();
+      pauseLog.push({ reason: EXIT_REASON, start: pauseStart, end: null });
+    }
+    setPauseLock(true);
+    const exited = !runState || !runState.pauseReason || /вышел/i.test(runState.pauseReason);
+    document.getElementById('pauseBannerText').innerHTML = exited
+      ? '<b>Вы вышли — сборка на паузе</b>'
+      : 'На паузе: <b>' + escapeHTML(runState.pauseReason) + '</b>';
+    renderTaskTimer();
+  }
+
+  // Печать листа сборки: «С отметками» — где что взято, «Пустой» — тот же
+  // лист без отметок (владелец 27.09.2026). Лист — pick_print.html.
+  let printSupplyId = null;
+  function openPrintChoice(supplyId){
+    printSupplyId = supplyId || printSupplyId || currentSupplyId();
+    document.getElementById('sheetOverlay').classList.add('show');
+    goSheetStep('print');
+  }
+  window.openPrintChoice = openPrintChoice;
+  function printAssemblySheet(marks){
+    closeSheet();
+    if(!printSupplyId) return;
+    window.open('pick_print.html?supplyId=' + encodeURIComponent(printSupplyId) + '&full=1&marks=' + (marks ? '1' : '0'), '_blank');
+  }
+  window.printAssemblySheet = printAssemblySheet;
+
+  // Окно «Поставка собрана» (п. 22–25): без пустоты, крупно, с комментарием
+  // и печатью листа.
+  function showAssemblyDone({ supplyId, number, assembly, taken, total, notTaken = [], minutes = null, report = null }){
+    hideAllScreens();
+    layoutRun(false);
+    pauseStart = null;
+    printSupplyId = supplyId;
+    backTarget = { kind: 'supplies' };
+    const screen = document.getElementById('doneScreen');
+    screen.classList.add('show', 'asm');
+    const short = notTaken.length > 0;
+    // Номер не рвём по дефису: «ПС-270926-» и «01» на разных строках читались как два номера.
+    document.getElementById('doneTitle').innerHTML = short
+      ? 'Сборка поставки <span class="nowrap">' + escapeHTML(number) + '</span> закончена'
+      : 'Поставка <span class="nowrap">' + escapeHTML(number) + '</span> собрана';
+    document.getElementById('doneSub').textContent = 'Информация уже отправлена менеджеру и руководителю склада — сообщать никому не нужно.';
+    const comment = assembly && assembly.comment;
+    const box = document.getElementById('doneComment');
+    box.classList.toggle('show', Boolean(comment));
+    box.innerHTML = comment ? '<span>Ваш комментарий</span>«' + escapeHTML(comment) + '»' : '';
+    const a = assembly || {};
+    const rows = [];
+    if(a.startedAt) rows.push(['Начало', formatClock(new Date(a.startedAt))]);
+    if(a.endedAt) rows.push(['Окончание', formatClock(new Date(a.endedAt))]);
+    if(a.startedAt) rows.push(['Чистое время работы', formatDuration(Number(a.workMs || 0))]);
+    else if(minutes) rows.push(['Время', minutes + ' мин']);
+    if(Number(a.pausedMs) > 0) rows.push(['На паузе', formatDuration(Number(a.pausedMs))]);
+    document.getElementById('doneTime').innerHTML = rows.map(r => '<div class="done-time-row' + (r[0] === 'На паузе' ? ' pause' : '') + '"><span>'
+      + r[0] + '</span><span>' + escapeHTML(r[1]) + '</span></div>').join('');
+    document.getElementById('doneTime').style.display = rows.length ? '' : 'none';
+    const lines = [];
+    if(total != null) lines.push('<div class="done-row"><div class="done-row-name">Взято ' + taken + ' из ' + total + ' шт.</div></div>');
+    const missRow = (name, text, qty) => '<div class="done-row done-row-warn"><div class="done-row-name">' + escapeHTML(name) + '</div>'
+      + '<div class="done-miss">' + text + ' <b>' + qty + ' шт.</b> — руководителю ушло «нет товара»</div></div>';
+    notTaken.forEach(x => lines.push(missRow(x.name || x.sku, 'не взято', x.qty)));
+    (report || []).filter(x => x.missing > 0).forEach(x => lines.push(missRow(x.name || x.sku, 'не нашёл', x.missing)));
+    document.getElementById('doneSummary').innerHTML = lines.join('');
+    document.getElementById('doneSummary').style.display = lines.length ? '' : 'none';
+    document.querySelectorAll('#doneScreen .done-actions .done-btn:not(.done-print):not(#doneNextBtn)')
+      .forEach(b => { b.textContent = '← К поставкам'; });
+    document.querySelector('#doneScreen .done-back').textContent = '← К поставкам';
+  }
+
   /* ---------- Сборка по бумажному листу ----------
      Скан QR на листе (или кнопка в поставке) — начало и таймер: сервер пишет
      в журнал «начал по листу». Грузчик собирает по бумаге, здесь отмечает
@@ -3336,7 +4071,7 @@
     try{ return JSON.parse(localStorage.getItem(PAPER_KEY) || 'null'); } catch(e){ return null; }
   }
 
-  async function openPaper(supplyId){
+  async function openPaper(supplyId, opts = {}){
     if(pauseStart) resumeTask();
     openJob('paperScreen');
     backTarget = { kind: 'supply', id: supplyId };
@@ -3360,19 +4095,42 @@
       pickListLines = list.lines;
       list.lines.forEach((l, i) => { if(l.kit && l.kit.canBuild > 0) paperKits.set(l.sku, i); });
     } catch(e){ /* без подсказки про наборы лист всё равно работает */ }
+    // Сборка по листу — тот же заход сборки на сервере, что и в приложении.
+    // Начинает его скан QR или «Начать» в окне с таймером (opts.start);
+    // просто открыть экран — не начало: запись «начал» и таймер не пишутся.
     const saved = loadPaper();
-    if(saved && saved.supplyId === supplyId){
-      paper = saved;
-    } else if(paperLines.length){
-      // Начало сборки — в журнал и таймер, только если собирать есть что.
+    paper = null;
+    if(paperLines.length){
+      let st = null;
       try{
-        const r = await apiFetch('/api/shipping/paper/start', { method: 'POST', body: { supplyId } });
-        paper = { supplyId, number: r.number, startedAt: r.startedAt, pausedMs: 0, pauseAt: null, pauseReason: '', miss: {} };
-        savePaper();
+        st = opts.start
+          ? await apiFetch('/api/shipping/paper/start', { method: 'POST', body: { supplyId, takeOver: opts.takeOver === true } })
+          : await apiFetch('/api/shipping/assembly/' + supplyId);
       } catch(e){
         document.getElementById('paperSub').textContent = e.message;
+        // Сборку ведёт другой грузчик — предложим забрать.
+        try{
+          const now = await apiFetch('/api/shipping/assembly/' + supplyId);
+          const other = liveOf(now);
+          if(other && !other.mine){
+            openStartSheet({ supplyId, number: now.supply.number, other, st: now, mode: 'paper' });
+          }
+        } catch(_){ /* текст ошибки уже на экране */ }
         return;
       }
+      const live = liveOf(st);
+      if(!live || !live.mine){
+        document.getElementById('paperTitle').textContent = 'По листу · ' + (d.supply && d.supply.number || '');
+        document.getElementById('paperSub').textContent = 'Сборка по листу ещё не начата';
+        document.getElementById('paperBody').innerHTML = '<div class="paper-note">Отсканируйте QR на листе или нажмите «Начать» — '
+          + 'тогда запустится таймер и руководитель увидит, что вы начали.</div>'
+          + '<button class="big-btn" onclick="beginPaperHere(\'' + jsArg(supplyId) + '\')">▶ Начать сборку по листу</button>';
+        return;
+      }
+      applyAssemblyState(st);
+      paper = { supplyId, number: st.supply.number, startedAt: null, pausedMs: 0, pauseAt: null, pauseReason: '',
+        miss: saved && saved.supplyId === supplyId ? (saved.miss || {}) : {} };
+      syncPaperFromState();
     }
     document.getElementById('paperTitle').textContent = 'По листу · ' + (d.supply && d.supply.number || '');
     document.getElementById('paperSub').textContent = (d.supply && d.supply.companyName || '')
@@ -3383,6 +4141,24 @@
   }
   window.openPaper = openPaper;
 
+  // Время и пауза листа — с сервера (заход сборки), отметки «не нашёл» — в
+  // этом телефоне, пока лист не закрыт.
+  function syncPaperFromState(){
+    if(!paper || !runState || runState.supplyId !== paper.supplyId) return;
+    paper.startedAt = runState.startedAt;
+    paper.pausedMs = Number(runState.pausedMs || 0);
+    paper.pauseAt = runState.pausedAt;
+    paper.pauseReason = runState.pauseReason || '';
+    paper.skewMs = runState.skewMs || 0;
+    savePaper();
+  }
+
+  function beginPaperHere(id){
+    const s = supplies.find(x => x.id === id);
+    openStartSheet({ supplyId: id, number: s ? s.number : '', other: null, st: s ? s.assembly : null, mode: 'paper' });
+  }
+  window.beginPaperHere = beginPaperHere;
+
   function paperBack(){
     const id = paper ? paper.supplyId : backTarget && backTarget.id;
     return id ? openSupply(id) : openSupplies();
@@ -3390,8 +4166,8 @@
   window.paperBack = paperBack;
 
   function renderPaperTimer(){
-    if(!paper || !document.getElementById('paperScreen').classList.contains('show')) return;
-    const now = paper.pauseAt ? new Date(paper.pauseAt).getTime() : Date.now();
+    if(!paper || !paper.startedAt || !document.getElementById('paperScreen').classList.contains('show')) return;
+    const now = paper.pauseAt ? new Date(paper.pauseAt).getTime() : Date.now() + (paper.skewMs || 0);
     const sec = Math.max(0, Math.floor((now - new Date(paper.startedAt).getTime() - paper.pausedMs) / 1000));
     const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
     document.getElementById('paperTimerValue').textContent = h > 0
@@ -3407,19 +4183,19 @@
     document.getElementById('paperPauseReason').textContent = paper.pauseReason || '';
   }
 
-  function paperPause(reason){
+  function paperPause(reason, comment){
     if(!reason || !paper || paper.pauseAt) return;
     closeSheet();
-    paper.pauseAt = new Date().toISOString();
+    paper.pauseAt = new Date(Date.now() + (paper.skewMs || 0)).toISOString();
     paper.pauseReason = reason;
     savePaper();
     renderPaperTimer();
-    reportPause({ reason });
+    reportPause(Object.assign({ reason }, comment ? { comment } : {}));
   }
 
   function paperResume(){
     if(!paper || !paper.pauseAt) return;
-    const ms = Date.now() - new Date(paper.pauseAt).getTime();
+    const ms = Date.now() + (paper.skewMs || 0) - new Date(paper.pauseAt).getTime();
     paper.pausedMs += ms;
     const reason = paper.pauseReason;
     paper.pauseAt = null;
@@ -3462,6 +4238,8 @@
           +   (miss ? paper.miss[r.sku] : 0) + '"> из ' + r.qty + ' шт</label>'
           + '</div>';
       }).join('')
+      + '<label class="asm-comment-label" for="paperComment">Комментарий: где оставил, что осталось (необязательно)</label>'
+      + '<textarea class="defect-input" id="paperComment" rows="2" maxlength="300" placeholder="Например: 2 короба собраны, стоят у ворот 3"></textarea>'
       + '<button class="big-btn" id="paperDoneBtn">Собрал по листу'
       + (missCount ? ' · не нашёл ' + missCount : '') + '</button>';
     body.querySelectorAll('[data-paper-miss]').forEach(function(b){
@@ -3492,17 +4270,20 @@
     btn.disabled = true;
     btn.textContent = 'Записываю…';
     try{
+      const box = document.getElementById('paperComment');
       const r = await apiFetch('/api/shipping/paper/finish', { method: 'POST', body: {
         supplyId: paper.supplyId, startedAt: paper.startedAt, pausedMs: paper.pausedMs,
         notFound: Object.keys(paper.miss).map(sku => ({ sku, found: paper.miss[sku] })),
+        comment: box ? box.value.trim() : '',
       } });
       const supplyId = paper.supplyId;
       paper = null;
       savePaper();
-      const missed = r.report.filter(x => x.missing > 0);
-      showToast('Записано: взято ' + r.taken + ' шт' + (r.minutes ? ' за ' + r.minutes + ' мин' : '')
-        + (missed.length ? ' · руководителю ушло «нет товара»: ' + missed.length : ''));
-      openSupply(supplyId);
+      // Итог — то же окно «Поставка собрана», что и после сборки в приложении.
+      let st = null;
+      try{ st = await apiFetch('/api/shipping/assembly/' + supplyId); } catch(_){ /* покажем без времени захода */ }
+      showAssemblyDone({ supplyId, number: r.number, assembly: st && st.assembly,
+        taken: st ? st.taken : r.taken, total: st ? st.total : null, minutes: r.minutes, report: r.report });
     } catch(e){
       btn.disabled = false;
       btn.textContent = 'Собрал по листу';
@@ -3660,6 +4441,13 @@
   }
 
   function showDone(){
+    // Итог обычной работы (приёмка, возврат, отгрузка из 1С) — свой вид;
+    // у сборки поставки — showAssemblyDone.
+    document.getElementById('doneScreen').classList.remove('asm');
+    document.getElementById('doneComment').classList.remove('show');
+    document.querySelector('#doneScreen .done-back').textContent = '← К списку';
+    document.querySelectorAll('#doneScreen .done-actions .done-btn:not(.done-print):not(#doneNextBtn)')
+      .forEach(b => { b.textContent = '← К списку'; });
     // Внутри поставки заказы идут подряд: записали позицию — сразу следующая.
     // По товарам — вся поставка и есть одна работа, переходить некуда.
     if(!productRun && isPicking() && backTarget && backTarget.kind === 'supply'){
@@ -3823,8 +4611,13 @@
     if(step === 'pause'){
       document.getElementById('sheetStepPause').classList.add('show');
       document.getElementById('pauseCustomInput').value = '';
+      document.getElementById('pauseSheetComment').value = '';
       document.getElementById('pauseCustomBtn').disabled = true;
     }
+    if(step === 'start') document.getElementById('sheetStepStart').classList.add('show');
+    if(step === 'finish') document.getElementById('sheetStepFinish').classList.add('show');
+    if(step === 'abandon') document.getElementById('sheetStepAbandon').classList.add('show');
+    if(step === 'print') document.getElementById('sheetStepPrint').classList.add('show');
   }
 
   // ---------- «Нет товара» ----------
@@ -3927,19 +4720,36 @@
   // Пауза видна руководителю сразу — записью в журнале, а не только в итоге
   // накладной (владелец 26.09.2026). Не дошла — работа не встаёт, но человек
   // должен знать, что начальник не в курсе.
+  // У сборки поставки та же пауза двигает и её состояние на сервере: ответ
+  // приносит его — таймер и замок берём оттуда.
   function reportPause(body){
     const onPaper = paper && document.getElementById('paperScreen').classList.contains('show');
     const doc = onPaper ? { supplyId: paper.supplyId }
       : productRun ? { supplyId: productRun.supplyId }
       : currentInvoice ? { invoiceId: currentInvoice.id } : {};
-    apiFetch('/api/journal/pause', { method: 'POST', body: Object.assign(doc, body) })
+    return apiFetch('/api/journal/pause', { method: 'POST', body: Object.assign(doc, body) })
+      .then(r => {
+        if(r && r.assembly){
+          applyAssemblyState(r.assembly);
+          if(onPaper) syncPaperFromState();
+          renderTaskTimer();
+        }
+        return r;
+      })
       .catch(e => showToast('Руководитель не получил отметку о паузе: ' + e.message));
+  }
+
+  function setPauseBannerText(reason){
+    document.getElementById('pauseBannerText').innerHTML = 'На паузе: <b id="pauseReasonLabel"></b>';
+    document.getElementById('pauseReasonLabel').textContent = reason;
   }
 
   // На паузе работа заперта целиком: раньше кнопки гасли, а поле количества
   // оставалось живым — набрал число, и «Принять» снова нажималось.
   function setPauseLock(on){
     document.getElementById('pauseBanner').classList.toggle('show', on);
+    // У сборки поставки главная кнопка паузы — «Продолжить».
+    document.getElementById('pauseResumeBtn').textContent = productRun ? '▶ Продолжить' : 'Возобновить';
     // inert — вся рабочая область и нижние кнопки: ни нажать, ни выбрать с
     // клавиатуры, даже если экран перерисуется на паузе (сборка по товару
     // перерисовывает ячейки и товары сама — проверка 26.09.2026).
@@ -3952,14 +4762,15 @@
   }
 
   function pauseTask(reason){
-    if(paper && document.getElementById('paperScreen').classList.contains('show')) return paperPause(reason);
+    const comment = document.getElementById('pauseSheetComment').value.trim();
+    if(paper && document.getElementById('paperScreen').classList.contains('show')) return paperPause(reason, comment);
     if(!reason || pauseStart) return;
     pauseStart = new Date();
     pauseLog.push({reason: reason, start: pauseStart, end: null});
     closeSheet();
-    document.getElementById('pauseReasonLabel').textContent = reason;
+    setPauseBannerText(reason);
     setPauseLock(true);
-    reportPause({ reason });
+    reportPause(Object.assign({ reason }, comment ? { comment } : {}));
   }
 
   function resumeTask(){
@@ -3971,7 +4782,11 @@
     last.end = now;
     pauseStart = null;
     setPauseLock(false);
-    reportPause({ reason: last.reason, resumed: true, pausedMs: ms });
+    // Комментарий, набранный на паузе, уходит одной записью с возвратом.
+    const box = document.getElementById('pauseComment');
+    const comment = productRun && box ? box.value.trim() : '';
+    if(box) box.value = '';
+    reportPause(Object.assign({ reason: last.reason, resumed: true, pausedMs: ms }, comment ? { comment } : {}));
     if(isPicking()) updatePickConfirm(); else updateConfirmState();
   }
 
