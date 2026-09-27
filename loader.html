@@ -24,6 +24,10 @@
     --green-soft:#263429;
     --text:#EDEBE6;
     --muted:#8D9096;
+    /* Голубой — набираемое количество (владелец 27.09.2026, третье задание):
+       не синий и не бирюзовый --accent, чтобы число не сливалось с кнопками.
+       Контраст с фоном карточки #1D2023 — 8.6:1, с фоном #111315 — 10:1. */
+    --sky:#7CC4F2;
     /* Моноширинного шрифта на экранах грузчика нет (владелец 26–27.09.2026:
        «шестёрки и пятёрки выглядят ужасно»): номера, ячейки и артикулы —
        тем же Golos, цифры одной ширины задаёт font-variant-numeric у body. */
@@ -276,6 +280,38 @@
   .custom-cell-label{font-size:11.5px; color:var(--muted); margin-bottom:2px;}
   .custom-cell-id{font-family:var(--mono); font-size:16px; font-weight:700; color:var(--accent);}
 
+  /* ---------- Несколько ячеек (третье задание 27.09.2026) ----------
+     Одна ячейка — как было, одним нажатием. «Положить в несколько ячеек» —
+     список ячеек, у каждой своё количество; подтвердить можно, только когда
+     разложено ровно всё принятое. Каждая строка — отдельная укладка: позже
+     её подтвердят сканом QR ячейки. */
+  .multi-toggle{margin-top:10px;}
+  .multi-place{display:none; margin-top:12px;}
+  .multi-place.show{display:block;}
+  .multi-row{display:flex; align-items:center; gap:10px; padding:10px 12px; margin-bottom:8px;
+    background:var(--accent-soft); border:1.5px solid var(--accent); border-radius:12px;}
+  .multi-cell{flex:1; min-width:0;}
+  .multi-cell b{display:block; font-size:22px; font-weight:700; color:var(--accent); line-height:1.15;}
+  .multi-row .qty-stepper{gap:4px;}
+  .multi-row .qty-btn{width:36px; height:36px; border-radius:10px; font-size:20px;}
+  .multi-row input.qty-value{font-size:22px; width:48px; color:var(--sky);}
+  .multi-row.zero input.qty-value{color:var(--terracotta);}
+  .multi-remove{flex:0 0 auto; width:32px; height:32px; border-radius:9px; border:1px solid var(--line);
+    background:var(--panel-2); color:var(--muted); font:inherit; font-size:18px; cursor:pointer;}
+  .multi-left{font-size:15px; font-weight:600; padding:6px 2px 0; color:var(--yellow);}
+  .multi-left.ok{color:var(--green);}
+  .multi-left.bad{color:var(--terracotta);}
+  .multi-empty{font-size:13.5px; color:var(--muted); padding:4px 2px 2px; line-height:1.45;}
+  .cell-option.added{border-color:var(--accent); opacity:0.6;}
+
+  /* «Написать руководителю о товаре» — внизу карточки товара. */
+  .item-note-btn{display:none; width:100%; margin-top:12px; padding:11px 14px; border-radius:12px;
+    border:1px dashed var(--line); background:none; color:var(--muted); font:inherit; font-size:14px; cursor:pointer; text-align:center;}
+  #taskScreen.run .item-note-btn{display:block;}
+  .item-note-btn:active{border-color:var(--accent); color:var(--accent);}
+  .item-note-sent{display:none; margin-top:8px; font-size:13px; color:var(--green); text-align:center;}
+  .item-note-sent.show{display:block;}
+
   /* ---------- Разбор возврата по состоянию товара ----------
      Три состояния из реального процесса: годный обратно в продажу, брак
      (чинить нельзя, решает продавец) и брак упаковки (товар цел, нужна
@@ -342,6 +378,19 @@
   .home-tile-sub{font-size:13.5px; color:var(--muted); margin-top:4px; line-height:1.45;}
   .home-tile-count{font-family:var(--mono); font-size:24px; font-weight:700; color:var(--accent-2); flex-shrink:0;}
   .home-tile-count.zero{color:var(--muted); font-size:16px; font-weight:500;}
+  /* Начатая работа — первой на главном экране: «Приёмка ПР-… на паузе ·
+     принято 3 из 8 — продолжить» (третье задание 27.09.2026). */
+  .home-started{display:flex; flex-direction:column; gap:10px;}
+  .home-started-head{font-size:12.5px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; margin:2px 2px 0;}
+  .home-work{display:flex; align-items:center; justify-content:space-between; gap:12px; cursor:pointer; text-align:left;
+    width:100%; font:inherit; color:var(--text); background:var(--yellow-soft); border:1.5px solid rgba(201,166,107,0.55);
+    border-radius:16px; padding:16px 18px;}
+  .home-work.active{background:var(--accent-soft); border-color:var(--accent);}
+  .home-work:active{border-color:var(--text);}
+  .home-work-name{font-size:17px; font-weight:700;}
+  .home-work-sub{font-size:14px; color:var(--muted); margin-top:4px; line-height:1.4;}
+  .home-work-go{flex:0 0 auto; font-size:14px; font-weight:700; color:var(--yellow); white-space:nowrap;}
+  .home-work.active .home-work-go{color:var(--accent-2);}
   .job-logout{font-size:13px; color:var(--muted); cursor:pointer; padding:8px 0; margin-left:auto;}
   .sup-card{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:18px 20px; cursor:pointer;}
   .sup-card:active{border-color:var(--accent);}
@@ -840,12 +889,16 @@
   #taskScreen.run #allProductsBtn, #taskScreen.run #progressText, #taskScreen.run #itemSku,
   #taskScreen.run .item-declared, #taskScreen.run .qty-block{display:none !important;}
   #taskScreen.run .invoice-switch-wrap{flex:0 0 auto;}
-  #taskScreen.run .invoice-switch{padding:10px 16px; font-size:20px;}
+  #taskScreen.run .invoice-switch{padding:10px 14px; font-size:20px;}
   #taskScreen.run .invoice-back{margin:0; font-size:20px; color:var(--text);}
   #taskScreen.run .run-title{display:block; flex:1; min-width:0; text-align:center; font-size:22px; font-weight:700;
     color:var(--accent-2); letter-spacing:0.3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   #taskScreen.run .run-title small{display:block; font-size:13px; font-weight:500; color:var(--muted); letter-spacing:0;}
-  #taskScreen.run .task-head-row::after{content:''; flex:0 0 56px;}
+  /* Номер — ровно по центру и при длинной подписи «← Главное меню»: три
+     колонки, крайние равны, пока хватает места. */
+  #taskScreen.run .task-head-row{display:grid; grid-template-columns:1fr minmax(0, max-content) 1fr; align-items:center; gap:10px;}
+  #taskScreen.run .task-head-row::after{content:'';}
+  #taskScreen.run .invoice-switch-wrap{justify-self:start; min-width:max-content;}
   #taskScreen.run .task-head-top{margin-bottom:10px;}
   #taskScreen.run .task-body{gap:14px; padding-top:16px;}
   #taskScreen.run .run-all-btn{display:flex; order:-3; align-items:center; justify-content:space-between; gap:12px; width:100%;
@@ -863,7 +916,22 @@
   #taskScreen.run .run-need b{color:var(--text); font-size:22px; font-weight:700;}
   #taskScreen.run .run-need .qty-stepper{gap:6px;}
   #taskScreen.run .run-need .qty-btn{width:42px; height:42px; border-radius:11px; font-size:22px;}
-  #taskScreen.run .run-need input.qty-value{font-size:26px; width:54px; min-width:0;}
+  /* Набираемое количество — крупно и голубым (третье задание 27.09): это
+     число человек ищет глазами, стоя с коробкой в руках. Ширина — по числу
+     (field-sizing), где браузер этого не умеет — под три цифры. */
+  #taskScreen.run .run-need input.qty-value,
+  #taskScreen.run .run-need input.qty-value.warn{font-size:36px; font-weight:800; color:var(--sky); width:66px; min-width:0;}
+  @supports (field-sizing: content){
+    #taskScreen.run .run-need input.qty-value{field-sizing:content; width:auto; min-width:1.4ch; padding:0 2px;}
+  }
+  #taskScreen.run .run-need input.qty-value:focus{box-shadow:0 3px 0 var(--sky);}
+  /* Таймер — крупнее: сколько идёт работа, видно издалека. */
+  #taskScreen.run .task-timer{font-size:22px; padding:8px 16px; border-radius:10px; gap:9px; letter-spacing:0.04em;}
+  #taskScreen.run .task-timer-dot{width:9px; height:9px;}
+  /* «← Главное меню» (третье задание 27.09): стрелка ведёт в «Что делаем?»,
+     работа встаёт на паузу. Подпись видна только на экране работы. */
+  .invoice-home{display:none;}
+  #taskScreen.run .invoice-home{display:inline; font-size:15px; font-weight:600; margin-left:6px; color:var(--text);}
   /* У приёмки — «принял [− 6 +] из 6»: одна строка под названием и на
      узком телефоне (сколько заявлено — числом после поля). */
   #taskScreen.run.recv #runTakeWord{order:1;}
@@ -1148,7 +1216,7 @@
               <!-- Назад — к своему списку (поставке, приходам), а не в
                    выпадающую кучу из работ и сотни заказов. -->
               <div class="invoice-switch" id="invoiceSwitch" onclick="event.stopPropagation(); goBackFromTask()" aria-label="Назад">
-                <span class="invoice-switch-text"><span class="invoice-back">←</span><b id="invoiceNum">—</b><span class="invoice-switch-dot"> · </span><span id="invoiceClient"></span></span>
+                <span class="invoice-switch-text"><span class="invoice-back">←</span><span class="invoice-home">Главное меню</span><b id="invoiceNum">—</b><span class="invoice-switch-dot"> · </span><span id="invoiceClient"></span></span>
               </div>
             </div>
             <!-- Сборка поставки: номер один раз и по центру (владелец 27.09.2026). -->
@@ -1194,6 +1262,10 @@
           <!-- «нужно 3 · взял [− 3 +]» — одной строкой под названием. -->
           <div class="run-need" id="runNeed"><span id="runNeedWord">нужно</span> <b id="runNeedQty">—</b> <span id="runNeedDot">·</span> <span id="runTakeWord">взял</span> <span id="runQtySlot"></span></div>
           <div class="run-codes" id="runCodes"></div>
+          <!-- Что-то не так с товаром — руководителю, запись «ждёт решения»
+               в журнале (третье задание 27.09.2026). -->
+          <button type="button" class="item-note-btn" id="itemNoteBtn" onclick="openItemNote()">Написать руководителю о товаре</button>
+          <div class="item-note-sent" id="itemNoteSent"></div>
         </div>
 
         <div class="shortfall-note" id="shortfallNote"></div>
@@ -1289,6 +1361,12 @@
             </div>
           </div>
           <div class="cell-manual" id="manualCellBtn" onclick="openSheet()" style="margin-top:10px;">Выбрать на карте склада</div>
+          <!-- Несколько ячеек: у каждой своё количество, в сумме — всё принятое. -->
+          <div class="multi-place" id="multiPlace">
+            <div id="multiList"></div>
+            <div class="multi-left" id="multiLeft"></div>
+          </div>
+          <div class="cell-manual multi-toggle" id="multiToggle" onclick="toggleMultiPlace()" style="display:none;">Положить в несколько ячеек</div>
           <!-- Отбор короче заявленного закрывает позицию с расхождением, поэтому
                спрашиваем прямо, а не догадываемся: пустая ячейка и «больше не
                повезли» для склада разные вещи. -->
@@ -1311,7 +1389,7 @@
       </div>
     </div>
 
-    <div class="sheet-overlay" id="sheetOverlay" onclick="if(event.target===this) closeSheet()">
+    <div class="sheet-overlay" id="sheetOverlay" onclick="if(event.target===this) sheetOutside()">
       <div class="sheet">
 
         <div class="sheet-step" id="sheetStepMap">
@@ -1377,7 +1455,7 @@
                     placeholder="Например: 2 короба собраны, стоят у ворот 3"></textarea>
           <div class="sheet-two">
             <button class="sheet-confirm" id="finishGoBtn" type="button" onclick="asmFinish()">Закончить сборку</button>
-            <button class="sheet-cancel" id="finishCancelBtn" type="button" onclick="asmFinishCancel()">Назад</button>
+            <button class="sheet-cancel sheet-back-btn" id="finishCancelBtn" type="button" onclick="asmFinishCancel()">Назад</button>
           </div>
         </div>
 
@@ -1389,7 +1467,21 @@
                     placeholder="Например: 2 короба собраны, стоят у ворот 3"></textarea>
           <div class="sheet-two">
             <button class="sheet-confirm danger" id="abandonGoBtn" type="button" onclick="asmAbandon()">Отказаться</button>
-            <button class="sheet-cancel" type="button" onclick="closeSheet()">Назад</button>
+            <button class="sheet-cancel sheet-back-btn" type="button" onclick="closeSheet()">Назад</button>
+          </div>
+        </div>
+
+        <!-- Записка руководителю о товаре: уходит в журнал «ждёт решения». -->
+        <div class="sheet-step" id="sheetStepNote">
+          <div class="sheet-title">Написать руководителю о товаре</div>
+          <div class="sheet-sub" id="noteItemName"></div>
+          <textarea class="defect-input" id="noteText" rows="3" maxlength="500"
+                    placeholder="Что не так: коробка мятая, штрихкод не читается, пришёл другой цвет…"
+                    oninput="document.getElementById('noteGoBtn').disabled = !this.value.trim();"></textarea>
+          <p class="sheet-note" style="margin-top:10px;">Руководитель и менеджер увидят это в журнале — запись будет ждать, пока они не отметят «Принял к сведению».</p>
+          <div class="sheet-two">
+            <button class="sheet-confirm" id="noteGoBtn" type="button" onclick="sendItemNote()" disabled>Отправить</button>
+            <button class="sheet-cancel sheet-back-btn" type="button" onclick="closeSheet()">Отмена</button>
           </div>
         </div>
 
@@ -1890,9 +1982,9 @@
       .sort((a, b) => Boolean(a.p.receiving_id) - Boolean(b.p.receiving_id));
     document.getElementById('productsList').innerHTML = items.map(({ p, i }) => {
       const done = Boolean(p.receiving_id);
-      const cell = done && p.row_num != null ? formatBlockLabel(p.row_num, p) : '';
+      const cell = done ? placedCells(p) : '';
       return '<div class="product-row' + (done ? ' done' : '') + (current && p.id === current.id ? ' current' : '') + '"'
-        + (done ? '' : ' onclick="pickReceivingItemNow(' + i + ')"') + '>'
+        + ' onclick="pickReceivingItemNow(' + i + ')">'
         + '<div><div class="product-row-name">' + escapeHTML(p.name) + '</div>'
         + '<div class="product-row-sub">' + escapeHTML(p.sku)
         + (done ? ' · принято ' + Number(p.accepted_qty) + ' из ' + Number(p.declared_qty) + (cell ? ' → ' + escapeHTML(cell) : '') : '')
@@ -1904,11 +1996,31 @@
     goSheetStep('products');
   }
 
+  // Принятая позиция видна, но на ней не останавливаемся (случай 27.09.2026:
+  // экран вернулся к уже принятому зефиру): нажатие ведёт к следующей
+  // непринятой, а если таких нет — к итогу.
+  // Куда легла принятая позиция: одна ячейка — адрес, несколько — «1.7.3 — 30,
+  // 1.2.1 — 6» (укладки из /api/invoices/:id, третье задание 27.09.2026).
+  function placedCells(it){
+    const list = Array.isArray(it.placements) ? it.placements.filter(p => p.rowNum != null) : [];
+    if(list.length > 1){
+      return list.map(p => formatBlockLabel(p.rowNum, { rack_start: p.rackStart, rack_end: p.rackEnd, tier_start: p.tierStart, tier_end: p.tierEnd })
+        + ' — ' + Number(p.qty)).join(', ');
+    }
+    return it.row_num != null ? formatBlockLabel(it.row_num, it) : '';
+  }
+
   function pickReceivingItemNow(i){
     const p = currentInvoice && currentInvoice.items[i];
-    if(!p || p.receiving_id || !recvRun) return;
-    recvRun.preferred = p.id;
+    if(!p || !recvRun) return;
     closeSheet();
+    if(p.receiving_id){
+      recvRun.preferred = null;
+      showToast(currentInvoice.items.some(it => !it.receiving_id)
+        ? '«' + p.name + '» уже принят — открыт следующий товар' : 'Все позиции приняты');
+    } else {
+      recvRun.preferred = p.id;
+    }
     renderCurrentItem();
   }
   window.pickReceivingItemNow = pickReceivingItemNow;
@@ -1970,6 +2082,8 @@
     selectedCellBlockId = null;
     selectedCellLabel = null;
     document.getElementById('customCellDisplay').classList.remove('show');
+    resetMultiPlace(Boolean(recvRun));
+    resetItemNote('recv:' + item.id);
 
     const total = currentInvoice.items.length;
     document.getElementById('progressText').textContent = (idx + 1) + ' / ' + total;
@@ -2032,7 +2146,7 @@
       empty: 'свободно',
     };
     wrap.innerHTML = options.map((c, i) => `
-      <div class="cell-option" id="cell-${i}" onclick="selectCellOption('${jsArg(c.blockId)}', '${jsArg(c.label)}', ${i})">
+      <div class="cell-option${multiPlace && multiPlace.some(p => p.blockId === c.blockId) ? ' added' : ''}" id="cell-${i}" data-block-id="${escapeHTML(c.blockId)}" onclick="selectCellOption('${jsArg(c.blockId)}', '${jsArg(c.label)}', ${i})">
         <div>
           <div class="cell-option-id">${escapeHTML(c.label)}</div>
           <div class="cell-option-note">${noteText[c.reason] || 'свободно'}</div>
@@ -2096,6 +2210,7 @@
     document.getElementById('manualCellRow').style.display = 'none';
     document.getElementById('cellSuggestLabel').style.display = 'none';
     document.getElementById('customCellDisplay').classList.remove('show');
+    resetMultiPlace(false);
 
     let idx = findNextUnpickedIndex();
     // По товарам: сперва тот, что человек выбрал сам («Все товары»).
@@ -2112,6 +2227,7 @@
     }
     currentItemIndex = idx;
     const item = currentInvoice.items[idx];
+    resetItemNote('asm:' + item.sku);
 
     const total = currentInvoice.items.length;
     document.getElementById('progressText').textContent = (idx + 1) + ' / ' + total;
@@ -2419,6 +2535,7 @@
   }
 
   function renderReturnItem(){
+    resetMultiPlace(false);
     document.getElementById('bucketBlock').classList.add('show');
     document.getElementById('manualCellRow').style.display = '';
     document.getElementById('cellSuggestLabel').style.display = 'none';
@@ -2617,6 +2734,7 @@
   setupHoldButton(document.getElementById('qtyPlus'), 1);
 
   function selectCellOption(blockId, label, i){
+    if(multiPlace) return addPlacement(blockId, label);
     document.querySelectorAll('.cell-option').forEach(el => el.classList.remove('selected'));
     document.getElementById('cell-' + i).classList.add('selected');
     document.getElementById('customCellDisplay').classList.remove('show');
@@ -2635,6 +2753,21 @@
     const btn = document.getElementById('confirmBtn');
     const field = document.getElementById('qtyValue');
     const empty = field && String(field.value).trim() === '';
+    if(!empty && multiPlace){
+      // Несколько ячеек: подтвердить — только когда разложено ровно всё
+      // принятое и в каждой ячейке хоть что-то лежит.
+      renderMultiLeft();
+      const left = currentQty - multiSum();
+      const zero = multiPlace.some(p => !(p.qty > 0));
+      btn.disabled = !multiPlace.length || left !== 0 || zero || currentQty === 0;
+      btn.textContent = currentQty === 0 ? 'Ничего не принято — раскладывать нечего'
+        : !multiPlace.length ? 'Выберите ячейки'
+        : left > 0 ? 'Осталось разложить ' + left + ' шт.'
+        : left < 0 ? 'Разложено больше на ' + (-left) + ' шт.'
+        : zero ? 'Поставьте количество в каждой ячейке'
+        : 'Принять ' + currentQty + ' шт — в ' + multiPlace.length + ' ' + pluralRu(multiPlace.length, 'ячейку', 'ячейки', 'ячеек');
+      return;
+    }
     if(empty){
       btn.disabled = true;
       btn.textContent = 'Введите количество';
@@ -2655,34 +2788,164 @@
     btn.disabled = true;
     btn.textContent = 'Сохраняю…';
     let saved = false;
+    // Несколько ячеек — списком укладок, каждая отдельным шагом; одна — как было.
+    const placements = multiPlace ? multiPlace.map(p => ({ cellBlockId: p.blockId, qty: p.qty })) : null;
+    const where = multiPlace ? multiPlace.map(p => p.label + ' — ' + p.qty).join(', ') : selectedCellLabel;
     try{
-      await apiFetch('/api/receiving', {
+      const r = await apiFetch('/api/receiving', {
         method: 'POST',
-        body: {
+        body: Object.assign({
           invoiceItemId: item.id,
           acceptedQty: currentQty,
-          cellBlockId: selectedCellBlockId || null,
           suggestionId: lastSuggestionId,
           pausedMs: totalPausedMs,
           pauseReasons: pauseLog.map(p => p.reason),
-        },
+        }, placements ? { placements } : { cellBlockId: selectedCellBlockId || null }),
       });
       saved = true;
       results.push({
         name: item.name, sku: item.sku, declared: Number(item.declared_qty),
-        accepted: currentQty, cell: selectedCellLabel || 'своё место',
+        accepted: currentQty, cell: where || 'своё место',
       });
       if(recvRun && recvRun.preferred === item.id) recvRun.preferred = null;
+      // Последняя позиция — приход принят, и заход закрылся на сервере сам
+      // (третье задание 27.09.2026): сразу итог, без окна «Закончить».
+      if(recvRun && r && r.invoiceStatus === 'completed') return recvCompleted(r.finished);
       await reloadCurrentInvoice();
-      if(selectedCellBlockId) cellRows = await apiFetch('/api/cells/rows');
+      if(selectedCellBlockId || placements) cellRows = await apiFetch('/api/cells/rows');
       if(recvRun && currentInvoice.items.some(it => !it.receiving_id)) flashNext('Следующий товар');
       renderCurrentItem();
     } catch(e){
       if(saved){ savedButStale(e); return; }
+      // Позицию уже приняли (второй телефон, повтор) — не стоять на ней:
+      // к следующей непринятой, а если их нет — к итогу.
+      if(recvRun && /уже принята/i.test(e.message)){
+        showToast('Эта позиция уже принята — открываю следующую');
+        try{ await reloadCurrentInvoice(); } catch(_){ return; }
+        return renderCurrentItem();
+      }
       showToast('Не удалось сохранить: ' + e.message);
       updateConfirmState();
     }
   }
+
+  // Приход принят целиком: итог «Приход принят». finished — ответ сервера
+  // (заход закрыт в той же транзакции); нет его — спросим состояние сами.
+  async function recvCompleted(finished){
+    const id = recvRun ? recvRun.invoiceId : (currentInvoice && currentInvoice.id);
+    let r = finished;
+    if(!r){
+      try{ r = await apiFetch(WORK.receiving.path(id)); }
+      catch(e){ showToast('Приход принят. Итог не открылся: ' + e.message); return openReceipt(id); }
+      r.minutes = r.assembly && r.assembly.workMs ? Math.max(1, Math.round(r.assembly.workMs / 60000)) : null;
+    }
+    closeSheet();
+    productRun = null;
+    recvRun = null;
+    applyAssemblyState(r);
+    return showReceivingDone(r);
+  }
+
+  // ---------- Несколько ячеек (третье задание 27.09.2026) ----------
+  // «Положить в несколько ячеек»: грузчик выбирает ячейки (подсказка, ввод
+  // вручную, карта) и у каждой ставит, сколько кладёт. Подтвердить можно,
+  // только когда разложено ровно всё принятое. Каждая строка уходит на
+  // сервер отдельной укладкой — позже её подтвердят сканом QR ячейки.
+  let multiPlace = null;   // [{ blockId, label, qty }] — пока раскладывают по нескольким ячейкам
+
+  const multiSum = () => (multiPlace ? multiPlace.reduce((a, p) => a + p.qty, 0) : 0);
+
+  // Показать кнопку (приёмка) или спрятать всё (сборка, возврат).
+  function resetMultiPlace(available){
+    multiPlace = null;
+    document.getElementById('multiToggle').style.display = available ? '' : 'none';
+    renderMultiPlace();
+  }
+
+  function toggleMultiPlace(){
+    if(multiPlace){
+      multiPlace = null;
+    } else {
+      multiPlace = [];
+      // Уже выбранная ячейка — первой в списке, со всем принятым.
+      if(selectedCellBlockId) multiPlace.push({ blockId: selectedCellBlockId, label: selectedCellLabel, qty: currentQty });
+      selectedCellBlockId = null;
+      selectedCellLabel = null;
+      document.getElementById('customCellDisplay').classList.remove('show');
+    }
+    renderMultiPlace();
+    updateConfirmState();
+  }
+  window.toggleMultiPlace = toggleMultiPlace;
+
+  function addPlacement(blockId, label){
+    if(multiPlace.some(p => p.blockId === blockId)){ showToast('Ячейка ' + label + ' уже в списке'); return; }
+    multiPlace.push({ blockId, label, qty: Math.max(0, currentQty - multiSum()) });
+    renderMultiPlace();
+    updateConfirmState();
+  }
+
+  function renderMultiPlace(){
+    const on = Boolean(multiPlace);
+    document.getElementById('multiPlace').classList.toggle('show', on);
+    document.getElementById('multiToggle').textContent = on ? 'Положить в одну ячейку' : 'Положить в несколько ячеек';
+    document.getElementById('cellSuggestLabel').textContent = on ? 'Подсказки — нажмите, чтобы добавить' : 'Подсказки Кладовщика';
+    document.querySelectorAll('#cellOptions .cell-option').forEach(el => {
+      if(on) el.classList.remove('selected');
+      el.classList.toggle('added', on && multiPlace.some(p => p.blockId === el.dataset.blockId));
+    });
+    if(!on) return;
+    document.getElementById('multiList').innerHTML = multiPlace.length ? multiPlace.map((p, i) =>
+      '<div class="multi-row"><div class="multi-cell"><b>' + escapeHTML(p.label) + '</b>' + cellInfoLink(p.blockId, p.label) + '</div>'
+      + '<div class="qty-stepper"><button type="button" class="qty-btn" onclick="stepPlace(' + i + ', -1)" aria-label="Меньше">−</button>'
+      + '<input class="qty-value" type="text" inputmode="numeric" pattern="[0-9]*" value="' + p.qty + '"'
+      +   ' aria-label="Сколько в ячейку ' + escapeHTML(p.label) + '" oninput="placeTyped(' + i + ', this.value)" onfocus="this.select()">'
+      + '<button type="button" class="qty-btn" onclick="stepPlace(' + i + ', 1)" aria-label="Больше">+</button></div>'
+      + '<button type="button" class="multi-remove" onclick="removePlace(' + i + ')" aria-label="Убрать ячейку ' + escapeHTML(p.label) + '">×</button></div>').join('')
+      : '<div class="multi-empty">Выберите ячейки — подсказкой, вводом вручную или на карте — и у каждой поставьте, сколько кладёте.</div>';
+    renderMultiLeft();
+  }
+
+  function renderMultiLeft(){
+    if(!multiPlace) return;
+    const left = currentQty - multiSum();
+    const el = document.getElementById('multiLeft');
+    el.className = 'multi-left' + (left === 0 ? ' ok' : left < 0 ? ' bad' : '');
+    el.textContent = !multiPlace.length ? ''
+      : left > 0 ? 'Осталось разложить ' + left + ' шт.'
+      : left < 0 ? 'Разложено больше, чем принято, на ' + (-left) + ' шт.'
+      : 'Разложено всё: ' + currentQty + ' шт.';
+    document.querySelectorAll('#multiList .multi-row').forEach((row, i) => row.classList.toggle('zero', !(multiPlace[i] && multiPlace[i].qty > 0)));
+  }
+
+  function stepPlace(i, delta){
+    const p = multiPlace && multiPlace[i];
+    if(!p) return;
+    p.qty = Math.max(0, p.qty + delta);
+    const input = document.querySelectorAll('#multiList .multi-row input')[i];
+    if(input) input.value = p.qty;
+    updateConfirmState();
+  }
+  window.stepPlace = stepPlace;
+
+  function placeTyped(i, raw){
+    const p = multiPlace && multiPlace[i];
+    if(!p) return;
+    const digits = String(raw).replace(/[^0-9]/g, '');
+    p.qty = digits === '' ? 0 : Number(digits);
+    const input = document.querySelectorAll('#multiList .multi-row input')[i];
+    if(input && digits !== '' && input.value !== String(p.qty)) input.value = p.qty;
+    updateConfirmState();
+  }
+  window.placeTyped = placeTyped;
+
+  function removePlace(i){
+    if(!multiPlace) return;
+    multiPlace.splice(i, 1);
+    renderMultiPlace();
+    updateConfirmState();
+  }
+  window.removePlace = removePlace;
 
   // Следующая работа — из того же списка, откуда пришли: следующий заказ этой
   // поставки, следующий приход. Кончились — обратно к списку.
@@ -3342,10 +3605,32 @@
     const returns = invoices.filter(i => i.direction === 'return' && isOpenDoc(i)).length;
     document.getElementById('homeSub').textContent = workerName;
 
+    // Начатая работа — первой (третье задание 27.09.2026): «Приёмка ПР-… на
+    // паузе · принято 3 из 8 — продолжить». Нажал — вернулся туда же.
+    const mineLive = (st) => Boolean(st && st.assembly && st.assembly.mine
+      && (st.assembly.status === 'active' || st.assembly.status === 'paused'));
+    const started = []
+      .concat(invoices.filter(i => i.direction === 'in' && mineLive(i.work))
+        .map(i => ({ kind: 'receiving', id: i.id, number: i.number, st: i.work })))
+      .concat(supplies.filter(s => mineLive(s.assembly))
+        .map(s => ({ kind: 'assembly', id: s.id, number: s.number, st: s.assembly })));
+    const startedHtml = started.length
+      ? '<div class="home-started"><div class="home-started-head">Начатая работа</div>'
+        + started.map(w => {
+          const a = w.st.assembly;
+          const paused = a.status === 'paused';
+          return '<button type="button" class="home-work' + (paused ? '' : ' active') + '" onclick="continueWork(\'' + w.kind + '\', \'' + jsArg(w.id) + '\')">'
+            + '<div><div class="home-work-name">' + (w.kind === 'receiving' ? 'Приёмка ' : 'Сборка ') + escapeHTML(w.number || '') + '</div>'
+            + '<div class="home-work-sub">' + (paused ? 'на паузе' : 'идёт') + (a.mode === 'paper' ? ' · по листу' : '')
+            + ' · ' + escapeHTML(takenText(w.st, w.kind)) + '</div></div>'
+            + '<span class="home-work-go">Продолжить →</span></button>';
+        }).join('') + '</div>'
+      : '';
+
     const tile = (onclick, name, sub, count) => '<div class="home-tile" onclick="' + onclick + '">'
       + '<div><div class="home-tile-name">' + name + '</div><div class="home-tile-sub">' + sub + '</div></div>'
       + '<div class="home-tile-count' + (count ? '' : ' zero') + '">' + (count == null ? '' : count || 'нет') + '</div></div>';
-    document.getElementById('homeBody').innerHTML =
+    document.getElementById('homeBody').innerHTML = startedHtml +
       tile('openSupplies()', 'Сборка поставок',
         collecting.length
           ? ordersLeft + ' ' + pluralRu(ordersLeft, 'заказ ждёт', 'заказа ждут', 'заказов ждут') + ' сборки'
@@ -3358,6 +3643,17 @@
       + tile('openInventory()', 'Пересчёт ячеек', 'задания руководителя', counting);
   }
   window.showHome = showHome;
+
+  // «Продолжить» с главного экрана: своя приёмка или сборка — туда же, где
+  // остановился; сборка по бумажному листу — на экран листа.
+  function continueWork(kind, id){
+    if(kind === 'receiving') return recvContinue(id);
+    const s = supplies.find(x => x.id === id);
+    const a = s && s.assembly && s.assembly.assembly;
+    if(a && a.mode === 'paper') return openPaper(id);
+    return asmContinue(id);
+  }
+  window.continueWork = continueWork;
 
   function supplyCardHtml(s){
     const total = Number(s.orders) || 0;
@@ -3866,22 +4162,16 @@
   async function goBackFromTask(){
     // Ушёл со сборки поставки или с приёмки — таймер встаёт на паузу сам,
     // руководитель видит «вышел из сборки» / «вышел из приёмки» (владелец
-    // 27.09.2026).
-    if(productRun){
-      const id = productRun.supplyId;
+    // 27.09.2026). Стрелка на экране работы — «← Главное меню» (третье
+    // задание): ведёт в «Что делаем?», где начатая работа стоит первой —
+    // «на паузе · продолжить».
+    if(productRun || recvRun){
       await exitRun();
       productRun = null;
-      pauseStart = null;
-      layoutRun(false);
-      return openSupply(id);
-    }
-    if(recvRun){
-      const id = recvRun.invoiceId;
-      await exitRun();
       recvRun = null;
       pauseStart = null;
       layoutRun(false);
-      return openReceipt(id);
+      return showHome();
     }
     if(backTarget && backTarget.kind === 'supply') return openSupply(backTarget.id);
     if(backTarget && backTarget.kind === 'receipt') return openReceipt(backTarget.id);
@@ -4382,6 +4672,9 @@
     document.getElementById('cellOptions').innerHTML = '';
     document.getElementById('confirmBtn').disabled = true;
     document.getElementById('confirmBtn').textContent = recvRun ? 'Все позиции приняты' : 'Собирать больше нечего';
+    // Все позиции приняты — приход принят и заход закрыт сам: итог, а не
+    // окно «Закончить» над пустым экраном (третье задание 27.09.2026).
+    if(recvRun && currentInvoice && currentInvoice.status === 'completed') return recvCompleted(null);
     asmFinishAsk({ auto: true });
   }
 
@@ -4689,7 +4982,7 @@
     summary.innerHTML = head + (d.items || []).map(it => {
       const declared = Number(it.declared_qty);
       const accepted = it.accepted_qty == null ? null : Number(it.accepted_qty);
-      const cell = it.row_num != null ? formatBlockLabel(it.row_num, it) : '';
+      const cell = placedCells(it);
       if(missed.has(it.sku) && !accepted){
         return '<div class="done-row done-row-warn"><div class="done-row-name">' + escapeHTML(it.name) + '</div>'
           + '<div class="done-miss">не приехало <b>' + declared + ' шт.</b> — руководителю ушло расхождение</div></div>';
@@ -5242,6 +5535,16 @@
   function closeSheet(){
     document.getElementById('sheetOverlay').classList.remove('show');
   }
+  // Клик мимо окна. Окна «Закончить», «Отказаться» и записку руководителю
+  // так не закрыть — только их кнопками (третье задание 27.09.2026): 27.09
+  // окно «Закончить приёмку» закрылось случайным касанием, и грузчик остался
+  // на уже принятом товаре без кнопки «Завершить».
+  const STICKY_STEPS = ['sheetStepFinish', 'sheetStepAbandon', 'sheetStepNote'];
+  function sheetOutside(){
+    if(STICKY_STEPS.some(id => document.getElementById(id).classList.contains('show'))) return;
+    closeSheet();
+  }
+  window.sheetOutside = sheetOutside;
   function goSheetStep(step){
     document.querySelectorAll('.sheet-step').forEach(s => s.classList.remove('show'));
     if(step === 'cell') document.getElementById('sheetStepCell').classList.add('show');
@@ -5265,7 +5568,50 @@
     if(step === 'finish') document.getElementById('sheetStepFinish').classList.add('show');
     if(step === 'abandon') document.getElementById('sheetStepAbandon').classList.add('show');
     if(step === 'print') document.getElementById('sheetStepPrint').classList.add('show');
+    if(step === 'note') document.getElementById('sheetStepNote').classList.add('show');
   }
+
+  // ---------- «Написать руководителю о товаре» ----------
+  // Приёмка — к строке прихода, сборка — к товару поставки. На сервере это
+  // запись журнала «ждёт решения» (POST /api/journal/item-note).
+  let noteTarget = null;   // { body, name }
+  // «Руководитель получил: …» — под тем товаром, о котором писали; сменился
+  // товар — подпись уходит.
+  let noteFor = null;
+  function resetItemNote(key){
+    if(key === noteFor) return;
+    noteFor = key;
+    document.getElementById('itemNoteSent').classList.remove('show');
+  }
+  function openItemNote(){
+    const item = currentInvoice && currentInvoice.items[currentItemIndex];
+    if(!item) return;
+    if(productRun) noteTarget = { body: { supplyId: productRun.supplyId, sku: item.sku }, name: item.name };
+    else if(recvRun) noteTarget = { body: { invoiceItemId: item.id }, name: item.name };
+    else return;
+    document.getElementById('noteItemName').textContent = item.name + ' · ' + item.sku;
+    document.getElementById('noteText').value = '';
+    document.getElementById('noteGoBtn').disabled = true;
+    document.getElementById('sheetOverlay').classList.add('show');
+    goSheetStep('note');
+    setTimeout(() => document.getElementById('noteText').focus(), 60);
+  }
+  window.openItemNote = openItemNote;
+  async function sendItemNote(){
+    const text = document.getElementById('noteText').value.trim();
+    if(!text || !noteTarget) return;
+    const btn = document.getElementById('noteGoBtn');
+    btn.disabled = true;
+    try{
+      await apiFetch('/api/journal/item-note', { method: 'POST', body: Object.assign({ text }, noteTarget.body) });
+      closeSheet();
+      const sent = document.getElementById('itemNoteSent');
+      sent.textContent = 'Руководитель получил: «' + text + '»';
+      sent.classList.add('show');
+      showToast('Отправлено руководителю — он ответит в журнале');
+    } catch(e){ btn.disabled = false; showToast('Не отправилось: ' + e.message); }
+  }
+  window.sendItemNote = sendItemNote;
 
   // ---------- «Нет товара» ----------
   let missingState = null;   // { item, max }
@@ -5635,6 +5981,7 @@
   }
 
   function applyCustomCell(blockId, label){
+    if(multiPlace){ closeSheet(); return addPlacement(blockId, label); }
     document.querySelectorAll('.cell-option').forEach(el => el.classList.remove('selected'));
     selectedCellBlockId = blockId;
     selectedCellLabel = label;
@@ -5649,7 +5996,7 @@
 
   startTaskTimer();
   // «Назад» браузера — то же, что стрелка «←» на экране (back.js).
-  argusBackButton({ buttons: '.job-back, .done-back, .sheet-back, .map-back, #invoiceSwitch' });
+  argusBackButton({ buttons: '.job-back, .done-back, .sheet-back, .sheet-back-btn, .map-back, #invoiceSwitch' });
 
   init();
 </script>
