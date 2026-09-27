@@ -1040,6 +1040,12 @@
   .rc-arrive-row{display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:10px;}
   .rc-arrive-row input{width:80px; margin-left:6px; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:7px 9px; font:inherit;}
   .rc-section{font-size:15px; font-weight:700; margin:20px 0 10px;}
+  /* Записки грузчиков о товаре: ждущие — жёлтой рамкой, отмеченные — тише. */
+  .rc-wnote{padding:10px 12px; border:1px solid rgba(201,166,107,0.55); background:var(--yellow-soft); border-radius:10px; margin-bottom:8px;}
+  .rc-wnote.done{border-color:var(--line); background:none;}
+  .rc-wnote-text{font-size:14.5px; margin:4px 0 6px; overflow-wrap:anywhere;}
+  .rc-wnote .staff-action{display:inline-block;}
+  .sup-inside .rc-section, .sup-panel .rc-section{margin-top:4px;}
   .rc-doc{display:flex; justify-content:space-between; gap:12px; align-items:center; padding:10px 0; border-bottom:1px solid var(--line-soft);}
   .rc-msg{padding:10px 12px; border:1px solid var(--line); border-radius:10px; margin:0 40px 8px 0; font-size:14px; white-space:pre-wrap; overflow-wrap:anywhere;}
   .rc-msg.mine{margin:0 0 8px 40px; background:var(--accent-soft); border-color:transparent;}
@@ -1976,6 +1982,30 @@
   }
   .j-group-body{display:none; padding:4px 10px 10px; border-top:1px solid var(--line);}
   .j-group.open .j-group-body{display:block;}
+  /* Одна строка на работу (третье задание 27.09.2026): «Джоник принимает
+     ПР-… · принято 5 из 8», в конце — «Джоник принял ПР-… · 8 из 8,
+     расхождений нет». Под заголовком — строка состояния: этап и прогресс. */
+  .j-work .j-group-head{flex-wrap:wrap; row-gap:8px;}
+  .j-work-status{flex:0 0 100%; display:flex; align-items:center; flex-wrap:wrap; gap:6px 10px; font-size:12.5px; color:var(--muted);}
+  .j-stage{display:inline-flex; align-items:center; gap:6px; padding:2px 9px; border-radius:20px; font-size:12px; font-weight:600;
+    background:var(--panel); border:1px solid var(--line); color:var(--muted);}
+  .j-stage::before{content:''; width:7px; height:7px; border-radius:50%; background:currentColor;}
+  .j-stage.active{color:var(--accent); border-color:rgba(95,175,166,0.45); background:var(--accent-soft);}
+  .j-stage.paused{color:var(--yellow); border-color:rgba(201,166,107,0.45); background:var(--yellow-soft);}
+  .j-stage.abandoned{color:var(--terracotta); border-color:rgba(217,142,110,0.45); background:var(--terracotta-soft);}
+  .j-stage.done{color:var(--green); border-color:rgba(127,183,126,0.45); background:var(--green-soft);}
+  .j-work-wait{color:var(--yellow); font-weight:600;}
+  .j-work .j-group-bar i{background:var(--accent);}
+  .j-work.is-done .j-group-bar i{background:var(--green);}
+  /* То, что ждёт решения, — и отдельной строкой сразу под работой. */
+  .j-under{margin:-2px 0 8px 18px; position:relative;}
+  .j-under::before{content:''; position:absolute; left:-10px; top:0; bottom:10px; border-left:2px solid rgba(201,166,107,0.5);}
+  /* Внутри развёрнутой работы ждущее — короткой ссылкой на строку снаружи. */
+  .j-step{display:flex; gap:10px; align-items:baseline; font-size:13px; padding:8px 6px; color:var(--text);
+    border-bottom:1px solid var(--line-soft);}
+  .j-step-time{font-family:var(--mono); font-size:12px; color:var(--muted); flex:0 0 auto;}
+  .j-step-note{color:var(--yellow); white-space:nowrap;}
+  @media(max-width:760px){ .j-under{margin-left:10px;} .j-step{flex-wrap:wrap;} }
   .j-scope{display:flex; align-items:center; gap:10px; flex-wrap:wrap;
     background:var(--accent-soft); border:1px solid rgba(95,175,166,0.3);
     border-radius:10px; padding:11px 14px; margin-bottom:14px;}
@@ -2852,8 +2882,8 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <script src="back.js?v=4901b838" defer></script>
-<script src="form-keys.js?v=cd462175" defer></script>
-<script src="cabinet_main.js?v=eaeae962" defer></script>
+<script src="form-keys.js?v=02a92e0e" defer></script>
+<script src="cabinet_main.js?v=90e18e8c" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->

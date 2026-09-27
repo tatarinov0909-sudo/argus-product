@@ -1239,12 +1239,44 @@
       + '<button type="button" class="wh-onboarding-btn primary" onclick="sendReceiptComment()">Отправить продавцу</button></div>';
     box.innerHTML = '<dl class="rc-facts">' + facts.map(f => '<dt>' + escapeHTML(f[0]) + '</dt><dd>' + escapeHTML(f[1]) + '</dd>').join('') + '</dl>'
       + arrival + verdict
+      + itemNotesHtml(c.notes, 'rc')
       + '<div class="rc-section">Документы поставщика</div>' + docs
       + '<div class="rc-section">Переписка с продавцом</div>' + talk
       + '<div class="rc-bottom"><span class="staff-action" onclick="window.open(\'act_print.html?kind=receipt&id=' + encodeURIComponent(c.id) + '\', \'_blank\')">Акт приёмки' + (c.discrepancy ? ' и расхождений' : '') + '</span>'
       + '<span class="staff-action" data-history-invoice="' + escapeHTML(c.id) + '" data-history-label="' + escapeHTML(c.number) + '" onclick="closeReceipt()">История в журнале</span></div>';
     box.scrollTop = keep;
   }
+
+  // Записки грузчиков о товаре (третье задание 27.09.2026) — в карточке
+  // прихода и поставки: ждущие — с «Принял к сведению», отмеченные — кем и
+  // когда. То же нажатие, что в журнале.
+  function itemNotesHtml(notes, where){
+    if(!notes || !notes.length) return '';
+    const waiting = notes.filter(n => !n.answered).length;
+    return '<div class="rc-section">Грузчики пишут о товаре' + (waiting ? ' · ждёт ответа: ' + waiting : '') + '</div>'
+      + notes.map(n => '<div class="rc-wnote' + (n.answered ? ' done' : '') + '">'
+        + '<div class="rc-src"><b>' + escapeHTML(n.workerName || 'Грузчик') + '</b> · ' + escapeHTML(rcWhen(n.at))
+        + ' · о товаре «' + escapeHTML(n.productName || n.sku || '') + '»</div>'
+        + '<div class="rc-wnote-text">' + escapeHTML(n.text) + '</div>'
+        + (n.answered
+          ? '<div class="rc-src">Принял к сведению ' + escapeHTML(n.answered.by) + ', ' + escapeHTML(rcWhen(n.answered.at)) + '</div>'
+          : '<span class="staff-action" onclick="ackItemNote(\'' + escapeHTML(n.entryId) + '\', \'' + where + '\')">Принял к сведению</span>')
+        + '</div>').join('');
+  }
+
+  async function ackItemNote(entryId, where){
+    try{
+      await apiFetch('/api/journal/' + entryId + '/resolve', { method: 'POST', body: { resolution: 'ack' } });
+      showWhToast('Отмечено: принято к сведению');
+      if(where === 'rc') renderReceipt();
+      else if(where) {
+        try{ supplyInside[where] = await apiFetch('/api/supplies/' + where); } catch(_){}
+        renderSupplies();
+      }
+      if(document.getElementById('view-journal')?.classList.contains('active')) loadJournal();
+    } catch(e){ showWhToast('Не отмечено: ' + e.message); }
+  }
+  window.ackItemNote = ackItemNote;
 
   async function markReceiptArrived(){
     try{
@@ -2955,6 +2987,9 @@
   // answered уже принятое висело «требует внимания» вечно.
   function isWaiting(e){ return e.status === 'pending' && !e.answered; }
   function isUrgentWaiting(e){ return Boolean(e.urgent) && isWaiting(e); }
+  // Записка грузчика о товаре (третье задание 27.09.2026): решать там нечего —
+  // её отмечают «Принял к сведению».
+  function isNote(e){ return e.entity_type === 'item_note'; }
   // Текст срочной отметки уже начинается с «ОЧЕНЬ ВАЖНО:» — рядом с красной
   // меткой эти слова дублировались бы.
   function urgentText(text){
@@ -3384,7 +3419,7 @@
       // Сборка поставки — одно событие, а не сорок: значок считает работы,
       // иначе за одну поставку он набегает на сотню и перестаёт что-то значить.
       const newEvents = new Set(fresh.filter(function(e){ return newIds.includes(e.id); })
-        .map(function(e){ return e.invoice_supply_id || e.id; })).size;
+        .map(function(e){ return e.work_key || e.invoice_supply_id || e.id; })).size;
       journalUnread += newEvents;
       const badge = document.getElementById('navBadge');
       badge.textContent = journalUnread > 99 ? '99+' : journalUnread;
@@ -3516,10 +3551,12 @@
       return;
     }
 
-    // Дни — потому что двести строк подряд читать нельзя.
+    // Дни — потому что двести строк подряд читать нельзя. Работа грузчика
+    // (приёмка прихода, сборка поставки) — одной строкой под днём последнего
+    // шага; срочные отметки внутри неё тоже есть, но в ленте — только сверху.
     let html = scopeBar + head;
     let lastDay = null;
-    groupJournalDay(feed).forEach(function(node){
+    groupJournalDay(journalEntries, urgentIds).forEach(function(node){
       if(node.day !== lastDay){
         html += '<div class="j-day-sep" data-day-sep="' + node.day + '">'
           + escapeHTML(journalDayLabel(node.day)) + '</div>';
@@ -3529,9 +3566,21 @@
         html += journalEntryHtml(node.entry, fresh.has(node.entry.id), node.day);
         return;
       }
+      if(node.kind === 'work'){
+        html += journalWorkHtml(node, fresh, urgentIds);
+        // Что ждёт решения — ещё и отдельной заметной строкой под работой.
+        node.entries.filter(function(e){ return isWaiting(e) && !urgentIds.has(e.id); }).forEach(function(e){
+          html += '<div class="j-under">' + journalEntryHtml(e, fresh.has(e.id), node.day) + '</div>';
+        });
+        return;
+      }
       html += journalGroupHtml(node, fresh);
     });
     list.innerHTML = html;
+    // История одного прихода — работа раскрыта сразу: за ней сюда и пришли.
+    if(journalScope && journalScope.kind === 'invoice'){
+      list.querySelectorAll('.j-work').forEach(function(g){ g.classList.add('open'); });
+    }
     restoreJournalScreenState(screen);
     renderJournalCalendar();
   }
@@ -3544,11 +3593,29 @@
   // единственное, ради чего владелец сюда зашёл, — значит сломать журнал.
   const GROUP_MIN = 3;
 
-  function groupJournalDay(entries){
+  function groupJournalDay(entries, urgentIds){
     const out = [];
     const buckets = new Map();
+    const works = new Map();
     entries.forEach(function(e){
       const day = journalDayKey(e.created_at);
+      // Работа грузчика по приходу или поставке — одна строка на всё время
+      // работы, а не на день и не на человека (третье задание 27.09.2026).
+      // Ключ и состояние работы даёт сервер (work_key, work). Лента идёт от
+      // новых к старым, поэтому строка встаёт на место последнего шага.
+      if(e.work_key){
+        let node = works.get(e.work_key);
+        if(!node){
+          node = { kind: 'work', day: day, id: 'w' + e.work_key.replace(/[^a-zA-Z0-9]/g, ''),
+            work: e.work, key: e.work_key, entries: [] };
+          works.set(e.work_key, node);
+          out.push(node);
+        }
+        node.entries.push(e);
+        return;
+      }
+      // Срочное вне работы — только в приколотом сверху.
+      if(urgentIds && urgentIds.has(e.id)) return;
       // Пауза грузчика — отдельной строкой: её и должны заметить.
       const groupable = !isWaiting(e) && e.invoice_id && e.entity_type !== 'worker_pause';
       // В поставке у каждого заказа свой товар, и по документу такая сборка
@@ -3638,6 +3705,98 @@
       + '</div>';
   }
 
+  // Строка работы: кто, что делает с каким документом и как идёт — «Джоник
+  // принимает ПР-270926-1 · принято 5 из 8» → «Джоник принял ПР-270926-1 ·
+  // 8 из 8, расхождений нет»; строка состояния — этап и полоса. Внутри по
+  // порядку: начал, каждая позиция, паузы и выходы, комментарии, конец.
+  function journalWorkHtml(node, fresh, urgentIds){
+    const w = node.work;
+    const entries = node.entries;
+    const hasNew = entries.some(function(e){ return fresh.has(e.id); });
+    // Кто работал — по заходам на сервере, а у старых работ — по записям.
+    const names = (w && w.workers && w.workers.length ? w.workers : [])
+      .concat(entries.slice().reverse().filter(function(e){ return e.actor_type === 'worker' && e.actor_name; })
+        .map(function(e){ return e.actor_name; }))
+      .filter(function(n, i, all){ return all.indexOf(n) === i; });
+    const session = w && w.session;
+    const live = session && (session.status === 'active' || session.status === 'paused');
+    const current = live ? session.workerName : (names[names.length - 1] || 'Грузчик');
+    const allNames = names.length ? (names.length > 1 ? names.slice(0, -1).join(', ') + ' и ' + names[names.length - 1] : names[0]) : 'Грузчик';
+    const many = names.length > 1;
+    const number = escapeHTML(w ? w.number : (entries[0].invoice_number || ''));
+    const recv = w && w.kind === 'receiving';
+    const asm = w && w.kind === 'assembly';
+    const done = Boolean(w && w.done);
+    const total = w ? Number(w.total || 0) : 0;
+    const taken = w ? Math.min(Number(w.taken || 0), total || Number(w.taken || 0)) : 0;
+    let title, count;
+    if(recv){
+      title = done ? escapeHTML(allNames) + (many ? ' приняли ' : ' принял ') + number
+        : escapeHTML(current) + ' принимает ' + number;
+      count = done
+        ? taken + ' из ' + total + ', ' + (w.diffs ? 'расхождений: ' + w.diffs : 'расхождений нет')
+        : 'принято ' + taken + ' из ' + total;
+    } else if(asm){
+      title = done ? escapeHTML(allNames) + (many ? ' собрали ' : ' собрал ') + number
+        : escapeHTML(current) + ' собирает ' + number;
+      count = 'взято ' + taken + ' из ' + total + (done ? ' шт.' : '');
+    } else {
+      const dir = entries[0].invoice_direction;
+      title = escapeHTML(current) + (dir === 'return' ? ' разбирает возврат ' : dir === 'out' ? ' собирает заказ ' : ' · ') + number;
+      const positions = entries.filter(function(e){ return e.entity_type === 'invoice_item'; }).length;
+      count = positions ? positions + ' ' + pluralRu(positions, 'позиция', 'позиции', 'позиций') : entries.length + ' ' + pluralRu(entries.length, 'запись', 'записи', 'записей');
+    }
+    // Этап работы.
+    let stage = '', stageKind = '';
+    if(done){
+      stageKind = 'done';
+      stage = recv ? 'Принят' : (w.status === 'shipped' ? 'Собрана, уехала' : 'Собрана');
+    } else if(session && session.status === 'active'){
+      stageKind = 'active'; stage = recv ? 'Идёт приёмка' : 'Идёт сборка';
+    } else if(session && session.status === 'paused'){
+      stageKind = 'paused'; stage = 'На паузе' + (session.pauseReason ? ': ' + session.pauseReason : '');
+    } else if(session && session.status === 'abandoned'){
+      stageKind = 'abandoned'; stage = 'Брошена — продолжит любой грузчик';
+    } else if(w){
+      stage = recv ? 'Ещё не принят' : 'Ещё не собрана';
+    }
+    const waiting = entries.filter(isWaiting).length;
+    const times = entries.map(function(e){ return formatEntryTime(e.created_at); });
+    const firstAt = new Date(entries[entries.length - 1].created_at);
+    const lastAt = new Date(entries[0].created_at);
+    const sameDay = journalDayKey(firstAt) === journalDayKey(lastAt);
+    const span = entries.length > 1
+      ? (sameDay ? times[times.length - 1] : firstAt.getDate() + ' ' + MONTHS_RU[firstAt.getMonth()] + ' ' + times[times.length - 1]) + ' – ' + times[0]
+      : times[0];
+    const bar = total > 0 ? '<span class="j-group-bar"><i style="width:' + Math.round(taken / total * 100) + '%"></i></span>' : '';
+    // Внутри — по порядку, от начала работы к концу. Ждущее решения — одной
+    // строкой-ссылкой: сама запись с кнопками стоит в ленте под работой.
+    const body = entries.slice().reverse().map(function(e){
+      if(isWaiting(e)){
+        return '<div class="j-step"><span class="j-step-time">' + formatEntryTime(e.created_at) + '</span>'
+          + '<span>' + escapeHTML(e.urgent ? urgentText(e.action_text) : e.action_text) + '</span>'
+          + '<span class="j-step-note">' + (urgentIds && urgentIds.has(e.id) ? '— ждёт решения, вверху журнала' : '— ждёт решения, строкой ниже') + '</span></div>';
+      }
+      return journalEntryHtml(e, fresh.has(e.id), node.day);
+    }).join('');
+    return '<div class="j-group j-work' + (done ? ' is-done' : '') + (hasNew ? ' j-new' : '') + '" data-group="' + node.id + '">'
+      + '<div class="j-group-head" data-toggle-group="' + node.id + '">'
+      +   '<svg class="j-group-chev" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">'
+      +     '<path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+      +   '<span class="j-group-title">' + title + '</span>'
+      +   '<span class="j-group-count">' + escapeHTML(count) + '</span>'
+      +   '<span class="j-group-time">' + escapeHTML(span) + '</span>'
+      +   '<span class="j-work-status">'
+      +     (stage ? '<span class="j-stage ' + stageKind + '">' + escapeHTML(stage) + '</span>' : '')
+      +     (waiting ? '<span class="j-work-wait">ждёт решения: ' + waiting + '</span>' : '')
+      +     (w && w.session && w.session.status === 'finished' && !done ? '<span>заход закончен</span>' : '')
+      +   '</span>'
+      +   bar
+      + '</div>'
+      + '<div class="j-group-body">' + body + '</div>'
+      + '</div>';
+  }
+
   function toggleJournalGroup(id){
     const box = document.querySelector('.j-group[data-group="' + id + '"]');
     if(box) box.classList.toggle('open');
@@ -3658,7 +3817,7 @@
       // подписывать её «требует внимания» — неправда.
       const statusKey = entry.status === 'pending' && entry.answered ? 'answered' : entry.status;
       return `
-        <div class="j-entry ${agentClass}${hot ? ' j-urgent' : ''}${isNew ? ' j-new' : ''}" data-client="" data-risk="${canResolve ? 'high' : 'low'}" data-order="0" data-day="${dayKey}" data-entry-id="${escapeHTML(entry.id)}">
+        <div class="j-entry ${agentClass}${hot ? ' j-urgent' : ''}${isNew ? ' j-new' : ''}" data-client="" data-risk="${canResolve ? 'high' : 'low'}" data-order="0" data-day="${dayKey}" data-entry-id="${escapeHTML(entry.id)}"${isNote(entry) ? ' data-note="1"' : ''}>
           <input type="checkbox" class="j-check" onclick="event.stopPropagation(); updateBulk()" ${canResolve && !hot ? '' : 'style=\"visibility:hidden;\"'}>
           <div class="j-avatar">
             <svg width="20" height="20" viewBox="0 0 22 22"><use href="#icon-warehouse-agent"/></svg>
@@ -3675,6 +3834,7 @@
               ${canResolve ? (isWb
                 ? '<a class="staff-action restore" style="display:inline-block; margin-left:8px;" href="marketplace-reconciliation.html">Открыть сверку WB</a>'
                 : hot ? urgentActionsHtml(entry, 'journal')
+                : isNote(entry) ? `<span class="staff-action" style="display:inline-block; margin-left:8px;" onclick="resolveJournalEntry('${escapeHTML(entry.id)}', 'ack')">Принял к сведению</span>`
                 : `<span class="staff-action" style="display:inline-block; margin-left:8px;" onclick="resolveJournalEntry('${escapeHTML(entry.id)}', 'confirm')">Принять</span><span class="staff-action revoke" style="display:inline-block; margin-left:8px;" onclick="resolveJournalEntry('${escapeHTML(entry.id)}', 'rollback')">Отклонить</span>`)
                 : ''}
             </div>
@@ -3837,6 +3997,7 @@
           ${isWb
             ? '<a class="ctx-btn confirm" href="marketplace-reconciliation.html">Открыть сверку WB</a>'
             : e.urgent ? urgentActionsHtml(e, 'ctx')
+            : isNote(e) ? `<div class="ctx-btn confirm" onclick="resolveJournalEntry('${e.id}', 'ack')">Принял к сведению</div>`
             : `<div class="ctx-btn confirm" onclick="resolveJournalEntry('${e.id}', 'confirm')">Принять</div>
                <div class="ctx-btn reject" onclick="resolveJournalEntry('${e.id}', 'rollback')">Отклонить</div>`}
         </div>
@@ -3844,6 +4005,8 @@
           ? 'Проверьте записанный отбор и фактическое движение товара в сверке. Данные 1С автоматически не изменяются.'
           : e.urgent && e.invoice_supply_id
             ? 'Убранный заказ вернётся в очередь, поставка уедет без него. Данные 1С не изменяются.'
+          : isNote(e)
+            ? 'Грузчик написал о товаре. Отметка «Принял к сведению» сохранится в журнале с вашим именем.'
             : 'Решение сохранится в журнале вместе с вашим именем. Данные 1С не изменяются.'}</div>
       </div>
     `;}).join('');
@@ -3883,6 +4046,7 @@
   window.resolveUrgent = resolveUrgent;
 
   async function resolveJournalEntry(id, resolution){
+    // 'ack' — «Принял к сведению» записку грузчика: одно нажатие, без вопроса.
     if(resolution === 'confirm' && !await askConfirm('Принять рекомендацию и сохранить решение в журнале?')) return;
     if(resolution === 'rollback' && !await askConfirm('Отклонить рекомендацию и сохранить решение в журнале?')) return;
     try{
@@ -3975,9 +4139,20 @@
   // как и пустой разделитель дня.
   function hideEmptyGroups(){
     document.querySelectorAll('.j-group').forEach(function(g){
-      const any = [...g.querySelectorAll('.j-entry')]
+      let any = [...g.querySelectorAll('.j-entry')]
         .some(function(el){ return el.style.display !== 'none'; });
+      // Строка работы видна и тогда, когда видна её ждущая запись под ней:
+      // без заголовка «Дима принял ПР-…» расхождение висело бы без работы.
+      for(let next = g.nextElementSibling; !any && next && next.classList.contains('j-under'); next = next.nextElementSibling){
+        const entry = next.querySelector('.j-entry');
+        any = Boolean(entry && entry.style.display !== 'none');
+      }
       g.style.display = any ? '' : 'none';
+    });
+    // Обёртка ждущей записи — вместе с самой записью.
+    document.querySelectorAll('.j-under').forEach(function(u){
+      const entry = u.querySelector('.j-entry');
+      u.style.display = entry && entry.style.display === 'none' ? 'none' : '';
     });
   }
 
@@ -4043,10 +4218,11 @@
     // Аргус в 1С не пишет (1С склада только читается) — и обещать этого нельзя.
     if(!await askConfirm('Подтвердить ' + checked.length + ' запис' + (checked.length===1?'ь':'и') + '?\n\n'
       + 'Решение запишется в журнал. В 1С ничего не отправляется.')) return;
-    const ids = Array.from(checked).map(cb => cb.closest('.j-entry').dataset.entryId);
+    const picked = Array.from(checked).map(cb => cb.closest('.j-entry'));
     try{
-      for(const id of ids){
-        await apiFetch('/api/journal/' + id + '/resolve', {method:'POST', body:{resolution:'confirm'}});
+      for(const el of picked){
+        // Записки грузчика о товаре — «Принял к сведению», остальное — «Принять».
+        await apiFetch('/api/journal/' + el.dataset.entryId + '/resolve', {method:'POST', body:{resolution: el.dataset.note ? 'ack' : 'confirm'}});
       }
       await loadJournal();
       updateBulk();
@@ -6296,6 +6472,7 @@
         + '<div class="sup-alert-note">Заказ вернётся в очередь, а поставка уедет без него. Товар нашёлся — нажмите'
         + ' «Товар нашёлся» у отметки в <span class="mp-act" onclick="switchView(\'journal\')">журнале</span>.</div></div>'
       : '';
+    const notes = itemNotesHtml(d.notes, id);
     const byProduct = new Map();
     (d.packing || []).forEach(r => {
       const it = byProduct.get(r.sku)
@@ -6307,7 +6484,7 @@
     const left = new Map((d.picking || []).map(p => [p.sku, p]));
     const rows = [...byProduct.values()]
       .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ru'));
-    if(rows.length === 0) return alerts + '<div class="sup-head">В поставке нет товаров.</div>';
+    if(rows.length === 0) return alerts + notes + '<div class="sup-head">В поставке нет товаров.</div>';
     const orders = new Set((d.packing || []).map(r => r.orderNumber)).size;
     const units = rows.reduce((sum, r) => sum + r.qty, 0);
     const body = rows.map(r => {
@@ -6333,7 +6510,7 @@
         + '<td>' + where + short + '</td>'
         + '</tr>';
     }).join('');
-    return alerts + '<div class="sup-head">' + orders + ' ' + pluralRu(orders, 'заказ', 'заказа', 'заказов')
+    return alerts + notes + '<div class="sup-head">' + orders + ' ' + pluralRu(orders, 'заказ', 'заказа', 'заказов')
       + ' · ' + units + ' ' + pluralRu(units, 'штука', 'штуки', 'штук')
       + ' · ' + rows.length + ' ' + pluralRu(rows.length, 'позиция', 'позиции', 'позиций') + '</div>'
       + '<table><thead><tr><th>Товар</th><th class="num">Заказов</th>'
