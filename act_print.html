@@ -161,6 +161,16 @@
     const when = (d) => new Date(d).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     const line = (m) => esc(m.author || '') + ', ' + esc(when(m.at)) + ': ' + esc(m.body);
     let out = '';
+    // Когда привоз ждали у ворот и когда машина приехала (владелец 27.09.2026:
+    // «время выгрузки» — везде, и в акте).
+    const D = a.delivery || {};
+    const day = (d) => String(d).slice(0, 10).split('-').reverse().join('.');
+    const slot = D.from && D.to ? D.from + '–' + D.to : D.from ? 'с ' + D.from : D.to ? 'до ' + D.to : '';
+    if (D.plannedDate || D.arrivedAt) {
+      out += '<p class="note" style="font-size:13px;color:#000;margin-top:10px">'
+        + (D.plannedDate ? 'Привоз: ' + esc(day(D.plannedDate)) + (slot ? ', время выгрузки ' + esc(slot) : '') + '. ' : '')
+        + (D.arrivedAt ? 'Машина приехала: ' + esc(when(D.arrivedAt)) + '.' : '') + '</p>';
+    }
     if (said || came) {
       out += '<p class="note" style="font-size:13px;color:#000;margin-top:10px">Грузомест заявлено: ' + esc(said || '—')
         + '; приехало: ' + esc(came || 'не отмечено') + '.</p>';

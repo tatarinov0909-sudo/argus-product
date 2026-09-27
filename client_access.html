@@ -3,7 +3,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#151a24">
 <title>Аргус · Кабинет продавца</title>
 <link rel="stylesheet" href="seller-fonts.css?v=d1da12bc"><link rel="stylesheet" href="seller-cabinet.css?v=7ad5ca16">
-<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script><script defer src="seller-cabinet.js?v=303c952b"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script><script defer src="form-keys.js?v=02a92e0e"></script><script defer src="seller-cabinet.js?v=5dd2d4ec"></script>
 </head><body>
 <a class="skip-link" href="#main">К содержимому</a>
 
@@ -11,7 +11,7 @@
  <header class="login-head"><div class="wordmark"><span class="brand-icon" aria-hidden="true"></span>аргус<span class="brand-period">.</span></div><a class="login-owner" href="login.html">Вход для владельца склада →</a></header>
  <div class="login-main">
   <div class="login-intro"><p class="login-caption">Кабинет продавца</p><h1>Ваши товары <span>под рукой</span></h1><p class="login-subtitle">Остатки, заказы, поставки и приходы на склад — в одном кабинете.</p></div>
-  <form id="loginForm" class="login-form" aria-labelledby="loginFormTitle"><h2 id="loginFormTitle">Войти в кабинет</h2><p class="form-note muted">Ключ доступа выдаёт ваш склад.</p>
+  <form id="loginForm" class="login-form" aria-labelledby="loginFormTitle" data-keys="native"><h2 id="loginFormTitle">Войти в кабинет</h2><p class="form-note muted">Ключ доступа выдаёт ваш склад.</p>
    <div class="form-fields">
     <label class="field" for="loginName"><span>Ваше имя</span><input id="loginName" name="name" autocomplete="name" maxlength="60" required placeholder="Как к вам обращаться"></label>
     <label class="field" for="loginKey"><span>Ключ доступа</span><input id="loginKey" name="key" autocomplete="off" spellcheck="false" maxlength="40" required placeholder="Ключ от склада" aria-describedby="loginError"></label>

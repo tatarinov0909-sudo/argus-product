@@ -29,7 +29,11 @@
     --an-soft:#2E2C1E;
     --text:#EDEBE6;
     --muted:#8D9096;
-    --mono:'IBM Plex Mono', monospace;
+    /* Моноширинного шрифта в кабинете нет (владелец 26–27.09.2026: номера,
+       ключи и адреса ячеек — «кривые отступы» и нечитаемые цифры). Там, где
+       раньше стоял IBM Plex Mono, — тот же Golos; цифры одной ширины задаёт
+       font-variant-numeric у body, поэтому столбцы чисел не пляшут. */
+    --mono:'Golos Text', 'Inter', system-ui, sans-serif;
     /* Golos Text — шрифт, выбранный для продукта. Inter стоял здесь по
        инерции и давал ту самую одинаковую «сгенерированную» гладкость. */
     --sans:'Golos Text', 'Inter', system-ui, sans-serif;
@@ -45,7 +49,8 @@
   ::-webkit-scrollbar-thumb{background:var(--line); border-radius:8px; border:2px solid var(--panel);}
   ::-webkit-scrollbar-thumb:hover{background:var(--accent);}
   ::selection{background:rgba(95,175,166,0.32); color:var(--text);}
-  body{background:var(--bg); color:var(--text); font-family:var(--sans); height:100vh; overflow:hidden; -webkit-font-smoothing:antialiased;}
+  body{background:var(--bg); color:var(--text); font-family:var(--sans); height:100vh; overflow:hidden; -webkit-font-smoothing:antialiased;
+    font-variant-numeric:tabular-nums;}
   .app{display:flex; height:100vh;}
 
   /* SIDEBAR */
@@ -1008,16 +1013,16 @@
   .rc-row{display:grid; grid-template-columns:1fr 110px 32px; gap:8px; align-items:start; margin-bottom:8px;}
   .rc-row input{width:100%; box-sizing:border-box; background:var(--panel); border:1px solid var(--line);
     border-radius:8px; padding:9px 10px; color:var(--text); font-family:var(--sans); font-size:14px;}
-  .rc-row input.rc-qty{font-family:var(--mono);}
+  .rc-row input.rc-qty{font-family:var(--sans); font-variant-numeric:tabular-nums;}
   .rc-row .rc-del{background:none; border:none; color:var(--muted); cursor:pointer; font-size:15px; padding:9px 0;}
-  .rc-note{grid-column:1 / -1; font-size:12px; margin:-2px 0 2px; color:var(--muted); font-family:var(--mono);}
+  .rc-note{grid-column:1 / -1; font-size:12px; margin:-2px 0 2px; color:var(--muted); font-family:var(--sans); font-variant-numeric:tabular-nums;}
   .rc-note.bad{color:var(--terracotta); font-family:var(--sans);}
   .rc-actions{display:flex; align-items:center; gap:10px; margin-top:6px;}
   .rc-actions .grow{flex:1;}
   .rc-add{background:none; border:1px dashed var(--line); color:var(--muted); border-radius:8px;
     padding:8px 12px; font-size:14px; cursor:pointer; font-family:var(--sans);}
   .rc-list-head{display:flex; align-items:baseline; gap:12px; margin-bottom:10px; flex-wrap:wrap;}
-  .rc-src{font-size:12px; color:var(--muted);}
+  .rc-src{font-size:13px; color:var(--muted); line-height:1.45; margin-top:3px; font-family:var(--sans); font-variant-numeric:tabular-nums;}
   .rc-acts{display:flex; gap:14px; justify-content:flex-end; flex-wrap:wrap;}
   .nav-soon{margin-left:auto; font-size:11px; color:var(--muted); border:1px solid var(--line); border-radius:6px; padding:1px 6px;}
   .bill-soon{font-size:12px; font-weight:600; color:var(--yellow, #C9A66B); border:1px solid currentColor; border-radius:6px; padding:2px 8px; margin-left:8px; vertical-align:middle;}
@@ -1056,6 +1061,47 @@
   .pr-table .sub{font-family:var(--mono); font-size:12px; color:var(--muted);}
   .pr-table .warn{color:var(--terracotta);}
   .pr-table .cells{font-family:var(--mono); font-size:13px;}
+  /* ===== Список приходов (владелец 27.09.2026): поиск, фильтры, ровные
+     столбцы, «Показать ещё». Без моноширинного шрифта. ===== */
+  .rc-toolbar{display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:12px;}
+  .rc-toolbar .rc-search{flex:1 1 340px; min-width:0;}
+  .rc-dd{position:relative; display:inline-flex;}
+  .rc-dd-btn b{font-weight:600;}
+  .rc-dd-btn.set{border-color:var(--accent); color:var(--accent);}
+  .rc-dd-menu{position:absolute; top:calc(100% + 6px); left:0; z-index:40; min-width:210px; max-height:340px; overflow:auto;
+    background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:6px; box-shadow:0 14px 34px rgba(0,0,0,0.45);}
+  .rc-dd-menu[hidden]{display:none;}
+  .rc-dd-item{display:block; width:100%; text-align:left; padding:9px 12px; border:0; border-radius:7px; background:none;
+    color:var(--text); font:inherit; font-size:15px; cursor:pointer; white-space:nowrap;}
+  .rc-dd-item:hover{background:var(--panel);}
+  .rc-dd-item.on{color:var(--accent); font-weight:600;}
+  .rc-reset{background:none; border:0; padding:6px 2px; color:var(--muted); font:inherit; font-size:14px; text-decoration:underline; cursor:pointer;}
+  .rc-table .staff-row.rc-row-list{grid-template-columns:minmax(130px,0.9fr) minmax(130px,1fr) minmax(0,1.9fr) 200px 150px;
+    align-items:start; gap:14px;}
+  .rc-table .staff-row.rc-row-list.head{align-items:center;}
+  .rc-row-list .staff-key{font-size:15px;}
+  .rc-cell-src{font-size:14px; line-height:1.45; min-width:0; overflow-wrap:anywhere;}
+  .rc-cell-state{min-width:0;}
+  .rc-row-list .rc-acts{justify-content:flex-end; padding-top:2px;}
+  .rc-row-list.rc-arrived{background:linear-gradient(90deg, var(--accent-soft), transparent 55%); box-shadow:inset 3px 0 0 var(--accent);}
+  .staff-status.bad{background:var(--terracotta-soft, rgba(217,142,110,0.14)); color:var(--terracotta);}
+  .staff-status.arrived{background:var(--accent); color:#182422;}
+  .staff-status.busy{background:var(--yellow-soft, rgba(201,166,107,0.16)); color:var(--yellow);}
+  .staff-status.wait{background:var(--panel-2); color:var(--muted);}
+  .rc-foot{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:12px; flex-wrap:wrap;}
+  @media(max-width:760px){
+    .rc-toolbar .rc-search{flex:1 1 100%;}
+    .rc-dd{flex:1 1 auto;}
+    .rc-dd-btn{width:100%; text-align:left;}
+    .rc-dd-menu{left:0; right:auto; max-width:calc(100vw - 32px);}
+    .rc-table .staff-row.rc-row-list:not(.head){grid-template-columns:minmax(0,1fr) auto;
+      grid-template-areas:"num state" "name name" "src src" "acts acts"; row-gap:6px;}
+    .rc-table .staff-row.rc-row-list > .rc-cell-num{grid-area:num;}
+    .rc-table .staff-row.rc-row-list > .staff-name{grid-area:name;}
+    .rc-table .staff-row.rc-row-list > .rc-cell-src{grid-area:src;}
+    .rc-table .staff-row.rc-row-list > .rc-cell-state{grid-area:state; text-align:right;}
+    .rc-table .staff-row.rc-row-list > .rc-acts{grid-area:acts; justify-content:flex-start;}
+  }
   @media(max-width:700px){ .rc-row{grid-template-columns:1fr 80px 28px;} }
 
   .wh-zone-item{padding:10px 0; border-bottom:1px solid var(--line);}
@@ -1284,7 +1330,7 @@
   .wh-search-item:last-child{border-bottom:none;}
   .wh-search-item:hover{background:var(--panel-2);}
   .wh-search-item.absent{opacity:0.5;}
-  .wh-search-item-sku{font-family:var(--mono); color:var(--accent);}
+  .wh-search-item-sku{font-family:var(--sans); font-variant-numeric:tabular-nums; font-weight:600; color:var(--accent);}
   .wh-search-item-name{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .wh-search-item-where{color:var(--muted); font-size:13px; white-space:nowrap;}
   .wh-search-empty{padding:12px; font-size:14px; color:var(--muted);}
@@ -1535,7 +1581,7 @@
   /* Как и у баннера: display в стилях перебивает браузерное скрытие. */
   .wh-sel[hidden]{display:none;}
   .wh-detail-empty{font-size:14px; color:var(--muted); line-height:1.6; margin-top:4px;}
-  .wh-detail-id{font-size:19px; font-weight:700; font-family:var(--mono); margin-bottom:4px;}
+  .wh-detail-id{font-size:22px; font-weight:700; font-family:var(--sans); font-variant-numeric:tabular-nums; margin-bottom:4px;}
   .wh-detail-status{display:inline-block; font-size:13px; font-weight:600; padding:3px 9px; border-radius:6px; margin-bottom:16px;}
   .wh-detail-status.occupied{background:var(--accent-soft); color:var(--accent);}
   .wh-detail-status.empty{background:var(--panel-2); color:var(--muted);}
@@ -1563,12 +1609,22 @@
   /* Содержимое ячейки: в объединённой их бывает несколько, поэтому список,
      а не пара строк. Длинный перечень скроллится внутри себя, чтобы панель
      не растягивалась на весь экран. */
+  /* Что лежит в ячейке — полностью, по нажатию (владелец 27.09.2026). */
+  .wh-cell-items{display:flex; flex-direction:column; gap:10px; margin-top:10px;}
+  .wh-cell-item{background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:11px 12px;}
+  .wh-cell-item-top{display:flex; justify-content:space-between; align-items:baseline; gap:10px; margin-bottom:6px;}
+  .wh-cell-item-name{font-size:14.5px; font-weight:600; line-height:1.35; min-width:0; overflow-wrap:anywhere;}
+  .wh-cell-item-qty{font-size:17px; font-weight:700; color:var(--accent); white-space:nowrap; font-variant-numeric:tabular-nums;}
+  .wh-cell-item-qty.bad{color:var(--terracotta);}
+  .wh-cell-item-grid{display:grid; grid-template-columns:auto minmax(0,1fr); gap:3px 12px; margin:0; font-size:13.5px;}
+  .wh-cell-item-grid dt{color:var(--muted);}
+  .wh-cell-item-grid dd{margin:0; overflow-wrap:anywhere; font-variant-numeric:tabular-nums;}
   .wh-detail-stock{display:flex; flex-direction:column; gap:2px; margin-top:10px; max-height:260px; overflow-y:auto;}
   .wh-detail-stock-item{
     display:grid; grid-template-columns:1fr auto; grid-template-areas:"sku qty" "client client";
     gap:2px 10px; padding:9px 10px; border-radius:8px; background:var(--panel-2); font-size:14px;
   }
-  .wh-detail-stock-sku{grid-area:sku; font-family:var(--mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .wh-detail-stock-sku{grid-area:sku; font-family:var(--sans); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
   .wh-detail-stock-qty{grid-area:qty; font-variant-numeric:tabular-nums; color:var(--accent); font-weight:600;}
   .wh-detail-stock-client{grid-area:client; color:var(--muted); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 
@@ -2359,8 +2415,9 @@
           <div class="staff-code-chip">Код склада: <b id="whCodeChip">—</b></div>
         </div>
 
-        <div class="staff-add">
-          <input type="text" id="managerNameInput" placeholder="Имя менеджера" onkeydown="if(event.key==='Enter') addManager()">
+        <!-- Ключ выдаёт только кнопка: Enter форму не отправляет (владелец 27.09.2026). -->
+        <div class="staff-add" data-form>
+          <input type="text" id="managerNameInput" placeholder="Имя менеджера">
           <button onclick="addManager()">+ Выдать ключ менеджера</button>
         </div>
         <div class="staff-grants">
@@ -2380,8 +2437,8 @@
             <div class="staff-sub">Приёмка, сборка и пересчёт на телефоне. Кладовщик не видит заказы, чат и деньги — только свою работу у полок.</div>
           </div>
         </div>
-        <div class="staff-add">
-          <input type="text" id="staffNameInput" placeholder="Имя кладовщика" onkeydown="if(event.key==='Enter') addStaffMember()">
+        <div class="staff-add" data-form>
+          <input type="text" id="staffNameInput" placeholder="Имя кладовщика">
           <button onclick="addStaffMember()">+ Выдать ключ кладовщика</button>
         </div>
         <div class="staff-toggle" id="staffToggle" onclick="toggleStaffList()">
@@ -2406,7 +2463,7 @@
           </div>
           <button type="button" class="wh-onboarding-btn" onclick="exportInvoices()">Выгрузить в Excel</button>
         </div>
-        <div class="rc-card">
+        <div class="rc-card" data-form>
           <div class="rc-top">
             <label class="rc-field"><span>Продавец</span>
               <select id="invoiceCompanySelect" class="mp-field" onchange="receiptCompanyChanged()"></select></label>
@@ -2471,7 +2528,7 @@
           </div>
         </div>
         <div id="invAdvice"></div>
-        <div class="inv-set-panel">
+        <div class="inv-set-panel" data-form>
           <div class="inv-set-row">
             <div><b>Одну ячейку не считать чаще, чем раз в</b><span>дней</span></div>
             <input type="number" class="num-field" id="invRecountDays" min="1" max="3650">
@@ -2575,7 +2632,7 @@
           </div>
           <button class="wh-onboarding-btn primary" type="button" onclick="toggleProductForm(true)">+ Добавить товар</button>
         </div>
-        <div class="rc-card" id="productForm" hidden>
+        <div class="rc-card" id="productForm" data-form hidden>
           <div class="staff-title" style="font-size:16px; margin-bottom:12px;">Новый товар</div>
           <div class="rc-top">
             <label class="rc-field"><span>Продавец</span>
@@ -2612,8 +2669,8 @@
             <div class="staff-sub">Компания получает ключ вида ST-4K2P7Q-K. По нему продавец видит свой товар, заказы и документы — и ничего чужого.</div>
           </div>
         </div>
-        <div class="staff-add">
-          <input type="text" id="companyNameInput" placeholder="Название компании" onkeydown="if(event.key==='Enter') addCompany()">
+        <div class="staff-add" data-form>
+          <input type="text" id="companyNameInput" placeholder="Название компании">
           <button onclick="addCompany()">+ Добавить компанию</button>
         </div>
         <div class="staff-toggle" id="companiesToggle" onclick="toggleCompaniesList()">
@@ -2645,7 +2702,7 @@
 
         <details class="mp-fold" id="mpConnectFold">
           <summary>Подключить площадку клиенту</summary>
-          <div class="mp-fold-body">
+          <div class="mp-fold-body" data-form>
             <div class="staff-sub" style="margin-bottom:12px;">Нужен только ключ API продавца и его согласие. Ключ сохраняется зашифрованным и обратно не показывается никому — ни здесь, ни продавцу.</div>
             <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
               <select id="mpCompanySelect" class="mp-field" style="flex:1; min-width:180px; width:auto;"></select>
@@ -2795,7 +2852,8 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <script src="back.js?v=4901b838" defer></script>
-<script src="cabinet_main.js?v=9afcf111" defer></script>
+<script src="form-keys.js?v=02a92e0e" defer></script>
+<script src="cabinet_main.js?v=4b6bb08a" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->

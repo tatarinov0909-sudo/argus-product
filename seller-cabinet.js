@@ -859,9 +859,9 @@
   }
   const INBOUND_COLUMNS = [
     { key: 'doc', title: 'Приход', locked: true, cell: (r) => `<button class="link-button nowrap" data-doc="${h(r.id)}">${h(r.number)}</button><span class="cell-sub">${counted(r.item_count, 'позиция', 'позиции', 'позиций')}</span>` },
-    // Окно выгрузки и места — подписью под датой: отдельными столбцами
+    // Время выгрузки и места — подписью под датой: отдельными столбцами
     // таблица не помещалась в экран.
-    { key: 'planned', title: 'Привезут', cls: 'n', cell: (r) => (r.source_document_type === 'seller_inbound' && r.source_document_date ? `${h(day(dateOnly(String(r.source_document_date).slice(0, 10))))}${windowText(r.planned_from, r.planned_to) ? `<span class="cell-sub">${h(windowText(r.planned_from, r.planned_to))}</span>` : ''}${placesText(r.boxes, r.pallets) ? `<span class="cell-sub">${h(placesText(r.boxes, r.pallets))}</span>` : ''}` : '<span class="zero">—</span>') },
+    { key: 'planned', title: 'Привезут', cls: 'n', cell: (r) => (r.source_document_type === 'seller_inbound' && r.source_document_date ? `${h(day(dateOnly(String(r.source_document_date).slice(0, 10))))}${windowText(r.planned_from, r.planned_to) ? `<span class="cell-sub">время выгрузки ${h(windowText(r.planned_from, r.planned_to))}</span>` : ''}${placesText(r.boxes, r.pallets) ? `<span class="cell-sub">${h(placesText(r.boxes, r.pallets))}</span>` : ''}` : '<span class="zero">—</span>') },
     { key: 'places', title: 'Мест', hidden: true, cell: (r) => (placesText(r.boxes, r.pallets) ? `<span class="cell-main" style="font-weight:400">${h(placesText(r.boxes, r.pallets))}</span>${r.weight_kg != null ? `<span class="cell-sub">${n(r.weight_kg)} кг</span>` : ''}` : '<span class="zero">—</span>') },
     { key: 'came', title: 'Машина приехала', cls: 'n', hidden: true, cell: (r) => (r.arrived_at ? h(when(r.arrived_at)) : '<span class="zero">ещё нет</span>') },
     { key: 'arrived', title: 'Начали выгрузку', cls: 'n', cell: (r) => (r.first_at ? h(when(r.first_at)) : '<span class="zero">ещё нет</span>') },
@@ -1181,7 +1181,10 @@
     const current = steps.findIndex((x) => !x[1]);
     const stepsHtml = `<ol class="steps">${steps.map(([t, at, note], i) => `<li class="${at ? 'done' : i === current ? 'now' : ''}"><strong>${h(t)}</strong><time>${at ? h(when(at)) : 'ещё нет'}</time>${note ? `<p>${h(note)}</p>` : ''}</li>`).join('')}</ol>`;
     const facts = [
-      c.plannedDate && ['Привезут', day(dateOnly(c.plannedDate)) + (windowText(c.plannedFrom, c.plannedTo) ? ', ' + windowText(c.plannedFrom, c.plannedTo) : '')],
+      c.plannedDate && ['Привезут', day(dateOnly(c.plannedDate))],
+      // «Время выгрузки» — время у ворот склада (владелец 27.09.2026; раньше
+      // называлось «окно выгрузки»).
+      c.plannedDate && windowText(c.plannedFrom, c.plannedTo) && ['Время выгрузки', windowText(c.plannedFrom, c.plannedTo)],
       placesText(c.boxes, c.pallets) && ['Мест заявлено', placesText(c.boxes, c.pallets)],
       c.weightKg != null && ['Вес', n(c.weightKg) + ' кг'],
       (c.carrier || c.vehicle) && ['Кто везёт', [c.carrier, c.vehicle && 'машина ' + c.vehicle].filter(Boolean).join(', ')],
@@ -1313,7 +1316,7 @@
     const v = (x) => h(x ?? '');
     $('drawerBody').innerHTML = `<form class="inbound-form" id="inboundForm"><p class="help">${edit ? 'Поменяйте, что изменилось. Список товаров меняется новым файлом — без файла останется прежний.' : 'Загрузите таблицу, по которой собираете товар: шаблон поставки WB, свою таблицу или выгрузку из 1С. Нужны количество и штрихкод, артикул или название.'}</p>
       <div class="field"><span>${edit ? 'Новый список товаров — если поменялся' : 'Файл Excel или CSV'}</span><label class="file-pick"><input type="file" id="inboundFile" accept=".xlsx,.xls,.csv"><span class="button">${icon('document')}Выбрать файл</span><span class="help" id="inboundFileName">Файл не выбран</span></label></div>
-      <div class="three"><label class="field"><span>Когда привезёте</span><input type="date" id="inboundDate" value="${edit ? v(edit.plannedDate) : tomorrow}"></label><label class="field"><span>Окно выгрузки: с</span><input type="time" id="inboundFrom" value="${v(edit?.plannedFrom)}"></label><label class="field"><span>до</span><input type="time" id="inboundTo" value="${v(edit?.plannedTo)}"></label></div>
+      <div class="three"><label class="field"><span>Когда привезёте</span><input type="date" id="inboundDate" value="${edit ? v(edit.plannedDate) : tomorrow}"></label><label class="field"><span>Время выгрузки: с</span><input type="time" id="inboundFrom" value="${v(edit?.plannedFrom)}"></label><label class="field"><span>до</span><input type="time" id="inboundTo" value="${v(edit?.plannedTo)}"></label></div>
       <div class="three"><label class="field"><span>Коробов</span><input id="inboundBoxes" inputmode="numeric" maxlength="6" value="${v(edit?.boxes)}"></label><label class="field"><span>Паллет</span><input id="inboundPallets" inputmode="numeric" maxlength="6" value="${v(edit?.pallets)}"></label><label class="field"><span>Вес всего, кг</span><input id="inboundWeight" inputmode="decimal" maxlength="10" value="${v(edit?.weightKg)}"></label></div>
       <div class="two"><label class="field"><span>Кто везёт — транспортная компания или водитель</span><input id="inboundCarrier" maxlength="120" placeholder="ТК «Деловые линии» или Иван, +7 900 …" value="${v(edit?.carrier)}"></label><label class="field"><span>Номер машины</span><input id="inboundVehicle" maxlength="20" placeholder="А123ВС 77" value="${v(edit?.vehicle)}"></label></div>
       <label class="field"><span>Комментарий складу</span><input id="inboundComment" maxlength="300" value="${v(edit?.comment)}"></label>

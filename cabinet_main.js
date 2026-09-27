@@ -950,8 +950,6 @@
 
   // Только приходы: заказы площадок и возвраты живут на своих экранах, а
   // здесь их тысячи — список прихода в них тонул.
-  let receiptsShowAll = false;
-
   async function loadInvoicesList(){
     const wrap = document.getElementById('invoicesList');
     if(!wrap) return;
@@ -965,63 +963,198 @@
     renderReceiptsList();
   }
 
+  /* Список приходов (владелец 27.09.2026): поиск по номеру, продавцу,
+     перевозчику, машине и номеру документа поставщика; фильтры — продавец,
+     статус, откуда, период; порядок — как у грузчика: машина приехала,
+     привезут сегодня, остальные привозы продавцов, из 1С и вручную, затем
+     принятые; внутри — новые выше. Список не тонет в старых приходах:
+     по 30 строк и «Показать ещё». Заказы поставщику из 1С — не привоз:
+     они видны только под «Откуда: из 1С». */
+  const RC_PAGE = 30;
+  const rcUi = { q: '', seller: '', status: 'all', origin: 'all', period: 'all', shown: RC_PAGE, open: null };
+  const RC_STATUS = [['all', 'Все'], ['waiting', 'Ждёт машину'], ['arrived', 'Приехала'], ['receiving', 'Принимается'],
+    ['done', 'Принят'], ['diff', 'Есть расхождение'], ['disputed', 'Продавец не согласен']];
+  const RC_ORIGIN = [['all', 'Все'], ['seller', 'От продавца'], ['1c', 'Из 1С'], ['manual', 'Вручную']];
+  const RC_PERIOD = [['all', 'Всё время'], ['1', 'Сегодня'], ['7', '7 дней'], ['30', '30 дней'], ['90', '90 дней']];
+  const rcDayKey = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const rcPlannedDay = (i) => i.source_document_type === 'seller_inbound' && i.source_document_date
+    ? String(i.source_document_date).slice(0, 10) : '';
+  // Из 1С — то, что пришло обменом (у него номер в 1С); заведённое в кабинете — вручную.
+  const rcOrigin = (i) => i.source_document_type === 'seller_inbound' ? 'seller' : i.external_id ? '1c' : 'manual';
+  const rcLive = (i) => i.work && i.work.assembly && (i.work.assembly.status === 'active' || i.work.assembly.status === 'paused')
+    ? i.work.assembly : null;
+  function rcState(i){
+    if(i.status === 'completed') return 'done';
+    if(i.status === 'in_progress' || rcLive(i)) return 'receiving';
+    if(i.arrived_at) return 'arrived';
+    return 'waiting';
+  }
+  function rcRank(i){
+    const st = rcState(i);
+    if(st === 'done') return 9;
+    if(st === 'arrived' || st === 'receiving') return 0;
+    if(rcPlannedDay(i) === rcDayKey(new Date())) return 1;
+    return rcOrigin(i) === 'seller' ? 2 : 3;
+  }
+  const rcTime = (v) => (v ? new Date(v).getTime() || 0 : 0);
+  function rcCompare(a, b){
+    const ra = rcRank(a), rb = rcRank(b);
+    if(ra !== rb) return ra - rb;
+    if(ra === 0){
+      const ka = a.arrived_at || (rcLive(a) && rcLive(a).startedAt) || a.created_at;
+      const kb = b.arrived_at || (rcLive(b) && rcLive(b).startedAt) || b.created_at;
+      return rcTime(kb) - rcTime(ka);
+    }
+    if(ra === 1){
+      const fa = String(a.planned_from || a.planned_to || '99:99'), fb = String(b.planned_from || b.planned_to || '99:99');
+      if(fa !== fb) return fa < fb ? -1 : 1;
+    }
+    return rcTime(b.created_at) - rcTime(a.created_at);
+  }
+  const rcFold = (t) => String(t || '').toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ').trim();
+  function rcMatches(i){
+    // Заказ поставщику — только под «Откуда: из 1С».
+    if(i.source_document_type === 'supplier_order' && rcUi.origin !== '1c') return false;
+    if(rcUi.seller && i.company_id !== rcUi.seller) return false;
+    if(rcUi.origin !== 'all' && rcOrigin(i) !== rcUi.origin) return false;
+    const st = rcState(i);
+    if(rcUi.status === 'diff' ? !(st === 'done' && i.has_discrepancy)
+      : rcUi.status === 'disputed' ? i.seller_verdict !== 'disputed'
+      : rcUi.status !== 'all' && st !== rcUi.status) return false;
+    if(rcUi.period !== 'all'){
+      const days = Number(rcUi.period);
+      const from = new Date(); from.setHours(0, 0, 0, 0); from.setDate(from.getDate() - (days - 1));
+      if(rcTime(i.created_at) < from.getTime()) return false;
+    }
+    const q = rcFold(rcUi.q);
+    if(!q) return true;
+    const hay = rcFold([i.number, i.company_name, i.carrier, i.vehicle, i.supplier_docs].filter(Boolean).join(' '));
+    return q.split(' ').every(w => hay.includes(w));
+  }
+  function rcFiltered(){ return (lastInvoices || []).filter(rcMatches).sort(rcCompare); }
+
+  // Выпадающий список фильтра — своё меню, а не выпадающий список браузера.
+  function rcDropdown(name, label, options){
+    const cur = options.find(o => o[0] === rcUi[name]) || options[0];
+    return '<span class="rc-dd' + (rcUi.open === name ? ' open' : '') + '">'
+      + '<button type="button" class="ord-chip rc-dd-btn' + (cur[0] !== options[0][0] ? ' set' : '') + '" data-rc-dd="' + name + '"'
+      +   ' aria-haspopup="true" aria-expanded="' + (rcUi.open === name) + '">' + escapeHTML(label) + ': <b>' + escapeHTML(cur[1]) + '</b> ▾</button>'
+      + '<span class="rc-dd-menu"' + (rcUi.open === name ? '' : ' hidden') + ' role="menu">'
+      +   options.map(o => '<button type="button" role="menuitemradio" aria-checked="' + (o[0] === cur[0]) + '" class="rc-dd-item'
+          + (o[0] === cur[0] ? ' on' : '') + '" data-rc-set="' + name + '" data-value="' + escapeHTML(o[0]) + '">' + escapeHTML(o[1]) + '</button>').join('')
+      + '</span></span>';
+  }
+
+  function receiptPlaces(boxes, pallets){
+    return [boxes ? boxes + ' ' + pluralRu(boxes, 'короб', 'короба', 'коробов') : '',
+      pallets ? pallets + ' ' + pluralRu(pallets, 'паллета', 'паллеты', 'паллет') : ''].filter(Boolean).join(', ');
+  }
+  function receiptSlot(from, to){
+    const f = from ? String(from).slice(0, 5) : ''; const t = to ? String(to).slice(0, 5) : '';
+    return f && t ? f + '–' + t : f ? 'с ' + f : t ? 'до ' + t : '';
+  }
+  function receiptWhen(date, from, to){
+    const d = date ? String(date).slice(0, 10).split('-').reverse().slice(0, 2).join('.') : '';
+    const slot = receiptSlot(from, to);
+    return d + (slot ? ', время выгрузки ' + slot : '');
+  }
+  function receiptState(inv){
+    if(inv.status === 'completed') return 'принят';
+    if(inv.status === 'in_progress' || rcLive(inv)) return 'принимается';
+    if(inv.arrived_at) return 'машина приехала';
+    return inv.source_document_type === 'seller_inbound' ? 'ждёт машину' : 'не начат';
+  }
+  const rcShortWhen = (d) => (d ? new Date(d).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '');
+
   function renderReceiptsList(){
     const wrap = document.getElementById('invoicesList');
-    const all = lastInvoices || [];
+    if(!wrap) return;
+    const all = (lastInvoices || []).filter(i => i.source_document_type !== 'supplier_order');
     const waiting = all.filter(inv => inv.status !== 'completed').length;
     document.getElementById('receiptsSummary').textContent = all.length
       ? 'всего ' + all.length + ' · ждут приёмки ' + waiting : '';
-    if(all.length === 0){
-      wrap.innerHTML = '<div class="staff-empty">Приходов пока нет.</div>';
-      return;
-    }
-    const LIMIT = 30;
-    const shown = receiptsShowAll ? all : all.slice(0, LIMIT);
-    wrap.innerHTML = shown.map(inv => {
-      const seller = inv.source_document_type === 'seller_inbound';
-      const src = seller
+    const sellers = [...new Map((lastInvoices || []).map(i => [i.company_id, i.company_name])).entries()]
+      .sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'ru'));
+    const rows = rcFiltered();
+    const page = rows.slice(0, rcUi.shown);
+    const filtered = rcUi.q || rcUi.seller || rcUi.status !== 'all' || rcUi.origin !== 'all' || rcUi.period !== 'all';
+    const keep = document.activeElement && document.activeElement.id === 'rcSearch' ? document.activeElement.selectionStart : null;
+    const toolbar = '<div class="rc-toolbar">'
+      + '<input type="search" class="ord-search rc-search" id="rcSearch" placeholder="Номер, продавец, перевозчик, машина, документ поставщика"'
+      +   ' value="' + escapeHTML(rcUi.q) + '" aria-label="Поиск прихода" autocomplete="off">'
+      + rcDropdown('seller', 'Продавец', [['', 'Все']].concat(sellers.map(([id, name]) => [id, name])))
+      + rcDropdown('status', 'Статус', RC_STATUS)
+      + rcDropdown('origin', 'Откуда', RC_ORIGIN)
+      + rcDropdown('period', 'Период', RC_PERIOD)
+      + (filtered ? '<button type="button" class="rc-reset" data-rc-reset="1">Сбросить</button>' : '')
+      + '</div>';
+    const head = '<div class="staff-row head rc-row-list"><div>Приход</div><div>Продавец</div><div>Откуда и когда</div><div>Статус</div><div></div></div>';
+    const body = page.map(inv => {
+      const origin = rcOrigin(inv);
+      const src = origin === 'seller'
         ? 'от продавца' + (inv.source_document_date ? ' · привезут ' + escapeHTML(receiptWhen(inv.source_document_date, inv.planned_from, inv.planned_to)) : '')
-          + (receiptPlaces(inv.boxes, inv.pallets) ? ' · ' + escapeHTML(receiptPlaces(inv.boxes, inv.pallets)) : '')
-        : (inv.external_id ? 'из 1С' : 'вручную') + ' · ' + escapeHTML(fmtDay(inv.created_at));
+        : (inv.source_document_type === 'supplier_order' ? 'заказ поставщику, из 1С' : origin === '1c' ? 'из 1С' : 'вручную')
+          + ' · ' + escapeHTML(fmtDay(inv.created_at));
+      const more = [receiptPlaces(inv.boxes, inv.pallets), [inv.carrier, inv.vehicle ? 'машина ' + inv.vehicle : ''].filter(Boolean).join(', '),
+        inv.supplier_docs ? 'документ: ' + inv.supplier_docs : ''].filter(Boolean).join(' · ');
       const flags = [
         inv.comment_count ? 'переписка: ' + inv.comment_count : '',
         inv.seller_verdict === 'disputed' ? '<span class="rc-flag-bad">продавец не согласен с актом</span>' : '',
       ].filter(Boolean).join(' · ');
-      return `
-      <div class="staff-row" data-invoice-id="${escapeHTML(inv.id)}" style="grid-template-columns:1fr 1.1fr 1.6fr 150px auto;">
-        <div class="staff-key">${escapeHTML(inv.number)}${flags ? '<div class="rc-src">' + flags + '</div>' : ''}</div>
-        <div class="staff-name">${escapeHTML(inv.company_name)}</div>
-        <div class="rc-src">${src}</div>
-        <div><span class="staff-status ${inv.status === 'completed' ? 'active' : ''}">${escapeHTML(receiptState(inv))}</span></div>
-        <div class="rc-acts"><span class="staff-action" data-receipt-open="${escapeHTML(inv.id)}">Открыть</span>
-          <span class="staff-action" data-history-invoice="${escapeHTML(inv.id)}" data-history-label="${escapeHTML(inv.number)}">История</span></div>
-      </div>`;
-    }).join('')
-      + (all.length > LIMIT
-        ? '<div style="margin-top:10px;"><span class="mp-act" onclick="toggleReceiptsAll()">'
-          + (receiptsShowAll ? 'Показать последние ' + LIMIT : 'Показать все ' + all.length) + '</span></div>'
-        : '');
+      const st = rcState(inv);
+      const live = rcLive(inv);
+      const work = inv.work && inv.work.assembly;
+      const workText = live
+        ? (live.status === 'paused' ? 'на паузе · ' : '') + escapeHTML(live.workerName) + ' · ' + inv.work.taken + ' из ' + inv.work.total
+        : st === 'arrived' ? 'приехала ' + escapeHTML(rcShortWhen(inv.arrived_at))
+        : work && work.status === 'abandoned' ? 'свободен · ' + inv.work.taken + ' из ' + inv.work.total : '';
+      const badge = st === 'done' ? (inv.has_discrepancy ? 'bad' : 'active') : st === 'arrived' ? 'arrived' : st === 'receiving' ? 'busy' : 'wait';
+      return '<div class="staff-row rc-row-list' + (st === 'arrived' ? ' rc-arrived' : '') + '" data-invoice-id="' + escapeHTML(inv.id) + '">'
+        + '<div class="rc-cell-num"><span class="staff-key">' + escapeHTML(inv.number) + '</span>' + (flags ? '<div class="rc-src">' + flags + '</div>' : '') + '</div>'
+        + '<div class="staff-name">' + escapeHTML(inv.company_name) + '</div>'
+        + '<div class="rc-cell-src"><div>' + src + '</div>' + (more ? '<div class="rc-src">' + escapeHTML(more) + '</div>' : '') + '</div>'
+        + '<div class="rc-cell-state"><span class="staff-status ' + badge + '">' + escapeHTML(receiptState(inv))
+        +   (st === 'done' && inv.has_discrepancy ? ' · расхождение' : '') + '</span>'
+        +   (workText ? '<div class="rc-src">' + workText + '</div>' : '') + '</div>'
+        + '<div class="rc-acts"><span class="staff-action" data-receipt-open="' + escapeHTML(inv.id) + '">Открыть</span>'
+        +   '<span class="staff-action" data-history-invoice="' + escapeHTML(inv.id) + '" data-history-label="' + escapeHTML(inv.number) + '">История</span></div>'
+        + '</div>';
+    }).join('');
+    wrap.innerHTML = toolbar
+      + (page.length
+        ? '<div class="staff-table rc-table">' + head + body + '</div>'
+          + '<div class="rc-foot"><span class="ord-meta">Показано ' + page.length + ' из ' + rows.length + '</span>'
+          + (rows.length > page.length ? '<button type="button" class="wh-onboarding-btn" data-rc-more="1">Показать ещё '
+            + Math.min(RC_PAGE, rows.length - page.length) + '</button>' : '') + '</div>'
+        : '<div class="staff-empty">' + (filtered ? 'Под этот поиск и фильтры приходов нет.' : 'Приходов пока нет.') + '</div>');
+    const box = document.getElementById('rcSearch');
+    box.oninput = () => { rcUi.q = box.value; rcUi.shown = RC_PAGE; renderReceiptsList(); };
+    if(keep != null){ box.focus(); box.setSelectionRange(keep, keep); }
   }
+
+  // Меню фильтров, «Показать ещё», «Сбросить» — одним обработчиком.
+  document.addEventListener('click', function(e){
+    const t = e.target.closest ? e.target : null;
+    if(!t) return;
+    const dd = t.closest('[data-rc-dd]');
+    if(dd){ rcUi.open = rcUi.open === dd.dataset.rcDd ? null : dd.dataset.rcDd; renderReceiptsList(); return; }
+    const set = t.closest('[data-rc-set]');
+    if(set){ rcUi[set.dataset.rcSet] = set.dataset.value; rcUi.open = null; rcUi.shown = RC_PAGE; renderReceiptsList(); return; }
+    if(t.closest('[data-rc-more]')){ rcUi.shown += RC_PAGE; renderReceiptsList(); return; }
+    if(t.closest('[data-rc-reset]')){
+      Object.assign(rcUi, { q: '', seller: '', status: 'all', origin: 'all', period: 'all', shown: RC_PAGE, open: null });
+      renderReceiptsList(); return;
+    }
+    if(rcUi.open && !t.closest('.rc-dd')){ rcUi.open = null; renderReceiptsList(); }
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && rcUi.open){ rcUi.open = null; renderReceiptsList(); }
+  });
 
   /* ===================== Карточка прихода =====================
      Привоз продавца (владелец 26.09.2026): когда и сколько мест, отметка
      «машина приехала», документы поставщика, переписка с продавцом и его
      ответ на акт расхождений. Данные — /api/inbound/:id. */
-  function receiptPlaces(boxes, pallets){
-    return [boxes ? boxes + ' ' + pluralRu(boxes, 'короб', 'короба', 'коробов') : '',
-      pallets ? pallets + ' ' + pluralRu(pallets, 'паллета', 'паллеты', 'паллет') : ''].filter(Boolean).join(', ');
-  }
-  function receiptWhen(date, from, to){
-    const d = date ? String(date).slice(0, 10).split('-').reverse().slice(0, 2).join('.') : '';
-    const f = from ? String(from).slice(0, 5) : ''; const t = to ? String(to).slice(0, 5) : '';
-    return d + (f && t ? ', ' + f + '–' + t : f ? ', с ' + f : t ? ', до ' + t : '');
-  }
-  function receiptState(inv){
-    if(inv.status === 'completed') return 'принят';
-    if(inv.status === 'in_progress') return 'принимается';
-    if(inv.arrived_at) return 'машина приехала';
-    return inv.source_document_type === 'seller_inbound' ? 'ждёт машину' : 'не начат';
-  }
   const rcWhen = (d) => (d ? new Date(d).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
 
   let receiptOpenId = null;
@@ -1049,9 +1182,19 @@
     if(id !== receiptOpenId) return;
     const keep = box.scrollTop;
     document.getElementById('receiptTitle').textContent = 'Приход ' + c.number + ' · ' + c.companyName;
+    // Кто принимает и где остановился — из списка приходов (ход приёмки).
+    const row = (lastInvoices || []).find(i => i.id === c.id);
+    const work = row && row.work && row.work.assembly ? row.work : null;
+    const workText = work ? ({ active: 'идёт', paused: 'на паузе', abandoned: 'брошена — продолжит любой грузчик', finished: 'закончена' }[work.assembly.status] || '')
+      + ' · ' + work.assembly.workerName + ' · принято ' + work.taken + ' из ' + work.total + ' ' + pluralRu(work.total, 'позиции', 'позиций', 'позиций')
+      + (work.lastComment ? ' · «' + work.lastComment.text + '»' : '') : '';
     const facts = [
-      ['Статус', receiptState({ status: c.status, arrived_at: c.arrivedAt, source_document_type: c.sellerInbound ? 'seller_inbound' : '' })],
-      c.plannedDate ? ['Привезут', receiptWhen(c.plannedDate, c.plannedFrom, c.plannedTo)] : null,
+      ['Статус', receiptState(Object.assign({ status: c.status, arrived_at: c.arrivedAt, source_document_type: c.sellerInbound ? 'seller_inbound' : '' }, row ? { work: row.work } : {}))],
+      workText ? ['Приёмка', workText] : null,
+      c.plannedDate ? ['Привезут', receiptWhen(c.plannedDate)] : null,
+      // «Время выгрузки» — время у ворот склада (владелец 27.09.2026; раньше
+      // называлось «окно выгрузки»).
+      c.plannedDate && receiptSlot(c.plannedFrom, c.plannedTo) ? ['Время выгрузки', receiptSlot(c.plannedFrom, c.plannedTo)] : null,
       receiptPlaces(c.boxes, c.pallets) ? ['Мест заявлено', receiptPlaces(c.boxes, c.pallets)] : null,
       c.weightKg != null ? ['Вес', c.weightKg.toLocaleString('ru-RU') + ' кг'] : null,
       c.carrier || c.vehicle ? ['Кто везёт', [c.carrier, c.vehicle ? 'машина ' + c.vehicle : ''].filter(Boolean).join(', ')] : null,
@@ -1276,12 +1419,6 @@
     btn.disabled = false;
   }
   window.saveProduct = saveProduct;
-
-  function toggleReceiptsAll(){
-    receiptsShowAll = !receiptsShowAll;
-    renderReceiptsList();
-  }
-  window.toggleReceiptsAll = toggleReceiptsAll;
 
   /* ===================== Подключение 1С ===================== */
 
@@ -1873,7 +2010,7 @@
       </div>`;
     }
     const row = ctorRows[ctorSel];
-    return `<div class="ctor-side">
+    return `<div class="ctor-side" data-form>
       <div class="ctor-side-label">Ряд ${escapeHTML(String(row.label || (ctorSel + 1)))}</div>
       <label class="ctor-side-field">Стеллажей в ряду
         <span class="wh-stepper">
@@ -1986,13 +2123,14 @@
     return (meta && meta.label) || rowNum;
   }
 
-  // Адрес ячейки — «ряд.ярус.ячейка» (решение владельца 24.09.2026): «1.1.2» —
-  // первый ряд, первый ярус, вторая ячейка, как на карте. Имя ячейки из 1С
+  // Адрес ячейки — «ряд.стеллаж.ярус» (решение владельца 27.09.2026): «1.7.3» —
+  // ряд 1, стеллаж 7, ярус 3; под схемой ряда стеллажи и подписаны «1.7».
+  // Сервер пишет так же (argus-api/src/cells/label.js). Имя ячейки из 1С
   // («01-01-001») не показываем — с картой оно не совпадает.
   function blockAddr(rowNum, block){
     const rackPart = block.r0 === block.r1 ? block.r0 : (block.r0 + '–' + block.r1);
     const tierPart = block.t0 === block.t1 ? block.t0 : (block.t0 + '–' + block.t1);
-    return rowLabel(rowNum) + '.' + tierPart + '.' + rackPart;
+    return rowLabel(rowNum) + '.' + rackPart + '.' + tierPart;
   }
 
   function pluralRu(n, one, few, many){
@@ -2617,8 +2755,11 @@
     try{
       const data = await apiFetch('/api/agents/kladovshchik/find?q=' + encodeURIComponent(q));
       whSearchResults = (data && data.results) || [];
+      // Адрес «ряд.стеллаж.ярус» (1.7.3) — это ячейка, а не товар.
+      whSearchCell = (data && data.cell) || null;
     } catch(e){
       whSearchResults = [];
+      whSearchCell = null;
       drop.hidden = false;
       drop.innerHTML = `<div class="wh-search-empty">Не удалось найти: ${escapeHTML(e.message)}</div>`;
       return;
@@ -2626,15 +2767,25 @@
     renderWhSearchDrop();
   }
 
+  let whSearchCell = null;
   function renderWhSearchDrop(){
     const drop = document.getElementById('whSearchDrop');
     if(!drop) return;
     drop.hidden = false;
-    if(whSearchResults.length === 0){
+    const c = whSearchCell;
+    const cellItem = !c ? ''
+      : c.exists
+        ? `<div class="wh-search-item" onclick="pickWhSearchCell()">
+            <span class="wh-search-item-sku">Ячейка ${escapeHTML(c.cell)}</span>
+            <span class="wh-search-item-name">${c.empty ? 'пустая' : c.items.length + ' ' + pluralRu(c.items.length, 'товар', 'товара', 'товаров')}</span>
+            <span class="wh-search-item-where">${c.empty ? '' : Number(c.totalUnits).toLocaleString('ru-RU') + ' шт'}</span>
+          </div>`
+        : `<div class="wh-search-empty">Ячейки ${escapeHTML(c.cell)} на складе нет. Адрес — ряд.стеллаж.ярус, например 1.7.3</div>`;
+    if(whSearchResults.length === 0 && !cellItem){
       drop.innerHTML = '<div class="wh-search-empty">Ничего не нашлось</div>';
       return;
     }
-    drop.innerHTML = whSearchResults.map((p, i) => {
+    drop.innerHTML = cellItem + whSearchResults.map((p, i) => {
       const where = p.locations.length
         ? `${p.totalQty.toLocaleString('ru-RU')} шт · ${p.locations.length} ${pluralRu(p.locations.length, 'ячейка', 'ячейки', 'ячеек')}`
         : 'нет на складе';
@@ -2651,6 +2802,14 @@
     const drop = document.getElementById('whSearchDrop');
     if(drop){ drop.hidden = true; drop.innerHTML = ''; }
   }
+
+  function pickWhSearchCell(){
+    const c = whSearchCell;
+    if(!c || !c.cellBlockId) return;
+    hideWhSearchDrop();
+    openCellById(c.cellBlockId);
+  }
+  window.pickWhSearchCell = pickWhSearchCell;
 
   function pickWhSearchResult(index){
     const product = whSearchResults[index];
@@ -2714,9 +2873,7 @@
     // сказать об этом, чем показать адрес, которого на схеме нет.
     const stale = hitCount < product.locations.length;
     const addrs = product.locations.map(l => {
-      const rack = l.rackFrom === l.rackTo ? l.rackFrom : `${l.rackFrom}–${l.rackTo}`;
-      const tier = l.tierFrom === l.tierTo ? l.tierFrom : `${l.tierFrom}–${l.tierTo}`;
-      const name = `${l.row}.${tier}.${rack}`;
+      const name = blockAddr(l.row, { r0: l.rackFrom, r1: l.rackTo, t0: l.tierFrom, t1: l.tierTo });
       return `<span class="wh-search-addr" onclick="scrollToWhRow(${l.row})">${escapeHTML(name)}<i>${l.qty.toLocaleString('ru-RU')} шт</i></span>`;
     }).join('');
 
@@ -2740,6 +2897,7 @@
   function clearWhSearch(){
     whHighlight = null;
     whSearchResults = [];
+    whSearchCell = null;
     clearTimeout(whSearchTimer);
     const input = document.getElementById('whSearchInput');
     if(input) input.value = '';
@@ -2996,6 +3154,10 @@
           Появится после первой приёмки через Аргус.</div>
       </div>`;
 
+    // Что лежит — полностью (владелец 27.09.2026): товар, продавец, артикул,
+    // штрихкод, артикул WB, количество, годное или брак, когда положили.
+    // Карта держит в памяти только артикул и количество по всем ячейкам;
+    // подробности приходят по нажатию — одной ячейкой.
     let rows;
     if(stock.length === 0){
       rows = (stock1c.length === 0
@@ -3003,28 +3165,13 @@
         : '') + from1c;
     } else {
       const totalQty = stock.reduce((sum, it) => sum + Number(it.qty || 0), 0);
-      // Сколько из этого проверено руками, а сколько выведено из учёта.
-      // Разница важнее суммы: по первому можно отгружать не глядя, второе
-      // стоит сверить с полкой, прежде чем обещать клиенту.
-      const derived = stock.filter(it => it.source === '1c').length;
       rows = `
         <div class="wh-detail-row">
           <span>Всего</span>
-          <span>${totalQty.toLocaleString('ru-RU')} шт · ${stock.length} ${pluralRu(stock.length, 'артикул', 'артикула', 'артикулов')}</span>
+          <span>${totalQty.toLocaleString('ru-RU')} шт</span>
         </div>
-        ${derived === 0 ? '' : `<div class="wh-detail-note" style="margin:6px 0 10px;">
-          ${derived === stock.length ? 'Разложено по учёту 1С' : derived + ' из них по учёту 1С'} —
-          полку никто не проверял. Проверится на первой приёмке или пересчёте.</div>`}
-        <div class="wh-detail-stock">
-          ${stock.map(it => `
-            <div class="wh-detail-stock-item${it.source === '1c' ? ' from-1c' : ''}"${it.source === '1c'
-              ? ' title="Выведено из учёта: 1С говорит, что этого товара всего столько и лежит он в одной ячейке. Полку никто не проверял."'
-              : ''}>
-              <span class="wh-detail-stock-sku" title="${escapeHTML(it.sku)}">${escapeHTML(it.sku)}</span>
-              <span class="wh-detail-stock-qty">${Number(it.qty || 0).toLocaleString('ru-RU')} шт</span>
-              <span class="wh-detail-stock-client" title="${escapeHTML(companyNameById(it.companyId) || '')}">${escapeHTML(companyNameById(it.companyId) || '—')}</span>
-            </div>
-          `).join('')}
+        <div class="wh-cell-items" id="whCellItems" data-block="${escapeHTML(el.dataset.blockId)}">
+          <div class="wh-detail-note">Загружаю, что лежит…</div>
         </div>
       ` + from1c;
     }
@@ -3048,7 +3195,48 @@
       </div>
     `;
     keepStill(el, () => detail.classList.add('open'));
+    if(stock.length) loadCellItems(el.dataset.blockId);
   }
+
+  const CELL_QUALITY_CLASS = { good: '', defective: ' bad', packaging_defect: ' bad' };
+  async function loadCellItems(blockId){
+    let d;
+    try{ d = await apiFetch('/api/cells/blocks/' + encodeURIComponent(blockId) + '/contents'); }
+    catch(e){
+      const box = document.getElementById('whCellItems');
+      if(box && box.dataset.block === blockId) box.innerHTML = '<div class="wh-detail-note">Не удалось загрузить: ' + escapeHTML(e.message) + '</div>';
+      return;
+    }
+    const box = document.getElementById('whCellItems');
+    if(!box || box.dataset.block !== blockId) return;   // уже выбрали другую ячейку
+    const when = (v) => v ? new Date(v).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
+    const placed = (it) => {
+      const last = when(it.placedAt), first = when(it.firstPlacedAt);
+      return first === last ? last : last + ' (первый раз — ' + first + ')';
+    };
+    const line = (k, v) => '<dt>' + k + '</dt><dd>' + escapeHTML(v || '—') + '</dd>';
+    box.innerHTML = d.items.length ? d.items.map(it => '<div class="wh-cell-item">'
+      + '<div class="wh-cell-item-top"><span class="wh-cell-item-name">' + escapeHTML(it.name) + '</span>'
+      +   '<span class="wh-cell-item-qty' + (CELL_QUALITY_CLASS[it.quality] || '') + '">' + it.qty.toLocaleString('ru-RU') + ' шт</span></div>'
+      + '<dl class="wh-cell-item-grid">'
+      +   line('Продавец', it.seller) + line('Артикул', it.sku) + line('Штрихкод', it.barcode)
+      +   line('Артикул WB', it.wbArticle) + line('Состояние', it.qualityName) + line('Положили', placed(it))
+      + '</dl></div>').join('')
+      : '<div class="wh-detail-note">Ячейка пуста</div>';
+  }
+
+  // Перейти к ячейке по id и открыть её карточку: из поиска по адресу.
+  function openCellById(blockId){
+    const entry = blockById[blockId];
+    if(!entry){ showWhToast('Этой ячейки нет на карте — обновите страницу.'); return; }
+    const find = () => document.querySelector('#fp-row-' + entry.rowNum + ' .wh-cell[data-block-id="' + blockId + '"]');
+    // Свёрнутый ряд показывает только занятые стеллажи: пустую ячейку ищем в развёрнутом.
+    if(!find() && !whShowEmpty[entry.rowNum]){ whShowEmpty[entry.rowNum] = true; renderWarehouseMap(); }
+    focusRow(entry.rowNum);
+    const el = find();
+    if(el) selectCell(el);
+  }
+  window.openCellById = openCellById;
 
   /* Открытие панели сужает карту, а от этого шапка ряда переносится на две
      строки — и всё, что ниже, уезжает вниз вместе с выбранной ячейкой. Ячейка
@@ -3421,10 +3609,13 @@
     const last = new Date(node.entries[0].created_at);
     const minutes = Math.round((last - first) / 60000);
     const took = node.entries.length > 1 ? ' · ' + (minutes < 1 ? 'меньше минуты' : minutes + ' мин') : '';
+    // Позиции — только строки товара: «начал приёмку», «закончил», «забрал
+    // себе» лежат в той же группе, но позициями не являются.
+    const positions = node.entries.filter(function(e){ return e.entity_type === 'invoice_item'; }).length;
     const count = node.supplyNumber && total > 0
       ? 'собрано ' + done + ' из ' + total
-      : node.worker
-        ? node.entries.length + ' ' + pluralRu(node.entries.length, 'позиция', 'позиции', 'позиций')
+      : node.worker && positions
+        ? positions + ' ' + pluralRu(positions, 'позиция', 'позиции', 'позиций')
         : node.entries.length + ' ' + pluralRu(node.entries.length, 'запись', 'записи', 'записей');
     // Полоса — чтобы ход сборки читался с одного взгляда, без арифметики.
     const bar = node.supplyNumber && total > 0
@@ -5521,21 +5712,24 @@
     saveXlsx('Ячейка ' + addr, 'Ячейка', rows, [14, 18, 24, 13]);
   }
 
+  // В Excel — то, что сейчас в списке: с поиском и фильтрами.
   function exportInvoices(){
-    const statusLabel = {open:'не начата', in_progress:'в процессе', completed:'завершена',
-      ready:'собрана', shipped:'отгружена'};
-    const dirLabel = {in:'приёмка', out:'отгрузка', return:'возврат'};
-    const rows = lastInvoices.map(function(inv){
+    const originLabel = { seller: 'от продавца', '1c': 'из 1С', manual: 'вручную' };
+    const rows = rcFiltered().map(function(inv){
       return {
         'Номер': inv.number,
         'Продавец': inv.company_name,
-        'Направление': dirLabel[inv.direction] || inv.direction || '',
-        'Статус': statusLabel[inv.status] || inv.status,
-        'Источник': inv.external_id ? (inv.source === 'wb' ? 'Wildberries' : '1С') : 'вручную',
-        'Создана': inv.created_at ? new Date(inv.created_at).toLocaleString('ru-RU') : '',
+        'Откуда': inv.source_document_type === 'supplier_order' ? 'заказ поставщику, из 1С' : originLabel[rcOrigin(inv)],
+        'Привезут': rcPlannedDay(inv) ? rcPlannedDay(inv).split('-').reverse().join('.') : '',
+        'Время выгрузки': rcPlannedDay(inv) ? receiptSlot(inv.planned_from, inv.planned_to) : '',
+        'Машина приехала': inv.arrived_at ? new Date(inv.arrived_at).toLocaleString('ru-RU') : '',
+        'Статус': receiptState(inv) + (inv.has_discrepancy ? ', расхождение' : ''),
+        'Кто везёт': [inv.carrier, inv.vehicle].filter(Boolean).join(', '),
+        'Документы поставщика': inv.supplier_docs || '',
+        'Заведён': inv.created_at ? new Date(inv.created_at).toLocaleString('ru-RU') : '',
       };
     });
-    saveXlsx('Приходы', 'Приходы', rows, [18, 24, 13, 13, 13, 18]);
+    saveXlsx('Приходы', 'Приходы', rows, [18, 24, 18, 12, 14, 18, 22, 24, 26, 18]);
   }
 
 
@@ -5888,7 +6082,7 @@
     const emptyRow = (text) => `<tr><td colspan="${withStock ? 9 : 8}" class="ord-empty">${text}</td></tr>`;
 
     box.innerHTML = `
-      <div class="ord-actions">
+      <div class="ord-actions" data-form>
         <!-- Куда уедет поставка. По этой точке её потом отбирают в списке
              поставок и по ней грузчик раскладывает собранное по машинам.
              Для WB — пункт приёма из списка WB и дата: их требует WB. -->
