@@ -347,32 +347,49 @@
     renderStaffTable();
   }
 
+  // Отозванные ключи не лежат вперемешку с рабочими (владелец 27.09.2026):
+  // в каждом разделе они свёрнуты под строкой «Показать отозванные (N)».
+  // Раскрыто или нет — помним, пока открыт кабинет.
+  const revokedOpen = { worker: false, manager: false };
+  function toggleRevokedStaff(role){
+    revokedOpen[role] = !revokedOpen[role];
+    renderStaffTable();
+  }
+  window.toggleRevokedStaff = toggleRevokedStaff;
+  const revokedToggleHtml = (count, open, onclick) => count
+    ? `<button type="button" class="staff-revoked-toggle${open ? ' open' : ''}" onclick="${onclick}" aria-expanded="${open}">
+        <span class="staff-toggle-arrow">▸</span>${open ? 'Скрыть отозванные' : 'Показать отозванные'} (${count})</button>`
+    : '';
+
   // Одна таблица на оба раздела: колонки и действия у них общие, разнится
   // только, кого показываем и что предлагаем сделать.
   function staffTableHtml(rows, role){
     const head = '<div class="staff-row head"><div>Имя</div><div>Ключ</div>'
       + '<div>Выдан</div><div>Статус</div><div></div></div>';
-    return head + rows.map((s) => {
+    const active = rows.filter(s => s.active);
+    const revoked = rows.filter(s => !s.active);
+    const rowHtml = (s) => {
       const issued = new Date(s.issued_at).toLocaleDateString('ru-RU');
       const manager = role === 'manager';
       const rights = (s.permissions || []).map(grantTitle);
       const rightsText = manager
         ? (rights.length ? 'Открыто: ' + rights.join(', ') : 'Только заказы, поставки и журнал')
         : '';
-      const canEdit = manager && !IS_MANAGER;
+      // Права и роль меняют у рабочего ключа; отозванный можно только вернуть.
+      const canEdit = manager && !IS_MANAGER && s.active;
       // Роль ключа меняется без перевыдачи: код у человека остаётся прежним.
-      const canPromote = !manager && !IS_MANAGER;
+      const canPromote = !manager && !IS_MANAGER && s.active;
       return `
         <div class="staff-row ${s.active ? '' : 'revoked'}">
           <div class="staff-name">${escapeHTML(s.name)}
             ${rightsText ? `<div class="staff-rights">${escapeHTML(rightsText)}</div>` : ''}</div>
           <div class="staff-key">${escapeHTML(s.key_code)}</div>
           <div class="staff-date">${issued}</div>
-          <div><span class="staff-status ${s.active ? 'active' : 'revoked'}">${s.active ? 'активен' : 'отозван'}</span></div>
-          <div style="text-align:right;">
-            ${canPromote ? `<span class="staff-action restore" style="margin-right:12px;" onclick="makeManager('${escapeHTML(s.id)}', '${escapeHTML(s.name)}')">Сделать менеджером</span>` : ''}
-            ${canEdit ? `<span class="staff-action restore" style="margin-right:12px;" onclick="editStaffGrants('${escapeHTML(s.id)}')">Права</span>` : ''}
-            <span class="staff-action ${s.active ? 'revoke' : 'restore'}" onclick="toggleStaffKey('${escapeHTML(s.id)}')">${s.active ? 'Отозвать' : 'Восстановить'}</span>
+          <div class="staff-state"><span class="staff-status ${s.active ? 'active' : 'revoked'}">${s.active ? 'активен' : 'отозван'}</span></div>
+          <div class="staff-actions">
+            ${canPromote ? `<button type="button" class="staff-btn" onclick="makeManager('${escapeHTML(s.id)}', '${escapeHTML(s.name)}')">Сделать менеджером</button>` : ''}
+            ${canEdit ? `<button type="button" class="staff-btn" onclick="editStaffGrants('${escapeHTML(s.id)}')">Права</button>` : ''}
+            <button type="button" class="staff-btn ${s.active ? 'revoke' : 'restore'}" onclick="toggleStaffKey('${escapeHTML(s.id)}')">${s.active ? 'Отозвать' : 'Восстановить'}</button>
           </div>
         </div>
         ${canEdit ? `<div class="staff-row staff-edit" id="staffEdit-${escapeHTML(s.id)}" hidden>
@@ -384,7 +401,11 @@
           </div>
         </div>` : ''}
       `;
-    }).join('');
+    };
+    return (active.length ? head + active.map(rowHtml).join('')
+      : '<div class="staff-empty">Рабочих ключей нет — выдайте ключ выше или восстановите отозванный.</div>')
+      + revokedToggleHtml(revoked.length, revokedOpen[role], `toggleRevokedStaff('${role}')`)
+      + (revokedOpen[role] ? revoked.map(rowHtml).join('') : '');
   }
 
   function renderStaffTable(){
@@ -398,7 +419,7 @@
       if(label){
         label.innerHTML = staffError
           ? 'Менеджеры <span class="staff-toggle-count">— не загрузились</span>'
-          : 'Менеджеры <span class="staff-toggle-count">· ' + managers.length + '</span>';
+          : 'Менеджеры <span class="staff-toggle-count">· ' + staffCountText(managers) + '</span>';
       }
       managerWrap.innerHTML = staffError
         ? '<div class="staff-empty">Не удалось загрузить: ' + escapeHTML(staffError) + '</div>'
@@ -424,7 +445,7 @@
     if(label){
       label.innerHTML = staffError
         ? 'Кладовщики <span class="staff-toggle-count">— не загрузились</span>'
-        : 'Кладовщики <span class="staff-toggle-count">· ' + workers.length + '</span>';
+        : 'Кладовщики <span class="staff-toggle-count">· ' + staffCountText(workers) + '</span>';
     }
 
     if(staffError){
@@ -439,6 +460,14 @@
     // Развернуть сам, если человек только что выдал ключ: иначе он нажимает
     // «сгенерировать» и не видит результата — ровно на это и была жалоба.
     wrap.innerHTML = staffTableHtml(workers, 'worker');
+  }
+
+  // Сколько рабочих ключей, и отдельно — сколько отозвано: отозванные в
+  // общий счёт не входят, как не входят и в сам список.
+  function staffCountText(rows){
+    const active = rows.filter(s => s.active).length;
+    const revoked = rows.length - active;
+    return active + (revoked ? ', отозвано ' + revoked : '');
   }
 
   // Один сворачиватель на оба списка: работников и продавцов. Второй такой же
@@ -587,25 +616,37 @@
     }
     wrap.innerHTML = companies.map(c => {
       const oneCName = c.one_c_counterparty_name || '';
+      const active = c.keys.filter(k => k.active);
+      const revoked = c.keys.filter(k => !k.active);
+      const open = sellerRevokedOpen.has(c.id);
+      const keyRow = (k) => `
+        <div class="staff-row company-row company-key${k.active ? '' : ' revoked'}">
+          <div class="staff-date company-key-text">Ключ <span class="staff-key">${escapeHTML(k.keyCode)}</span>, выдан ${new Date(k.issuedAt).toLocaleDateString('ru-RU')}${k.active ? '' : ' · отозван'}</div>
+          <div class="staff-actions"><button type="button" class="staff-btn ${k.active ? 'revoke' : 'restore'}" onclick="toggleSellerKey('${k.id}')">${k.active ? 'Отозвать' : 'Восстановить'}</button></div>
+        </div>`;
       return `
       <div class="staff-row company-row">
         <div class="staff-name">${escapeHTML(c.name)}</div>
-        <div class="staff-key">${c.keys.length === 0 ? '—' : c.keys.map(k => `${escapeHTML(k.keyCode)}${k.active ? '' : ' (отозван)'}`).join(', ')}</div>
+        <div class="staff-key">${active.length === 0 ? '<span class="staff-date">нет рабочего ключа</span>' : active.map(k => escapeHTML(k.keyCode)).join(', ')}</div>
         <button type="button" class="company-1c-link ${c.one_c_external_id ? 'linked' : ''}" onclick="openOneCMapping('${c.id}')">
           <span class="company-1c-dot" aria-hidden="true"></span>
           <span class="company-1c-name">${oneCName ? '1С: ' + escapeHTML(oneCName) : 'Связать с контрагентом 1С'}</span>
         </button>
-        <div class="staff-action" onclick="issueSellerKey('${c.id}')">+ Ключ</div>
+        <div class="staff-actions"><button type="button" class="staff-btn" onclick="issueSellerKey('${c.id}')">+ Ключ</button></div>
       </div>
-      ${c.keys.map(k => `
-        <div class="staff-row company-row" style="opacity:0.85;">
-          <div class="staff-date" style="grid-column:1/4;">Ключ ${escapeHTML(k.keyCode)}, выдан ${new Date(k.issuedAt).toLocaleDateString('ru-RU')}</div>
-          <div class="staff-action ${k.active ? 'revoke' : 'restore'}" onclick="toggleSellerKey('${k.id}')">${k.active ? 'Отозвать' : 'Восстановить'}</div>
-        </div>
-      `).join('')}
+      ${active.map(keyRow).join('')}
+      ${revokedToggleHtml(revoked.length, open, `toggleRevokedSellerKeys('${c.id}')`)}
+      ${open ? revoked.map(keyRow).join('') : ''}
     `;
     }).join('');
   }
+  // Отозванные ключи продавца — так же свёрнуты, как у сотрудников.
+  const sellerRevokedOpen = new Set();
+  function toggleRevokedSellerKeys(companyId){
+    if(sellerRevokedOpen.has(companyId)) sellerRevokedOpen.delete(companyId); else sellerRevokedOpen.add(companyId);
+    renderCompaniesList();
+  }
+  window.toggleRevokedSellerKeys = toggleRevokedSellerKeys;
 
   function renderOneCMappingCurrent(){
     const host = document.getElementById('oneCMapCurrent');
@@ -5684,6 +5725,54 @@
     return [...rows].sort(by[ordersSort] || by.product);
   }
 
+  // Нехватка по учёту Аргуса — цветом строки (владелец 27.09.2026): красный —
+  // годного товара в ячейках нет совсем, жёлтый — есть, но меньше, чем нужно
+  // этим заказам вместе с поставками, которые уже собираются. Считает сервер
+  // (stockLevel) — тем же правилом, что «не хватит товара» у поставки.
+  const orderShortLevel = (o) => (o.stockLevel === 'none' || o.stockLevel === 'short') ? o.stockLevel : null;
+  let ordersShortOnly = false;
+  function setOrdersShortOnly(companyId, on){
+    ordersShortOnly = Boolean(on);
+    renderPartnerOrders(companyId);
+  }
+  window.setOrdersShortOnly = setOrdersShortOnly;
+  // Видна ли строка: поиск и «Только с нехваткой». Галка «выбрать все» стоит
+  // над видимым списком и обязана означать ровно его.
+  const orderVisible = (o) => matchesOrderSearch(o) && (!ordersShortOnly || Boolean(orderShortLevel(o)));
+
+  // Необязательные столбцы — человек включает сам; выбор помним в этом
+  // браузере отдельно на склад и роль: владелец и менеджер за одним
+  // компьютером выбирают каждый своё.
+  const ORDER_COLUMNS = { stock: 'На складе, шт.' };
+  const ORDER_COLS_KEY = 'argus_orders_cols_' + (authPayload.warehouseId || '') + '_' + ROLE;
+  function orderColumns(){
+    let saved = null;
+    try{ saved = JSON.parse(localStorage.getItem(ORDER_COLS_KEY) || 'null'); } catch(e){ saved = null; }
+    return new Set((Array.isArray(saved) ? saved : []).filter(c => ORDER_COLUMNS[c]));
+  }
+  function toggleOrderColumn(companyId, col){
+    const cols = orderColumns();
+    if(cols.has(col)) cols.delete(col); else cols.add(col);
+    try{ localStorage.setItem(ORDER_COLS_KEY, JSON.stringify([...cols])); } catch(e){}
+    ordersColsOpen = true;
+    renderPartnerOrders(companyId);
+  }
+  window.toggleOrderColumn = toggleOrderColumn;
+  let ordersColsOpen = false;
+  function toggleOrderColsMenu(companyId){
+    ordersColsOpen = !ordersColsOpen;
+    renderPartnerOrders(companyId);
+  }
+  window.toggleOrderColsMenu = toggleOrderColsMenu;
+  document.addEventListener('click', function(e){
+    if(!ordersColsOpen || (e.target.closest && e.target.closest('.ord-cols'))) return;
+    ordersColsOpen = false;
+    const menu = document.querySelector('.ord-cols-menu');
+    if(menu) menu.hidden = true;
+    const btn = document.querySelector('.ord-cols-btn');
+    if(btn) btn.setAttribute('aria-expanded', 'false');
+  });
+
   function matchesOrderSearch(o){
     const q = ordersSearch.trim().toLowerCase();
     if(!q) return true;
@@ -5743,7 +5832,12 @@
     const box = document.getElementById('ordersDetail');
     if(!box) return;
     const partner = ordersPartners.find(p => p.companyId === companyId);
-    const shown = ordersRows.filter(matchesOrderSearch);
+    const shown = ordersRows.filter(orderVisible);
+    const cols = orderColumns();
+    const withStock = cols.has('stock');
+    // Сколько заказов с нехваткой — по всему списку продавца, без поиска:
+    // цифра на кнопке фильтра не должна прыгать от набранной буквы.
+    const shortCount = new Set(ordersRows.filter(o => orderShortLevel(o)).map(o => o.id)).size;
     const fresh = sortOrders(shown.filter(o => !o.wbConfirmed));
     const confirmed = sortOrders(shown.filter(o => o.wbConfirmed));
     const ready = fresh.filter(o => o.ready);
@@ -5758,28 +5852,40 @@
     if(isWb) loadShippingPoints(companyId);
     const points = isWb && Array.isArray(ordersPoints[companyId]) ? ordersPoints[companyId] : null;
     const needShipping = !!points && (!ordersPointId || !ordersShipDate);
+    // Годный остаток в ячейках Аргуса. Жёлтой строке — сколько нужно: «1» и
+    // «нужно 3» читаются как «1 из 3».
+    const stockCell = (o) => {
+      if(o.stockQty == null) return '<td class="num"><span class="ord-sub">—</span></td>';
+      const need = Number(o.stockNeed || 0), reserved = Number(o.stockReserved || 0);
+      return '<td class="num ord-stock">' + o.stockQty
+        + (orderShortLevel(o)
+          ? '<div class="ord-sub">нужно ' + need + (reserved ? ' + ' + reserved + ' в поставках' : '') + '</div>'
+          : '')
+        + '</td>';
+    };
     const row = (o, selectable) => `
-      <tr class="${selectable ? '' : 'not-ready'}">
+      <tr class="${selectable ? '' : 'not-ready'}${orderShortLevel(o) ? ' st-' + orderShortLevel(o) : ''}">
         <td>${selectable
           ? `<input type="checkbox" ${ordersSelected.has(o.id) ? 'checked' : ''} onchange="toggleOrderPick('${companyId}', '${o.id}')" aria-label="Выбрать заказ">`
           : ''}</td>
         <td class="ord-mono ord-no">${escapeHTML(o.number)}${o.rid
           ? `<div class="ord-sub" title="${escapeHTML(o.rid)}">${escapeHTML(String(o.rid).slice(0, 14))}…</div>` : ''}</td>
         <td class="ord-when">${orderWhen(o)}</td>
-        <td>${escapeHTML(o.name || '—')}<div class="ord-mono">${escapeHTML(o.sku || 'не сопоставлен')}</div>${o.ready && o.stockShort
-          ? '<div class="ord-short" title="По учёту Аргуса этого товара на полках не хватит — с ним поставку полностью не соберут">на полке не хватает</div>' : ''}</td>
+        <td>${escapeHTML(o.name || '—')}<div class="ord-mono">${escapeHTML(o.sku || 'не сопоставлен')}</div></td>
         <td class="ord-mono">${escapeHTML(o.article || '—')}${o.nmId ? `<div class="ord-sub">WB ${escapeHTML(o.nmId)}</div>` : ''}</td>
         <td class="ord-mono">${escapeHTML(o.barcode || '—')}</td>
         <td>${(o.offices || []).length ? escapeHTML(o.offices.join(', ')) : '<span class="ord-sub">—</span>'}</td>
         <td class="num">${o.qty === null ? '—' : o.qty}${o.salePriceKopecks != null
           ? `<div class="ord-sub">${(o.salePriceKopecks / 100).toLocaleString('ru-RU')} ₽</div>` : ''}</td>
+        ${withStock ? stockCell(o) : ''}
       </tr>`;
     const head = (withToggle) => `<thead><tr>
         <th>${withToggle ? `<input type="checkbox" ${allOn ? 'checked' : ''} ${ready.length ? '' : 'disabled'}
           onchange="toggleAllOrders('${companyId}')" aria-label="Выбрать все готовые">` : ''}</th>
         <th>Заказ</th><th>Оформлен</th><th>Товар</th><th>Артикул МП</th><th>Штрихкод</th>
-        <th>Куда</th><th class="num">Кол-во</th>
+        <th>Куда</th><th class="num">Кол-во</th>${withStock ? '<th class="num">На складе, шт.</th>' : ''}
       </tr></thead>`;
+    const emptyRow = (text) => `<tr><td colspan="${withStock ? 9 : 8}" class="ord-empty">${text}</td></tr>`;
 
     box.innerHTML = `
       <div class="ord-actions">
@@ -5825,10 +5931,28 @@
             <option value="number"${ordersSort === 'number' ? ' selected' : ''}>По номеру заказа</option>
             <option value="date"${ordersSort === 'date' ? ' selected' : ''}>По дате</option>
           </select>
+          <button type="button" class="ord-chip${ordersShortOnly ? ' on' : ''}" aria-pressed="${ordersShortOnly}"
+                  onclick="setOrdersShortOnly('${companyId}', ${!ordersShortOnly})" ${shortCount || ordersShortOnly ? '' : 'disabled'}>
+            Только с нехваткой · ${shortCount}</button>
+          <span class="ord-cols">
+            <button type="button" class="ord-chip ord-cols-btn" aria-haspopup="true" aria-expanded="${ordersColsOpen}"
+                    onclick="toggleOrderColsMenu('${companyId}')">Столбцы ▾</button>
+            <span class="ord-cols-menu" ${ordersColsOpen ? '' : 'hidden'}>
+              ${Object.keys(ORDER_COLUMNS).map(c => `<label class="ord-cols-item">
+                <input type="checkbox" ${cols.has(c) ? 'checked' : ''} onchange="toggleOrderColumn('${companyId}', '${c}')">
+                ${escapeHTML(ORDER_COLUMNS[c])}</label>`).join('')}
+            </span>
+          </span>
         </span>
       </div>
+      <div class="ord-legend">
+        <span><i class="ord-sw st-none"></i>товара на складе нет совсем</span>
+        <span><i class="ord-sw st-short"></i>есть, но меньше, чем нужно этим заказам (вместе с поставками, которые уже собираются)</span>
+        <span class="ord-sub">по годному остатку в ячейках Аргуса</span>
+      </div>
       <div class="ord-scroll">
-        <table class="ord-table">${head(true)}<tbody>${fresh.map(o => row(o, o.ready)).join('')}</tbody></table>
+        <table class="ord-table">${head(true)}<tbody>${fresh.map(o => row(o, o.ready)).join('')
+          || emptyRow(ordersShortOnly ? 'Заказов с нехваткой нет.' : 'Под поиск ничего не подходит.')}</tbody></table>
       </div>
       ${confirmed.length ? `
         <div class="ord-meta" style="margin:24px 0 10px;">
@@ -5881,7 +6005,7 @@
     // Только видимые: галка стоит над отфильтрованным списком и обязана
     // означать ровно его. Отметки на скрытых заказах не трогаем — их ставил
     // человек. Раньше бралась вся сотня заказов, включая спрятанные поиском.
-    const ready = ordersRows.filter(o => o.ready && !o.wbConfirmed && matchesOrderSearch(o));
+    const ready = ordersRows.filter(o => o.ready && !o.wbConfirmed && orderVisible(o));
     const allOn = ready.length > 0 && ready.every(o => ordersSelected.has(o.id));
     const next = new Set(ordersSelected);
     ready.forEach(o => { if(allOn) next.delete(o.id); else next.add(o.id); });
@@ -6120,6 +6244,7 @@
         +   (s.created_at ? '<div class="sup-by">составлена ' + escapeHTML(new Date(s.created_at).toLocaleString('ru-RU',
               { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }))
               + (s.created_by ? ' · составил ' + escapeHTML(s.created_by) : '') + '</div>' : '')
+        +   supplyAssemblyHtml(s)
         + '</div>'
         + '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">'
         +   (s.missing > 0 ? '<span class="sup-missing" title="Грузчик отметил на сборке — смотрите «Что внутри» и журнал">Нет товара: ' + s.missing + '</span>' : '')
@@ -6151,6 +6276,26 @@
   }
   window.loadSupplies = loadSupplies;
   window.renderSupplies = renderSupplies;
+
+  // Ход сборки у поставки — строкой, как её видят грузчики (27.09.2026):
+  // «На паузе · Дима · взято 3 из 7 · «коробы у ворот 3»». Руководитель и
+  // менеджер только смотрят: начать или бросить сборку может лишь грузчик.
+  function supplyAssemblyHtml(s){
+    const st = s.assembly;
+    if(!st || !st.assembly || s.status === 'shipped') return '';
+    const a = st.assembly;
+    const taken = 'взято ' + st.taken + ' из ' + st.total + ' шт.';
+    const byPaper = a.mode === 'paper' ? ' по листу' : '';
+    const head = a.status === 'active' ? 'Собирает ' + escapeHTML(a.workerName) + byPaper
+      : a.status === 'paused' ? 'На паузе · ' + escapeHTML(a.workerName)
+      : a.status === 'abandoned' ? 'Свободна — ' + escapeHTML(a.workerName) + ' отказался'
+      : (s.status === 'collecting' ? 'Сборку закончил ' : 'Собрал ') + escapeHTML(a.workerName) + byPaper;
+    const note = st.lastComment
+      ? ' · «' + escapeHTML(st.lastComment.text) + '»'
+        + (st.lastComment.by && st.lastComment.by !== a.workerName ? ' — ' + escapeHTML(st.lastComment.by) : '')
+      : '';
+    return '<div class="sup-asm ' + escapeHTML(a.status) + '">' + head + ' · ' + taken + note + '</div>';
+  }
 
   // Лист комплектации и упаковочный — отдельной страницей.
   //

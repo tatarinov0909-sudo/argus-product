@@ -512,14 +512,28 @@
   const transitQty = (r) => Number(r.inTransit || 0);
   const availableQty = (r) => (r.available == null ? null : Number(r.available));
   const isShort = (r) => r.shortage === true || (total(r) != null && orderedQty(r) + assemblyQty(r) > Number(total(r)));
+  // Что стоит за числами (владелец 27.09.2026): нажал на «Заказано», «В сборке»
+  // или «В пути» — видишь сами заказы. Какая строка под каким числом, решает
+  // сервер тем же правилом, что и сами числа (bucket в /api/sellers/orders).
+  const BUCKETS = {
+    ordered: { title: 'Заказано', note: 'купили на WB, поставки ещё нет', get: orderedQty },
+    assembly: { title: 'В сборке', note: 'в поставке у склада или товар уже отбирали', get: assemblyQty },
+    transit: { title: 'В пути', note: 'уехало поставкой на WB, WB ещё не принял', get: transitQty },
+  };
+  const bucketNum = (r, bucket) => {
+    const v = BUCKETS[bucket].get(r);
+    return v > 0
+      ? `<button type="button" class="num-link" data-bucket="${bucket}" data-bucket-sku="${h(r.sku)}" title="Какие это заказы">${n(v)}</button>`
+      : num(v);
+  };
   const PRODUCT_COLUMNS = [
     { key: 'photo', title: 'Фото', cls: 'w-photo', cell: (r) => photo(r.sku) },
     { key: 'name', title: 'Товар', locked: true, main: true, cell: (r) => `<button class="link-button" data-open-product="${h(r.sku)}">${h(productName(r))}</button>${vendorCodes(r.sku).length ? `<span class="cell-sub">Артикул продавца: ${h(vendorCodes(r.sku).join(', '))}</span>` : ''}${isShort(r) ? '<span class="row-note bad">Заказов больше, чем товара по учёту</span>' : ''}` },
     { key: 'wb', title: 'Артикул WB', cell: (r) => idCell(wbIds(r.sku), r.barcode) },
     { key: 'total', title: 'Всего', cls: 'n', cell: (r) => num(total(r)) },
-    { key: 'ordered', title: 'Заказано', cls: 'n', cell: (r) => num(orderedQty(r)) },
-    { key: 'assembly', title: 'В сборке', cls: 'n', cell: (r) => num(assemblyQty(r)) },
-    { key: 'transit', title: 'В пути', cls: 'n', cell: (r) => num(transitQty(r)) },
+    { key: 'ordered', title: 'Заказано', cls: 'n', cell: (r) => bucketNum(r, 'ordered') },
+    { key: 'assembly', title: 'В сборке', cls: 'n', cell: (r) => bucketNum(r, 'assembly') },
+    { key: 'transit', title: 'В пути', cls: 'n', cell: (r) => bucketNum(r, 'transit') },
     { key: 'available', title: 'Доступно', cls: 'n', cell: (r) => num(availableQty(r), true) },
     { key: 'defective', title: 'Брак', cls: 'n', hidden: true, cell: (r) => num(r.defective || 0) },
     { key: 'category', title: 'Категория', hidden: true, cell: (r) => h(meta(r.sku).category || '—') },
@@ -609,6 +623,10 @@
       ? table(visibleColumns('products', PRODUCT_COLUMNS), rows.slice(0, ui.shown), { rowAttrs: (r) => `class="clickable" data-product="${h(r.sku)}"` }) + moreFooter(ui, rows.length, ['товар', 'товара', 'товаров'])
       : empty('Товары не найдены', ui.q ? 'Проверьте название, артикул WB или штрихкод.' : 'Под выбранные фильтры не подошёл ни один товар.');
     host.querySelectorAll('[data-product]').forEach((tr) => { tr.onclick = () => openProduct(tr.dataset.product); });
+    // Число в строке — сразу к заказам за ним, а не просто в карточку.
+    host.querySelectorAll('[data-bucket]').forEach((b) => {
+      b.onclick = (e) => { e.stopPropagation(); openProduct(b.dataset.bucketSku, b.dataset.bucket); };
+    });
     wireRows(host, ui, renderProductRows);
   }
   const exportProducts = () => exportExcel({
@@ -951,18 +969,29 @@
   $('drawer').addEventListener('close', () => { state.drawerRun += 1; });
   $('drawer').addEventListener('click', (e) => { if (e.target === $('drawer') && e.clientX < $('drawer').getBoundingClientRect().left) $('drawer').close(); });
   const mini = (label, value) => `<div><span>${h(label)}</span><strong>${value == null ? '—' : n(value)}</strong></div>`;
+  // Число над списком заказов — кнопка: переключает список под собой.
+  const miniBucket = (bucket, value) => `<button type="button" class="mini-link" data-mini-bucket="${bucket}"><span>${h(BUCKETS[bucket].title)}</span><strong>${n(value)}</strong></button>`;
+  const BUCKET_COLUMNS = [
+    { key: 'order', title: 'Заказ WB', cell: (x) => `<span class="cell-main nowrap">${h(x.number)}</span>${x.mp_rid ? `<span class="cell-sub rid">${h(x.mp_rid)}</span>` : ''}` },
+    { key: 'at', title: 'Дата', cls: 'n', cell: (x) => (orderAt(x) ? `${h(day(orderAt(x)))}<span class="cell-sub">${h(clock(orderAt(x)))}</span>` : '—') },
+    { key: 'supply', title: 'Поставка', cell: (x) => (x.supply_number ? `<span class="cell-main nowrap">${h(x.supply_number)}</span>${x.supply_destination ? `<span class="cell-sub">${h(x.supply_destination)}</span>` : ''}` : '<span class="zero">нет</span>') },
+    { key: 'status', title: 'Статус', cell: (x) => badge(orderStatus(x), orderStyle(x)) },
+    { key: 'qty', title: 'Шт.', cls: 'n', cell: (x) => num(x.qty) },
+  ];
 
-  async function openProduct(sku) {
+  async function openProduct(sku, bucket = null) {
     const r = (state.data.stock || []).find((x) => x.sku === sku)
       || (state.data.defects?.now || []).find((x) => x.sku === sku) || { sku, name: sku };
     const run = openDrawer(productName(r), 'Карточка товара');
     const ids = wbIds(sku);
     $('drawerBody').innerHTML = `<div class="drawer-meta"><span>Артикул WB <b>${h(ids.join(', ') || 'не передан')}</b></span><span>Штрихкод <b>${h(r.barcode || 'не указан')}</b></span>${vendorCodes(sku).length ? `<span>Артикул продавца <b>${h(vendorCodes(sku).join(', '))}</b></span>` : ''}</div>`
-      + `<div class="mini-stats">${mini('Всего', total(r))}${mini('Заказано', orderedQty(r))}${mini('В сборке', assemblyQty(r))}${mini('В пути', transitQty(r))}${mini('Доступно', availableQty(r))}${mini('Брак', r.defective || 0)}</div>`
-      + `<div class="drawer-actions"><button class="button" id="productOrders">Заказы с этим товаром</button>${ids[0] ? `<a class="button ghost" href="${h(wbLink(ids[0]))}" target="_blank" rel="noopener">Карточка на WB</a>` : ''}</div>`
+      + `<div class="mini-stats">${mini('Всего', total(r))}${miniBucket('ordered', orderedQty(r))}${miniBucket('assembly', assemblyQty(r))}${miniBucket('transit', transitQty(r))}${mini('Доступно', availableQty(r))}${mini('Брак', r.defective || 0)}</div>`
+      + `<section class="detail-section" id="bucketSection"><h3>Какие заказы за этими числами</h3><div id="bucketOrders">${loading}</div></section>`
+      + `<div class="drawer-actions"><button class="button" id="productOrders">Все заказы с этим товаром</button>${ids[0] ? `<a class="button ghost" href="${h(wbLink(ids[0]))}" target="_blank" rel="noopener">Карточка на WB</a>` : ''}</div>`
       + `<section class="detail-section"><h3>Движение товара</h3><div id="productHistory">${loading}</div></section>`
       + (r.updatedAt ? `<p class="help" style="margin-top:20px">Учёт на ${h(when(r.updatedAt))}</p>` : '');
     $('productOrders').onclick = () => { Object.assign(state.ui.orders, state.defaults.orders(), { q: ids[0] || productName(r), shown: state.prefs.rows }); $('drawer').close(); location.hash = 'orders'; };
+    showBucketOrders(r, bucket, run);
     const events = []; let cursor = null; let busy = false;
     async function more() {
       if (busy || run !== state.drawerRun) return; busy = true;
@@ -980,6 +1009,42 @@
     }
     await more();
   }
+  // Заказы за числами «Заказано», «В сборке», «В пути». Берём с сервера по
+  // одному товару: общий список заказов обрезан тысячей строк, и у продавца
+  // побольше «В пути» уехавшие заказы в него уже не попадали бы.
+  async function showBucketOrders(r, bucket, run) {
+    const box = $('bucketOrders');
+    let rows;
+    try {
+      rows = (await api('/api/sellers/orders?sku=' + encodeURIComponent(r.sku))).rows || [];
+    } catch (e) {
+      if (run === state.drawerRun && $('bucketOrders')) box.innerHTML = `<p class="error-text">${h(e.message)}</p>`;
+      return;
+    }
+    if (run !== state.drawerRun || !$('bucketOrders')) return;
+    const by = { ordered: [], assembly: [], transit: [] };
+    rows.forEach((x) => { if (by[x.bucket]) by[x.bucket].push(x); });
+    const qty = (list) => list.reduce((a, x) => a + Number(x.qty || 0), 0);
+    const orders = (list) => new Set(list.map((x) => x.id)).size;
+    let current = bucket && by[bucket] ? bucket : Object.keys(by).find((k) => by[k].length) || 'ordered';
+    const draw = () => {
+      const list = by[current].slice().sort((a, b) => new Date(orderAt(b)) - new Date(orderAt(a)));
+      // Список свежее таблицы (пришли новые заказы) — говорим прямо, а не
+      // показываем под числом «3» четыре заказа молча.
+      const stale = Object.keys(BUCKETS).filter((k) => qty(by[k]) !== BUCKETS[k].get(r));
+      box.innerHTML = `<div class="segmented bucket-tabs" role="tablist" aria-label="Заказы за числами">${Object.keys(BUCKETS).map((k) => `<button type="button" role="tab" aria-selected="${k === current}" data-bucket-tab="${k}">${h(BUCKETS[k].title)} · ${n(qty(by[k]))} шт.</button>`).join('')}</div>`
+        + `<p class="help bucket-note">${h(BUCKETS[current].title)} — ${h(BUCKETS[current].note)}.${list.length ? ' ' + h(counted(orders(list), 'заказ', 'заказа', 'заказов')) + ', ' + h(n(qty(list))) + ' шт.' : ''}</p>`
+        + (stale.length ? `<p class="help bucket-note warn">Пока открыта страница, заказы изменились — числа в таблице обновятся по кнопке «Обновить».</p>` : '')
+        + (list.length ? table(BUCKET_COLUMNS, list) : `<p class="help">Таких заказов по этому товару сейчас нет.</p>`);
+      box.querySelectorAll('[data-bucket-tab]').forEach((b) => { b.onclick = () => { current = b.dataset.bucketTab; draw(); }; });
+    };
+    draw();
+    document.querySelectorAll('[data-mini-bucket]').forEach((b) => {
+      b.onclick = () => { current = b.dataset.miniBucket; draw(); $('bucketSection').scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+    });
+    if (bucket) $('bucketSection').scrollIntoView({ block: 'start' });
+  }
+
   function historyEvent(e) {
     const labels = { received: 'Принято на склад', picked: 'Собрано для заказа', shipped: 'Отгружено со склада', returned: 'Возврат', add: 'Добавлено', remove: 'Списано', move: 'Перемещение', adjust: 'Корректировка', set: 'Пересчёт', inventory_adjust: 'Пересчёт', inventory: 'Пересчёт', kit_assemble: 'Собран набор', repack: 'Перепаковка', canceled_pick_return: 'Возвращено после отмены WB', initial_load: 'Начальный остаток на складе', initial_load_undo: 'Отмена начального остатка' };
     const sign = ['received', 'returned', 'initial_load'].includes(e.kind) ? '+' : ['shipped', 'initial_load_undo'].includes(e.kind) ? '−' : '';

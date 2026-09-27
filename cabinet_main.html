@@ -82,7 +82,14 @@
   .nav-dot{width:5px; height:5px; border-radius:50%; background:var(--muted); flex-shrink:0;}
   .nav-item.active .nav-dot{background:var(--accent);}
   .nav-sep{height:1px; background:var(--line); margin:16px 0;}
-  .sidebar-footer{margin-top:auto; position:relative;}
+  /* Пункты меню прокручиваются сами, а профиль внизу стоит на месте: на
+     низком экране ноутбука нижние пункты раньше были недостижимы
+     (владелец 27.09.2026). Логотип и склад наверху тоже не уезжают. */
+  .sidebar-nav{flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain;
+    margin:0 -14px; padding:0 14px 12px; scrollbar-width:thin;}
+  .sidebar-nav::-webkit-scrollbar-thumb{border-color:var(--panel);}
+  .sidebar > .logo, .sidebar > .wh-select{flex-shrink:0;}
+  .sidebar-footer{margin-top:auto; position:relative; flex-shrink:0; padding-top:8px; border-top:1px solid var(--line-soft);}
   .account-card{display:flex; align-items:center; gap:9px; padding:8px; border-radius:8px; cursor:pointer; transition:background 0.15s;}
   .account-card:hover{background:var(--panel-2);}
   .account-avatar{width:30px; height:30px; border-radius:8px; background:var(--accent-soft); color:var(--accent); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; flex-shrink:0;}
@@ -125,7 +132,9 @@
     .sidebar .wh-select, .sidebar .nav-label, .sidebar .nav-sep, .sidebar .nav-dot,
     .resize-handle, .account-info, .account-chevron, .context{display:none !important;}
     .sidebar .nav-item{white-space:nowrap; margin:0; padding:8px 12px; flex-shrink:0;}
-    .sidebar-footer{margin:0 0 0 auto; position:static; flex-shrink:0;}
+    .sidebar-footer{margin:0 0 0 auto; position:static; flex-shrink:0; padding-top:0; border-top:0;}
+    /* На телефоне меню — полоса сверху: обёртка пунктов не мешает ей. */
+    .sidebar-nav{display:contents;}
     .account-card{padding:4px;}
     .account-menu{position:fixed; top:58px; bottom:auto; right:12px; left:auto; width:220px;}
     .main{height:auto; flex:1; min-height:0;}
@@ -138,8 +147,9 @@
     .ord-partner{grid-template-columns:auto 1fr; padding:16px;}
     .ord-partner > :last-child{display:none;}
     .ord-actions > *, .ord-tools, .ord-place{width:100%;}
-    .ord-tools{margin-left:0; flex-wrap:nowrap;}
-    .ord-search{min-width:0; flex:1;}
+    .ord-tools{margin-left:0; flex-wrap:wrap;}
+    .ord-search{min-width:0; flex:1 1 100%;}
+
   }
   .view{display:none; height:100vh;}
   .view.active{display:flex;}
@@ -646,7 +656,7 @@
   .staff-title{font-size:22px; font-weight:700; margin-bottom:6px; letter-spacing:-0.2px;}
   .staff-sub{font-size:15px; color:var(--muted); max-width:72ch; line-height:1.55;}
   .staff-code-chip{
-    font-size:13px; color:var(--muted); font-family:var(--mono); background:var(--panel-2);
+    font-size:13px; color:var(--muted); font-family:var(--sans); font-variant-numeric:tabular-nums; background:var(--panel-2);
     border:1px solid var(--line); border-radius:8px; padding:8px 12px; flex-shrink:0;
   }
   .staff-code-chip b{color:var(--accent);}
@@ -737,25 +747,73 @@
   .ord-partner:hover{border-color:var(--accent-soft); background:var(--panel-2);}
   .ord-partner.active{border-color:var(--accent);}
   .ord-count{
-    font-family:var(--mono); font-size:28px; font-weight:600; color:var(--accent);
+    font-family:var(--sans); font-size:28px; font-weight:600; color:var(--accent);
     font-variant-numeric:tabular-nums; min-width:3ch; text-align:right;
   }
   .ord-name{font-size:17px; font-weight:600;}
   .ord-meta{font-size:14px; color:var(--muted); margin-top:3px;}
   .ord-warn{color:var(--yellow);}
   .ord-actions{display:flex; gap:8px; align-items:center; margin:14px 0; flex-wrap:wrap;}
-  .ord-table{width:100%; border-collapse:collapse; font-size:15px;}
+  .ord-table{width:100%; border-collapse:collapse; font-size:16px; font-variant-numeric:tabular-nums;}
   .ord-table th{
-    text-align:left; font-size:12px; text-transform:uppercase; letter-spacing:0.06em;
-    color:var(--muted); font-weight:500; padding:8px 10px; border-bottom:1px solid var(--line);
+    text-align:left; font-size:12.5px; text-transform:uppercase; letter-spacing:0.06em;
+    color:var(--muted); font-weight:500; padding:9px 12px; border-bottom:1px solid var(--line);
   }
   .ord-table td{padding:12px 12px; border-bottom:1px solid var(--line-soft);}
+  /* Линии между столбцами и числа по центру (владелец 26–27.09.2026). */
+  .ord-table th + th, .ord-table td + td{border-left:1px solid var(--line-soft);}
+  .ord-table th.num, .ord-table td.num{text-align:center; white-space:nowrap;}
   .ord-table tr.not-ready td{opacity:0.55;}
+  /* Нехватка по учёту — цветом всей строки, без надписей с подсказками:
+     красный — товара нет совсем, жёлтый — меньше, чем нужно (27.09.2026). */
+  .ord-table tr.st-none td{background:rgba(217,142,110,0.13);}
+  .ord-table tr.st-none td:first-child{box-shadow:inset 4px 0 0 var(--terracotta);}
+  .ord-table tr.st-short td{background:rgba(201,166,107,0.12);}
+  .ord-table tr.st-short td:first-child{box-shadow:inset 4px 0 0 var(--yellow);}
+  .ord-table td.ord-stock{font-weight:600; font-size:17px;}
+  .ord-table tr.st-none td.ord-stock{color:var(--terracotta);}
+  .ord-table tr.st-short td.ord-stock{color:var(--yellow);}
+  .ord-table td.ord-stock .ord-sub{font-weight:400;}
+  .ord-table td.ord-empty{text-align:center; color:var(--muted); padding:22px 12px;}
+  .ord-legend{display:flex; flex-wrap:wrap; gap:6px 18px; align-items:center; margin:0 0 10px;
+    font-size:14px; color:var(--text);}
+  .ord-legend > span{display:inline-flex; align-items:center; gap:7px;}
+  .ord-sw{display:inline-block; width:14px; height:14px; border-radius:4px; flex-shrink:0;}
+  .ord-sw.st-none{background:rgba(217,142,110,0.35); box-shadow:inset 3px 0 0 var(--terracotta);}
+  .ord-sw.st-short{background:rgba(201,166,107,0.32); box-shadow:inset 3px 0 0 var(--yellow);}
+  .ord-chip{background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:9px 12px;
+    color:var(--text); font-family:var(--sans); font-size:15px; cursor:pointer; white-space:nowrap;}
+  .ord-chip:hover:not(:disabled){border-color:var(--accent-soft);}
+  .ord-chip.on{border-color:var(--yellow); color:var(--yellow); background:var(--yellow-soft);}
+  .ord-chip:disabled{opacity:0.5; cursor:default;}
+  /* Ход сборки у поставки: кто собирает, пауза, «свободна», комментарий. */
+  .sup-asm{font-size:14px; margin-top:4px; color:var(--accent-2); line-height:1.45;}
+  .sup-asm.paused{color:var(--yellow);}
+  .sup-asm.abandoned{color:var(--terracotta);}
+  .sup-asm.finished{color:var(--muted);}
+  .ord-cols{position:relative; display:inline-flex;}
+  .ord-cols-menu{position:absolute; top:calc(100% + 6px); right:0; z-index:30; min-width:220px;
+    background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:6px;
+    box-shadow:0 14px 34px rgba(0,0,0,0.45);}
+  .ord-cols-menu[hidden]{display:none;}
+  .ord-cols-item{display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:7px;
+    font-size:15px; cursor:pointer; white-space:nowrap;}
+  .ord-cols-item:hover{background:var(--panel);}
+  .ord-cols-item input{width:18px; height:18px; margin:0; accent-color:var(--accent);}
+  @media(max-width:760px){
+    /* Меню столбцов — во всю ширину под кнопками: у края телефона оно
+       обрезалось. */
+    .ord-tools{position:relative;}
+    .ord-cols{position:static;}
+    .ord-cols-menu{left:0; right:0; min-width:0;}
+  }
   /* Флажки крупнее и по центру строки: мелкий флажок у верхнего края
      промахивался мышью и выглядел как съехавший. */
   .ord-table th, .ord-table td{vertical-align:middle;}
   .ord-table input[type=checkbox]{width:18px; height:18px; margin:0; accent-color:var(--accent); cursor:pointer; vertical-align:middle;}
-  .ord-mono{font-family:var(--mono); font-size:14px; color:var(--muted);}
+  /* Номера и артикулы — тем же Golos с цифрами одной ширины: моноширинный
+     шрифт владелец убрал (26.09.2026). */
+  .ord-mono{font-family:var(--sans); font-size:15px; color:var(--muted); font-variant-numeric:tabular-nums;}
   .ord-sub{font-size:12.5px; color:var(--muted); margin-top:2px; font-family:var(--sans);}
   /* Негромкая отметка, не на пол-экрана: «этот заказ особенный». */
   .align-table{width:100%; border-collapse:collapse; font-size:13px; margin-top:12px;}
@@ -772,8 +830,6 @@
     border:1px solid var(--line); border-radius:10px; margin-bottom:8px; background:var(--panel-2);}
   .act-row b{font-family:var(--mono);}
   .act-row .ord-sub{margin-top:2px;}
-  .ord-short{display:inline-block; margin-top:4px; font-size:12px; font-weight:600; color:var(--yellow);
-    border:1px solid rgba(230,190,90,0.35); border-radius:6px; padding:1px 7px;}
   .ord-when, .ord-no, .ord-table th{white-space:nowrap;}
   .ord-scroll{max-height:52vh; overflow:auto; border:1px solid var(--line); border-radius:10px;}
 
@@ -846,16 +902,57 @@
   #staffRows, #companiesList{margin-top:10px;}
   .staff-table{background:var(--panel); border:1px solid var(--line); border-radius:12px; overflow:hidden;}
   .staff-row{
-    display:grid; grid-template-columns:1fr 130px 120px 110px 200px; align-items:center; gap:10px;
-    padding:13px 16px; border-bottom:1px solid var(--line); font-size:14px;
+    display:grid; grid-template-columns:minmax(0,1fr) 150px 120px 110px 300px; align-items:center; gap:10px;
+    padding:13px 16px; border-bottom:1px solid var(--line); font-size:15px;
   }
   .staff-row:last-child{border-bottom:none;}
   .staff-row.head{font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:0.4px; background:var(--panel-2);}
-  .staff-row.revoked{opacity:0.45;}
-  .staff-name{font-weight:600;}
-  .staff-key{font-family:var(--mono); color:var(--accent);}
+  .staff-row.revoked{opacity:0.5;}
+  .staff-name{font-weight:600; min-width:0; overflow-wrap:anywhere;}
+  /* Ключи и даты — Golos с цифрами одной ширины, без моноширинного
+     (владелец 26–27.09.2026). */
+  .staff-key{font-family:var(--sans); font-variant-numeric:tabular-nums; font-weight:600; color:var(--accent); letter-spacing:0.02em; min-width:0; overflow-wrap:anywhere;}
   .staff-row.revoked .staff-key{color:var(--muted); text-decoration:line-through;}
-  .staff-date{color:var(--muted); font-family:var(--mono); font-size:13px;}
+  .staff-date{color:var(--muted); font-family:var(--sans); font-variant-numeric:tabular-nums; font-size:14px;}
+  /* Кнопки строки — одной высоты, в одну линию, с ровным промежутком. */
+  .staff-actions{display:flex; gap:8px; justify-content:flex-end; align-items:center; flex-wrap:nowrap;}
+  .staff-btn{display:inline-flex; align-items:center; justify-content:center; height:36px; padding:0 14px;
+    border-radius:8px; border:1px solid var(--line); background:var(--panel-2); color:var(--text);
+    font:600 14px/1 var(--sans); white-space:nowrap; cursor:pointer; transition:border-color .15s var(--ease), background .15s var(--ease);}
+  .staff-btn:hover{border-color:var(--accent-soft); background:var(--panel);}
+  .staff-btn.revoke{color:var(--terracotta); border-color:rgba(217,142,110,0.45);}
+  .staff-btn.restore{color:var(--accent); border-color:rgba(95,175,166,0.45);}
+  .staff-revoked-toggle{display:flex; align-items:center; gap:9px; width:100%; padding:12px 16px;
+    background:none; border:0; border-bottom:1px solid var(--line); color:var(--muted);
+    font:500 14px/1.3 var(--sans); text-align:left; cursor:pointer;}
+  .staff-revoked-toggle:hover{color:var(--text);}
+  .staff-revoked-toggle.open .staff-toggle-arrow{transform:rotate(90deg);}
+  .company-key .company-key-text{grid-column:1 / 4;}
+  .company-key .staff-key{display:inline;}
+  @media(max-width:760px){
+    /* На телефоне строка сотрудника — карточка: имя и статус, ключ и дата,
+       кнопки отдельной строкой. Пять столбцов в 375 px не помещались. */
+    .staff-row.head{display:none;}
+    .staff-row:not(.staff-edit):not(.company-row){grid-template-columns:minmax(0,1fr) auto;
+      grid-template-areas:"name state" "key date" "acts acts"; row-gap:8px;}
+    .staff-row:not(.company-row) > .staff-name{grid-area:name;}
+    .staff-row:not(.company-row) > .staff-key{grid-area:key;}
+    .staff-row:not(.company-row) > .staff-date{grid-area:date; text-align:right;}
+    .staff-row:not(.company-row) > .staff-state{grid-area:state;}
+    .staff-row > .staff-actions{grid-area:acts; justify-content:flex-start; flex-wrap:wrap;}
+    .company-row{grid-template-columns:minmax(0,1fr) auto;
+      grid-template-areas:"name acts" "key key" "onec onec";}
+    .company-row > .staff-name{grid-area:name;}
+    .company-row > .staff-key{grid-area:key;}
+    .company-row > .company-1c-link{grid-area:onec;}
+    .company-row.company-key{grid-template-areas:"text acts";}
+    .company-row.company-key .company-key-text{grid-area:text; grid-column:auto;}
+    /* Поле имени и кнопка выдачи ключа — друг под другом: в одну строку
+       кнопка уезжала за край телефона. */
+    .staff-add{flex-wrap:wrap;}
+    .staff-add input{min-width:0; flex:1 1 100%;}
+    .staff-add button{width:100%; white-space:normal;}
+  }
   .staff-status{font-size:13px; font-weight:600; padding:3px 9px; border-radius:6px; display:inline-block; width:fit-content;}
   .staff-status.active{background:var(--accent-soft); color:var(--accent);}
   .staff-status.revoked{background:var(--panel-2); color:var(--muted);}
@@ -863,7 +960,7 @@
   .staff-action.revoke{color:var(--terracotta);}
   .staff-action.restore{color:var(--accent);}
 
-  .company-row{grid-template-columns:minmax(180px,1.25fr) minmax(220px,1fr) minmax(240px,1fr) 76px;}
+  .company-row{grid-template-columns:minmax(180px,1.25fr) minmax(220px,1fr) minmax(240px,1fr) 140px;}
   .company-1c-link{
     display:flex; align-items:center; gap:9px; min-width:0; width:100%; padding:0;
     border:0; background:none; color:var(--muted); font:inherit; text-align:left; cursor:pointer;
@@ -1946,6 +2043,7 @@
     </div>
     <div class="wh-select"><span id="whSelectLabel">Загрузка…</span><span>▾</span></div>
 
+    <nav class="sidebar-nav" aria-label="Разделы кабинета">
     <div class="nav-label">Рабочее место</div>
     <div class="nav-item active" id="nav-chat" onclick="switchView('chat')"><span class="nav-dot"></span>Чат<span class="nav-badge" id="chatBadge"></span></div>
     <div class="nav-item" id="nav-journal" onclick="switchView('journal')"><span class="nav-dot"></span>Журнал действий<span class="nav-badge" id="navBadge">1</span></div>
@@ -1972,6 +2070,7 @@
     <div class="nav-item" id="nav-mp" onclick="switchView('mp')"><span class="nav-dot"></span>Продавцы и площадки</div>
     <div class="nav-item" id="nav-staff" onclick="switchView('staff')"><span class="nav-dot"></span>Сотрудники</div>
     <div class="nav-item" id="nav-1c" onclick="switchView('1c')"><span class="nav-dot"></span>Подключение 1С</div>
+    </nav>
 
     <div class="sidebar-footer">
       <div class="account-menu" id="accountMenu">
@@ -2696,7 +2795,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <script src="back.js?v=4901b838" defer></script>
-<script src="cabinet_main.js?v=7d2c0010" defer></script>
+<script src="cabinet_main.js?v=9afcf111" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->

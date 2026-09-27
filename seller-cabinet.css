@@ -306,9 +306,28 @@ dialog::backdrop { background: rgba(8, 11, 18, .6); }
 .drawer-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; font-size: 14px; color: var(--muted); margin-bottom: 20px; }
 .drawer-meta b { color: var(--text); font-weight: 500; }
 .mini-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-bottom: 20px; }
-.mini-stats > div { padding: 12px; text-align: center; border-left: 1px solid var(--line); border-top: 1px solid var(--line); margin: -1px 0 0 -1px; }
+.mini-stats > div, .mini-stats > .mini-link { padding: 12px; text-align: center; border-left: 1px solid var(--line); border-top: 1px solid var(--line); margin: -1px 0 0 -1px; }
 .mini-stats span { display: block; font-size: 12px; color: var(--muted); }
-.mini-stats strong { display: block; font-size: 20px; font-weight: 600; margin-top: 2px; }
+.mini-stats strong { display: block; font-size: 20px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+/* «Заказано», «В сборке», «В пути» — кнопки: под ними список этих заказов. */
+.mini-link { display: block; width: 100%; border: 0; border-radius: 0; background: none; color: var(--text); font: inherit; cursor: pointer; }
+.mini-link strong { color: var(--accent); }
+.mini-link:hover { background: var(--accent-bg); }
+.num-link { border: 0; background: none; padding: 2px 6px; margin: -2px -6px; border-radius: 6px; font: inherit; font-variant-numeric: tabular-nums;
+  color: var(--accent); text-decoration: underline; text-decoration-color: rgba(195, 204, 255, .45); text-underline-offset: 4px; cursor: pointer; }
+.num-link:hover, .num-link:focus-visible { background: var(--accent-bg); text-decoration-color: currentColor; }
+.bucket-tabs { display: flex; flex-wrap: wrap; margin-bottom: 10px; }
+.bucket-tabs button { border: 0; background: none; padding: 8px 14px; border-radius: 7px; font: inherit; font-size: 15px; color: var(--muted); cursor: pointer; font-variant-numeric: tabular-nums; }
+.bucket-tabs button[aria-selected=true] { background: var(--accent-bg); color: var(--text); }
+.bucket-note { margin-bottom: 12px; }
+.bucket-note.warn { color: var(--warn); }
+/* Карточка товара узкая (620 px): список заказов компактнее основной таблицы. */
+#bucketOrders .grid { font-size: 16px; }
+#bucketOrders .grid th, #bucketOrders .grid td { padding: 10px 10px; }
+#bucketOrders .grid th.n { padding-left: 10px; padding-right: 10px; }
+#bucketOrders .cell-sub { font-size: 14px; }
+#bucketOrders .cell-sub.rid { overflow-wrap: anywhere; }
+#bucketOrders .badge { font-size: 14px; white-space: normal; }
 .detail-section { margin-top: 28px; }
 .detail-section > h3 { font-size: 16px; font-weight: 600; margin-bottom: 14px; }
 .drawer-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
