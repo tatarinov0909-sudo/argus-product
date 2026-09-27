@@ -90,7 +90,7 @@
     -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
   }
   .landing-sub{font-size:14px; color:var(--muted); text-align:center; margin-bottom:38px;}
-  /* Ролей четыре: сеткой 2×2, а не три в ряд и одна отдельно внизу. */
+  /* Четыре рабочих кабинета и пятый вход в закрытый просмотр лендинга. */
   .cabinet-grid{display:grid; grid-template-columns:repeat(2, 1fr); gap:18px; max-width:760px; margin-inline:auto;}
   .cabinet-card{
     position:relative; overflow:hidden;
@@ -121,6 +121,8 @@
   .cabinet-card:hover .cabinet-icon{transform:scale(1.08) rotate(-4deg); box-shadow:inset 0 1px 0 rgba(255,255,255,0.06), 0 6px 20px rgba(95,175,166,0.22);}
   .cabinet-name{font-size:15.5px; font-weight:700; margin-bottom:7px; letter-spacing:-0.1px;}
   .cabinet-desc{font-size:12.5px; color:var(--muted); line-height:1.55;}
+  .cabinet-preview{color:var(--text);text-decoration:none;grid-column:1 / -1;}
+  .cabinet-preview:focus-visible{outline:3px solid var(--accent);outline-offset:4px;}
 
   /* ---------- Формы входа ---------- */
   .form-screen{display:none;}
@@ -231,7 +233,7 @@
   <!-- Экран выбора кабинета -->
   <div class="landing show" id="landing">
     <div class="landing-title">Какой у вас кабинет?</div>
-    <div class="landing-sub">Одна система. Четыре роли.</div>
+    <div class="landing-sub">Выберите, куда войти</div>
     <div class="cabinet-grid">
 
       <div class="cabinet-card" onclick="goForm('worker')">
@@ -265,6 +267,14 @@
         <div class="cabinet-name">Продавец</div>
         <div class="cabinet-desc">Для продавцов маркетплейсов — остатки, заказы и документы по своему товару. Вход по имени и ключу от склада.</div>
       </div>
+
+      <a class="cabinet-card cabinet-preview" href="https://api.argus-ai.online/landing-preview/">
+        <div class="cabinet-icon" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/></svg>
+        </div>
+        <div class="cabinet-name">Лендинг</div>
+        <div class="cabinet-desc">Закрытый просмотр сайта Argus. Вход по паролю.</div>
+      </a>
 
     </div>
   </div>
