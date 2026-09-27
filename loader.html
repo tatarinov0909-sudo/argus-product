@@ -67,7 +67,11 @@
     background:linear-gradient(165deg, var(--panel) 0%, #1A1C1F 100%);
     border:1px solid var(--line-soft);
     border-radius:22px; overflow:hidden; box-shadow:var(--shadow-md), 0 30px 70px rgba(0,0,0,0.45);
-    animation:fadeInUp 0.4s var(--ease) both;
+    /* backwards, а не both: оставшийся после появления transform делал
+       корпус опорой для position:fixed, и окна (пауза, «Что здесь»),
+       открытые внизу длинного экрана, вставали посреди страницы, за краем
+       телефона (проверка 27.09.2026). */
+    animation:fadeInUp 0.4s var(--ease) backwards;
   }
 
   /* ---------- Шапка задачи ---------- */
@@ -169,7 +173,7 @@
   .qty-stepper{display:flex; align-items:center; justify-content:center; gap:18px;}
   .qty-btn{
     width:56px; height:56px; border-radius:16px; border:1px solid var(--line); background:var(--panel-2);
-    color:var(--text); font-size:26px; display:flex; align-items:center; justify-content:center;
+    color:var(--text); font-family:var(--sans); font-size:26px; display:flex; align-items:center; justify-content:center;
     cursor:pointer; user-select:none; flex-shrink:0;
   }
   .qty-btn:active{background:var(--accent-soft); border-color:var(--accent); color:var(--accent);}
@@ -860,6 +864,13 @@
   #taskScreen.run .run-need .qty-stepper{gap:6px;}
   #taskScreen.run .run-need .qty-btn{width:42px; height:42px; border-radius:11px; font-size:22px;}
   #taskScreen.run .run-need input.qty-value{font-size:26px; width:54px; min-width:0;}
+  /* У приёмки — «принял [− 6 +] из 6»: одна строка под названием и на
+     узком телефоне (сколько заявлено — числом после поля). */
+  #taskScreen.run.recv #runTakeWord{order:1;}
+  #taskScreen.run.recv #runQtySlot{order:2;}
+  #taskScreen.run.recv #runNeedWord{order:3;}
+  #taskScreen.run.recv #runNeedQty{order:4;}
+  #taskScreen.run.recv #runNeedDot{display:none;}
   #taskScreen.run #qtyDiff{margin-top:6px; font-size:14px;}
   #taskScreen.run .run-codes{display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px 18px;
     margin-top:14px; padding-top:14px; border-top:1px solid var(--line);}
@@ -937,6 +948,105 @@
     #taskScreen.run .task-footer .postpone-btn{flex:0 1 260px; width:auto;}
     .done-screen.asm{padding:26px 34px 34px;}
   }
+  /* ===================== Приёмка (задание 27.09.2026, второе) ===================== */
+  /* Список приходов: поиск и фильтры сверху, приехавшая машина — заметно. */
+  .recv-filter{display:flex; flex-direction:column; gap:10px; padding:16px 24px 0;}
+  .recv-search{width:100%; background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:13px 14px; color:var(--text); font:inherit; font-size:16px;}
+  .recv-search:focus{outline:none; border-color:var(--accent);}
+  .recv-search::placeholder{color:var(--muted); font-size:14.5px;}
+  .recv-filter-row{display:flex; align-items:center; gap:10px; min-width:0;}
+  .recv-filter-row > span{font-size:13px; color:var(--muted); flex:0 0 72px;}
+  /* Варианты фильтра переносятся на новую строку, а не уезжают вбок:
+     прокрутку внутри полоски на телефоне никто не находит. */
+  .recv-filter-row .pick-seg{flex:0 1 auto; min-width:0; flex-wrap:wrap; overflow:visible;}
+  .recv-filter-row .pick-seg button{flex:0 1 auto;}
+  .recv-found{font-size:13px; color:var(--muted);}
+  .recv-row{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:14px 16px;
+    cursor:pointer; display:flex; flex-direction:column; gap:6px;}
+  .recv-row:active{border-color:var(--accent);}
+  .recv-row.done{opacity:0.55;}
+  .recv-row-top{display:flex; justify-content:space-between; align-items:baseline; gap:10px;}
+  .recv-row-num{font-size:18px; font-weight:700; color:var(--accent-2); letter-spacing:0.2px; overflow-wrap:anywhere;}
+  .recv-row-state{font-size:13px; color:var(--muted); white-space:nowrap;}
+  .recv-row-seller{font-size:15px; font-weight:600;}
+  .recv-row-meta{font-size:14px; color:var(--muted); line-height:1.45;}
+  .recv-row .asm-line{margin-top:4px; padding:9px 12px; font-size:14.5px;}
+  /* «Машина приехала — принять»: у всех грузчиков сразу видно, что ждёт у ворот. */
+  .recv-row.arrived{border:2px solid var(--accent); background:linear-gradient(160deg, var(--accent-soft), var(--panel) 70%);}
+  .recv-arrived{font-size:16px; font-weight:700; color:var(--accent-2);}
+  .recv-row .arrive-row{padding:0;}
+  .recv-more{align-self:center; background:none; border:1px solid var(--line); border-radius:12px; color:var(--text);
+    font:inherit; font-size:14.5px; padding:12px 18px; cursor:pointer;}
+
+  /* Экран прихода и товары прихода — как поставка у сборки. */
+  .rcv-facts{font-size:15px; color:var(--muted); line-height:1.55;}
+  .rcv-facts b{color:var(--text); font-weight:600;}
+  .rcv-items{display:flex; flex-direction:column; gap:10px;}
+  .rcv-item{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:14px 16px;
+    display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px 14px; cursor:pointer;}
+  .rcv-item:active{border-color:var(--accent);}
+  .rcv-item.done{cursor:default; opacity:0.7;}
+  .rcv-item-name{font-size:17px; font-weight:600; line-height:1.35; overflow-wrap:anywhere;}
+  .rcv-item-qty{text-align:right; white-space:nowrap; line-height:1.1;}
+  .rcv-item-qty b{font-size:24px; font-weight:700; color:var(--accent);}
+  .rcv-item-qty span{display:block; font-size:12.5px; color:var(--muted);}
+  .rcv-item .sp-codes{font-size:16px;}
+  .rcv-item-done{grid-column:1 / -1; font-size:14.5px; color:var(--green);}
+  .rcv-item-done.warn{color:var(--terracotta);}
+
+  /* Экран приёмки: карточка товара остаётся над выбором места — сначала
+     «что это и сколько», потом «куда». */
+  #taskScreen.run.recv #cellBlock{order:0;}
+  #taskScreen.run.recv .item-card{order:-1;}
+  .cell-manual-row{display:flex; gap:8px; margin-bottom:12px;}
+  .cell-manual-input{flex:1; min-width:0; background:var(--panel-2); border:1.5px solid var(--line); border-radius:12px;
+    padding:14px; color:var(--text); font:inherit; font-size:20px; font-weight:600; letter-spacing:0.5px;}
+  .cell-manual-input:focus{outline:none; border-color:var(--accent);}
+  .cell-manual-input::placeholder{font-size:15px; font-weight:400; letter-spacing:0; color:var(--muted);}
+  .cell-manual-go{flex:0 0 auto; border:none; border-radius:12px; background:var(--accent); color:#182422;
+    font:inherit; font-size:15px; font-weight:700; padding:0 18px; cursor:pointer;}
+  .cell-manual-go:disabled{background:var(--panel-2); color:var(--muted); cursor:default;}
+  .cell-sub-label{font-size:13px; color:var(--muted); margin-bottom:8px;}
+  #taskScreen.run .cell-sub-label{text-transform:uppercase; letter-spacing:0.06em;}
+
+  /* Что в ячейке — кнопка у каждой ячейки и окно с полным составом. */
+  .cell-option{gap:12px;}
+  .cell-option > div:first-child{min-width:0; flex:1;}
+  .cell-info-btn{flex:0 0 auto; border:1px solid var(--line); background:var(--panel); color:var(--muted);
+    border-radius:10px; padding:8px 10px; font:inherit; font-size:13px; line-height:1.2; cursor:pointer; white-space:nowrap;}
+  .cell-info-btn:active{border-color:var(--accent); color:var(--accent);}
+  .cell-info-link{background:none; border:0; padding:0 0 0 6px; color:var(--accent); font:inherit; font-size:0.62em;
+    font-weight:600; letter-spacing:0; text-decoration:underline; cursor:pointer; vertical-align:middle;}
+  .cell-info{display:flex; flex-direction:column; gap:10px;}
+  .cell-info-empty{font-size:15px; color:var(--muted); padding:8px 0;}
+  .cell-info-item{background:var(--panel-2); border:1px solid var(--line); border-radius:12px; padding:12px 14px;
+    display:flex; flex-direction:column; gap:6px;}
+  .cell-info-top{display:flex; justify-content:space-between; gap:10px; align-items:baseline;}
+  .cell-info-name{font-size:15.5px; font-weight:600; line-height:1.35; overflow-wrap:anywhere;}
+  .cell-info-qty{font-size:20px; font-weight:700; color:var(--accent-2); white-space:nowrap;}
+  .cell-info-qty.bad{color:var(--terracotta);}
+  .cell-info-grid{display:grid; grid-template-columns:auto minmax(0,1fr); gap:3px 12px; font-size:14px;}
+  .cell-info-grid dt{color:var(--muted);}
+  .cell-info-grid dd{overflow-wrap:anywhere; font-weight:600;}
+  #sheetStepCell .sheet-title{font-size:22px;}
+  #sheetStepCell .sheet-confirm{margin-top:14px; font-size:15px;}
+  .map-cell.occupied{cursor:pointer;}
+  .done-screen.asm.recv .done-print{display:none;}
+  .receipt-sub-line{display:block;}
+  .stock-row-end{display:flex; align-items:center; gap:10px; flex-shrink:0;}
+
+  @media(max-width:480px){
+    .recv-filter{padding:14px 14px 0;}
+    .recv-filter-row > span{flex-basis:62px;}
+  }
+  @media(min-width:1000px){
+    .recv-filter{padding:18px 34px 0; max-width:none;}
+    #docsBody{display:grid; grid-template-columns:repeat(auto-fill, minmax(420px, 1fr)); gap:14px; align-content:start;}
+    #docsBody > .list-group-title, #docsBody > .job-empty, #docsBody > .recv-more{grid-column:1 / -1;}
+    #docsBody > .recv-more{justify-self:center;}
+    .rcv-items{display:grid; grid-template-columns:repeat(auto-fill, minmax(420px, 1fr)); gap:12px;}
+  }
 </style>
 </head>
 <body>
@@ -1005,7 +1115,21 @@
         <div class="job-title" id="docsTitle">—</div>
         <div class="job-sub" id="docsSub">—</div>
       </div>
+      <!-- Поиск и фильтры приходов (владелец 27.09.2026): привоз продавца
+           тонул сто шестьдесят седьмым в списке без поиска. -->
+      <div class="recv-filter" id="docsFilter" style="display:none;"></div>
       <div class="job-body" id="docsBody"></div>
+    </div>
+
+    <!-- Приход: как поставка у сборки — номер один раз по центру, кто
+         принимает и сколько принято, «Начать» и товары прихода. -->
+    <div class="job-screen" id="receiptScreen">
+      <div class="job-head supply-head">
+        <div class="job-back" onclick="openDocs('in')">← К приходам</div>
+        <div class="job-title supply-title" id="receiptTitle">—</div>
+        <div class="job-sub supply-sub" id="receiptSub">—</div>
+      </div>
+      <div class="job-body" id="receiptBody"></div>
     </div>
 
     <div id="taskScreen" style="display:none;">
@@ -1050,14 +1174,14 @@
           <textarea class="defect-input" id="pauseComment" rows="2" maxlength="300"
                     placeholder="Комментарий: где оставил, что осталось — например, «2 короба у ворот 3»"></textarea>
           <div class="pause-row">
-            <button type="button" onclick="asmFinishAsk()">Закончить сборку</button>
-            <button type="button" class="danger" onclick="asmAbandonAsk()">Отказаться от сборки</button>
+            <button type="button" id="pauseFinishBtn" onclick="asmFinishAsk()">Закончить сборку</button>
+            <button type="button" class="danger" id="pauseAbandonBtn" onclick="asmAbandonAsk()">Отказаться от сборки</button>
           </div>
         </div>
       </div>
 
       <div class="task-body">
-        <button type="button" class="run-all-btn" id="runAllBtn" onclick="openProductsSheet()">Все товары поставки <span id="runAllCount"></span></button>
+        <button type="button" class="run-all-btn" id="runAllBtn" onclick="openProductsSheet()"><b id="runAllText">Все товары поставки</b> <span id="runAllCount"></span></button>
         <div class="item-card">
           <div class="task-progress-text" id="progressText" style="margin-bottom:8px; text-align:center;">—</div>
           <div class="all-products-btn" id="allProductsBtn" onclick="openProductsSheet()">Все товары поставки</div>
@@ -1068,7 +1192,7 @@
             <b id="itemDeclared">—</b>
           </div>
           <!-- «нужно 3 · взял [− 3 +]» — одной строкой под названием. -->
-          <div class="run-need" id="runNeed">нужно <b id="runNeedQty">—</b> · взял <span id="runQtySlot"></span></div>
+          <div class="run-need" id="runNeed"><span id="runNeedWord">нужно</span> <b id="runNeedQty">—</b> <span id="runNeedDot">·</span> <span id="runTakeWord">взял</span> <span id="runQtySlot"></span></div>
           <div class="run-codes" id="runCodes"></div>
         </div>
 
@@ -1142,17 +1266,29 @@
 
         <div class="cell-block" id="cellBlock">
           <div class="cell-label" id="cellLabel">Куда положить — рекомендации Кладовщика</div>
+          <!-- Ячейку вручную — самым первым, выше подсказок (владелец
+               27.09.2026): раньше это было окно «Своё место» в самом низу. -->
+          <div class="cell-manual-row" id="manualCellRow">
+            <input type="text" class="cell-manual-input" id="manualCellInline" autocomplete="off" autocapitalize="off"
+                   spellcheck="false" enterkeyhint="done" aria-label="Ввести ячейку вручную"
+                   placeholder="Ввести ячейку вручную: 1.7.3"
+                   oninput="document.getElementById('manualCellGo').disabled = !this.value.trim();"
+                   onkeydown="if(event.key === 'Enter'){ event.preventDefault(); confirmManualInline(); }">
+            <button type="button" class="cell-manual-go" id="manualCellGo" onclick="confirmManualInline()" disabled>Выбрать</button>
+          </div>
+          <div class="cell-sub-label" id="cellSuggestLabel">Подсказки Кладовщика</div>
           <div class="cell-options" id="cellOptions"></div>
           <div class="custom-cell-display" id="customCellDisplay">
-            <div>
+            <div style="flex:1; min-width:0;">
               <div class="custom-cell-label">Выбрано вручную</div>
               <div class="custom-cell-id" id="customCellId"></div>
             </div>
+            <span id="customCellInfo" style="margin-right:10px;"></span>
             <div class="cell-option-check" style="background:var(--accent); border-color:var(--accent); position:relative;">
               <span style="content:''; position:absolute; left:6px; top:2px; width:5px; height:9px; border:solid #182422; border-width:0 2px 2px 0; transform:rotate(45deg); display:block;"></span>
             </div>
           </div>
-          <div class="cell-manual" id="manualCellBtn" onclick="openSheet()" style="margin-top:10px;">Своё место</div>
+          <div class="cell-manual" id="manualCellBtn" onclick="openSheet()" style="margin-top:10px;">Выбрать на карте склада</div>
           <!-- Отбор короче заявленного закрывает позицию с расхождением, поэтому
                спрашиваем прямо, а не догадываемся: пустая ячейка и «больше не
                повезли» для склада разные вещи. -->
@@ -1178,39 +1314,8 @@
     <div class="sheet-overlay" id="sheetOverlay" onclick="if(event.target===this) closeSheet()">
       <div class="sheet">
 
-        <div class="sheet-step show" id="sheetStepChoice">
-          <div class="sheet-title">Своё место</div>
-          <div class="sheet-sub">Как хотите указать, куда положили товар</div>
-          <div class="sheet-option" onclick="showToast('Сканер штрихкода ячейки — подключим вместе со сканером на складе')">
-            <div class="sheet-option-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 6V4h3M17 4h3v2M20 18v2h-3M7 20H4v-2M4 10v4M20 10v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-            </div>
-            Сканировать штрихкод
-          </div>
-          <div class="sheet-option" onclick="goSheetStep('manual')">
-            <div class="sheet-option-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 17.5v2.5h2.5L18 8.5l-2.5-2.5L4 17.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
-            </div>
-            Ввести вручную
-          </div>
-          <div class="sheet-option" onclick="goSheetStep('map')">
-            <div class="sheet-option-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="7" height="7" rx="1.3" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="4" width="7" height="7" rx="1.3" stroke="currentColor" stroke-width="1.6"/><rect x="3" y="15" width="7" height="7" rx="1.3" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="15" width="7" height="7" rx="1.3" stroke="currentColor" stroke-width="1.6"/></svg>
-            </div>
-            Выбрать на карте склада
-          </div>
-        </div>
-
-        <div class="sheet-step" id="sheetStepManual">
-          <div class="sheet-back" onclick="goSheetStep('choice')">← Назад</div>
-          <div class="sheet-title">Ввести место вручную</div>
-          <div class="sheet-sub">Например: 1.1.2 — ряд, ярус, ячейка. Ячейка должна быть на складе.</div>
-          <input type="text" class="sheet-input" id="manualCellInput" placeholder="Ряд.ярус.ячейка" oninput="document.getElementById('manualConfirmBtn').disabled = !this.value.trim();">
-          <button class="sheet-confirm" id="manualConfirmBtn" disabled onclick="confirmManualCell()">Подтвердить место</button>
-        </div>
-
         <div class="sheet-step" id="sheetStepMap">
-          <div class="sheet-back" onclick="goSheetStep('choice')">← Назад</div>
+          <div class="sheet-back" onclick="closeSheet()">← Назад</div>
           <div class="sheet-title" id="mapTitle">Выберите ряд</div>
           <div class="sheet-sub" id="mapSub">Терракотовые места уже заняты</div>
           <div class="map-rows-picker" id="mapRowsPicker"></div>
@@ -1220,9 +1325,20 @@
           </div>
         </div>
 
+        <!-- Что лежит в ячейке — полностью (владелец 27.09.2026): товар,
+             продавец, артикул, штрихкод, артикул WB, сколько, годное или
+             брак, когда положили. Открывается везде, где видна ячейка. -->
+        <div class="sheet-step" id="sheetStepCell">
+          <div class="sheet-back" onclick="cellInfoBack()">← Назад</div>
+          <div class="sheet-title" id="cellInfoTitle">Ячейка</div>
+          <div class="sheet-sub" id="cellInfoSub"></div>
+          <div class="cell-info" id="cellInfoBody"></div>
+          <button class="sheet-confirm" id="cellInfoPut" type="button" style="display:none;">Положить сюда</button>
+        </div>
+
         <div class="sheet-step" id="sheetStepProducts">
-          <div class="sheet-title">Все товары поставки</div>
-          <div class="sheet-sub">Стоите у другой ячейки — возьмите этот товар сейчас, а не когда до него дойдёт очередь.</div>
+          <div class="sheet-title" id="productsTitle">Все товары поставки</div>
+          <div class="sheet-sub" id="productsSub">Стоите у другой ячейки — возьмите этот товар сейчас, а не когда до него дойдёт очередь.</div>
           <div id="productsList"></div>
         </div>
 
@@ -1519,12 +1635,13 @@
     if(mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
     return many;
   }
-  // Адрес ячейки — «ряд.ярус.ячейка», как на карте склада (решение владельца
-  // 24.09.2026). Одна запись на весь экран грузчика.
+  // Адрес ячейки — «ряд.стеллаж.ярус», как на карте склада (решение владельца
+  // 27.09.2026): «1.7.3» — ряд 1, стеллаж 7, ярус 3. Одна запись на весь
+  // экран грузчика; сервер пишет так же (argus-api/src/cells/label.js).
   function formatBlockLabel(rowNum, block){
     const rackPart = block.rack_start === block.rack_end ? block.rack_start : (block.rack_start + '–' + block.rack_end);
     const tierPart = block.tier_start === block.tier_end ? block.tier_start : (block.tier_start + '–' + block.tier_end);
-    return rowNum + '.' + tierPart + '.' + rackPart;
+    return rowNum + '.' + rackPart + '.' + tierPart;
   }
 
   async function init(){
@@ -1551,10 +1668,15 @@
   }
 
   async function selectInvoice(invoiceId, keepRun){
+    // Приход открывается своим экраном — с «Начать приёмку», таймером на
+    // сервере и паузой при выходе (владелец 27.09.2026), а не сразу работой.
+    const row = invoices.find(i => i.id === invoiceId);
+    if(row && row.direction === 'in') return openReceipt(invoiceId);
     // Ушёл с паузы на другую работу — пауза кончилась: так и пишем
     // руководителю, а не бросаем её висеть без конца.
     if(pauseStart) resumeTask();
     productRun = null;
+    recvRun = null;
     runState = null;
     layoutRun(false);
     try{
@@ -1563,6 +1685,7 @@
       showToast('Не удалось загрузить накладную: ' + e.message);
       return;
     }
+    if(currentInvoice.direction === 'in') return openReceipt(invoiceId);
     hideAllScreens();
     // Сборка поставки — одна работа, а не десять отдельных. Переходя к
     // следующему заказу той же поставки, не сбрасываем ни таймер, ни то,
@@ -1686,6 +1809,7 @@
   // «Начать» (или продолжили) — таймер и паузы живут на сервере (runState).
   async function openProductRun(supplyId, sku){
     pauseStart = null;
+    recvRun = null;
     productRun = { supplyId, preferred: sku || null };
     backTarget = { kind: 'supply', id: supplyId };
     postponedItems = new Set();
@@ -1700,7 +1824,7 @@
     layoutRun(true);
     startTaskTimer();
     setPauseLock(false);
-    document.getElementById('doneScreen').classList.remove('show', 'asm');
+    document.getElementById('doneScreen').classList.remove('show', 'asm', 'recv');
     document.getElementById('taskScreen').style.display = '';
     const title = document.getElementById('runTitle');
     title.innerHTML = escapeHTML(currentInvoice.supply_number || '')
@@ -1711,11 +1835,20 @@
   }
   window.openProductRun = openProductRun;
 
-  // Экран задачи общий у приёмки, возврата и сборки. У сборки поставки свой
-  // вид: поле количества встаёт в строку «нужно · взял» под названием.
-  function layoutRun(on){
+  // Экран задачи общий у приёмки, возврата и сборки. У сборки поставки и у
+  // приёмки прихода свой вид: номер один раз по центру, без имени грузчика,
+  // поле количества встаёт в строку «нужно · взял» («заявлено · принял») под
+  // названием, коды товара — крупно.
+  function layoutRun(on, kind = 'assembly'){
     const screen = document.getElementById('taskScreen');
     screen.classList.toggle('run', on);
+    screen.classList.toggle('recv', on && kind === 'receiving');
+    const W = WORK[on ? kind : 'assembly'];
+    document.getElementById('pauseFinishBtn').textContent = W.finish;
+    document.getElementById('pauseAbandonBtn').textContent = W.abandon;
+    document.getElementById('runNeedWord').textContent = on && kind === 'receiving' ? 'из' : 'нужно';
+    document.getElementById('runTakeWord').textContent = on && kind === 'receiving' ? 'принял' : 'взял';
+    document.getElementById('runAllText').textContent = on && kind === 'receiving' ? 'Все товары прихода' : 'Все товары поставки';
     const stepper = document.getElementById('qtyValue').parentElement;
     const diff = document.getElementById('qtyDiff');
     if(on){
@@ -1730,7 +1863,10 @@
   }
 
   function openProductsSheet(){
+    if(recvRun && currentInvoice) return openReceivingItemsSheet();
     if(!productRun || !currentInvoice) return;
+    document.getElementById('productsTitle').textContent = 'Все товары поставки';
+    document.getElementById('productsSub').textContent = 'Стоите у другой ячейки — возьмите этот товар сейчас, а не когда до него дойдёт очередь.';
     const current = currentInvoice.items[currentItemIndex];
     document.getElementById('productsList').innerHTML = currentInvoice.items.map((p, i) =>
       '<div class="product-row' + (p.closed ? ' done' : '') + (current && p.sku === current.sku ? ' current' : '') + '"'
@@ -1743,6 +1879,39 @@
     goSheetStep('products');
   }
   window.openProductsSheet = openProductsSheet;
+
+  // Все товары прихода: какую коробку открыл — ту и принимай, не дожидаясь
+  // очереди. Принятое — внизу, с количеством и ячейкой.
+  function openReceivingItemsSheet(){
+    document.getElementById('productsTitle').textContent = 'Все товары прихода';
+    document.getElementById('productsSub').textContent = 'Открыли другую коробку — примите этот товар сейчас, а не когда до него дойдёт очередь.';
+    const current = currentInvoice.items[currentItemIndex];
+    const items = currentInvoice.items.map((p, i) => ({ p, i }))
+      .sort((a, b) => Boolean(a.p.receiving_id) - Boolean(b.p.receiving_id));
+    document.getElementById('productsList').innerHTML = items.map(({ p, i }) => {
+      const done = Boolean(p.receiving_id);
+      const cell = done && p.row_num != null ? formatBlockLabel(p.row_num, p) : '';
+      return '<div class="product-row' + (done ? ' done' : '') + (current && p.id === current.id ? ' current' : '') + '"'
+        + (done ? '' : ' onclick="pickReceivingItemNow(' + i + ')"') + '>'
+        + '<div><div class="product-row-name">' + escapeHTML(p.name) + '</div>'
+        + '<div class="product-row-sub">' + escapeHTML(p.sku)
+        + (done ? ' · принято ' + Number(p.accepted_qty) + ' из ' + Number(p.declared_qty) + (cell ? ' → ' + escapeHTML(cell) : '') : '')
+        + '</div></div>'
+        + (done ? '' : '<div class="product-row-need">' + Number(p.declared_qty) + ' шт</div>')
+        + '</div>';
+    }).join('');
+    document.getElementById('sheetOverlay').classList.add('show');
+    goSheetStep('products');
+  }
+
+  function pickReceivingItemNow(i){
+    const p = currentInvoice && currentInvoice.items[i];
+    if(!p || p.receiving_id || !recvRun) return;
+    recvRun.preferred = p.id;
+    closeSheet();
+    renderCurrentItem();
+  }
+  window.pickReceivingItemNow = pickReceivingItemNow;
 
   function pickProductNow(i){
     const p = currentInvoice && currentInvoice.items[i];
@@ -1774,13 +1943,24 @@
     document.getElementById('cellBlock').style.display = '';
     document.getElementById('itemDeclaredLabel').textContent = 'Заявлено по накладной';
     document.getElementById('qtyLabel').textContent = 'Сколько приняли по факту';
-    document.getElementById('cellLabel').textContent = 'Куда положить — рекомендации Кладовщика';
+    document.getElementById('cellLabel').textContent = recvRun ? 'Куда положить' : 'Куда положить — рекомендации Кладовщика';
+    document.getElementById('cellSuggestLabel').style.display = recvRun ? '' : 'none';
     document.getElementById('shortfallNote').classList.remove('show');
     document.getElementById('lastCellToggle').classList.remove('show');
+    document.getElementById('manualCellRow').style.display = '';
     document.getElementById('manualCellBtn').style.display = '';
 
-    const idx = findNextUnreceivedIndex();
+    let idx = findNextUnreceivedIndex();
+    // Товар, который грузчик взял сам («Все товары прихода», товар на экране
+    // прихода), — первым: коробка уже в руках.
+    if(recvRun && recvRun.preferred){
+      const chosen = currentInvoice.items.findIndex(it => it.id === recvRun.preferred && !it.receiving_id);
+      if(chosen !== -1) idx = chosen; else recvRun.preferred = null;
+    }
     if(idx === -1){
+      // Принимать больше нечего: приёмку заканчивает человек — одной записью
+      // с комментарием, как сборку.
+      if(recvRun) return runNothingLeft();
       showDone();
       return;
     }
@@ -1798,6 +1978,8 @@
     document.getElementById('itemName').textContent = item.name;
     document.getElementById('itemSku').textContent = item.sku;
     document.getElementById('itemDeclared').textContent = item.declared_qty + ' шт';
+    document.getElementById('runNeedQty').textContent = item.declared_qty;
+    if(recvRun) renderRunCodes(item);
     document.getElementById('qtyValue').value = currentQty;
     document.getElementById('qtyValue').classList.remove('warn');
     document.getElementById('qtyDiff').classList.remove('show');
@@ -1855,6 +2037,7 @@
           <div class="cell-option-id">${escapeHTML(c.label)}</div>
           <div class="cell-option-note">${noteText[c.reason] || 'свободно'}</div>
         </div>
+        ${c.reason === 'same_sku' ? cellInfoBtn(c.blockId, c.label, 'option', i) : ''}
         <div class="cell-option-check"></div>
       </div>
     `).join('');
@@ -1910,6 +2093,8 @@
     // товар действительно лежит, а это сервер и так перечисляет.
     cancelCellOptions();
     document.getElementById('manualCellBtn').style.display = 'none';
+    document.getElementById('manualCellRow').style.display = 'none';
+    document.getElementById('cellSuggestLabel').style.display = 'none';
     document.getElementById('customCellDisplay').classList.remove('show');
 
     let idx = findNextUnpickedIndex();
@@ -1998,15 +2183,21 @@
   }
 
   // Штрихкод, артикул продавца и артикул WB — крупно, как в печатном листе.
+  // У приёмки артикул продавца — артикул строки прихода, артикул WB — номер
+  // карточки из сопоставления; штрихкодов у товара с размерами несколько.
   function renderRunCodes(item){
-    const tail = tailLength(currentInvoice.items.map(p => p.barcode));
+    const recv = Boolean(recvRun);
+    const barcodes = String(item.barcode || '').split(',').map(b => b.trim()).filter(Boolean);
+    const tail = tailLength(currentInvoice.items.flatMap(p => String(p.barcode || '').split(',').map(b => b.trim())));
     const code = (label, value, cls) => '<div class="run-code' + (cls ? ' ' + cls : '') + '"><i>' + label + '</i><b>'
       + (value || '<span class="bc-head">не передан</span>') + '</b></div>';
+    const article = recv ? item.sku : item.article;
+    const wb = recv ? item.wb_article : item.nmId;
     document.getElementById('runCodes').innerHTML =
-      code('Штрихкод', item.barcode ? barcodeHtml(item.barcode, tail || 4) : '', 'bc')
-      + code('Артикул продавца', item.article ? escapeHTML(item.article) : '')
-      + code('Артикул WB', item.nmId ? escapeHTML(item.nmId) : '');
-    const open = currentInvoice.items.filter(p => !p.closed).length;
+      code(barcodes.length > 1 ? 'Штрихкоды' : 'Штрихкод', barcodes.map(b => barcodeHtml(b, tail || 4)).join('<br>'), 'bc')
+      + code('Артикул продавца', article ? escapeHTML(article) : '')
+      + code('Артикул WB', wb ? escapeHTML(wb) : '');
+    const open = currentInvoice.items.filter(p => recv ? !p.receiving_id : !p.closed).length;
     document.getElementById('runAllCount').textContent = 'осталось ' + open + ' ›';
   }
 
@@ -2038,6 +2229,7 @@
             ? 'взять ' + take + (short ? ' — здесь только ' + c.available + ' из ' + remaining : '')
             : 'здесь тоже есть: ' + c.available + ' шт')
         + '</div></div>'
+        + cellInfoBtn(c.cellBlockId, label, 'pick', i)
         + '<div class="cell-option-check"></div></div>';
     }).join('')
       + (hidden
@@ -2228,6 +2420,8 @@
 
   function renderReturnItem(){
     document.getElementById('bucketBlock').classList.add('show');
+    document.getElementById('manualCellRow').style.display = '';
+    document.getElementById('cellSuggestLabel').style.display = 'none';
     document.getElementById('itemDeclaredLabel').textContent = 'Осталось разобрать';
     document.getElementById('qtyLabel').textContent = 'Сколько штук в этом состоянии';
     document.getElementById('shortfallNote').classList.remove('show');
@@ -2478,8 +2672,10 @@
         name: item.name, sku: item.sku, declared: Number(item.declared_qty),
         accepted: currentQty, cell: selectedCellLabel || 'своё место',
       });
+      if(recvRun && recvRun.preferred === item.id) recvRun.preferred = null;
       await reloadCurrentInvoice();
       if(selectedCellBlockId) cellRows = await apiFetch('/api/cells/rows');
+      if(recvRun && currentInvoice.items.some(it => !it.receiving_id)) flashNext('Следующий товар');
       renderCurrentItem();
     } catch(e){
       if(saved){ savedButStale(e); return; }
@@ -2558,7 +2754,7 @@
     let seconds = Math.max(0, Math.floor((now - taskStartTime.getTime() - totalPausedMs) / 1000));
     // Сборка поставки: время — по заходу на сервере. Вышел и вернулся —
     // таймер продолжает с того же места, а не с нуля.
-    if(productRun && runState && runState.startedAt){
+    if(workNow() && runState && runState.startedAt){
       paused = Boolean(runState.pausedAt);
       now = paused ? new Date(runState.pausedAt).getTime() : Date.now() + runState.skewMs;
       seconds = Math.max(0, Math.floor((now - new Date(runState.startedAt).getTime() - Number(runState.pausedMs || 0)) / 1000));
@@ -2729,7 +2925,8 @@
           + 'onclick="selectKitCell(\'' + jsArg(o.blockId) + '\', \'' + jsArg(o.label) + '\')">'
           + '<div><div class="stock-row-sku">' + escapeHTML(o.label) + '</div>'
           + '<div class="stock-row-state">' + (KIT_CELL_REASON[o.reason] || 'ячейка') + '</div></div>'
-          + '<div class="stock-row-qty">' + (on ? 'выбрана' : '') + '</div></div>';
+          + '<div class="stock-row-end"><span class="stock-row-qty">' + (on ? 'выбрана' : '') + '</span>'
+          + (o.reason === 'same_sku' ? cellInfoBtn(o.blockId, o.label) : '') + '</div></div>';
       }).join('');
     }
 
@@ -2842,7 +3039,7 @@
       return '<div class="stock-row" onclick="openInvTask(\'' + t.id + '\')">'
         + '<div><div class="stock-row-sku">' + escapeHTML(t.label) + '</div>'
         + '<div class="stock-row-state">' + escapeHTML(t.reason) + '</div></div>'
-        + '<div class="stock-row-qty">посчитать →</div></div>';
+        + '<div class="stock-row-end">' + cellInfoBtn(t.cellBlockId, t.label) + '<span class="stock-row-qty">посчитать →</span></div></div>';
     }).join('');
   }
 
@@ -3082,7 +3279,7 @@
     }
   }
 
-  const ALL_SCREENS = ['homeScreen', 'suppliesScreen', 'supplyScreen', 'paperScreen', 'docsScreen',
+  const ALL_SCREENS = ['homeScreen', 'suppliesScreen', 'supplyScreen', 'paperScreen', 'docsScreen', 'receiptScreen',
     'pickListScreen', 'moveScreen', 'kitScreen', 'invScreen'];
 
   function hideAllScreens(){
@@ -3105,7 +3302,7 @@
      всё лежало одной кучей в выпадающем списке: работы вперемешку с сотней
      заказов, без прокрутки и без того, куда заказ едет и от кого. */
   let supplies = [];
-  // Куда вернуться из накладной: {kind:'supply', id} | {kind:'docs', dir} | {kind:'supplies'}.
+  // Куда вернуться из накладной: {kind:'supply', id} | {kind:'receipt', id} | {kind:'docs', dir} | {kind:'supplies'}.
   let backTarget = null;
   // Заказы, уже пройденные в этом заходе по поставке: без этого заказ, где
   // всё отложено, гонял бы грузчика по кругу.
@@ -3308,8 +3505,8 @@
         + '<div class="sp-list">' + rows.map(r => {
           const cells = (r.cells || []).filter(c => c.take > 0);
           const cellHtml = cells.length
-            ? escapeHTML(cells[0].label) + (cells.length > 1
-              ? '<small>+ ' + cells.slice(1).map(c => escapeHTML(c.label) + ' — ' + c.take).join(', ') + '</small>' : '')
+            ? escapeHTML(cells[0].label) + cellInfoLink(cells[0].cellBlockId, cells[0].label) + (cells.length > 1
+              ? '<small>+ ' + cells.slice(1).map(c => escapeHTML(c.label) + ' — ' + c.take + cellInfoLink(c.cellBlockId, c.label)).join(', ') + '</small>' : '')
             : '';
           const code = (label, value) => value ? '<span><i>' + label + '</i>' + value + '</span>' : '';
           return '<div class="sp-row" onclick="beginAssembly(\'' + jsArg(id) + '\', \'' + jsArg(r.sku) + '\')">'
@@ -3327,48 +3524,197 @@
   window.openSupply = openSupply;
 
   const DOC_TITLES = {
-    in: { title: 'Приёмка товара', empty: 'Приходов нет. Когда руководитель заведёт приход, он появится здесь.' },
+    in: { title: 'Приёмка товара', empty: 'Приходов нет. Когда продавец оформит привоз или руководитель заведёт приход, он появится здесь.' },
     return: { title: 'Возвраты', empty: 'Возвратов нет.' },
   };
 
   async function openDocs(dir){
     openJob('docsScreen');
+    recvRun = null;
     try{ await refreshWork(); } catch(e){ showToast('Не удалось обновить: ' + e.message); }
     backTarget = { kind: 'docs', dir };
+    document.getElementById('docsTitle').textContent = DOC_TITLES[dir].title;
+    if(dir === 'in') return renderReceipts();
+    document.getElementById('docsFilter').style.display = 'none';
     const all = invoices.filter(i => i.direction === dir);
     const open = all.filter(isOpenDoc).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
     const done = all.filter(i => !isOpenDoc(i)).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 20);
-    document.getElementById('docsTitle').textContent = DOC_TITLES[dir].title;
     document.getElementById('docsSub').textContent = open.length ? 'ждут: ' + open.length : 'Всё обработано';
     document.getElementById('docsBody').innerHTML = (open.length
-      ? open.map(i => dir === 'in' ? inboundRowHtml(i) : orderRowHtml(i, (i.company_name || '') + ' · пришла ' + fmtWhen(i.created_at))).join('')
+      ? open.map(i => orderRowHtml(i, (i.company_name || '') + ' · пришла ' + fmtWhen(i.created_at))).join('')
       : '<div class="job-empty">' + DOC_TITLES[dir].empty + '</div>')
       + (done.length ? '<div class="list-group-title">Недавно готовые</div>'
         + done.map(i => orderRowHtml(i, i.company_name || '')).join('') : '');
   }
   window.openDocs = openDocs;
 
-  // Привоз продавца (владелец 26.09.2026): когда и в какое окно привезут,
+  /* ---------- Приёмка товара: список приходов ----------
+     Владелец 27.09.2026: привоз продавца, у которого уже отметили «машина
+     приехала», грузчик «не увидел» — он был сто шестьдесят седьмым, внизу
+     списка от старых к новым. Теперь порядок: машина приехала — принять (по
+     времени приезда), привезут сегодня (по времени выгрузки), остальные
+     привозы продавцов, приходы из 1С и заведённые вручную. Внутри — новые
+     выше старых. Поиск и фильтры — сверху. Заказы поставщику из 1С сервер
+     грузчику не отдаёт: это заказ, а не привоз. */
+  const RECV_PAGE = 30;
+  const recvUi = { q: '', status: 'all', origin: 'all', seller: '', shown: RECV_PAGE };
+  const RECV_STATUS = { all: 'Все', waiting: 'Ждёт машину', arrived: 'Приехала', receiving: 'Принимается' };
+  const RECV_ORIGIN = { all: 'Все', seller: 'От продавца', '1c': 'Из 1С', manual: 'Вручную' };
+  const RECV_STATE_TEXT = { waiting: 'ждёт машину', arrived: 'приехала', receiving: 'принимается', done: 'принят' };
+
+  const dayKey = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const plannedDay = (i) => i.source_document_type === 'seller_inbound' && i.source_document_date
+    ? String(i.source_document_date).slice(0, 10) : '';
+  // Из 1С — то, что пришло обменом (у него есть номер в 1С); заведённое в
+  // кабинете руками номера в 1С не имеет.
+  const recvOrigin = (i) => i.source_document_type === 'seller_inbound' ? 'seller'
+    : i.external_id ? '1c' : 'manual';
+  function recvState(i){
+    if(i.status === 'completed') return 'done';
+    if(i.status === 'in_progress' || liveOf(i.work)) return 'receiving';
+    if(i.arrived_at) return 'arrived';
+    return 'waiting';
+  }
+  function recvRank(i){
+    const st = recvState(i);
+    if(st === 'done') return 9;
+    if(st === 'arrived' || st === 'receiving') return 0;
+    if(plannedDay(i) === dayKey(new Date())) return 1;
+    return recvOrigin(i) === 'seller' ? 2 : 3;
+  }
+  const timeOf = (v) => (v ? new Date(v).getTime() || 0 : 0);
+  function recvCompare(a, b){
+    const ra = recvRank(a), rb = recvRank(b);
+    if(ra !== rb) return ra - rb;
+    if(ra === 0){
+      // Приехавшие — по времени приезда, последняя машина выше.
+      const ka = a.arrived_at || (a.work && a.work.assembly && a.work.assembly.startedAt) || a.created_at;
+      const kb = b.arrived_at || (b.work && b.work.assembly && b.work.assembly.startedAt) || b.created_at;
+      return timeOf(kb) - timeOf(ka);
+    }
+    if(ra === 1){
+      // Сегодняшние — по времени выгрузки: кто раньше у ворот, тот выше.
+      const fa = String(a.planned_from || a.planned_to || '99:99'), fb = String(b.planned_from || b.planned_to || '99:99');
+      if(fa !== fb) return fa < fb ? -1 : 1;
+    }
+    return timeOf(b.created_at) - timeOf(a.created_at);
+  }
+  const fold = (t) => String(t || '').toLowerCase().replace(/ё/g, 'е').replace(/\s+/g, ' ').trim();
+  function recvMatches(i){
+    if(recvUi.seller && i.company_name !== recvUi.seller) return false;
+    if(recvUi.origin !== 'all' && recvOrigin(i) !== recvUi.origin) return false;
+    if(recvUi.status !== 'all' && recvState(i) !== recvUi.status) return false;
+    const q = fold(recvUi.q);
+    if(!q) return true;
+    const hay = fold([i.number, i.company_name, i.carrier, i.vehicle].filter(Boolean).join(' '));
+    return q.split(' ').every(w => hay.includes(w));
+  }
+
+  // «сегодня», «завтра» или дата — рядом со временем выгрузки.
+  function plannedText(i){
+    const day = plannedDay(i);
+    if(!day) return '';
+    const today = dayKey(new Date());
+    const tomorrow = dayKey(new Date(Date.now() + 86400000));
+    const f = i.planned_from ? String(i.planned_from).slice(0, 5) : '';
+    const t = i.planned_to ? String(i.planned_to).slice(0, 5) : '';
+    const slot = f && t ? f + '–' + t : f ? 'с ' + f : t ? 'до ' + t : '';
+    return 'привезут ' + (day === today ? 'сегодня' : day === tomorrow ? 'завтра' : fmtDay(day))
+      + (slot ? ' · время выгрузки ' + slot : '');
+  }
+  // «Приехала в 10:40 — принять»; вчерашняя — с датой.
+  function arrivedText(i){
+    const at = new Date(i.arrived_at);
+    return 'Приехала ' + (dayKey(at) === dayKey(new Date()) ? '' : fmtDay(i.arrived_at) + ' ') + 'в ' + formatClock(at);
+  }
+
+  function renderReceipts(){
+    const all = invoices.filter(i => i.direction === 'in');
+    const open = all.filter(i => i.status !== 'completed');
+    const shown = open.filter(recvMatches).sort(recvCompare);
+    const arrived = open.filter(i => recvState(i) === 'arrived').length;
+    document.getElementById('docsSub').textContent = open.length
+      ? 'ждут: ' + open.length + (arrived ? ' · машина у ворот: ' + arrived : '') : 'Всё принято';
+    renderReceiptFilter(open);
+    const done = all.filter(i => i.status === 'completed' && recvMatches(i))
+      .sort((a, b) => timeOf(b.created_at) - timeOf(a.created_at)).slice(0, 10);
+    const filtered = recvUi.q || recvUi.status !== 'all' || recvUi.origin !== 'all' || recvUi.seller;
+    const page = shown.slice(0, recvUi.shown);
+    document.getElementById('docsBody').innerHTML = (page.length
+      ? page.map(recvRowHtml).join('')
+        + (shown.length > page.length ? '<button type="button" class="recv-more" onclick="recvMore()">Показать ещё '
+          + Math.min(RECV_PAGE, shown.length - page.length)
+          + (shown.length - page.length > RECV_PAGE ? ' · осталось ' + (shown.length - page.length) : '') + '</button>' : '')
+      : '<div class="job-empty">' + (filtered && open.length ? 'Под этот поиск и фильтры приходов нет.' : DOC_TITLES.in.empty) + '</div>')
+      + (done.length && recvUi.status === 'all' ? '<div class="list-group-title">Недавно принятые</div>'
+        + done.map(recvRowHtml).join('') : '');
+  }
+
+  function renderReceiptFilter(open){
+    const host = document.getElementById('docsFilter');
+    host.style.display = '';
+    const sellers = [...new Set(open.map(i => i.company_name).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));
+    if(recvUi.seller && !sellers.includes(recvUi.seller)) recvUi.seller = '';
+    const origins = Object.keys(RECV_ORIGIN).filter(k => k === 'all' || open.some(i => recvOrigin(i) === k) || recvUi.origin === k);
+    const seg = (name, value, label) => '<button type="button" data-recv="' + name + '" data-value="' + escapeHTML(value) + '" class="'
+      + (recvUi[name] === value ? 'on' : '') + '">' + escapeHTML(label) + '</button>';
+    const row = (title, inner) => '<div class="recv-filter-row"><span>' + title + '</span><div class="pick-seg" role="group" aria-label="' + title + '">' + inner + '</div></div>';
+    // Поле поиска перерисовывается вместе с фильтрами: фокус и каретку
+    // возвращаем туда, где их оставил человек.
+    const keep = document.activeElement && document.activeElement.id === 'recvSearch' ? document.activeElement.selectionStart : null;
+    host.innerHTML = '<input type="search" class="recv-search" id="recvSearch" placeholder="Номер, продавец, перевозчик, машина" '
+      + 'value="' + escapeHTML(recvUi.q) + '" autocomplete="off" enterkeyhint="search" aria-label="Поиск прихода">'
+      + row('Статус', Object.keys(RECV_STATUS).map(k => seg('status', k, RECV_STATUS[k])).join(''))
+      + row('Откуда', origins.map(k => seg('origin', k, RECV_ORIGIN[k])).join(''))
+      + (sellers.length > 1 ? row('Продавец', seg('seller', '', 'Все') + sellers.map(n => seg('seller', n, n)).join('')) : '');
+    const box = document.getElementById('recvSearch');
+    box.oninput = () => { recvUi.q = box.value; recvUi.shown = RECV_PAGE; renderReceipts(); };
+    box.onkeydown = (e) => { if(e.key === 'Enter'){ e.preventDefault(); box.blur(); } };
+    if(keep != null){ box.focus(); const at = Math.min(keep, box.value.length); box.setSelectionRange(at, at); }
+    host.querySelectorAll('[data-recv]').forEach(b => {
+      b.onclick = () => { recvUi[b.dataset.recv] = b.dataset.value; recvUi.shown = RECV_PAGE; renderReceipts(); };
+    });
+  }
+
+  function recvMore(){ recvUi.shown += RECV_PAGE; renderReceipts(); }
+  window.recvMore = recvMore;
+
+  // Привоз продавца (владелец 26.09.2026): когда и во сколько привезут,
   // сколько мест, кто везёт. «Машина приехала» грузчик отмечает у ворот,
   // пересчитав места; первая принятая строка отметит приезд и сама.
   function inboundPlaces(boxes, pallets){
     return [boxes ? boxes + ' ' + pluralRu(boxes, 'короб', 'короба', 'коробов') : '',
       pallets ? pallets + ' ' + pluralRu(pallets, 'паллета', 'паллеты', 'паллет') : ''].filter(Boolean).join(', ');
   }
-  function inboundRowHtml(i){
-    const parts = [i.company_name || ''];
-    if(i.source_document_type === 'seller_inbound' && i.source_document_date){
-      const f = i.planned_from ? String(i.planned_from).slice(0, 5) : ''; const t = i.planned_to ? String(i.planned_to).slice(0, 5) : '';
-      parts.push('привезут ' + fmtDay(String(i.source_document_date).slice(0, 10)) + (f && t ? ', ' + f + '–' + t : f ? ', с ' + f : t ? ', до ' + t : ''));
-    } else parts.push('пришла ' + fmtWhen(i.created_at));
-    parts.push(inboundPlaces(i.boxes, i.pallets));
-    parts.push([i.carrier, i.vehicle].filter(Boolean).join(', '));
-    if(i.arrived_at) parts.push('машина приехала ' + fmtWhen(i.arrived_at));
-    if(i.inbound_comment) parts.push('«' + i.inbound_comment + '»');
-    const row = orderRowHtml(i, parts.filter(Boolean).join(' · '));
-    if(i.arrived_at || i.status !== 'open') return row;
-    return '<div class="arrive-wrap">' + row + '<div class="arrive-row" id="arrive-' + escapeHTML(i.id) + '">'
-      + '<button class="arrive-btn" onclick="startArrive(\'' + jsArg(i.id) + '\')">Машина приехала</button></div></div>';
+  function recvMeta(i){
+    const origin = recvOrigin(i);
+    return [
+      origin === 'seller' ? plannedText(i) : (origin === '1c' ? 'из 1С' : 'заведён складом') + ' · пришла ' + fmtWhen(i.created_at),
+      inboundPlaces(i.boxes, i.pallets),
+      [i.carrier, i.vehicle ? 'машина ' + i.vehicle : ''].filter(Boolean).join(', '),
+      i.inbound_comment ? '«' + i.inbound_comment + '»' : '',
+    ].filter(Boolean);
+  }
+  function recvRowHtml(i){
+    const st = recvState(i);
+    const arrived = st === 'arrived';
+    const id = jsArg(i.id);
+    // «Машина приехала» в списке — только у привоза, который ждут сегодня
+    // (или уже ждали): у старых приходов из 1С и завтрашних привозов кнопка
+    // только мешала. На экране прихода она есть всегда.
+    const day = plannedDay(i);
+    const canArrive = !i.arrived_at && i.status === 'open' && recvOrigin(i) === 'seller' && (!day || day <= dayKey(new Date()));
+    return '<div class="recv-row' + (arrived ? ' arrived' : '') + (st === 'done' ? ' done' : '') + '" onclick="openReceipt(\'' + id + '\')">'
+      + (arrived ? '<div class="recv-arrived">' + escapeHTML(arrivedText(i)) + ' — принять</div>' : '')
+      + '<div class="recv-row-top"><span class="recv-row-num">' + escapeHTML(i.number) + '</span>'
+      +   '<span class="recv-row-state">' + RECV_STATE_TEXT[st] + '</span></div>'
+      + '<div class="recv-row-seller">' + escapeHTML(i.company_name || '') + '</div>'
+      + recvMeta(i).map(t => '<div class="recv-row-meta">' + escapeHTML(t) + '</div>').join('')
+      // Кто принимает и сколько принято — у всех грузчиков одинаково.
+      + (i.work && i.work.assembly ? assemblyLine(i.work, i.status, 'receiving') : '')
+      + (canArrive ? '<div class="arrive-row" id="arrive-' + escapeHTML(i.id) + '" onclick="event.stopPropagation()">'
+        + '<button class="arrive-btn" type="button" onclick="startArrive(\'' + id + '\')">Машина приехала</button></div>' : '')
+      + '</div>';
   }
   function startArrive(id){
     const i = invoices.find(x => x.id === id);
@@ -3377,7 +3723,9 @@
     box.innerHTML = '<div class="arrive-form">Сколько мест выгрузили?'
       + '<label>Коробов <input id="arrB-' + escapeHTML(id) + '" inputmode="numeric" maxlength="6" value="' + escapeHTML(i.boxes ?? '') + '"></label>'
       + '<label>Паллет <input id="arrP-' + escapeHTML(id) + '" inputmode="numeric" maxlength="6" value="' + escapeHTML(i.pallets ?? '') + '"></label>'
-      + '<button class="arrive-btn primary" onclick="confirmArrive(\'' + jsArg(id) + '\', this)">Отметить приезд</button></div>';
+      + '<button class="arrive-btn primary" type="button" onclick="confirmArrive(\'' + jsArg(id) + '\', this)">Отметить приезд</button></div>';
+    const first = document.getElementById('arrB-' + id);
+    if(first) first.focus();
   }
   window.startArrive = startArrive;
   async function confirmArrive(id, btn){
@@ -3387,17 +3735,138 @@
         boxes: document.getElementById('arrB-' + id).value.trim() || null,
         pallets: document.getElementById('arrP-' + id).value.trim() || null } });
       showToast('Приезд машины отмечен');
-      openDocs('in');
+      if(backTarget && backTarget.kind === 'receipt' && backTarget.id === id) openReceipt(id);
+      else openDocs('in');
     } catch(e){ btn.disabled = false; showToast('Не отмечено: ' + e.message); }
   }
   window.confirmArrive = confirmArrive;
+
+  /* ---------- Приход: экран, как поставка у сборки ----------
+     Номер один раз по центру, кто принимает и сколько принято, «Начать
+     приёмку» (или «Продолжить / Закончить / Отказаться» у своей), машина,
+     места и товары прихода — крупно, с кодами, по которым их узнают на
+     коробке. Нажал на товар — приёмка с него. */
+  async function openReceipt(id){
+    productRun = null;
+    recvRun = null;
+    openJob('receiptScreen');
+    backTarget = { kind: 'receipt', id };
+    try{ await refreshWork(); } catch(e){ showToast('Не удалось обновить: ' + e.message); }
+    const i = invoices.find(x => x.id === id);
+    if(!i){ showToast('Прихода больше нет — возможно, его отменили'); return openDocs('in'); }
+    document.getElementById('receiptTitle').textContent = i.number;
+    document.getElementById('receiptSub').innerHTML = [i.company_name, recvOrigin(i) === 'seller' ? plannedText(i) : '']
+      .filter(Boolean).map(t => '<span class="receipt-sub-line">' + escapeHTML(t) + '</span>').join('');
+    let d = null;
+    try{ d = await apiFetch('/api/invoices/' + id); } catch(e){ showToast('Не удалось открыть приход: ' + e.message); }
+    if(!backTarget || backTarget.kind !== 'receipt' || backTarget.id !== id) return;   // ушли, пока грузилось
+    const st = i.work || null;
+    const live = liveOf(st);
+    const state = recvState(i);
+    const arg = jsArg(id);
+    let actions = '';
+    if(live && live.mine){
+      // Вернулся к своей приёмке: «Вы вышли — приёмка на паузе» и три действия.
+      actions = '<div class="asm-panel' + (live.status === 'active' ? ' mine-active' : '') + '">'
+        + '<div class="asm-panel-title">' + (live.status === 'paused' ? 'Вы вышли — приёмка на паузе' : 'Вы принимаете этот приход') + '</div>'
+        + '<div class="asm-panel-sub">' + escapeHTML(takenText(st, 'receiving'))
+        +   (live.pausedAt ? ' · на паузе с ' + escapeHTML(formatClock(new Date(live.pausedAt))) : '')
+        +   ' · работали ' + escapeHTML(formatDuration(Number(live.workMs || 0))) + '</div>'
+        + '<label class="asm-comment-label" for="asmComment">Комментарий: где оставил, что осталось (необязательно)</label>'
+        + '<textarea class="defect-input" id="asmComment" rows="2" maxlength="300" placeholder="Например: 3 короба разобраны, остальные у ворот 2"></textarea>'
+        + '<div class="asm-actions">'
+        +   '<button class="big-btn" type="button" onclick="recvContinue(\'' + arg + '\')">▶ Продолжить</button>'
+        +   '<button class="big-btn secondary" type="button" onclick="asmFinishAsk()">Закончить приёмку</button>'
+        +   '<button class="big-btn secondary danger" type="button" onclick="asmAbandonAsk()">Отказаться от приёмки</button>'
+        + '</div></div>';
+    } else if(state !== 'done'){
+      actions = (state === 'arrived' ? '<div class="asm-line active"><b>' + escapeHTML(arrivedText(i)) + '</b> — принять</div>' : '')
+        + assemblyLine(st, i.status, 'receiving')
+        + '<button class="big-btn" type="button" onclick="beginReceiving(\'' + arg + '\')">'
+        + (live ? '▶ Забрать приёмку себе' : '▶ Начать приёмку') + '</button>';
+    } else {
+      actions = '<div class="job-empty" style="padding:14px 12px;">Приход принят.</div>';
+    }
+    const facts = [
+      i.arrived_at && state !== 'arrived' ? 'Машина приехала ' + fmtWhen(i.arrived_at)
+        + (inboundPlaces(i.arrived_boxes, i.arrived_pallets) ? ' · выгрузили ' + inboundPlaces(i.arrived_boxes, i.arrived_pallets) : '') : '',
+      inboundPlaces(i.boxes, i.pallets) ? 'Мест заявлено: ' + inboundPlaces(i.boxes, i.pallets) : '',
+      [i.carrier, i.vehicle ? 'машина ' + i.vehicle : ''].filter(Boolean).join(', '),
+      i.inbound_comment ? 'Комментарий продавца: «' + i.inbound_comment + '»' : '',
+      recvOrigin(i) !== 'seller' ? (recvOrigin(i) === '1c' ? 'Из 1С' : 'Заведён складом') + ' · пришла ' + fmtWhen(i.created_at) : '',
+    ].filter(Boolean);
+    const canArrive = !i.arrived_at && i.status === 'open';
+    document.getElementById('receiptBody').innerHTML = actions
+      + (canArrive ? '<div class="arrive-row" id="arrive-' + escapeHTML(id) + '">'
+        + '<button class="arrive-btn" type="button" onclick="startArrive(\'' + arg + '\')">Машина приехала</button></div>' : '')
+      + (facts.length ? '<div class="rcv-facts">' + facts.map(f => '<div>' + escapeHTML(f) + '</div>').join('') + '</div>' : '')
+      + (d ? receiptItemsHtml(d, id, state !== 'done') : '');
+  }
+  window.openReceipt = openReceipt;
+
+  function receiptItemsHtml(d, id, open){
+    const items = (d.items || []).slice().sort((a, b) => Boolean(a.receiving_id) - Boolean(b.receiving_id));
+    if(!items.length) return '';
+    const tail = tailLength(items.flatMap(it => String(it.barcode || '').split(',').map(b => b.trim())));
+    const left = items.filter(it => !it.receiving_id).length;
+    const code = (label, value) => value ? '<span><i>' + label + '</i>' + value + '</span>' : '';
+    return '<div class="list-group-title">Товары прихода · ' + items.length + (left && left < items.length ? ' · осталось ' + left : '') + '</div>'
+      + '<div class="rcv-items">' + items.map(it => {
+        const done = Boolean(it.receiving_id);
+        const declared = Number(it.declared_qty);
+        const accepted = done ? Number(it.accepted_qty) : null;
+        const cell = done && it.row_num != null ? formatBlockLabel(it.row_num, it) : '';
+        const bcs = String(it.barcode || '').split(',').map(b => b.trim()).filter(Boolean);
+        return '<div class="rcv-item' + (done ? ' done' : '') + '"' + (done || !open ? '' : ' onclick="beginReceiving(\'' + jsArg(id) + '\', \'' + jsArg(it.id) + '\')"') + '>'
+          + '<div class="rcv-item-name">' + escapeHTML(it.name) + '</div>'
+          + '<div class="rcv-item-qty"><b>' + declared + '</b><span>заявлено</span></div>'
+          + '<div class="sp-codes">'
+          +   code('Штрихкод', bcs.map(b => barcodeHtml(b, tail)).join(', '))
+          +   code('Арт. продавца', escapeHTML(it.sku))
+          +   code('Арт. WB', it.wb_article ? escapeHTML(it.wb_article) : '')
+          + '</div>'
+          + (done ? '<div class="rcv-item-done' + (accepted !== declared ? ' warn' : '') + '">Принято ' + accepted + ' из ' + declared
+            + (cell ? ' → ' + escapeHTML(cell) : ' · без ячейки') + '</div>' : '')
+          + '</div>';
+      }).join('') + '</div>';
+  }
+
+  // Приёмка прихода по строкам: открывается только идущей приёмкой — её
+  // начали «Начать» (или продолжили), таймер и паузы живут на сервере.
+  async function openReceivingRun(invoiceId, itemId){
+    pauseStart = null;
+    productRun = null;
+    recvRun = { invoiceId, preferred: itemId || null };
+    backTarget = { kind: 'receipt', id: invoiceId };
+    postponedItems = new Set();
+    try{ currentInvoice = await apiFetch('/api/invoices/' + invoiceId); }
+    catch(e){ recvRun = null; showToast('Не удалось открыть приход: ' + e.message); return openReceipt(invoiceId); }
+    hideAllScreens();
+    taskStartTime = runState && runState.startedAt ? new Date(runState.startedAt) : new Date();
+    totalPausedMs = runState ? Number(runState.pausedMs || 0) : 0;
+    pauseLog = [];
+    results.length = 0;
+    runVisited.clear();
+    layoutRun(true, 'receiving');
+    startTaskTimer();
+    setPauseLock(false);
+    document.getElementById('doneScreen').classList.remove('show', 'asm', 'recv');
+    document.getElementById('taskScreen').style.display = '';
+    document.getElementById('runTitle').innerHTML = escapeHTML(currentInvoice.number || '')
+      + (currentInvoice.company_name ? '<small>' + escapeHTML(currentInvoice.company_name) + '</small>' : '');
+    renderCurrentItem();
+    // Приёмка на паузе (вышел и вернулся) — сразу «Вы вышли — приёмка на паузе».
+    if(runState && runState.status === 'paused') showRunPaused();
+  }
+  window.openReceivingRun = openReceivingRun;
 
   function openOrder(id){ selectInvoice(id); }
   window.openOrder = openOrder;
 
   async function goBackFromTask(){
-    // Ушёл со сборки поставки — таймер встаёт на паузу сам, руководитель
-    // видит «вышел из сборки» (владелец 27.09.2026).
+    // Ушёл со сборки поставки или с приёмки — таймер встаёт на паузу сам,
+    // руководитель видит «вышел из сборки» / «вышел из приёмки» (владелец
+    // 27.09.2026).
     if(productRun){
       const id = productRun.supplyId;
       await exitRun();
@@ -3406,7 +3875,16 @@
       layoutRun(false);
       return openSupply(id);
     }
+    if(recvRun){
+      const id = recvRun.invoiceId;
+      await exitRun();
+      recvRun = null;
+      pauseStart = null;
+      layoutRun(false);
+      return openReceipt(id);
+    }
     if(backTarget && backTarget.kind === 'supply') return openSupply(backTarget.id);
+    if(backTarget && backTarget.kind === 'receipt') return openReceipt(backTarget.id);
     if(backTarget && backTarget.kind === 'docs') return openDocs(backTarget.dir);
     if(backTarget && backTarget.kind === 'supplies') return openSupplies();
     return showHome();
@@ -3637,7 +4115,7 @@
       const index = entry.index;
       const owner = entry.owner;
       const cells = l.cells.map(function(c){
-        return '<div class="pick-cell"><span class="pick-cell-id">' + escapeHTML(c.label)
+        return '<div class="pick-cell"><span class="pick-cell-id">' + escapeHTML(c.label) + cellInfoLink(c.cellBlockId, c.label)
           + '</span><span class="pick-cell-take">взять ' + c.take + ' шт</span></div>';
       }).join('');
       const orders = l.perOrder.map(function(o){
@@ -3702,13 +4180,36 @@
   // Сколько вкладка может быть скрыта, прежде чем это считается выходом:
   // короткий взгляд в уведомление — не выход.
   const HIDDEN_GRACE_MS = 15000;
-  const EXIT_REASON = 'Вышел из сборки';
+
+  // Приёмка прихода устроена так же, как сборка поставки (владелец
+  // 27.09.2026, второе задание): тот же таймер на сервере, выход — пауза,
+  // «Продолжить / Закончить / Отказаться», комментарий, «забрать себе».
+  // Чем они различаются — адрес на сервере, поле в паузе и слова — здесь.
+  // Приёмка идёт по recvRun (как сборка по productRun).
+  const WORK = {
+    assembly: {
+      path: (id) => '/api/shipping/assembly/' + id, key: 'supplyId', exit: 'Вышел из сборки',
+      work: 'сборка', acc: 'сборку', gen: 'сборки', doc: 'поставки', Doc: 'Поставка',
+      finish: 'Закончить сборку', abandon: 'Отказаться от сборки', back: 'К поставке',
+    },
+    receiving: {
+      path: (id) => '/api/receiving/session/' + id, key: 'invoiceId', exit: 'Вышел из приёмки',
+      work: 'приёмка', acc: 'приёмку', gen: 'приёмки', doc: 'прихода', Doc: 'Приход',
+      finish: 'Закончить приёмку', abandon: 'Отказаться от приёмки', back: 'К приходу',
+    },
+  };
+  let recvRun = null;          // { invoiceId, preferred }
+  const workNow = () => productRun ? { kind: 'assembly', id: productRun.supplyId }
+    : recvRun ? { kind: 'receiving', id: recvRun.invoiceId } : null;
 
   function applyAssemblyState(st){
-    if(!st || !st.supply) return runState;
+    const doc = st && (st.supply || st.invoice);
+    if(!doc) return runState;
+    const kind = st.kind || (st.supply ? 'assembly' : 'receiving');
     const a = st.assembly || {};
     runState = {
-      supplyId: st.supply.id, number: st.supply.number, supplyStatus: st.supply.status,
+      kind, docId: doc.id, supplyId: kind === 'assembly' ? doc.id : null, invoiceId: kind === 'receiving' ? doc.id : null,
+      number: doc.number, supplyStatus: doc.status, docStatus: doc.status,
       status: a.status || null, mine: Boolean(a.mine), mode: a.mode || 'app', workerName: a.workerName || '',
       startedAt: a.startedAt || null, pausedAt: a.pausedAt || null, pausedMs: Number(a.pausedMs || 0),
       pauseReason: a.pauseReason || '', endedAt: a.endedAt || null, workMs: Number(a.workMs || 0),
@@ -3719,27 +4220,37 @@
     };
     return runState;
   }
-  const runActive = () => Boolean(productRun && runState && runState.mine && runState.status === 'active'
-    && runState.supplyId === productRun.supplyId);
-  const takenText = (st) => 'взято ' + st.taken + ' из ' + st.total + ' шт.';
+  const runActive = () => {
+    const w = workNow();
+    return Boolean(w && runState && runState.mine && runState.status === 'active' && runState.docId === w.id);
+  };
+  // «взято 3 из 7 шт.» у сборки, «принято 3 из 8 позиций» у приёмки: приёмка
+  // идёт строка за строкой, и штуками тут врал бы лишний короб.
+  const kindOf = (st) => (st && (st.kind || (st.invoice ? 'receiving' : st.supply ? 'assembly' : st.assembly && st.assembly.kind))) || 'assembly';
+  const takenText = (st, kind) => ((kind || kindOf(st)) === 'receiving'
+    ? 'принято ' + st.taken + ' из ' + st.total + ' ' + pluralRu(Number(st.total), 'позиции', 'позиций', 'позиций')
+    : 'взято ' + st.taken + ' из ' + st.total + ' шт.');
   const liveOf = (st) => st && st.assembly && (st.assembly.status === 'active' || st.assembly.status === 'paused') ? st.assembly : null;
 
-  // Строка состояния у поставки — у всех грузчиков одинаковая (п. 20):
+  // Строка состояния у поставки и у прихода — у всех грузчиков одинаковая:
   // «На паузе · Дима · взято 3 из 7 · «коробы у ворот 3»».
-  function assemblyLine(st, supplyStatus){
+  function assemblyLine(st, docStatus, kind = 'assembly'){
     const a = st && st.assembly;
-    if(!a || supplyStatus === 'shipped') return '';
+    const recv = kind === 'receiving';
+    if(!a || (!recv && docStatus === 'shipped')) return '';
+    const open = recv ? docStatus !== 'completed' : docStatus === 'collecting';
     const note = st.lastComment ? ' · «' + escapeHTML(st.lastComment.text) + '»' : '';
-    const taken = escapeHTML(takenText(st));
+    const taken = escapeHTML(takenText(st, kind));
     const paper = a.mode === 'paper' ? ' по листу' : '';
-    if(a.status === 'active') return '<div class="asm-line active">' + (a.mine ? '<b>Вы</b> собираете' : 'Собирает <b>' + escapeHTML(a.workerName) + '</b>')
+    if(a.status === 'active') return '<div class="asm-line active">'
+      + (a.mine ? '<b>Вы</b> ' + (recv ? 'принимаете' : 'собираете') : (recv ? 'Принимает' : 'Собирает') + ' <b>' + escapeHTML(a.workerName) + '</b>')
       + paper + ' · ' + taken + note + '</div>';
-    if(a.status === 'paused') return '<div class="asm-line paused">На паузе · <b>' + (a.mine ? 'ваша сборка' : escapeHTML(a.workerName)) + '</b> · ' + taken + note + '</div>';
-    if(a.status === 'abandoned') return supplyStatus === 'collecting'
-      ? '<div class="asm-line abandoned">Свободна · ' + taken + note + '</div>' : '';
-    return supplyStatus === 'collecting'
-      ? '<div class="asm-line">Сборку закончил ' + escapeHTML(a.workerName) + ' · ' + taken + note + '</div>'
-      : (note ? '<div class="asm-line">Собрал ' + escapeHTML(a.workerName) + note + '</div>' : '');
+    if(a.status === 'paused') return '<div class="asm-line paused">На паузе · <b>' + (a.mine ? 'ваша ' + WORK[kind].work : escapeHTML(a.workerName)) + '</b> · ' + taken + note + '</div>';
+    if(a.status === 'abandoned') return open
+      ? '<div class="asm-line abandoned">' + (recv ? 'Свободен' : 'Свободна') + ' · ' + taken + note + '</div>' : '';
+    return open
+      ? '<div class="asm-line">' + (recv ? 'Приёмку' : 'Сборку') + ' закончил ' + escapeHTML(a.workerName) + ' · ' + taken + note + '</div>'
+      : (note ? '<div class="asm-line">' + (recv ? 'Принял ' : 'Собрал ') + escapeHTML(a.workerName) + note + '</div>' : '');
   }
 
   // «Начать сборку в приложении» и нажатие на товар в списке: свою сборку —
@@ -3753,27 +4264,42 @@
   }
   window.beginAssembly = beginAssembly;
 
-  function openStartSheet({ supplyId, sku, number, other, st, mode }){
+  // То же для прихода: «Начать приёмку» и нажатие на товар прихода.
+  function beginReceiving(invoiceId, itemId){
+    const i = invoices.find(x => x.id === invoiceId);
+    if(!i) return openDocs('in');
+    const live = liveOf(i.work);
+    if(live && live.mine) return recvContinue(invoiceId, itemId);
+    openStartSheet({ kind: 'receiving', supplyId: invoiceId, sku: itemId, number: i.number, other: live, st: i.work, mode: 'app' });
+  }
+  window.beginReceiving = beginReceiving;
+
+  function openStartSheet({ kind = 'assembly', supplyId, sku, number, other, st, mode }){
     const paper = mode === 'paper';
+    const recv = kind === 'receiving';
     document.getElementById('startTitle').textContent = other
-      ? 'Поставку ' + number + ' собирает ' + other.workerName
-      : 'Сейчас запустится таймер сборки поставки ' + number;
+      ? (recv ? 'Приход ' + number + ' принимает ' : 'Поставку ' + number + ' собирает ') + other.workerName
+      : 'Сейчас запустится таймер ' + WORK[kind].gen + ' ' + WORK[kind].doc + ' ' + number;
     document.getElementById('startSub').textContent = other
-      ? (other.status === 'paused' ? 'Сборка на паузе. ' : 'Сборка идёт. ') + 'Забрать её себе? ' + other.workerName + ' больше не сможет её продолжить — руководитель увидит это в журнале.'
+      ? (other.status === 'paused' ? capitalRu(WORK[kind].work) + ' на паузе. ' : capitalRu(WORK[kind].work) + ' идёт. ')
+        + 'Забрать её себе? ' + other.workerName + ' больше не сможет её продолжить — руководитель увидит это в журнале.'
       : paper ? 'Сборка по бумажному листу: отмечайте здесь только то, чего не нашли, и в конце — «Собрал по листу».'
-        : 'Таймер и отметка «начал сборку» — только после «Начать».';
+        : 'Таймер и отметка «начал ' + WORK[kind].acc + '» — только после «Начать».';
     const prior = st && st.assembly && !other && st.taken > 0;
     document.getElementById('startNote').innerHTML = (prior || other
-      ? 'Продолжите с того же места: <b>' + escapeHTML(takenText(st)) + '</b>' : '')
+      ? 'Продолжите с того же места: <b>' + escapeHTML(takenText(st, kind)) + '</b>' : '')
       + (st && st.lastComment ? (prior || other ? '<br>' : '') + 'Комментарий ' + escapeHTML(st.lastComment.by || '')
         + ': <b>«' + escapeHTML(st.lastComment.text) + '»</b>' : '');
     const go = document.getElementById('startGoBtn');
     go.textContent = other ? 'Забрать и начать' : 'Начать';
     go.disabled = false;
-    go.onclick = () => startAssembly(supplyId, sku, { takeOver: Boolean(other), mode });
+    go.onclick = recv
+      ? () => startReceiving(supplyId, sku, { takeOver: Boolean(other) })
+      : () => startAssembly(supplyId, sku, { takeOver: Boolean(other), mode });
     document.getElementById('sheetOverlay').classList.add('show');
     goSheetStep('start');
   }
+  const capitalRu = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 
   async function startAssembly(supplyId, sku, { takeOver = false, mode = 'app' } = {}){
     const go = document.getElementById('startGoBtn');
@@ -3799,6 +4325,25 @@
     }
   }
 
+  async function startReceiving(invoiceId, itemId, { takeOver = false } = {}){
+    const go = document.getElementById('startGoBtn');
+    go.disabled = true;
+    try{
+      const r = await apiFetch('/api/receiving/session/' + invoiceId + '/start', { method: 'POST', body: { takeOver } });
+      applyAssemblyState(r);
+      closeSheet();
+      await openReceivingRun(invoiceId, itemId);
+    } catch(e){
+      go.disabled = false;
+      showToast('Не началось: ' + e.message);
+      await refreshWork().catch(() => {});
+      const i = invoices.find(x => x.id === invoiceId);
+      if(i && liveOf(i.work) && !liveOf(i.work).mine && !takeOver){
+        openStartSheet({ kind: 'receiving', supplyId: invoiceId, sku: itemId, number: i.number, other: liveOf(i.work), st: i.work, mode: 'app' });
+      }
+    }
+  }
+
   // «Продолжить» — своя сборка: с паузы сервер снимает её сам (запись
   // «вернулся» — одна, с комментарием).
   async function asmContinue(supplyId, sku){
@@ -3812,35 +4357,63 @@
   }
   window.asmContinue = asmContinue;
 
+  async function recvContinue(invoiceId, itemId){
+    const box = document.getElementById('asmComment');
+    const comment = box ? box.value.trim() : '';
+    try{
+      const r = await apiFetch('/api/receiving/session/' + invoiceId + '/start', { method: 'POST', body: { comment } });
+      applyAssemblyState(r);
+      await openReceivingRun(invoiceId, itemId);
+    } catch(e){ showToast('Не продолжилось: ' + e.message); }
+  }
+  window.recvContinue = recvContinue;
+
   const currentSupplyId = () => (productRun && productRun.supplyId)
     || (backTarget && backTarget.kind === 'supply' && backTarget.id) || (runState && runState.supplyId) || null;
+  // Чья работа сейчас перед глазами: идущая, экран поставки или прихода,
+  // последнее известное состояние.
+  const currentWorkRef = () => workNow()
+    || (backTarget && backTarget.kind === 'supply' ? { kind: 'assembly', id: backTarget.id } : null)
+    || (backTarget && backTarget.kind === 'receipt' ? { kind: 'receiving', id: backTarget.id } : null)
+    || (runState && runState.docId ? { kind: runState.kind, id: runState.docId } : null);
 
-  // Собирать больше нечего — окно «Закончить сборку» само.
+  // Делать больше нечего — окно «Закончить» само.
   function runNothingLeft(){
     document.getElementById('cellOptions').innerHTML = '';
     document.getElementById('confirmBtn').disabled = true;
-    document.getElementById('confirmBtn').textContent = 'Собирать больше нечего';
+    document.getElementById('confirmBtn').textContent = recvRun ? 'Все позиции приняты' : 'Собирать больше нечего';
     asmFinishAsk({ auto: true });
   }
 
   let finishAuto = false;
   async function asmFinishAsk(opts = {}){
-    const id = currentSupplyId();
-    if(!id) return;
+    const w = currentWorkRef();
+    if(!w) return;
+    const W = WORK[w.kind];
     finishAuto = Boolean(opts.auto);
     let st;
-    try{ st = await apiFetch('/api/shipping/assembly/' + id); } catch(e){ showToast('Не удалось: ' + e.message); return; }
+    try{ st = await apiFetch(W.path(w.id)); } catch(e){ showToast('Не удалось: ' + e.message); return; }
     const left = Math.max(0, st.total - st.taken);
-    document.getElementById('finishTitle').textContent = left > 0
-      ? (finishAuto ? 'Больше собирать нечего' : 'Закончить сборку с тем, что взято?')
-      : 'Всё взято — закончить сборку';
-    document.getElementById('finishNote').innerHTML = 'Поставка ' + escapeHTML(st.supply.number) + ': <b>' + escapeHTML(takenText(st)) + '</b>'
-      + (left > 0 ? '<br>Не взятое — ' + left + ' шт. — уходит руководителю отметкой «нет товара», как при бумажном листе.' : '');
+    if(w.kind === 'receiving'){
+      document.getElementById('finishTitle').textContent = left > 0
+        ? 'Закончить приёмку с тем, что принято?' : 'Всё принято — закончить приёмку';
+      document.getElementById('finishNote').innerHTML = 'Приход ' + escapeHTML(st.invoice.number) + ': <b>' + escapeHTML(takenText(st)) + '</b>'
+        + (left > 0 ? '<br>Не принятые — ' + left + ' ' + pluralRu(left, 'позиция', 'позиции', 'позиций')
+          + ' — запишутся как «не приехало» (0 шт.): руководитель увидит расхождение в журнале, продавец — в акте.' : '');
+    } else {
+      document.getElementById('finishTitle').textContent = left > 0
+        ? (finishAuto ? 'Больше собирать нечего' : 'Закончить сборку с тем, что взято?')
+        : 'Всё взято — закончить сборку';
+      document.getElementById('finishNote').innerHTML = 'Поставка ' + escapeHTML(st.supply.number) + ': <b>' + escapeHTML(takenText(st)) + '</b>'
+        + (left > 0 ? '<br>Не взятое — ' + left + ' шт. — уходит руководителю отметкой «нет товара», как при бумажном листе.' : '');
+    }
     const typed = [document.getElementById('pauseComment'), document.getElementById('asmComment')]
       .map(el => el && el.value.trim()).find(Boolean) || '';
     document.getElementById('finishComment').value = typed;
-    document.getElementById('finishGoBtn').disabled = false;
-    document.getElementById('finishCancelBtn').textContent = finishAuto ? 'К поставке' : 'Назад';
+    const go = document.getElementById('finishGoBtn');
+    go.textContent = W.finish;
+    go.disabled = false;
+    document.getElementById('finishCancelBtn').textContent = finishAuto ? W.back : 'Назад';
     document.getElementById('sheetOverlay').classList.add('show');
     goSheetStep('finish');
   }
@@ -3848,35 +4421,43 @@
 
   function asmFinishCancel(){
     closeSheet();
-    // Взять больше нечего — оставаться на пустом экране незачем.
-    if(finishAuto && productRun) goBackFromTask();
+    // Делать больше нечего — оставаться на пустом экране незачем.
+    if(finishAuto && (productRun || recvRun)) goBackFromTask();
   }
   window.asmFinishCancel = asmFinishCancel;
 
   async function asmFinish(){
-    const id = currentSupplyId();
+    const w = currentWorkRef();
+    if(!w) return;
     const btn = document.getElementById('finishGoBtn');
     btn.disabled = true;
     try{
-      const r = await apiFetch('/api/shipping/assembly/' + id + '/finish', { method: 'POST',
+      const r = await apiFetch(WORK[w.kind].path(w.id) + '/finish', { method: 'POST',
         body: { comment: document.getElementById('finishComment').value.trim() } });
       closeSheet();
       productRun = null;
+      recvRun = null;
       applyAssemblyState(r);
-      showAssemblyDone({ supplyId: id, number: r.supply.number, assembly: r.assembly, taken: r.taken, total: r.total,
+      if(w.kind === 'receiving') return showReceivingDone(r);
+      showAssemblyDone({ supplyId: w.id, number: r.supply.number, assembly: r.assembly, taken: r.taken, total: r.total,
         notTaken: r.notTaken || [], minutes: r.minutes });
     } catch(e){ btn.disabled = false; showToast('Не закончилось: ' + e.message); }
   }
   window.asmFinish = asmFinish;
 
   async function asmAbandonAsk(){
-    const id = currentSupplyId();
-    if(!id) return;
+    const w = currentWorkRef();
+    if(!w) return;
+    const W = WORK[w.kind];
     let st;
-    try{ st = await apiFetch('/api/shipping/assembly/' + id); } catch(e){ showToast('Не удалось: ' + e.message); return; }
-    document.getElementById('abandonTitle').textContent = 'Отказаться от сборки ' + st.supply.number + '?';
-    document.getElementById('abandonNote').innerHTML = 'Взятое — <b>' + escapeHTML(takenText(st)) + '</b> — останется записанным. '
-      + 'Поставка вернётся в общий список: любой грузчик продолжит с того же места.';
+    try{ st = await apiFetch(W.path(w.id)); } catch(e){ showToast('Не удалось: ' + e.message); return; }
+    const number = (st.supply || st.invoice).number;
+    document.getElementById('abandonTitle').textContent = W.abandon + ' ' + number + '?';
+    document.getElementById('abandonNote').innerHTML = (w.kind === 'receiving' ? 'Принятое' : 'Взятое')
+      + ' — <b>' + escapeHTML(takenText(st)) + '</b> — останется записанным. '
+      + (w.kind === 'receiving'
+        ? 'Приход вернётся в общий список: любой грузчик продолжит с того же места.'
+        : 'Поставка вернётся в общий список: любой грузчик продолжит с того же места.');
     const typed = [document.getElementById('pauseComment'), document.getElementById('asmComment')]
       .map(el => el && el.value.trim()).find(Boolean) || '';
     document.getElementById('abandonComment').value = typed;
@@ -3887,29 +4468,36 @@
   window.asmAbandonAsk = asmAbandonAsk;
 
   async function asmAbandon(){
-    const id = currentSupplyId();
+    const w = currentWorkRef();
+    if(!w) return;
     const btn = document.getElementById('abandonGoBtn');
     btn.disabled = true;
     try{
-      await apiFetch('/api/shipping/assembly/' + id + '/abandon', { method: 'POST',
+      await apiFetch(WORK[w.kind].path(w.id) + '/abandon', { method: 'POST',
         body: { comment: document.getElementById('abandonComment').value.trim() } });
       closeSheet();
       productRun = null;
+      recvRun = null;
       runState = null;
       pauseStart = null;
       layoutRun(false);
+      if(w.kind === 'receiving'){
+        showToast('Вы отказались от приёмки — приход свободен, его продолжат с того же места');
+        return openDocs('in');
+      }
       showToast('Вы отказались от сборки — поставка свободна, её продолжат с того же места');
       await openSupplies();
     } catch(e){ btn.disabled = false; showToast('Не получилось: ' + e.message); }
   }
   window.asmAbandon = asmAbandon;
 
-  // Вышел из сборки стрелкой или «назад» — пауза сразу, с ответом сервера.
+  // Вышел из работы стрелкой или «назад» — пауза сразу, с ответом сервера.
   async function exitRun(){
     if(!runActive()) return;
+    const w = workNow();
     try{
       const r = await apiFetch('/api/journal/pause', { method: 'POST',
-        body: { supplyId: productRun.supplyId, reason: EXIT_REASON, exit: true } });
+        body: { [WORK[w.kind].key]: w.id, reason: WORK[w.kind].exit, exit: true } });
       if(r && r.assembly) applyAssemblyState(r.assembly);
     } catch(e){ showToast('Руководитель не получил отметку о выходе: ' + e.message); }
   }
@@ -3919,17 +4507,18 @@
   // ушли на самом деле (по часам сервера).
   function exitBeacon(atClientMs){
     if(!runActive()) return;
+    const w = workNow();
     const at = new Date((atClientMs || Date.now()) + runState.skewMs).toISOString();
     try{
       fetch(API_BASE + '/api/journal/pause', {
         method: 'POST', keepalive: true,
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN },
-        body: JSON.stringify({ supplyId: productRun.supplyId, reason: EXIT_REASON, exit: true, at }),
+        body: JSON.stringify({ [WORK[w.kind].key]: w.id, reason: WORK[w.kind].exit, exit: true, at }),
       }).catch(() => {});
     } catch(e){ /* страница уже уходит */ }
     runState.status = 'paused';
     runState.pausedAt = at;
-    runState.pauseReason = 'вышел из сборки';
+    runState.pauseReason = WORK[w.kind].exit.toLowerCase();
   }
 
   let hiddenAt = 0;
@@ -3955,40 +4544,44 @@
     if(exitedWhileHidden){
       exitedWhileHidden = false;
       showRunPaused();
-      // Сверим с сервером, что пауза записана (и сколько взято).
+      // Сверим с сервером, что пауза записана (и сколько сделано).
       setTimeout(() => refreshRunState(), 800);
     }
   });
   window.addEventListener('pagehide', function(){ exitBeacon(); });
 
   async function refreshRunState(){
-    const id = productRun && productRun.supplyId;
-    if(!id) return;
-    try{ applyAssemblyState(await apiFetch('/api/shipping/assembly/' + id)); renderTaskTimer(); } catch(e){ return; /* покажем при следующем шаге */ }
-    // Пока телефон лежал, сборку забрал другой грузчик — продолжать её здесь
-    // нельзя: говорим прямо и возвращаем к поставке.
+    const w = workNow();
+    if(!w) return;
+    try{ applyAssemblyState(await apiFetch(WORK[w.kind].path(w.id))); renderTaskTimer(); } catch(e){ return; /* покажем при следующем шаге */ }
+    // Пока телефон лежал, работу забрал другой грузчик — продолжать её здесь
+    // нельзя: говорим прямо и возвращаем к поставке или приходу.
     const live = runState && (runState.status === 'active' || runState.status === 'paused');
     if(!live || !runState.mine){
-      showToast(live ? 'Сборку забрал ' + runState.workerName : 'Эту сборку уже закончили или от неё отказались');
+      const recv = w.kind === 'receiving';
+      showToast(live ? capitalRu(WORK[w.kind].acc) + ' забрал ' + runState.workerName
+        : 'Эту ' + WORK[w.kind].acc + ' уже закончили или от неё отказались');
       productRun = null;
+      recvRun = null;
       pauseStart = null;
       layoutRun(false);
-      openSupply(id);
+      if(recv) openReceipt(w.id); else openSupply(w.id);
     }
   }
 
-  // «Вы вышли — сборка на паузе» на самом экране сборки: работа заперта,
-  // под рукой «Продолжить», «Закончить сборку», «Отказаться от сборки».
+  // «Вы вышли — сборка на паузе» на самом экране работы: работа заперта,
+  // под рукой «Продолжить», «Закончить», «Отказаться».
   function showRunPaused(){
-    if(!productRun) return;
+    const w = workNow();
+    if(!w) return;
     if(!pauseStart){
       pauseStart = runState && runState.pausedAt ? new Date(new Date(runState.pausedAt).getTime() - runState.skewMs) : new Date();
-      pauseLog.push({ reason: EXIT_REASON, start: pauseStart, end: null });
+      pauseLog.push({ reason: WORK[w.kind].exit, start: pauseStart, end: null });
     }
     setPauseLock(true);
     const exited = !runState || !runState.pauseReason || /вышел/i.test(runState.pauseReason);
     document.getElementById('pauseBannerText').innerHTML = exited
-      ? '<b>Вы вышли — сборка на паузе</b>'
+      ? '<b>Вы вышли — ' + WORK[w.kind].work + ' на паузе</b>'
       : 'На паузе: <b>' + escapeHTML(runState.pauseReason) + '</b>';
     renderTaskTimer();
   }
@@ -4009,27 +4602,8 @@
   }
   window.printAssemblySheet = printAssemblySheet;
 
-  // Окно «Поставка собрана» (п. 22–25): без пустоты, крупно, с комментарием
-  // и печатью листа.
-  function showAssemblyDone({ supplyId, number, assembly, taken, total, notTaken = [], minutes = null, report = null }){
-    hideAllScreens();
-    layoutRun(false);
-    pauseStart = null;
-    printSupplyId = supplyId;
-    backTarget = { kind: 'supplies' };
-    const screen = document.getElementById('doneScreen');
-    screen.classList.add('show', 'asm');
-    const short = notTaken.length > 0;
-    // Номер не рвём по дефису: «ПС-270926-» и «01» на разных строках читались как два номера.
-    document.getElementById('doneTitle').innerHTML = short
-      ? 'Сборка поставки <span class="nowrap">' + escapeHTML(number) + '</span> закончена'
-      : 'Поставка <span class="nowrap">' + escapeHTML(number) + '</span> собрана';
-    document.getElementById('doneSub').textContent = 'Информация уже отправлена менеджеру и руководителю склада — сообщать никому не нужно.';
-    const comment = assembly && assembly.comment;
-    const box = document.getElementById('doneComment');
-    box.classList.toggle('show', Boolean(comment));
-    box.innerHTML = comment ? '<span>Ваш комментарий</span>«' + escapeHTML(comment) + '»' : '';
-    const a = assembly || {};
+  // Время работы на итоговом экране — по заходу на сервере.
+  function workTimeRows(a, minutes){
     const rows = [];
     if(a.startedAt) rows.push(['Начало', formatClock(new Date(a.startedAt))]);
     if(a.endedAt) rows.push(['Окончание', formatClock(new Date(a.endedAt))]);
@@ -4039,6 +4613,33 @@
     document.getElementById('doneTime').innerHTML = rows.map(r => '<div class="done-time-row' + (r[0] === 'На паузе' ? ' pause' : '') + '"><span>'
       + r[0] + '</span><span>' + escapeHTML(r[1]) + '</span></div>').join('');
     document.getElementById('doneTime').style.display = rows.length ? '' : 'none';
+  }
+  function doneComment(assembly){
+    const comment = assembly && assembly.comment;
+    const box = document.getElementById('doneComment');
+    box.classList.toggle('show', Boolean(comment));
+    box.innerHTML = comment ? '<span>Ваш комментарий</span>«' + escapeHTML(comment) + '»' : '';
+  }
+
+  // Окно «Поставка собрана» (п. 22–25): без пустоты, крупно, с комментарием
+  // и печатью листа.
+  function showAssemblyDone({ supplyId, number, assembly, taken, total, notTaken = [], minutes = null, report = null }){
+    hideAllScreens();
+    layoutRun(false);
+    pauseStart = null;
+    printSupplyId = supplyId;
+    backTarget = { kind: 'supplies' };
+    const screen = document.getElementById('doneScreen');
+    screen.classList.remove('recv');
+    screen.classList.add('show', 'asm');
+    const short = notTaken.length > 0;
+    // Номер не рвём по дефису: «ПС-270926-» и «01» на разных строках читались как два номера.
+    document.getElementById('doneTitle').innerHTML = short
+      ? 'Сборка поставки <span class="nowrap">' + escapeHTML(number) + '</span> закончена'
+      : 'Поставка <span class="nowrap">' + escapeHTML(number) + '</span> собрана';
+    document.getElementById('doneSub').textContent = 'Информация уже отправлена менеджеру и руководителю склада — сообщать никому не нужно.';
+    doneComment(assembly);
+    workTimeRows(assembly || {}, minutes);
     const lines = [];
     if(total != null) lines.push('<div class="done-row"><div class="done-row-name">Взято ' + taken + ' из ' + total + ' шт.</div></div>');
     const missRow = (name, text, qty) => '<div class="done-row done-row-warn"><div class="done-row-name">' + escapeHTML(name) + '</div>'
@@ -4050,6 +4651,54 @@
     document.querySelectorAll('#doneScreen .done-actions .done-btn:not(.done-print):not(#doneNextBtn)')
       .forEach(b => { b.textContent = '← К поставкам'; });
     document.querySelector('#doneScreen .done-back').textContent = '← К поставкам';
+  }
+
+  // Итог приёмки: как «Поставка собрана» — крупно, время, комментарий, что
+  // принято по строкам и что не приехало (ушло руководителю расхождением).
+  async function showReceivingDone(r){
+    const inv = r.invoice || {};
+    hideAllScreens();
+    layoutRun(false);
+    pauseStart = null;
+    backTarget = { kind: 'docs', dir: 'in' };
+    const screen = document.getElementById('doneScreen');
+    screen.classList.add('show', 'asm', 'recv');
+    const notArrived = r.notArrived || [];
+    document.getElementById('doneTitle').innerHTML = notArrived.length
+      ? 'Приёмка прихода <span class="nowrap">' + escapeHTML(inv.number || '') + '</span> закончена'
+      : 'Приход <span class="nowrap">' + escapeHTML(inv.number || '') + '</span> принят';
+    document.getElementById('doneSub').textContent = 'Информация уже отправлена менеджеру и руководителю склада — сообщать никому не нужно.';
+    doneComment(r.assembly);
+    workTimeRows(r.assembly || {}, r.minutes);
+    const summary = document.getElementById('doneSummary');
+    // Не приехавшее записано нулём, но «принятым» его не назовёшь.
+    const got = Math.max(0, Number(r.taken || 0) - notArrived.length);
+    const head = '<div class="done-row"><div class="done-row-name">'
+      + escapeHTML(capitalRu(takenText({ taken: got, total: r.total }, 'receiving'))
+        + (notArrived.length ? ' · не приехало ' + notArrived.length : '')) + '</div></div>';
+    summary.innerHTML = head;
+    summary.style.display = '';
+    document.querySelectorAll('#doneScreen .done-actions .done-btn:not(.done-print):not(#doneNextBtn)')
+      .forEach(b => { b.textContent = '← К приходам'; });
+    document.querySelector('#doneScreen .done-back').textContent = '← К приходам';
+    // Строки прихода — что и сколько принято и куда положено.
+    let d = null;
+    try{ d = await apiFetch('/api/invoices/' + inv.id); } catch(e){ return; }
+    if(!screen.classList.contains('recv') || !screen.classList.contains('show')) return;
+    const missed = new Set(notArrived.map(x => x.sku));
+    summary.innerHTML = head + (d.items || []).map(it => {
+      const declared = Number(it.declared_qty);
+      const accepted = it.accepted_qty == null ? null : Number(it.accepted_qty);
+      const cell = it.row_num != null ? formatBlockLabel(it.row_num, it) : '';
+      if(missed.has(it.sku) && !accepted){
+        return '<div class="done-row done-row-warn"><div class="done-row-name">' + escapeHTML(it.name) + '</div>'
+          + '<div class="done-miss">не приехало <b>' + declared + ' шт.</b> — руководителю ушло расхождение</div></div>';
+      }
+      const diff = accepted !== declared;
+      return '<div class="done-row' + (diff ? ' done-row-warn' : '') + '"><div class="done-row-name">' + escapeHTML(it.name) + '</div>'
+        + '<div class="done-row-meta"><span>Принято: <span class="done-row-qty">' + (accepted == null ? '—' : accepted) + ' / ' + declared + '</span></span>'
+        + (cell ? '<span class="done-row-cell">→ ' + escapeHTML(cell) + '</span>' : '<span class="done-row-cell">без ячейки</span>') + '</div></div>';
+    }).join('');
   }
 
   /* ---------- Сборка по бумажному листу ----------
@@ -4221,12 +4870,13 @@
       + paperLines.map(function(r, i){
         const miss = Object.prototype.hasOwnProperty.call(paper.miss, r.sku);
         const cells = (r.cells || []).filter(c => c.take > 0)
-          .map(c => c.label + ' — взять ' + c.take).join(' · ') || 'в ячейках Аргуса нет';
+          .map(c => escapeHTML(c.label + ' — взять ' + c.take) + cellInfoLink(c.cellBlockId, c.label)).join(' · ')
+          || 'в ячейках Аргуса нет';
         return '<div class="paper-line' + (miss ? ' miss' : '') + '">'
           + '<div class="paper-top"><div><div class="paper-name">' + escapeHTML(r.name || r.sku) + '</div>'
           +   '<div class="paper-sku">' + escapeHTML(r.article || r.sku) + '</div></div>'
           +   '<div class="paper-need">' + r.qty + ' шт</div></div>'
-          + '<div class="paper-cells">' + escapeHTML(cells) + '</div>'
+          + '<div class="paper-cells">' + cells + '</div>'
           + (paperKits.has(r.sku)
               ? '<button type="button" class="paper-miss-btn" style="color:var(--accent); border-color:var(--accent);" '
                 + 'onclick="openKitAssembly(' + paperKits.get(r.sku) + ', true)">Это набор — собрать '
@@ -4324,7 +4974,7 @@
       return '<div class="stock-row" onclick="pickMoveCell(\'' + jsArg(o.block.id) + '\', \'' + jsArg(label) + '\')">'
         + '<div><div class="stock-row-sku">' + escapeHTML(label) + '</div>'
         + '<div class="stock-row-state">' + escapeHTML(states) + '</div></div>'
-        + '<div class="stock-row-qty">' + total + ' шт</div></div>';
+        + '<div class="stock-row-end"><span class="stock-row-qty">' + total + ' шт</span>' + cellInfoBtn(o.block.id, label) + '</div></div>';
     }).join('');
   }
 
@@ -4402,7 +5052,8 @@
         const busy = (o.block.stock || []).length > 0 ? 'занята' : 'свободна';
         return '<div class="stock-row" onclick="doMoveToCell(\'' + jsArg(o.block.id) + '\')">'
           + '<div><div class="stock-row-sku">' + escapeHTML(label) + '</div>'
-          + '<div class="stock-row-state">' + busy + '</div></div></div>';
+          + '<div class="stock-row-state">' + busy + '</div></div>'
+          + ((o.block.stock || []).length ? cellInfoBtn(o.block.id, label) : '') + '</div>';
       }).join('');
   }
 
@@ -4582,22 +5233,18 @@
     toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
   }
 
+  // «Выбрать на карте склада» — карта сразу. Ввести ячейку вручную можно
+  // прямо над подсказками, без окна.
   function openSheet(){
     document.getElementById('sheetOverlay').classList.add('show');
-    goSheetStep('choice');
+    goSheetStep('map');
   }
   function closeSheet(){
     document.getElementById('sheetOverlay').classList.remove('show');
   }
   function goSheetStep(step){
     document.querySelectorAll('.sheet-step').forEach(s => s.classList.remove('show'));
-    if(step === 'choice') document.getElementById('sheetStepChoice').classList.add('show');
-    if(step === 'manual'){
-      document.getElementById('sheetStepManual').classList.add('show');
-      document.getElementById('manualCellInput').value = '';
-      document.getElementById('manualConfirmBtn').disabled = true;
-      setTimeout(() => document.getElementById('manualCellInput').focus(), 50);
-    }
+    if(step === 'cell') document.getElementById('sheetStepCell').classList.add('show');
     if(step === 'map'){
       document.getElementById('sheetStepMap').classList.add('show');
       showMapRowsPicker();
@@ -4749,7 +5396,7 @@
   function setPauseLock(on){
     document.getElementById('pauseBanner').classList.toggle('show', on);
     // У сборки поставки главная кнопка паузы — «Продолжить».
-    document.getElementById('pauseResumeBtn').textContent = productRun ? '▶ Продолжить' : 'Возобновить';
+    document.getElementById('pauseResumeBtn').textContent = productRun || recvRun ? '▶ Продолжить' : 'Возобновить';
     // inert — вся рабочая область и нижние кнопки: ни нажать, ни выбрать с
     // клавиатуры, даже если экран перерисуется на паузе (сборка по товару
     // перерисовывает ячейки и товары сама — проверка 26.09.2026).
@@ -4784,7 +5431,7 @@
     setPauseLock(false);
     // Комментарий, набранный на паузе, уходит одной записью с возвратом.
     const box = document.getElementById('pauseComment');
-    const comment = productRun && box ? box.value.trim() : '';
+    const comment = (productRun || recvRun) && box ? box.value.trim() : '';
     if(box) box.value = '';
     reportPause(Object.assign({ reason: last.reason, resumed: true, pausedMs: ms }, comment ? { comment } : {}));
     if(isPicking()) updatePickConfirm(); else updateConfirmState();
@@ -4806,32 +5453,52 @@
   // Раньше введённый текст просто показывался на экране, а на сервер уходил
   // cellBlockId: null — товар принимался «в никуда»: в отчёте и в Excel стоял
   // адрес, а в ячейках его не было, и отбор этот товар не видел.
+  //
+  // Разделители значимы: раньше их выбрасывали, и «1.17.3» совпадало с
+  // «11.7.3» — товар ушёл бы в другой ряд. Любой разделитель («1 7 3»,
+  // «1-7-3», «ряд 1 стеллаж 7 ярус 3») читается как точка, ведущие нули
+  // («01.07.03») не в счёт. Место внутри объединённой ячейки («1.5.2» при
+  // ячейке 1.5–6.2) находит её саму.
   function normalizeCellLabel(text){
-    return String(text).toLowerCase().replace(/ярус/g, '').replace(/[^0-9a-zа-яё]+/gi, '');
+    return String(text).toLowerCase().replace(/ряд|стеллаж|ярус/g, ' ')
+      .split(/[^0-9a-zа-яё]+/i).filter(Boolean)
+      .map(part => /^\d+$/.test(part) ? String(Number(part)) : part).join('.');
   }
 
   function findCellByLabel(text){
     const wanted = normalizeCellLabel(text);
     if(!wanted) return null;
+    const parts = wanted.split('.');
     for(const row of cellRows){
       for(const block of (row.blocks || [])){
         const label = formatBlockLabel(row.row_num, block);
         if(normalizeCellLabel(label) === wanted) return { id: block.id, label: label };
+        if(parts.length !== 3) continue;
+        const rack = Number(parts[1]), tier = Number(parts[2]);
+        const rowMatch = parts[0] === String(row.row_num) || (row.label && parts[0] === normalizeCellLabel(row.label));
+        if(rowMatch && rack >= block.rack_start && rack <= block.rack_end && tier >= block.tier_start && tier <= block.tier_end){
+          return { id: block.id, label: label };
+        }
       }
     }
     return null;
   }
 
-  function confirmManualCell(){
-    const val = document.getElementById('manualCellInput').value.trim();
+  function confirmManualInline(){
+    const box = document.getElementById('manualCellInline');
+    const val = box.value.trim();
     if(!val) return;
     const found = findCellByLabel(val);
     if(!found){
-      showToast('Такой ячейки на складе нет. Проверьте адрес или выберите её на карте.');
+      showToast('Ячейки ' + val + ' на складе нет. Адрес — ряд.стеллаж.ярус, например 1.7.3, или выберите ячейку на карте.');
       return;
     }
+    box.value = '';
+    document.getElementById('manualCellGo').disabled = true;
+    box.blur();
     applyCustomCell(found.id, found.label);
   }
+  window.confirmManualInline = confirmManualInline;
 
   function showMapRowsPicker(){
     document.getElementById('mapRackView').style.display = 'none';
@@ -4870,7 +5537,10 @@
           ${blocks.sort((a,b) => b.tier_start - a.tier_start).map(b => {
             const label = formatBlockLabel(rowNum, b);
             const free = b.state === 'empty';
-            const action = free ? `onclick="applyCustomCell('${b.id}', '${label}')"` : '';
+            // Свободную — сразу выбрать; занятую — сначала показать, что в
+            // ней лежит, и дать положить туда же (владелец 27.09.2026).
+            const action = free ? `onclick="applyCustomCell('${jsArg(b.id)}', '${jsArg(label)}')"`
+              : `onclick="openCellInfo('${jsArg(b.id)}', '${jsArg(label)}', 'custom', null, ${Number(rowNum)})"`;
             // Долю заполнения не показываем: сервер знает про ячейку только
             // «пусто/занято» (fill_pct всегда 0 или 100), и полоска на часть
             // ширины выглядела бы как процент, которого никто не считал.
@@ -4882,11 +5552,94 @@
     `).join('');
   }
 
+  /* ---------- Что лежит в ячейке ----------
+     Владелец 27.09.2026: нажал на ячейку — полная информация: товар,
+     продавец, артикул, штрихкод, артикул WB, сколько, годное или брак, когда
+     положили. У грузчика — везде, где видна ячейка: подсказки приёмки,
+     ячейки сборки, карта, лист грузчика, перестановка, пересчёт. Данные —
+     /api/cells/blocks/:id/contents, по одной ячейке. */
+  let cellInfoCtx = null;   // { blockId, label, put, arg, row }
+  const CELL_PUT = { option: 'Положить сюда', custom: 'Положить сюда', pick: 'Взять отсюда' };
+  function cellInfoBtn(blockId, label, put, arg){
+    if(!blockId) return '';
+    return '<button type="button" class="cell-info-btn" onclick="event.stopPropagation(); openCellInfo(\''
+      + jsArg(blockId) + '\', \'' + jsArg(label || '') + '\'' + (put ? ', \'' + put + '\', ' + JSON.stringify(arg == null ? null : arg) : '') + ')">Что здесь</button>';
+  }
+  // Внутри крупного адреса (строка товара поставки, лист грузчика) — ссылкой.
+  function cellInfoLink(blockId, label){
+    if(!blockId) return '';
+    return '<button type="button" class="cell-info-link" onclick="event.stopPropagation(); openCellInfo(\''
+      + jsArg(blockId) + '\', \'' + jsArg(label || '') + '\')">что здесь</button>';
+  }
+  function placedText(it){
+    if(!it.placedAt) return '—';
+    const last = fmtWhen(it.placedAt);
+    const first = it.firstPlacedAt ? fmtWhen(it.firstPlacedAt) : last;
+    return first === last ? last : last + ' (первый раз — ' + first + ')';
+  }
+  async function openCellInfo(blockId, label, put, arg, row){
+    cellInfoCtx = { blockId, label, put: put || null, arg: arg == null ? null : arg, row: row == null ? null : row };
+    document.getElementById('sheetOverlay').classList.add('show');
+    goSheetStep('cell');
+    document.getElementById('cellInfoTitle').textContent = 'Ячейка ' + (label || '');
+    document.getElementById('cellInfoSub').textContent = 'Смотрю, что лежит…';
+    document.getElementById('cellInfoBody').innerHTML = '';
+    const putBtn = document.getElementById('cellInfoPut');
+    putBtn.style.display = put ? '' : 'none';
+    putBtn.textContent = CELL_PUT[put] || 'Выбрать';
+    putBtn.onclick = cellInfoPut;
+    // «Назад» ведёт туда, откуда пришли: на карту — к тому же ряду.
+    document.querySelector('#sheetStepCell .sheet-back').textContent = row == null ? '← Закрыть' : '← К карте';
+    let d;
+    try{ d = await apiFetch('/api/cells/blocks/' + encodeURIComponent(blockId) + '/contents'); }
+    catch(e){
+      if(cellInfoCtx && cellInfoCtx.blockId === blockId) document.getElementById('cellInfoSub').textContent = 'Не удалось узнать: ' + e.message;
+      return;
+    }
+    if(!cellInfoCtx || cellInfoCtx.blockId !== blockId) return;
+    cellInfoCtx.label = d.label;
+    document.getElementById('cellInfoTitle').textContent = 'Ячейка ' + d.label;
+    document.getElementById('cellInfoSub').textContent = d.items.length
+      ? d.totalUnits + ' шт · ' + d.items.length + ' ' + pluralRu(d.items.length, 'товар', 'товара', 'товаров')
+      : 'Пустая';
+    const row2 = (k, v) => '<dt>' + k + '</dt><dd>' + v + '</dd>';
+    document.getElementById('cellInfoBody').innerHTML = d.items.length ? d.items.map(it => '<div class="cell-info-item">'
+      + '<div class="cell-info-top"><div class="cell-info-name">' + escapeHTML(it.name) + '</div>'
+      +   '<div class="cell-info-qty' + (it.quality !== 'good' ? ' bad' : '') + '">' + it.qty + ' шт</div></div>'
+      + '<dl class="cell-info-grid">'
+      +   row2('Продавец', escapeHTML(it.seller || '—'))
+      +   row2('Артикул', escapeHTML(it.sku))
+      +   row2('Штрихкод', escapeHTML(it.barcode || '—'))
+      +   row2('Артикул WB', escapeHTML(it.wbArticle || '—'))
+      +   row2('Состояние', escapeHTML(it.qualityName))
+      +   row2('Положили', escapeHTML(placedText(it)))
+      + '</dl></div>').join('')
+      : '<div class="cell-info-empty">В ячейке ничего нет.</div>';
+  }
+  window.openCellInfo = openCellInfo;
+  function cellInfoBack(){
+    const ctx = cellInfoCtx;
+    cellInfoCtx = null;
+    if(ctx && ctx.row != null){ goSheetStep('map'); showMapRow(ctx.row); return; }
+    closeSheet();
+  }
+  window.cellInfoBack = cellInfoBack;
+  function cellInfoPut(){
+    const ctx = cellInfoCtx;
+    if(!ctx) return;
+    cellInfoCtx = null;
+    if(ctx.put === 'option') return (closeSheet(), selectCellOption(ctx.blockId, ctx.label, ctx.arg));
+    if(ctx.put === 'pick') return (closeSheet(), selectPickCell(ctx.arg));
+    if(ctx.put === 'custom') return applyCustomCell(ctx.blockId, ctx.label);
+    closeSheet();
+  }
+
   function applyCustomCell(blockId, label){
     document.querySelectorAll('.cell-option').forEach(el => el.classList.remove('selected'));
     selectedCellBlockId = blockId;
     selectedCellLabel = label;
     document.getElementById('customCellId').textContent = label;
+    document.getElementById('customCellInfo').innerHTML = cellInfoBtn(blockId, label);
     document.getElementById('customCellDisplay').classList.add('show');
     closeSheet();
     updateConfirmState();
