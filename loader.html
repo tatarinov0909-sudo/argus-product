@@ -1039,6 +1039,14 @@
   .done-comment{display:none; width:100%; text-align:left; background:var(--panel); border:1px solid var(--line);
     border-radius:14px; padding:14px 18px; margin-bottom:16px; font-size:16px; line-height:1.45;}
   .done-comment.show{display:block;}
+  /* После приёмки или сборки — где исправить ошибку (владелец 29.09.2026):
+     работа закрыта, переложить товар можно в «Перепаковке и перестановке». */
+  .done-fix{display:none; width:100%; text-align:left; margin-bottom:16px; padding:14px 16px; border-radius:14px;
+    background:var(--yellow-soft); border:1.5px solid rgba(201,166,107,0.55); font-size:15px; line-height:1.45;}
+  .done-fix.show{display:block;}
+  .done-fix b{display:block; font-size:16px; color:var(--yellow); margin-bottom:4px;}
+  .done-fix button{margin-top:10px; width:100%; padding:12px 14px; border-radius:10px; border:1px solid var(--yellow);
+    background:var(--panel-2); color:var(--text); font:inherit; font-size:15px; font-weight:600; cursor:pointer;}
   .done-comment span{display:block; font-size:13px; color:var(--muted); margin-bottom:4px;}
   .done-screen.asm .done-row-name{font-size:16px;}
   .done-screen.asm .done-row-meta{font-size:15px;}
@@ -1667,6 +1675,7 @@
       </div>
       <div class="done-title" id="doneTitle">Приёмка завершена</div>
       <div class="done-sub" id="doneSub">Накладная полностью обработана. Владелец склада увидит расхождения в журнале, если они есть.</div>
+      <div class="done-fix" id="doneFix"></div>
       <div class="done-comment" id="doneComment"></div>
       <div class="done-time" id="doneTime"></div>
       <div class="done-summary" id="doneSummary"></div>
@@ -5154,6 +5163,19 @@
 
   // Окно «Поставка собрана» (п. 22–25): без пустоты, крупно, с комментарием
   // и печатью листа.
+  // Плашка «где исправить», если ошиблись: приёмка и сборка уже закрыты,
+  // товар перекладывают в «Перепаковке и перестановке» (владелец 29.09.2026).
+  function showDoneFix(kind){
+    const box = document.getElementById('doneFix');
+    if(!kind){ box.classList.remove('show'); box.innerHTML = ''; return; }
+    box.innerHTML = '<b>Ошиблись с ячейкой?</b>'
+      + (kind === 'receiving'
+        ? 'Приход уже принят. Если товар лёг не туда или не столько, переложите его в «Перепаковке и перестановке».'
+        : 'Сборка уже закрыта. Если товар взяли не из той ячейки, поправьте остаток в «Перепаковке и перестановке».')
+      + '<button type="button" onclick="openMove()">Открыть «Перепаковка и перестановка»</button>';
+    box.classList.add('show');
+  }
+
   function showAssemblyDone({ supplyId, number, assembly, taken, total, notTaken = [], minutes = null, report = null }){
     hideAllScreens();
     layoutRun(false);
@@ -5170,6 +5192,7 @@
       : 'Поставка <span class="nowrap">' + escapeHTML(number) + '</span> собрана';
     document.getElementById('doneSub').textContent = 'Информация уже отправлена менеджеру и руководителю склада — сообщать никому не нужно.';
     doneComment(assembly);
+    showDoneFix('assembly');
     workTimeRows(assembly || {}, minutes);
     const lines = [];
     if(total != null) lines.push('<div class="done-row"><div class="done-row-name">Взято ' + taken + ' из ' + total + ' шт.</div></div>');
@@ -5200,6 +5223,7 @@
       : 'Приход <span class="nowrap">' + escapeHTML(inv.number || '') + '</span> принят';
     document.getElementById('doneSub').textContent = 'Информация уже отправлена менеджеру и руководителю склада — сообщать никому не нужно.';
     doneComment(r.assembly);
+    showDoneFix('receiving');
     workTimeRows(r.assembly || {}, r.minutes);
     const summary = document.getElementById('doneSummary');
     // Не приехавшее записано нулём, но «принятым» его не назовёшь.
@@ -5627,6 +5651,7 @@
     // у сборки поставки — showAssemblyDone.
     document.getElementById('doneScreen').classList.remove('asm');
     document.getElementById('doneComment').classList.remove('show');
+    showDoneFix(null);
     document.querySelector('#doneScreen .done-back').textContent = '← К списку';
     document.querySelectorAll('#doneScreen .done-actions .done-btn:not(.done-print):not(#doneNextBtn)')
       .forEach(b => { b.textContent = '← К списку'; });
