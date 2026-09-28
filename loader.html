@@ -325,6 +325,8 @@
   .place-here-hint{flex:1 0 100%; font-size:13.5px; color:var(--muted); line-height:1.4;}
   /* Принятое у раскладываемой позиции уже записано — его не меняют. */
   #taskScreen.placing #qtyMinus, #taskScreen.placing #qtyPlus{display:none;}
+  /* Старое «своё место» принятого прихода: без таймера, паузы и списка товаров. */
+  #taskScreen.legacy .work-clock, #taskScreen.legacy .run-all-btn{display:none !important;}
   #taskScreen.placing .run-need input.qty-value{color:var(--text);}
   /* «Все товары прихода» → принятый товар: где лежит, «Переложить», «Убрать». */
   .placed-row{padding:12px 14px; margin-bottom:10px; border-radius:12px; background:var(--panel-2); border:1px solid var(--line);}
@@ -2037,6 +2039,7 @@
       block.appendChild(diff);
     }
     if(!on) document.getElementById('runTitle').textContent = '';
+    if(!on) screen.classList.remove('legacy');
   }
 
   function openProductsSheet(){
@@ -3012,7 +3015,7 @@
       if(recvRun) recvRun.preferred = stay ? item.id : null;
       // Последняя позиция — приход принят, и заход закрылся на сервере сам
       // (третье задание 27.09.2026): сразу итог, без окна «Закончить».
-      if(recvRun && r && r.invoiceStatus === 'completed') return recvCompleted(r.finished);
+      if(recvRun && !recvRun.legacy && r && r.invoiceStatus === 'completed') return recvCompleted(r.finished);
       await reloadCurrentInvoice();
       cellRows = await apiFetch('/api/cells/rows');
       if(moved) showToast('Переложено ' + n + ' шт.');
@@ -4287,7 +4290,14 @@
         + '<button class="big-btn" type="button" onclick="beginReceiving(\'' + arg + '\')">'
         + (live ? '▶ Забрать приёмку себе' : '▶ Начать приёмку') + '</button>';
     } else {
-      actions = '<div class="job-empty" style="padding:14px 12px;">Приход принят.</div>';
+      // Принят до 28.09.2026 частью «на своё место» (без ячейки): такой товар
+      // раскладывают и после приёмки — иначе он навсегда «не размещён».
+      const loose = d ? d.items.filter(it => recvLeft(it) > 0) : [];
+      actions = loose.length
+        ? '<div class="asm-panel"><div class="asm-panel-title">Приход принят, но не всё лежит в ячейках</div>'
+          + '<div class="asm-panel-sub">Принято без ячейки: ' + loose.map(it => '«' + escapeHTML(it.name) + '» — ' + recvLeft(it) + ' шт.').join(', ') + '</div>'
+          + '<div class="asm-actions"><button class="big-btn" type="button" onclick="openReceivingRun(\'' + arg + '\', \'' + jsArg(loose[0].id) + '\', { legacy: true })">Разложить по ячейкам</button></div></div>'
+        : '<div class="job-empty" style="padding:14px 12px;">Приход принят.</div>';
     }
     const facts = [
       i.arrived_at && state !== 'arrived' ? 'Машина приехала ' + fmtWhen(i.arrived_at)
@@ -4336,10 +4346,12 @@
 
   // Приёмка прихода по строкам: открывается только идущей приёмкой — её
   // начали «Начать» (или продолжили), таймер и паузы живут на сервере.
-  async function openReceivingRun(invoiceId, itemId){
+  // legacy — разложить старое «своё место» принятого прихода: тот же экран
+  // раскладки, без хода работы (таймера, паузы, «Закончить») — приход уже принят.
+  async function openReceivingRun(invoiceId, itemId, opts = {}){
     pauseStart = null;
     productRun = null;
-    recvRun = { invoiceId, preferred: itemId || null };
+    recvRun = { invoiceId, preferred: itemId || null, legacy: Boolean(opts.legacy) };
     backTarget = { kind: 'receipt', id: invoiceId };
     postponedItems = new Set();
     try{ currentInvoice = await apiFetch('/api/invoices/' + invoiceId); }
@@ -4351,6 +4363,7 @@
     results.length = 0;
     runVisited.clear();
     layoutRun(true, 'receiving');
+    document.getElementById('taskScreen').classList.toggle('legacy', recvRun.legacy);
     startTaskTimer();
     setPauseLock(false);
     document.getElementById('doneScreen').classList.remove('show', 'asm', 'recv');
@@ -4876,6 +4889,13 @@
 
   // Делать больше нечего — окно «Закончить» само.
   function runNothingLeft(){
+    // Старое «своё место» разложено — обратно к приходу.
+    if(recvRun && recvRun.legacy){
+      const id = recvRun.invoiceId;
+      recvRun = null;
+      showToast('Всё принятое лежит в ячейках');
+      return openReceipt(id);
+    }
     document.getElementById('cellOptions').innerHTML = '';
     document.getElementById('confirmBtn').disabled = true;
     document.getElementById('confirmBtn').textContent = recvRun ? 'Все позиции приняты' : 'Собирать больше нечего';
