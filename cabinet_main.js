@@ -3363,10 +3363,49 @@
   });
 
   let journalEntries = [];
-  let activeFilter = 'all';
   let attentionOnly = false;
 
-  const AGENT_LABEL = {'Кладовщик':'warehouse', 'Аналитик':'analyst', 'Оркестратор':'orchestrator'};
+  // Категории журнала (задание 28.09.2026, п. 3). Какая у записи категория,
+  // решает сервер (поле category в GET /api/journal); здесь — только вид:
+  // значок, цвет, подпись. Порядок — как у владельца.
+  const ICO = function(d){
+    return '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"'
+      + ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+  };
+  const JOURNAL_CATS = [
+    ['inbound',  'Приходы',                '#6FB3E0', ICO('<path d="M8 2v7M5 6l3 3 3-3"/><path d="M2.5 10.5v3h11v-3"/>')],
+    ['labor',    'Сборка',                 '#5FAFA6', ICO('<circle cx="5" cy="12.6" r="1.4"/><path d="M1.8 2.5h2l2.1 8.3h7.3"/><rect x="7.2" y="4" width="5.3" height="4.6" rx=".8"/>')],
+    ['supplies', 'Поставки',               '#F08FA8', ICO('<path d="M1.5 4.5h8v6h-8z"/><path d="M9.5 6.5h3l2 2v2h-5"/><circle cx="4.5" cy="12" r="1.3"/><circle cx="11.5" cy="12" r="1.3"/>')],
+    ['orders',   'Заказы с маркетплейсов', '#E0A458', ICO('<path d="M3 5.5h10l-.8 8H3.8z"/><path d="M6 5.5V4a2 2 0 0 1 4 0v1.5"/>')],
+    ['wb',       'Обмен с WB',             '#C77DDB', ICO('<path d="M2.5 5.5h10M10 3l2.5 2.5L10 8"/><path d="M13.5 10.5h-10M6 8l-2.5 2.5L6 13"/>')],
+    ['onec',     'Обмен с 1С',             '#E3C75A', ICO('<ellipse cx="8" cy="4" rx="5" ry="1.8"/><path d="M3 4v8c0 1 2.2 1.8 5 1.8s5-.8 5-1.8V4"/><path d="M3 8c0 1 2.2 1.8 5 1.8s5-.8 5-1.8"/>')],
+    ['docs',     'Акты и документы',       '#B9B2A5', ICO('<path d="M4 2.5h5.5L12.5 6v7.5H4z"/><path d="M6 8.5h4.5M6 11h3"/>')],
+    ['cells',    'Склад и ячейки',         '#D98E6E', ICO('<rect x="2.5" y="2.5" width="11" height="11" rx="1.6"/><path d="M2.5 8h11M8 2.5v11"/>')],
+    ['staff',    'Сотрудники',             '#86C08A', ICO('<circle cx="8" cy="5.5" r="2.5"/><path d="M3 13.5c.6-2.6 2.6-4 5-4s4.4 1.4 5 4"/>')],
+    ['agent',    'Кладовщик',              '#9AA7FF', '<svg width="16" height="16" viewBox="0 0 22 22" aria-hidden="true"><use href="#icon-warehouse-agent"/></svg>'],
+  ].map(function(c){ return { key: c[0], label: c[1], color: c[2], icon: c[3] }; });
+  const JOURNAL_CAT = Object.fromEntries(JOURNAL_CATS.map(function(c){ return [c.key, c]; }));
+  // Запись со старого сервера без категории — под «Кладовщиком», как и всё
+  // прочее, что ни под что не подошло.
+  function journalCat(entry){ return JOURNAL_CAT[entry && entry.category] || JOURNAL_CAT.agent; }
+  function journalCatTag(cat){
+    return '<span class="j-cat" style="--cat:' + cat.color + '">' + cat.icon + '<span>' + escapeHTML(cat.label) + '</span></span>';
+  }
+
+  // Фильтр по категориям — можно несколько сразу; выбор запоминается в этом
+  // браузере. Пусто — показывать всё.
+  const JOURNAL_CATS_KEY = 'argus_journal_cats';
+  let journalCats = new Set();
+  try{
+    const saved = JSON.parse(localStorage.getItem(JOURNAL_CATS_KEY) || '[]');
+    if(Array.isArray(saved)) journalCats = new Set(saved.filter(function(k){ return JOURNAL_CAT[k]; }));
+  } catch(e){ /* нет хранилища — фильтр просто не запомнится */ }
+
+  // Какие строки человек раскрыл сам. Журнал перечитывается каждые 25 секунд
+  // и перерисовывается целиком — раскрытое должно пережить перерисовку и
+  // оставаться раскрытым, пока его не свернут (задание 28.09.2026).
+  const journalOpen = new Set();
+  let journalOpenWorkOnce = false;
 
   // Журнал грузился один раз при входе в кабинет — работник принимал товар,
   // а владелец видел это только после перезагрузки страницы. Для журнала,
@@ -3392,8 +3431,7 @@
         journalEntries = [];
         renderContextPanel();
         showWhToast('Не удалось загрузить журнал: ' + e.message);
-        renderJournalEntries();
-        applyFilters();
+        refreshJournalList();
         renderWhSummary();
       }
       return; // молчаливый опрос не должен ругаться на каждую потерю связи
@@ -3406,8 +3444,7 @@
     journalEntries = fresh;
 
     renderContextPanel();
-    renderJournalEntries(newIds);
-    applyFilters();
+    refreshJournalList(newIds);
     renderWhSummary();
 
     // Новая отметка «нет товара» — сразу на экран, где бы владелец ни был:
@@ -3465,15 +3502,15 @@
     return base + ' ' + y;
   }
 
-  // Что человек уже сделал на экране: отмеченные записи и раскрытые группы.
-  // Журнал перечитывается каждые 25 секунд, и без этого отметки для массового
-  // подтверждения слетали прямо во время работы.
+  // Что человек уже сделал на экране: отмеченные записи. Журнал
+  // перечитывается каждые 25 секунд, и без этого отметки для массового
+  // подтверждения слетали прямо во время работы. Раскрытые строки — в
+  // journalOpen, их ставит applyFilters.
   function journalScreenState(){
     return {
       checked: [...document.querySelectorAll('.j-check:checked')]
         .map(function(cb){ const e = cb.closest('.j-entry'); return e && e.dataset.entryId; })
         .filter(Boolean),
-      open: [...document.querySelectorAll('.j-group.open')].map(function(g){ return g.dataset.group; }),
     };
   }
 
@@ -3483,11 +3520,44 @@
       const entry = document.querySelector('.j-entry[data-entry-id="' + CSS.escape(id) + '"] .j-check');
       if(entry) entry.checked = true;
     });
-    state.open.forEach(function(id){
-      const group = document.querySelector('.j-group[data-group="' + CSS.escape(id) + '"]');
-      if(group) group.classList.add('open');
-    });
     updateBulk();
+  }
+
+  // Перерисовка ленты без прыжка: запоминаем строку, которая сейчас вверху
+  // экрана, и после перерисовки возвращаем её на то же место. Новые записи
+  // сверху тогда не сдвигают то, что человек читает; кто смотрит самый верх
+  // ленты — видит новые записи.
+  function journalScroller(){
+    const list = document.getElementById('jList');
+    return list && list.closest('.journal');
+  }
+  function journalAnchor(){
+    const box = journalScroller();
+    if(!box || box.scrollTop <= 0) return null;
+    const top = box.getBoundingClientRect().top;
+    const rows = box.querySelectorAll('#jList .j-entry, #jList .j-group-head');
+    for(const el of rows){
+      const r = el.getBoundingClientRect();
+      if(!r.height || r.bottom <= top) continue;
+      const head = el.classList.contains('j-group-head');
+      return { box: box, group: head ? el.parentElement.dataset.group : null,
+        entry: head ? null : el.dataset.entryId, offset: r.top - top };
+    }
+    return null;
+  }
+  function restoreJournalAnchor(a){
+    if(!a) return;
+    const el = a.group
+      ? document.querySelector('#jList .j-group[data-group="' + CSS.escape(a.group) + '"] > .j-group-head')
+      : document.querySelector('#jList .j-entry[data-entry-id="' + CSS.escape(a.entry) + '"]');
+    if(!el || !el.getBoundingClientRect().height) return;
+    a.box.scrollTop += el.getBoundingClientRect().top - a.box.getBoundingClientRect().top - a.offset;
+  }
+  function refreshJournalList(newIds){
+    const anchor = journalAnchor();
+    renderJournalEntries(newIds);
+    applyFilters();
+    restoreJournalAnchor(anchor);
   }
 
   function renderJournalEntries(newIds){
@@ -3578,8 +3648,10 @@
     });
     list.innerHTML = html;
     // История одного прихода — работа раскрыта сразу: за ней сюда и пришли.
-    if(journalScope && journalScope.kind === 'invoice'){
-      list.querySelectorAll('.j-work').forEach(function(g){ g.classList.add('open'); });
+    // Один раз, при входе: дальше человек сворачивает её сам.
+    if(journalOpenWorkOnce){
+      journalOpenWorkOnce = false;
+      list.querySelectorAll('.j-work').forEach(function(g){ journalOpen.add(g.dataset.group); });
     }
     restoreJournalScreenState(screen);
     renderJournalCalendar();
@@ -3688,10 +3760,12 @@
     const bar = node.supplyNumber && total > 0
       ? '<span class="j-group-bar"><i style="width:' + Math.round(done / total * 100) + '%"></i></span>'
       : '';
-    return '<div class="j-group' + (hasNew ? ' j-new' : '') + '" data-group="' + node.id + '">'
+    const cat = journalCat(node.entries[0]);
+    return '<div class="j-group' + (hasNew ? ' j-new' : '') + '" style="--cat:' + cat.color + '" data-group="' + node.id + '">'
       + '<div class="j-group-head' + (node.supplyNumber ? ' j-supply' : '') + '" data-toggle-group="' + node.id + '">'
       +   '<svg class="j-group-chev" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">'
       +     '<path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+      +   journalCatTag(cat)
       +   '<span class="j-group-title">' + title + '</span>'
       +   '<span class="j-group-count">' + count + '</span>'
       +   '<span class="j-group-time">' + escapeHTML(span + took) + '</span>'
@@ -3779,10 +3853,12 @@
       }
       return journalEntryHtml(e, fresh.has(e.id), node.day);
     }).join('');
-    return '<div class="j-group j-work' + (done ? ' is-done' : '') + (hasNew ? ' j-new' : '') + '" data-group="' + node.id + '">'
+    const cat = journalCat(entries[0]);
+    return '<div class="j-group j-work' + (done ? ' is-done' : '') + (hasNew ? ' j-new' : '') + '" style="--cat:' + cat.color + '" data-group="' + node.id + '">'
       + '<div class="j-group-head" data-toggle-group="' + node.id + '">'
       +   '<svg class="j-group-chev" width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">'
       +     '<path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+      +   journalCatTag(cat)
       +   '<span class="j-group-title">' + title + '</span>'
       +   '<span class="j-group-count">' + escapeHTML(count) + '</span>'
       +   '<span class="j-group-time">' + escapeHTML(span) + '</span>'
@@ -3798,8 +3874,10 @@
   }
 
   function toggleJournalGroup(id){
-    const box = document.querySelector('.j-group[data-group="' + id + '"]');
-    if(box) box.classList.toggle('open');
+    const box = document.querySelector('.j-group[data-group="' + CSS.escape(id) + '"]');
+    if(!box) return;
+    const open = box.classList.toggle('open');
+    if(open) journalOpen.add(id); else journalOpen.delete(id);
   }
 
   document.addEventListener('click', function(e){
@@ -3809,7 +3887,7 @@
 
   function journalEntryHtml(entry, isNew, dayKey){
     return (function(){
-      const agentClass = AGENT_LABEL[entry.agent] || 'warehouse';
+      const cat = journalCat(entry);
       const canResolve = isWaiting(entry);
       const hot = isUrgentWaiting(entry);
       const isWb = entry.agent === 'Обмен с WB';
@@ -3817,14 +3895,12 @@
       // подписывать её «требует внимания» — неправда.
       const statusKey = entry.status === 'pending' && entry.answered ? 'answered' : entry.status;
       return `
-        <div class="j-entry ${agentClass}${hot ? ' j-urgent' : ''}${isNew ? ' j-new' : ''}" data-client="" data-risk="${canResolve ? 'high' : 'low'}" data-order="0" data-day="${dayKey}" data-entry-id="${escapeHTML(entry.id)}"${isNote(entry) ? ' data-note="1"' : ''}>
+        <div class="j-entry${hot ? ' j-urgent' : ''}${isNew ? ' j-new' : ''}" style="--cat:${cat.color}" data-cat="${cat.key}" data-client="" data-risk="${canResolve ? 'high' : 'low'}" data-order="0" data-day="${dayKey}" data-entry-id="${escapeHTML(entry.id)}"${isNote(entry) ? ' data-note="1"' : ''}>
           <input type="checkbox" class="j-check" onclick="event.stopPropagation(); updateBulk()" ${canResolve && !hot ? '' : 'style=\"visibility:hidden;\"'}>
-          <div class="j-avatar">
-            <svg width="20" height="20" viewBox="0 0 22 22"><use href="#icon-warehouse-agent"/></svg>
-          </div>
+          <div class="j-avatar">${cat.icon}</div>
           <div class="j-body">
             <div class="j-top">
-              <span class="j-agent ${agentClass}">${escapeHTML(entry.agent)}</span>
+              <span class="j-agent">${escapeHTML(cat.label)}</span>
               <span class="j-time">${formatEntryTime(entry.created_at)}</span>
             </div>
             <div class="j-text">${hot ? '<span class="j-urgent-tag">ОЧЕНЬ ВАЖНО</span>' + escapeHTML(urgentText(entry.action_text)) : escapeHTML(entry.action_text)}</div>
@@ -3913,6 +3989,7 @@
 
   async function showJournalFor(kind, id, label){
     journalScope = { kind: kind, id: id, label: label };
+    journalOpenWorkOnce = kind === 'invoice';
     // Фильтры ленты сбрасываем: они относились к общему журналу, и молча
     // унести их в историю ячейки — способ показать пустой экран без причины.
     journalDayFilter = null;
@@ -3989,7 +4066,7 @@
       return `
       <div class="ctx-card">
         <div class="ctx-entry-head">
-          <span class="ctx-entry-agent">${escapeHTML(String(e.agent || 'Агент'))}</span>
+          <span class="ctx-entry-agent" style="color:${journalCat(e).color}">${escapeHTML(journalCat(e).label)}</span>
           <span class="ctx-entry-time">${formatEntryTime(e.created_at)}</span>
         </div>
         <div class="ctx-entry-text">${e.urgent ? '<span class="j-urgent-tag">ОЧЕНЬ ВАЖНО</span>' + escapeHTML(urgentText(e.action_text)) : escapeHTML(String(e.action_text || ''))}</div>
@@ -4057,13 +4134,32 @@
     }
   }
 
-  function toggleChip(key, el){
-    activeFilter = key;
-    document.querySelectorAll('.jf-chip').forEach(c=>{
-      c.classList.toggle('active', c.dataset.filter === key);
-    });
+  // Чипы категорий: «Все» снимает выбор, остальные включаются и
+  // выключаются по одному — можно «Сотрудники» + «Обмен с 1С» + «Сборка».
+  function renderJournalChips(){
+    const box = document.getElementById('jCats');
+    if(!box) return;
+    box.innerHTML = '<button class="jf-chip' + (journalCats.size ? '' : ' active') + '" type="button" data-cat-chip=""'
+      + ' aria-pressed="' + (journalCats.size ? 'false' : 'true') + '">Все</button>'
+      + JOURNAL_CATS.map(function(c){
+        const on = journalCats.has(c.key);
+        return '<button class="jf-chip jf-cat' + (on ? ' active' : '') + '" type="button" data-cat-chip="' + c.key + '"'
+          + ' aria-pressed="' + on + '" style="--cat:' + c.color + '">' + c.icon + '<span>' + escapeHTML(c.label) + '</span></button>';
+      }).join('');
+  }
+  function toggleChip(key){
+    if(!key) journalCats.clear();
+    else if(journalCats.has(key)) journalCats.delete(key);
+    else journalCats.add(key);
+    try{ localStorage.setItem(JOURNAL_CATS_KEY, JSON.stringify([...journalCats])); } catch(e){ /* не запомнится */ }
+    renderJournalChips();
     applyFilters();
   }
+  document.addEventListener('click', function(e){
+    const chip = e.target.closest && e.target.closest('[data-cat-chip]');
+    if(chip) toggleChip(chip.dataset.catChip);
+  });
+  renderJournalChips();
   function toggleAttention(){
     attentionOnly = !attentionOnly;
     document.getElementById('attentionToggle').classList.toggle('active', attentionOnly);
@@ -4071,24 +4167,25 @@
   }
   function applyFilters(){
     const search = document.getElementById('jSearch').value.trim().toLowerCase();
-    // Пока фильтр включён, группы раскрыты: спрятать найденное под плюсик —
-    // худшее, что может сделать поиск.
-    const filtering = Boolean(search) || Boolean(journalDayFilter)
-      || activeFilter !== 'all' || attentionOnly;
+    // Пока ищут, группы раскрыты: спрятать найденное под плюсик — худшее,
+    // что может сделать поиск. Фильтр по категории ничего не раскрывает:
+    // строка работы и так целиком одной категории. Остальное — как раскрыл
+    // человек (journalOpen), и перерисовка раз в 25 секунд этого не трогает.
+    const filtering = Boolean(search) || Boolean(journalDayFilter) || attentionOnly;
     document.querySelectorAll('.j-group').forEach(function(g){
-      g.classList.toggle('open', filtering);
+      g.classList.toggle('open', filtering || journalOpen.has(g.dataset.group));
     });
-    const agentKeys = ['orchestrator','warehouse','analyst'].includes(activeFilter) ? [activeFilter] : [];
     const needPending = attentionOnly;
     let visibleCount = 0;
     let auto = 0, confirmed = 0, pending = 0;
     document.querySelectorAll('.j-entry').forEach(entry=>{
       let show = true;
-      if(show && agentKeys.length>0){ show = agentKeys.some(k=>entry.classList.contains(k)); }
       // «Ждёт решения» — только то, что ещё можно решить (data-risk="high").
       // По цвету метки считать нельзя: «отклонено вами» тоже красное, и
       // решённая запись висела в счётчике «ждёт решения».
       const waiting = entry.dataset.risk === 'high';
+      // Ждущее решения видно при любом фильтре категорий.
+      if(show && journalCats.size && !waiting){ show = journalCats.has(entry.dataset.cat); }
       if(show && needPending){ show = waiting; }
       if(show && search){
         const searchable = [
@@ -4192,8 +4289,7 @@
   // разваливался — заголовки дней висели над пустотой, а свёрнутые группы
   // внезапно раскрывались.
   function sortEntries(){
-    renderJournalEntries();
-    applyFilters();
+    refreshJournalList();
   }
 
   function togglePin(el){
@@ -4232,7 +4328,7 @@
   }
 
   function exportCSV(){
-    const rows = [['Время','Агент','Действие','Статус']];
+    const rows = [['Время','Категория','Действие','Статус']];
     document.querySelectorAll('.j-entry').forEach(e=>{
       if(e.style.display === 'none') return;
       const time = e.querySelector('.j-time')?.textContent || '';

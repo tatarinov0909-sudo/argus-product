@@ -484,7 +484,7 @@
   .j-agent{font-size:14px; font-weight:700; color:var(--accent);}
   .j-agent.warehouse{color:var(--terracotta);}
   .j-agent.analyst{color:var(--an);}
-  .j-time{font-size:12px; color:var(--muted); font-family:var(--mono);}
+  .j-time{font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums;}
   .j-text{font-size:16px; line-height:1.6; margin-bottom:8px; color:var(--text);}
   .j-meta{display:flex; align-items:center; gap:10px;}
   .j-status{font-size:13px; font-weight:700; padding:4px 10px; border-radius:8px; border:1.5px solid transparent;}
@@ -492,6 +492,19 @@
   .j-status.pending{background:var(--terracotta-soft); color:var(--terracotta); border-color:rgba(217,142,110,0.65); box-shadow:0 0 7px -1px rgba(217,142,110,0.45);}
   .j-status.auto{background:var(--yellow-soft); color:var(--yellow); border-color:rgba(201,166,107,0.55);}
   .j-empty{display:none; text-align:center; padding:50px 20px; color:var(--muted); font-size:15px;}
+  /* Категории журнала (задание 28.09.2026): у записи — значок, цвет и
+     подпись категории; цвет приходит в --cat. */
+  .j-entry[data-cat]{border-left:3px solid var(--cat); background:var(--panel);}
+  .j-entry[data-cat] .j-avatar{background:color-mix(in srgb, var(--cat) 16%, transparent); color:var(--cat);}
+  .j-entry[data-cat] .j-agent{color:var(--cat);}
+  .j-cat{display:inline-flex; align-items:center; gap:6px; flex:0 0 auto; padding:3px 9px 3px 7px; border-radius:20px;
+    font-size:12.5px; font-weight:600; color:var(--cat); background:color-mix(in srgb, var(--cat) 14%, transparent);
+    border:1px solid color-mix(in srgb, var(--cat) 40%, transparent); white-space:nowrap;}
+  .jf-chip{display:inline-flex; align-items:center; gap:6px;}
+  .jf-cat svg{color:var(--cat);}
+  .jf-cat.active{background:color-mix(in srgb, var(--cat) 18%, transparent); color:var(--text);
+    border-color:color-mix(in srgb, var(--cat) 60%, transparent);}
+  .journal-filters-row{align-items:flex-start;}
   .j-empty.show{display:block;}
 
   /* Склад и ячейки */
@@ -1965,8 +1978,8 @@
   .j-group.open .j-group-chev{transform:rotate(90deg);}
   .j-group-title{font-size:14px; font-weight:600; flex:1; min-width:0; overflow:hidden;
     text-overflow:ellipsis; white-space:nowrap;}
-  .j-group-count{font-size:13px; color:var(--accent); font-family:var(--mono); white-space:nowrap;}
-  .j-group-time{font-size:12px; color:var(--muted); font-family:var(--mono); white-space:nowrap;}
+  .j-group-count{font-size:13px; color:var(--accent); font-variant-numeric:tabular-nums; white-space:nowrap;}
+  .j-group-time{font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap;}
   /* Сборка поставки — одна запись на всю поставку: сколько собрано и полоса
      на всю ширину. Внутри, по раскрытию, каждый товар отдельной строкой. */
   .j-group-head.j-supply{flex-wrap:wrap; row-gap:9px;}
@@ -1980,8 +1993,18 @@
     .j-group-title{flex:1 1 180px; white-space:normal;}
     .j-group-count{flex:1 1 auto; min-width:0;}
   }
-  .j-group-body{display:none; padding:4px 10px 10px; border-top:1px solid var(--line);}
+  /* Развёрнутая строка: подробности — с отступом слева и вертикальной линией
+     цвета категории, чтобы было видно, что развёрнуто и к чему относится. */
+  .j-group-body{display:none; position:relative; padding:8px 12px 12px 40px; border-top:1px solid var(--line);}
+  .j-group-body::before{content:''; position:absolute; left:21px; top:10px; bottom:16px; width:2px; border-radius:2px;
+    background:var(--cat, var(--accent)); opacity:0.75;}
   .j-group.open .j-group-body{display:block;}
+  .j-group.open{border-color:color-mix(in srgb, var(--cat, var(--accent)) 45%, var(--line));}
+  .j-group.open > .j-group-head{background:var(--panel);}
+  @media(max-width:760px){
+    .j-group-body{padding:6px 8px 10px 24px;}
+    .j-group-body::before{left:12px;}
+  }
   /* Одна строка на работу (третье задание 27.09.2026): «Джоник принимает
      ПР-… · принято 5 из 8», в конце — «Джоник принял ПР-… · 8 из 8,
      расхождений нет». Под заголовком — строка состояния: этап и прогресс. */
@@ -2003,9 +2026,17 @@
   /* Внутри развёрнутой работы ждущее — короткой ссылкой на строку снаружи. */
   .j-step{display:flex; gap:10px; align-items:baseline; font-size:13px; padding:8px 6px; color:var(--text);
     border-bottom:1px solid var(--line-soft);}
-  .j-step-time{font-family:var(--mono); font-size:12px; color:var(--muted); flex:0 0 auto;}
+  .j-step-time{font-variant-numeric:tabular-nums; font-size:12px; color:var(--muted); flex:0 0 auto;}
   .j-step-note{color:var(--yellow); white-space:nowrap;}
   @media(max-width:760px){ .j-under{margin-left:10px;} .j-step{flex-wrap:wrap;} }
+  /* На телефоне шапка журнала не шире экрана: поиск — своей строкой,
+     плитки — по две, кнопки записи переносятся. */
+  @media(max-width:640px){
+    .journal-toolbar{flex-wrap:wrap;}
+    .j-search{flex:1 1 100%; min-width:0;}
+    .j-stats{grid-template-columns:repeat(2, minmax(0,1fr));}
+    .j-meta{flex-wrap:wrap; row-gap:8px;}
+  }
   .j-scope{display:flex; align-items:center; gap:10px; flex-wrap:wrap;
     background:var(--accent-soft); border:1px solid rgba(95,175,166,0.3);
     border-radius:10px; padding:11px 14px; margin-bottom:14px;}
@@ -2328,11 +2359,7 @@
         </div>
 
         <div class="journal-filters-row">
-          <div class="journal-filters">
-            <button class="jf-chip active" type="button" data-filter="all" onclick="toggleChip('all', this)">Все</button>
-            <button class="jf-chip" type="button" data-filter="warehouse" onclick="toggleChip('warehouse', this)">Кладовщик</button>
-            <button class="jf-chip" type="button" data-filter="analyst" onclick="toggleChip('analyst', this)">Аналитик</button>
-          </div>
+          <div class="journal-filters" id="jCats" role="group" aria-label="Категории журнала"></div>
           <button class="jf-attention" type="button" id="attentionToggle" onclick="toggleAttention()">
             <span class="jf-toggle-track"><span class="jf-toggle-dot"></span></span>
             Требует внимания
@@ -2883,7 +2910,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <script src="back.js?v=4901b838" defer></script>
 <script src="form-keys.js?v=cd462175" defer></script>
-<script src="cabinet_main.js?v=88b1c3c3" defer></script>
+<script src="cabinet_main.js?v=9091692d" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->
