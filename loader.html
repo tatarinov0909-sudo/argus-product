@@ -100,6 +100,7 @@
   .worker-menu-item:hover{background:var(--panel);}
   .task-logout{font-size:11.5px; color:var(--muted); cursor:pointer; text-decoration:underline;}
   .task-head-row{display:flex; align-items:center; gap:8px;}
+  .task-head-row .work-clock{margin-left:4px;}
   /* Что за работа сейчас открыта: приёмка, сборка поставки, возврат. Раньше
      это приходилось угадывать по номеру документа. */
   .task-kind{font-size:12px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase;
@@ -136,12 +137,32 @@
   .invoice-switch.open .invoice-switch-chevron{transform:rotate(180deg);}
   .task-progress-text{font-size:12.5px; color:var(--muted); font-family:var(--mono); margin-bottom:8px;}
 
-  .task-pause-row{display:flex; justify-content:center; align-items:center; gap:10px; margin-top:8px;}
+  /* Таймер работы — крупной прямоугольной плашкой справа от номера и
+     названия прихода или поставки, пауза — кнопкой рядом (задание 28.09.2026).
+     Раньше таймер был мелкой строкой под шапкой, а справа от номера пусто. */
+  .work-clock{display:flex; align-items:stretch; gap:8px; flex:0 0 auto; margin-left:auto;}
+  .work-clock[hidden]{display:none;}
+  .work-clock .task-timer{font-size:30px; font-weight:700; line-height:1; padding:8px 16px; min-height:54px;
+    border-radius:12px; gap:10px; letter-spacing:0.02em; border:1.5px solid rgba(95,175,166,0.45);}
+  .work-clock .task-timer.paused{border-color:rgba(201,166,107,0.55);}
+  .work-clock .task-timer-dot{width:10px; height:10px;}
   .task-pause-btn{
-    font-size:12px; color:var(--muted); cursor:pointer; display:flex; align-items:center; gap:5px;
-    padding:5px 10px; border-radius:7px;
+    font:inherit; font-size:12.5px; font-weight:600; color:var(--text); cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px;
+    min-width:58px; padding:6px 10px; border-radius:12px; border:1px solid var(--line); background:var(--panel-2);
   }
-  .task-pause-btn:hover{background:var(--panel-2); color:var(--text);}
+  .task-pause-btn:hover{border-color:var(--yellow); color:var(--yellow);}
+  .task-pause-btn svg{color:var(--yellow);}
+  @media(max-width:520px){
+    /* Возврат и заказ на телефоне: номер документа не обрезается — таймер
+       встаёт строкой ниже, справа. */
+    .task-head-row{flex-wrap:wrap; row-gap:10px;}
+    .task-head-row .invoice-switch-wrap{flex:1 1 calc(100% - 60px);}
+    .task-head-row .work-clock{margin-left:auto;}
+    .work-clock{gap:6px;}
+    .work-clock .task-timer{font-size:26px; padding:6px 12px; min-height:48px; gap:8px;}
+    .task-pause-btn{min-width:50px; padding:5px 8px; font-size:12px;}
+  }
 
   .pause-banner{
     display:none; align-items:center; justify-content:space-between; gap:10px; background:var(--yellow-soft);
@@ -897,8 +918,16 @@
   /* Номер — ровно по центру и при длинной подписи «← Главное меню»: три
      колонки, крайние равны, пока хватает места. */
   #taskScreen.run .task-head-row{display:grid; grid-template-columns:1fr minmax(0, max-content) 1fr; align-items:center; gap:10px;}
-  #taskScreen.run .task-head-row::after{content:'';}
   #taskScreen.run .invoice-switch-wrap{justify-self:start; min-width:max-content;}
+  #taskScreen.run .work-clock{justify-self:end; margin:0;}
+  /* Телефон: «← Главное меню» — первой строкой, ниже номер с продавцом и
+     справа от них таймер с паузой. В одну строку всё это не помещается. */
+  @media(max-width:560px){
+    #taskScreen.run .task-head-row{grid-template-columns:minmax(0, 1fr) auto; grid-template-areas:'back back' 'title clock'; row-gap:12px;}
+    #taskScreen.run .invoice-switch-wrap{grid-area:back;}
+    #taskScreen.run .run-title{grid-area:title; text-align:left; white-space:normal; overflow-wrap:anywhere; font-size:21px;}
+    #taskScreen.run .work-clock{grid-area:clock;}
+  }
   #taskScreen.run .task-head-top{margin-bottom:10px;}
   #taskScreen.run .task-body{gap:14px; padding-top:16px;}
   #taskScreen.run .run-all-btn{display:flex; order:-3; align-items:center; justify-content:space-between; gap:12px; width:100%;
@@ -925,9 +954,6 @@
     #taskScreen.run .run-need input.qty-value{field-sizing:content; width:auto; min-width:1.4ch; padding:0 2px;}
   }
   #taskScreen.run .run-need input.qty-value:focus{box-shadow:0 3px 0 var(--sky);}
-  /* Таймер — крупнее: сколько идёт работа, видно издалека. */
-  #taskScreen.run .task-timer{font-size:22px; padding:8px 16px; border-radius:10px; gap:9px; letter-spacing:0.04em;}
-  #taskScreen.run .task-timer-dot{width:9px; height:9px;}
   /* «← Главное меню» (третье задание 27.09): стрелка ведёт в «Что делаем?»,
      работа встаёт на паузу. Подпись видна только на экране работы. */
   .invoice-home{display:none;}
@@ -1164,9 +1190,10 @@
             <div class="job-title" id="paperTitle">По бумажному листу</div>
             <div class="job-sub" id="paperSub">—</div>
           </div>
-          <div class="task-pause-row" style="margin:0;">
+          <!-- Таймер — крупной плашкой справа от номера, пауза рядом (задание 28.09.2026). -->
+          <div class="work-clock">
             <div class="task-timer running" id="paperTimer"><span class="task-timer-dot"></span><span id="paperTimerValue">0:00</span></div>
-            <div class="task-pause-btn" onclick="openPauseSheet()">Пауза</div>
+            <button type="button" class="task-pause-btn" onclick="openPauseSheet()"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="4" y="3" width="3" height="10" rx="1" fill="currentColor"/><rect x="9" y="3" width="3" height="10" rx="1" fill="currentColor"/></svg><span>Пауза</span></button>
           </div>
         </div>
       </div>
@@ -1221,17 +1248,15 @@
             </div>
             <!-- Сборка поставки: номер один раз и по центру (владелец 27.09.2026). -->
             <div class="run-title" id="runTitle"></div>
-            <div class="task-head-spacer"></div>
+            <!-- Таймер — крупной плашкой справа от номера, пауза рядом
+                 (задание 28.09.2026): раньше он стоял мелкой строкой под шапкой. -->
+            <div class="work-clock">
+              <div class="task-timer running" id="taskTimer"><span class="task-timer-dot"></span><span id="taskTimerValue">0:00</span></div>
+              <button type="button" class="task-pause-btn" id="pauseBtn" onclick="openPauseSheet()"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="4" y="3" width="3" height="10" rx="1" fill="currentColor"/><rect x="9" y="3" width="3" height="10" rx="1" fill="currentColor"/></svg><span>Пауза</span></button>
+            </div>
           </div>
         </div>
         <div class="task-progress-bar"><div class="task-progress-fill" id="progressFill" style="width:33%;"></div></div>
-        <div class="task-pause-row">
-          <div class="task-timer running" id="taskTimer"><span class="task-timer-dot"></span><span id="taskTimerValue">0:00</span></div>
-          <div class="task-pause-btn" id="pauseBtn" onclick="openPauseSheet()">
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="4" y="3" width="3" height="10" rx="1" fill="currentColor"/><rect x="9" y="3" width="3" height="10" rx="1" fill="currentColor"/></svg>
-            Поставить на паузу
-          </div>
-        </div>
       </div>
 
       <div class="pause-banner" id="pauseBanner">
@@ -1550,8 +1575,17 @@
     <div class="job-screen" id="invScreen">
       <div class="job-head">
         <div class="job-back" onclick="closeJob()">← Что делаем?</div>
-        <div class="job-title">Пересчёт ячеек</div>
-        <div class="job-sub" id="invSub">—</div>
+        <div class="job-head-row">
+          <div>
+            <div class="job-title">Пересчёт ячеек</div>
+            <div class="job-sub" id="invSub">—</div>
+          </div>
+          <!-- Сколько идёт пересчёт открытой ячейки. Паузы у пересчёта нет:
+               ячейку считают за один подход. -->
+          <div class="work-clock" id="invClock" hidden>
+            <div class="task-timer running"><span class="task-timer-dot"></span><span id="invTimerValue">0:00</span></div>
+          </div>
+        </div>
       </div>
       <div class="job-body" id="invBody"></div>
     </div>
@@ -3285,7 +3319,23 @@
     renderInvList();
   }
 
+  // Таймер пересчёта открытой ячейки — от открытия (задание 28.09.2026).
+  // Заходов на сервере у пересчёта нет: ячейку считают за один подход.
+  let invClockTimer = null;
+  function renderInvClock(){
+    const box = document.getElementById('invClock');
+    const on = Boolean(invState && invState.openedAt && document.getElementById('invScreen').classList.contains('show'));
+    box.hidden = !on;
+    if(!on){ clearInterval(invClockTimer); invClockTimer = null; return; }
+    const sec = Math.max(0, Math.floor((Date.now() - invState.openedAt) / 1000));
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    document.getElementById('invTimerValue').textContent = h > 0
+      ? h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0')
+      : m + ':' + String(s).padStart(2, '0');
+  }
+
   function renderInvList(){
+    renderInvClock();
     const sub = document.getElementById('invSub');
     const body = document.getElementById('invBody');
     if(invTasks.length === 0){
@@ -3321,8 +3371,11 @@
         lines: (t.expected || []).map(function(l){ return Object.assign({}, l, { counted: '', added: false }); }),
         extra: false,
         products: [], query: '', searchStatus: '', saving: false,
+        openedAt: Date.now(),
       };
       renderInvTask();
+      renderInvClock();
+      if(!invClockTimer) invClockTimer = setInterval(renderInvClock, 1000);
     } catch(e){
       showToast(e.message);
       renderInvList();
