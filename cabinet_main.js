@@ -2129,11 +2129,12 @@
     rowMeta = {};
     blockById = {};
     apiRows.forEach(row => {
-      rowMeta[row.row_num] = {rackCount: row.rack_count, tierCount: row.tier_count, label: row.label || null, aisleAfter: row.aisle_after === true};
+      rowMeta[row.row_num] = {rackCount: row.rack_count, tierCount: row.tier_count, label: row.label || null, aisleAfter: row.aisle_after === true,
+        cellSize: [row.cell_width_cm, row.cell_depth_cm, row.cell_height_cm].map(v => v == null ? null : Number(v))};
       cellBlocks[row.row_num] = row.blocks.map(b => {
         const block = {
           r0: b.rack_start, r1: b.rack_end, t0: b.tier_start, t1: b.tier_end,
-          state: b.state, blockId: b.id, stock: b.stock || [],
+          state: b.state, blockId: b.id, stock: b.stock || [], fill: b.fill || null,
           label: b.label || null, stock1c: b.stock_1c || [],
         };
         blockById[b.id] = {block, rowNum: row.row_num};
@@ -2142,11 +2143,24 @@
     });
   }
 
-  // One uniform tone means that goods are present. It carries no percentage.
-  function cellPaintVars(){
-    return ' --edge:var(--accent);';
+  // Заполнение ячейки — приблизительно, по объёму: размер ячейки ряда ×
+  // габариты товара (сервер, argus-api/src/cells/fill.js; владелец
+  // 28.09.2026). Процента нет — штриховка «лежит, сколько места — неизвестно».
+  function cellFillPaint(fill){
+    if(!fill || fill.pct == null) return { cls: ' fill-unknown', style: '' };
+    const tone = fill.pct > 100 ? 'over' : fill.pct > 75 ? 'high' : fill.pct >= 40 ? 'mid' : 'low';
+    return { cls: ' fill-' + tone, style: '--p:' + Math.min(100, fill.pct) + '%;' };
   }
-  const fillModeClass = ' fill-unknown';
+  function cellFillText(fill){
+    if(!fill) return '';
+    if(fill.pct != null){
+      return 'Заполнено ≈ ' + fill.pct + '%' + (fill.freeLiters > 0 ? ' · свободно ≈ ' + fill.freeLiters.toLocaleString('ru-RU') + ' л'
+        : fill.pct > 100 ? ' — больше, чем вмещает по размерам' : '');
+    }
+    return fill.reason === 'no_cell_size'
+      ? 'Заполнение неизвестно: не задан размер ячеек ряда (карандаш «Править ячейки»)'
+      : 'Заполнение неизвестно: у «' + (fill.product || 'товара') + '» нет габаритов';
+  }
   // Имя ряда, если владелец его задал, иначе номер. Оно же становится первой
   // частью адреса ячейки, поэтому берётся здесь, в одном месте: адрес должен
   // читаться одинаково и на карте, и в поиске, и в подсказке при приёмке.
@@ -2307,9 +2321,8 @@
       const gridRowStart = tierCount - tTop + 1;
       const gridRowSpan = tTop - b.t0 + 1;
       const c0 = colOf.get(b.r0), c1 = colOf.get(b.r1) || c0;
-      const style = b.state === 'occupied'
-        ? ` style="grid-column:${c0} / span ${c1 - c0 + 1}; grid-row:${gridRowStart} / span ${gridRowSpan};${cellPaintVars()}"`
-        : ` style="grid-column:${c0} / span ${c1 - c0 + 1}; grid-row:${gridRowStart} / span ${gridRowSpan};"`;
+      const paint = b.state === 'occupied' ? cellFillPaint(b.fill) : { cls: '', style: '' };
+      const style = ` style="grid-column:${c0} / span ${c1 - c0 + 1}; grid-row:${gridRowStart} / span ${gridRowSpan};${paint.style}"`;
       // Балок рисуем ровно столько, сколько ярусов ячейка проглотила: одна
       // граница — одна недостающая балка. Повторяющийся фон этого не умел
       // и дорисовывал лишнюю линию у верхнего края, где полка как раз есть.
@@ -2322,10 +2335,10 @@
       for(let k = 1; k <= missing; k++){
         beams += `<i class="wh-beam" style="bottom:${(k / gridRowSpan * 100).toFixed(3)}%"></i>`;
       }
-      const hint = tall
+      const hint = (tall
         ? addr + ' — высокий отсек: ' + missing + ' ' + pluralRu(missing, 'балки', 'балок', 'балок') + ' не хватает'
-        : addr;
-      cellsHtml += `<div class="wh-cell in-grid ${b.state}${mergedClass}${tall ? ' tall' : ''}${b.state === 'occupied' ? fillModeClass : ''}" data-row="${rowNum}" data-id="${b.r0}" data-tier="${b.t0}" data-addr="${escapeHTML(addr)}" data-state="${b.state}" data-block-id="${b.blockId}"${style} onclick="selectCell(this)" title="${escapeHTML(hint)}">${beams}</div>`;
+        : addr) + (b.state === 'occupied' ? ' · ' + cellFillText(b.fill) : '');
+      cellsHtml += `<div class="wh-cell in-grid ${b.state}${mergedClass}${tall ? ' tall' : ''}${paint.cls}" data-row="${rowNum}" data-id="${b.r0}" data-tier="${b.t0}" data-addr="${escapeHTML(addr)}" data-state="${b.state}" data-block-id="${b.blockId}"${style} onclick="selectCell(this)" title="${escapeHTML(hint)}">${beams}</div>`;
     });
 
     let labelsHtml = '';
@@ -2392,6 +2405,23 @@
 
   let editingRowNum = null;   // ряд, который сейчас правят; null — никакой
 
+  // Размер ячейки ряда: все три пусто — «не задан».
+  async function saveCellSize(e, rowNum){
+    e.preventDefault();
+    const f = e.target;
+    const vals = [f.w.value, f.d.value, f.h.value].map(v => v.trim());
+    const body = vals.every(v => v === '')
+      ? { widthCm: null, depthCm: null, heightCm: null }
+      : { widthCm: vals[0], depthCm: vals[1], heightCm: vals[2] };
+    try{
+      await apiFetch('/api/cells/rows/' + rowNum + '/cell-size', { method: 'PATCH', body });
+      populateCellStateFromApi(await apiFetch('/api/cells/rows'));
+      refreshRackRowDOM(rowNum);
+      showWhToast(body.widthCm === null ? 'Размер ячеек ряда снят' : 'Размер ячеек сохранён — заполнение посчитано');
+    } catch(err){ showWhToast('Не сохранилось: ' + err.message); }
+  }
+  window.saveCellSize = saveCellSize;
+
   function toggleRowEdit(rowNum){
     const leaving = editingRowNum === rowNum;
     const previous = editingRowNum;
@@ -2433,9 +2463,9 @@
       const wide = block.r1 - block.r0 + 1, tall = block.t1 - block.t0 + 1;
       const isMerged = wide > 1 || tall > 1;
       const addr = blockAddr(rowNum, block);
-      const fillVars = block.state === 'occupied' ? cellPaintVars() : '';
-      return `<div class="wh-big-cell ${block.state}${isMerged ? ' merged' : ''}${block.state === 'occupied' ? fillModeClass : ''}"
-        style="grid-column:${block.r0} / span ${wide}; grid-row:${gridRowOf(block.t1)} / span ${tall};${fillVars}"
+      const paint = block.state === 'occupied' ? cellFillPaint(block.fill) : { cls: '', style: '' };
+      return `<div class="wh-big-cell ${block.state}${isMerged ? ' merged' : ''}${paint.cls}"
+        style="grid-column:${block.r0} / span ${wide}; grid-row:${gridRowOf(block.t1)} / span ${tall};${paint.style}"
         title="${escapeHTML(addr)}">
         <span class="wh-big-cell-label">${escapeHTML(addr)}</span>
         ${isMerged ? `<span class="wh-big-cell-size">${wide}×${tall}</span>
@@ -2461,7 +2491,18 @@
       }
     }
 
+    const size = meta.cellSize || [];
+    const num = (v) => v == null ? '' : String(v).replace('.', ',');
     return `
+      <form class="wh-cellsize" onsubmit="saveCellSize(event, ${rowNum})">
+        <div class="wh-cellsize-title">Размер одной ячейки ряда, см
+          <span>Место стеллажа: ширина, глубина и высота яруса. По ним и габаритам товаров считается, насколько заполнена ячейка;
+            объединённая — сумма своих мест.</span></div>
+        <label>Ширина<input name="w" inputmode="decimal" value="${num(size[0])}" aria-label="Ширина ячейки, см"></label>
+        <label>Глубина<input name="d" inputmode="decimal" value="${num(size[1])}" aria-label="Глубина ячейки, см"></label>
+        <label>Высота<input name="h" inputmode="decimal" value="${num(size[2])}" aria-label="Высота ячейки, см"></label>
+        <button type="submit">Сохранить размер</button>
+      </form>
       <div class="wh-editor-hint">Проведите мышкой по нескольким ячейкам, чтобы объединить их в одну. Расцепить обратно — крестиком в углу объединённой ячейки.</div>
       <div class="wh-editor-focus">
         <div class="wh-full-grid"
@@ -2733,9 +2774,11 @@
         </div>
         <div class="wh-search-banner" id="whSearchBanner" hidden></div>
         <div class="wh-legend">
-          <div class="wh-legend-item"><span class="wh-legend-swatch empty"></span>Свободна</div>
-          <div class="wh-legend-item"><span class="wh-legend-swatch occupied"></span>Занята</div>
-          <div class="wh-legend-item"><span class="wh-legend-swatch merged"></span>Объединена</div>
+          <div class="wh-legend-item"><i class="wh-cell empty"></i>Свободна</div>
+          <div class="wh-legend-item"><i class="wh-cell occupied fill-low" style="--p:30%"></i>до 40%</div>
+          <div class="wh-legend-item"><i class="wh-cell occupied fill-mid" style="--p:60%"></i>до 75%</div>
+          <div class="wh-legend-item"><i class="wh-cell occupied fill-high" style="--p:90%"></i>почти полная</div>
+          <div class="wh-legend-item"><i class="wh-cell occupied fill-unknown"></i>сколько места — неизвестно</div>
         </div>
         <div id="whContent">
           <div class="wh-row-group visible" id="whSummary"></div>
@@ -3200,11 +3243,14 @@
         : '') + from1c;
     } else {
       const totalQty = stock.reduce((sum, it) => sum + Number(it.qty || 0), 0);
+      const fill = blockById[el.dataset.blockId] && blockById[el.dataset.blockId].block.fill;
+      const paint = cellFillPaint(fill);
       rows = `
         <div class="wh-detail-row">
           <span>Всего</span>
           <span>${totalQty.toLocaleString('ru-RU')} шт</span>
         </div>
+        <div class="wh-fill-line${fill && fill.pct != null ? '' : ' muted'}"><i class="wh-cell occupied${paint.cls}" style="${paint.style}"></i>${escapeHTML(cellFillText(fill))}</div>
         <div class="wh-cell-items" id="whCellItems" data-block="${escapeHTML(el.dataset.blockId)}">
           <div class="wh-detail-note">Загружаю, что лежит…</div>
         </div>

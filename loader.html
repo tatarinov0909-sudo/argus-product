@@ -675,15 +675,26 @@
   .map-cell{
     width:44px; height:20px; border-radius:4px; cursor:pointer; position:relative;
   }
-  .map-cell.free{background:var(--bg); border:1.5px dashed var(--line);}
-  /* Тот же вид, что и на карте склада у владельца: занятая ячейка — мягкая
-     зелёная заливка с переходом слева направо. Одно и то же место не должно
-     выглядеть по-разному у работника и у владельца. Значения совпадают с
-     cellPaint() в cabinet_main.js при спокойном тоне «занята». */
+  /* Заполнение ячейки — «батарейка» (владелец 28.09.2026). Та же в
+     loader.html: одно место не должно выглядеть по-разному у грузчика и у
+     владельца. Доля — --p, цвет — насколько полна; процента нет — штриховка. */
+  .map-cell.free{background:#15171A; border:1.5px dashed rgba(232,230,225,0.16);}
   .map-cell.occupied{
-    background:linear-gradient(to right, rgba(126,192,140,0.10) 0%, rgba(87,202,111,0.37) 100%), var(--panel);
-    border:1px solid rgba(87,202,111,0.58); cursor:default;
+    --f:#B7AB8E; --p:100%;
+    background:linear-gradient(to right, var(--f) 0 var(--p), #25282C var(--p) 100%);
+    border:1.5px solid rgba(232,230,225,0.55); box-shadow:inset 0 0 0 1px rgba(0,0,0,0.35);
   }
+  .map-cell.occupied.fill-low{--f:#8FB59C;}
+  .map-cell.occupied.fill-mid{--f:#B7AB8E;}
+  .map-cell.occupied.fill-high{--f:#D9926F;}
+  .map-cell.occupied.fill-over{--f:#D9926F; border-color:#E8776A;}
+  .map-cell.occupied.fill-unknown{
+    background:repeating-linear-gradient(135deg, rgba(183,171,142,0.55) 0 4px, rgba(183,171,142,0.28) 4px 8px);
+  }
+  .cell-fill-line{display:flex; align-items:center; gap:10px; margin:2px 0 12px; font-size:14.5px; line-height:1.4; color:var(--text);}
+  .cell-fill-line .map-cell{flex:0 0 44px; cursor:default;}
+  .cell-fill-line.muted{color:var(--muted);}
+
   .map-cell.free:active{background:var(--accent-soft); border-color:var(--accent); border-style:solid;}
 
   /* ---------- Нижняя кнопка ---------- */
@@ -6095,10 +6106,10 @@
             // ней лежит, и дать положить туда же (владелец 27.09.2026).
             const action = free ? `onclick="applyCustomCell('${jsArg(b.id)}', '${jsArg(label)}')"`
               : `onclick="openCellInfo('${jsArg(b.id)}', '${jsArg(label)}', 'custom', null, ${Number(rowNum)})"`;
-            // Долю заполнения не показываем: сервер знает про ячейку только
-            // «пусто/занято» (fill_pct всегда 0 или 100), и полоска на часть
-            // ширины выглядела бы как процент, которого никто не считал.
-            return `<div class="map-cell ${free ? 'free' : 'occupied'}" ${action} title="${label}"></div>`;
+            // Насколько заполнена — приблизительно, по объёму (сервер,
+            // src/cells/fill.js): видно, куда ещё влезет (владелец 28.09.2026).
+            const paint = free ? { cls: '', style: '' } : cellFillPaint(b.fill);
+            return `<div class="map-cell ${free ? 'free' : 'occupied'}${paint.cls}" style="${paint.style}" ${action} title="${escapeHTML(label + (free ? ' · свободна' : ' · ' + cellFillText(b.fill)))}"></div>`;
           }).join('')}
         </div>
         <div class="map-rack-label">${rowNum}.${rackKey}</div>
@@ -6113,6 +6124,22 @@
      ячейки сборки, карта, лист грузчика, перестановка, пересчёт. Данные —
      /api/cells/blocks/:id/contents, по одной ячейке. */
   let cellInfoCtx = null;   // { blockId, label, put, arg, row }
+
+  // Заполнение ячейки — как на карте склада у владельца (cabinet_main.js).
+  function cellFillPaint(fill){
+    if(!fill || fill.pct == null) return { cls: ' fill-unknown', style: '' };
+    const tone = fill.pct > 100 ? 'over' : fill.pct > 75 ? 'high' : fill.pct >= 40 ? 'mid' : 'low';
+    return { cls: ' fill-' + tone, style: '--p:' + Math.min(100, fill.pct) + '%;' };
+  }
+  function cellFillText(fill){
+    if(!fill) return '';
+    if(fill.pct != null){
+      return 'Заполнено ≈ ' + fill.pct + '%' + (fill.freeLiters > 0 ? ' · свободно ≈ ' + fill.freeLiters.toLocaleString('ru-RU') + ' л'
+        : fill.pct > 100 ? ' — больше, чем вмещает по размерам' : '');
+    }
+    return fill.reason === 'no_cell_size' ? 'Сколько места осталось — неизвестно: не задан размер ячейки'
+      : 'Сколько места осталось — неизвестно: у «' + (fill.product || 'товара') + '» нет габаритов';
+  }
   const CELL_PUT = { option: 'Положить сюда', custom: 'Положить сюда', pick: 'Взять отсюда' };
   function cellInfoBtn(blockId, label, put, arg){
     if(!blockId) return '';
@@ -6156,8 +6183,12 @@
     document.getElementById('cellInfoSub').textContent = d.items.length
       ? d.totalUnits + ' шт · ' + d.items.length + ' ' + pluralRu(d.items.length, 'товар', 'товара', 'товаров')
       : 'Пустая';
+    const paint = cellFillPaint(d.fill);
     const row2 = (k, v) => '<dt>' + k + '</dt><dd>' + v + '</dd>';
-    document.getElementById('cellInfoBody').innerHTML = d.items.length ? d.items.map(it => '<div class="cell-info-item">'
+    document.getElementById('cellInfoBody').innerHTML = (d.items.length
+      ? '<div class="cell-fill-line' + (d.fill && d.fill.pct != null ? '' : ' muted') + '"><i class="map-cell occupied' + paint.cls + '" style="' + paint.style + '"></i>'
+        + escapeHTML(cellFillText(d.fill)) + '</div>' : '')
+      + (d.items.length ? d.items.map(it => '<div class="cell-info-item">'
       + '<div class="cell-info-top"><div class="cell-info-name">' + escapeHTML(it.name) + '</div>'
       +   '<div class="cell-info-qty' + (it.quality !== 'good' ? ' bad' : '') + '">' + it.qty + ' шт</div></div>'
       + '<dl class="cell-info-grid">'
@@ -6168,7 +6199,7 @@
       +   row2('Состояние', escapeHTML(it.qualityName))
       +   row2('Положили', escapeHTML(placedText(it)))
       + '</dl></div>').join('')
-      : '<div class="cell-info-empty">В ячейке ничего нет.</div>';
+      : '<div class="cell-info-empty">В ячейке ничего нет.</div>');
   }
   window.openCellInfo = openCellInfo;
   function cellInfoBack(){

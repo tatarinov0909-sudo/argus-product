@@ -1391,7 +1391,9 @@
     #whContent.searching .wh-cell, .wh-row-rect{transition:none;}
   }
 
-  .wh-legend{display:flex; gap:18px; margin-bottom:2px;}
+  .wh-legend{display:flex; flex-wrap:wrap; gap:8px 18px; margin-bottom:2px;}
+  .wh-legend .wh-cell{width:30px; height:15px; border-radius:4px; cursor:default; flex-shrink:0;}
+  .wh-legend .wh-cell:hover{transform:none;}
   .wh-legend-item{display:flex; align-items:center; gap:7px; font-size:13px; color:var(--muted);}
   .wh-legend-swatch{width:12px; height:12px; border-radius:4px; flex-shrink:0;}
   .wh-legend-swatch.empty{background:var(--bg); border:1px solid rgba(232,230,225,0.11);}
@@ -1453,16 +1455,21 @@
   /* Обводка есть у каждой ячейки и всегда сплошная. Пунктир раньше означал
      «свободна», но свободу и так видно по отсутствию заливки, а рябь из
      штрихов на сотне ячеек читалась хуже ровной линии. */
-  .wh-cell.empty{background:var(--bg); border:1px solid rgba(232,230,225,0.11);}
-  /* Занятая ячейка отмечается ровной заливкой: её вместимость неизвестна. */
-  .wh-cell.occupied{
-    background:var(--accent-soft);
-    border:1.5px solid var(--edge);
+  /* Заполнение ячейки — «батарейка» (владелец 28.09.2026). Та же в
+     loader.html: одно место не должно выглядеть по-разному у грузчика и у
+     владельца. Доля — --p, цвет — насколько полна; процента нет — штриховка. */
+  .wh-cell.empty, .wh-big-cell.empty{background:#15171A; border:1.5px dashed rgba(232,230,225,0.16);}
+  :is(.wh-cell, .wh-big-cell).occupied{
+    --f:#B7AB8E; --p:100%;
+    background:linear-gradient(to right, var(--f) 0 var(--p), #25282C var(--p) 100%);
+    border:1.5px solid rgba(232,230,225,0.55); box-shadow:inset 0 0 0 1px rgba(0,0,0,0.35);
   }
-  /* Заполненность неизвестна: заливка ровная, сверху вниз, без направления
-     слева направо — чтобы её нельзя было прочитать как «полоса на 100%». */
-  .wh-cell.occupied.fill-unknown{
-    background:var(--accent-soft);
+  :is(.wh-cell, .wh-big-cell).occupied.fill-low{--f:#8FB59C;}
+  :is(.wh-cell, .wh-big-cell).occupied.fill-mid{--f:#B7AB8E;}
+  :is(.wh-cell, .wh-big-cell).occupied.fill-high{--f:#D9926F;}
+  :is(.wh-cell, .wh-big-cell).occupied.fill-over{--f:#D9926F; border-color:#E8776A;}
+  :is(.wh-cell, .wh-big-cell).occupied.fill-unknown{
+    background:repeating-linear-gradient(135deg, rgba(183,171,142,0.55) 0 4px, rgba(183,171,142,0.28) 4px 8px);
   }
   /* Объединённая — та же ячейка, только больше. Никакого отдельного канта:
      светлая рамка вокруг неё была самым ярким пятном на карте, хотя объединение
@@ -1517,6 +1524,20 @@
 
   .wh-cell-editor{background:var(--panel-2); border:1px solid var(--line); border-radius:12px; padding:18px;}
   .wh-editor-hint{font-size:14px; color:var(--muted); line-height:1.6; margin-bottom:18px;}
+  /* Размер одной ячейки ряда — по нему считается заполнение. */
+  .wh-cellsize{display:flex; align-items:flex-end; flex-wrap:wrap; gap:10px 14px; margin-bottom:18px; padding:14px 16px;
+    background:var(--panel); border:1px solid var(--line); border-radius:10px;}
+  .wh-cellsize-title{flex:1 0 100%; font-size:14px; font-weight:600;}
+  .wh-cellsize-title span{display:block; font-weight:400; font-size:13px; color:var(--muted); margin-top:2px; line-height:1.45;}
+  .wh-cellsize label{display:flex; flex-direction:column; gap:4px; font-size:12.5px; color:var(--muted);}
+  .wh-cellsize input{width:92px; padding:8px 10px; border-radius:8px; border:1px solid var(--line); background:var(--panel-2);
+    color:var(--text); font:inherit; font-size:15px; font-variant-numeric:tabular-nums;}
+  .wh-cellsize input:focus{outline:none; border-color:var(--accent);}
+  .wh-cellsize button{padding:9px 14px; border-radius:8px; border:1px solid var(--accent); background:var(--accent-soft);
+    color:var(--accent-2); font:inherit; font-size:14px; font-weight:600; cursor:pointer;}
+  .wh-fill-line{display:flex; align-items:center; gap:10px; margin:8px 0 2px; font-size:14px; line-height:1.4;}
+  .wh-fill-line i{flex:0 0 46px; height:18px; border-radius:4px;}
+  .wh-fill-line.muted{color:var(--muted);}
   /* Ряд может быть шире окна (40 стеллажей), поэтому сетка скроллится внутри
      себя, а не растягивает модальное окно. justify-content:center убран: при
      скролле он прижимал левый край за пределы видимости. */
@@ -1531,15 +1552,7 @@
     display:flex; align-items:center; justify-content:center; padding:0 6px; box-sizing:border-box;
     overflow:hidden;
   }
-  .wh-big-cell.empty{background:var(--bg); border:1.5px solid rgba(232,230,225,0.11);}
-  .wh-big-cell.occupied{
-    background:var(--accent-soft);
-    border:1.5px solid var(--edge);
-  }
-  .wh-big-cell.occupied.fill-unknown{
-    background:var(--accent-soft);
-  }
-  .wh-big-cell-label{font-size:13px; color:var(--text); font-family:var(--mono); font-weight:700; text-align:center;}
+  .wh-big-cell-label{font-size:13px; color:var(--text); font-weight:700; text-align:center; text-shadow:0 1px 3px rgba(0,0,0,0.85);}
 
   /* Из скольких мест собрана объединённая, показывают точки на стыках (см.
      .wh-hot ниже) — они гаснут, но остаются видны под ней. Отдельный кант и
@@ -2910,7 +2923,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <script src="back.js?v=4901b838" defer></script>
 <script src="form-keys.js?v=cd462175" defer></script>
-<script src="cabinet_main.js?v=9091692d" defer></script>
+<script src="cabinet_main.js?v=8573558b" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->
