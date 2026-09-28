@@ -301,29 +301,44 @@
   .custom-cell-label{font-size:11.5px; color:var(--muted); margin-bottom:2px;}
   .custom-cell-id{font-family:var(--mono); font-size:16px; font-weight:700; color:var(--accent);}
 
-  /* ---------- Несколько ячеек (третье задание 27.09.2026) ----------
-     Одна ячейка — как было, одним нажатием. «Положить в несколько ячеек» —
-     список ячеек, у каждой своё количество; подтвердить можно, только когда
-     разложено ровно всё принятое. Каждая строка — отдельная укладка: позже
-     её подтвердят сканом QR ячейки. */
-  .multi-toggle{margin-top:10px;}
-  .multi-place{display:none; margin-top:12px;}
-  .multi-place.show{display:block;}
-  .multi-row{display:flex; align-items:center; gap:10px; padding:10px 12px; margin-bottom:8px;
-    background:var(--accent-soft); border:1.5px solid var(--accent); border-radius:12px;}
-  .multi-cell{flex:1; min-width:0;}
-  .multi-cell b{display:block; font-size:22px; font-weight:700; color:var(--accent); line-height:1.15;}
-  .multi-row .qty-stepper{gap:4px;}
-  .multi-row .qty-btn{width:36px; height:36px; border-radius:10px; font-size:20px;}
-  .multi-row input.qty-value{font-size:22px; width:48px; color:var(--sky);}
-  .multi-row.zero input.qty-value{color:var(--terracotta);}
-  .multi-remove{flex:0 0 auto; width:32px; height:32px; border-radius:9px; border:1px solid var(--line);
-    background:var(--panel-2); color:var(--muted); font:inherit; font-size:18px; cursor:pointer;}
-  .multi-left{font-size:15px; font-weight:600; padding:6px 2px 0; color:var(--yellow);}
-  .multi-left.ok{color:var(--green);}
-  .multi-left.bad{color:var(--terracotta);}
-  .multi-empty{font-size:13.5px; color:var(--muted); padding:4px 2px 2px; line-height:1.45;}
-  .cell-option.added{border-color:var(--accent); opacity:0.6;}
+  /* ---------- Раскладка по ячейкам (задание 28.09.2026) ----------
+     Выбрал ячейку — рядом «сюда: [300]»: по умолчанию всё, что осталось
+     разложить; места мало — уменьшил, остаток — в следующую ячейку. Пока всё
+     принятое не разложено, позиция не закончена. */
+  .place-info{display:none; margin-bottom:12px; padding:12px 14px; border-radius:12px;
+    background:var(--yellow-soft); border:1.5px solid rgba(201,166,107,0.55);}
+  .place-info.show{display:block;}
+  .place-info b{display:block; font-size:19px; color:var(--yellow);}
+  .place-info span{display:block; margin-top:4px; font-size:14px; color:var(--text); line-height:1.4;}
+  .place-info.move{background:var(--accent-soft); border-color:rgba(95,175,166,0.55);}
+  .place-info.move b{color:var(--accent-2);}
+  .place-info button{margin-top:10px; padding:9px 14px; border-radius:10px; border:1px solid var(--line);
+    background:var(--panel-2); color:var(--text); font:inherit; font-size:14px; font-weight:600; cursor:pointer;}
+  .place-here{display:none; align-items:center; flex-wrap:wrap; gap:8px 12px; margin-top:12px; padding:12px 14px;
+    border-radius:12px; background:var(--accent-soft); border:1.5px solid var(--accent);}
+  .place-here.show{display:flex;}
+  .place-here-label{font-size:16px; font-weight:600; color:var(--text);}
+  .place-here-label b{color:var(--accent-2); font-size:20px;}
+  .place-here .qty-stepper{gap:6px;}
+  .place-here .qty-btn{width:42px; height:42px; border-radius:11px; font-size:22px;}
+  .place-here input.qty-value{font-size:30px; font-weight:800; width:84px; color:var(--sky);}
+  .place-here-hint{flex:1 0 100%; font-size:13.5px; color:var(--muted); line-height:1.4;}
+  /* Принятое у раскладываемой позиции уже записано — его не меняют. */
+  #taskScreen.placing #qtyMinus, #taskScreen.placing #qtyPlus{display:none;}
+  #taskScreen.placing .run-need input.qty-value{color:var(--text);}
+  /* «Все товары прихода» → принятый товар: где лежит, «Переложить», «Убрать». */
+  .placed-row{padding:12px 14px; margin-bottom:10px; border-radius:12px; background:var(--panel-2); border:1px solid var(--line);}
+  .placed-top{display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:10px;}
+  .placed-top b{font-size:22px; color:var(--accent-2);}
+  .placed-top span{font-size:15px; color:var(--muted);}
+  .placed-row .qty-stepper{justify-content:flex-start; gap:6px; margin-bottom:10px;}
+  .placed-row .qty-btn{width:40px; height:40px; border-radius:10px; font-size:20px;}
+  .placed-row input.qty-value{font-size:24px; width:70px; color:var(--sky);}
+  .placed-actions{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .placed-actions button{padding:11px 10px; border-radius:10px; border:1px solid var(--line); background:var(--panel);
+    color:var(--text); font:inherit; font-size:14px; font-weight:600; cursor:pointer;}
+  .placed-actions button.primary{border-color:var(--accent); color:var(--accent-2);}
+  .placed-empty{font-size:14px; color:var(--muted); padding:6px 2px;}
 
   /* «Написать руководителю о товаре» — внизу карточки товара. */
   .item-note-btn{display:none; width:100%; margin-top:12px; padding:11px 14px; border-radius:12px;
@@ -1363,6 +1378,8 @@
 
         <div class="cell-block" id="cellBlock">
           <div class="cell-label" id="cellLabel">Куда положить — рекомендации Кладовщика</div>
+          <!-- «Осталось разложить 50 шт.» / «Переложить из 1.7.3» (задание 28.09.2026). -->
+          <div class="place-info" id="placeInfo"></div>
           <!-- Ячейку вручную — самым первым, выше подсказок (владелец
                27.09.2026): раньше это было окно «Своё место» в самом низу. -->
           <div class="cell-manual-row" id="manualCellRow">
@@ -1386,12 +1403,18 @@
             </div>
           </div>
           <div class="cell-manual" id="manualCellBtn" onclick="openSheet()" style="margin-top:10px;">Выбрать на карте склада</div>
-          <!-- Несколько ячеек: у каждой своё количество, в сумме — всё принятое. -->
-          <div class="multi-place" id="multiPlace">
-            <div id="multiList"></div>
-            <div class="multi-left" id="multiLeft"></div>
+          <!-- Сколько кладём в выбранную ячейку: по умолчанию всё, что осталось
+               разложить; места мало — меньше, остаток — в следующую ячейку. -->
+          <div class="place-here" id="placeHere">
+            <div class="place-here-label" id="placeHereLabel"></div>
+            <div class="qty-stepper">
+              <button type="button" class="qty-btn" onclick="stepPlaceQty(-1)" aria-label="Меньше">−</button>
+              <input class="qty-value" id="placeQty" type="text" inputmode="numeric" pattern="[0-9]*" aria-label="Сколько кладёте в ячейку"
+                     oninput="placeQtyTyped(this.value)" onfocus="this.select()">
+              <button type="button" class="qty-btn" onclick="stepPlaceQty(1)" aria-label="Больше">+</button>
+            </div>
+            <div class="place-here-hint" id="placeHereHint"></div>
           </div>
-          <div class="cell-manual multi-toggle" id="multiToggle" onclick="toggleMultiPlace()" style="display:none;">Положить в несколько ячеек</div>
           <!-- Отбор короче заявленного закрывает позицию с расхождением, поэтому
                спрашиваем прямо, а не догадываемся: пустая ячейка и «больше не
                повезли» для склада разные вещи. -->
@@ -1443,6 +1466,14 @@
           <div class="sheet-title" id="productsTitle">Все товары поставки</div>
           <div class="sheet-sub" id="productsSub">Стоите у другой ячейки — возьмите этот товар сейчас, а не когда до него дойдёт очередь.</div>
           <div id="productsList"></div>
+        </div>
+
+        <!-- Принятый товар прихода: где лежит, «Переложить», «Убрать из ячейки». -->
+        <div class="sheet-step" id="sheetStepPlaced">
+          <div class="sheet-back" onclick="openReceivingItemsSheet()">← Все товары прихода</div>
+          <div class="sheet-title" id="placedTitle">Товар</div>
+          <div class="sheet-sub" id="placedSub"></div>
+          <div id="placedList"></div>
         </div>
 
         <div class="sheet-step" id="sheetStepMissing">
@@ -1844,8 +1875,17 @@
     return currentInvoice;
   }
 
+  // Сколько принятого ещё не разложено по ячейкам (задание 28.09.2026);
+  // null — позиция ещё не принята. Позиция закончена, когда разложено всё.
+  function recvLeft(it){
+    return it && it.receiving_id ? Math.max(0, Number(it.accepted_qty) - Number(it.placed_qty || 0)) : null;
+  }
+  function recvDone(it){ return recvLeft(it) === 0; }
+
+  // Сначала — принятое, но не разложенное: товар уже в руках. Потом — не принятое.
   function findNextUnreceivedIndex(){
-    return currentInvoice.items.findIndex(it => !it.receiving_id);
+    const unplaced = currentInvoice.items.findIndex(it => recvLeft(it) > 0);
+    return unplaced !== -1 ? unplaced : currentInvoice.items.findIndex(it => !it.receiving_id);
   }
 
   // Накладная сама говорит, что с ней делать: приход кладут, расход отбирают,
@@ -2013,17 +2053,20 @@
     document.getElementById('productsSub').textContent = 'Открыли другую коробку — примите этот товар сейчас, а не когда до него дойдёт очередь.';
     const current = currentInvoice.items[currentItemIndex];
     const items = currentInvoice.items.map((p, i) => ({ p, i }))
-      .sort((a, b) => Boolean(a.p.receiving_id) - Boolean(b.p.receiving_id));
+      .sort((a, b) => recvDone(a.p) - recvDone(b.p));
     document.getElementById('productsList').innerHTML = items.map(({ p, i }) => {
-      const done = Boolean(p.receiving_id);
-      const cell = done ? placedCells(p) : '';
+      const left = recvLeft(p);
+      const done = left === 0;
+      const cell = p.receiving_id ? placedCells(p) : '';
       return '<div class="product-row' + (done ? ' done' : '') + (current && p.id === current.id ? ' current' : '') + '"'
         + ' onclick="pickReceivingItemNow(' + i + ')">'
         + '<div><div class="product-row-name">' + escapeHTML(p.name) + '</div>'
         + '<div class="product-row-sub">' + escapeHTML(p.sku)
-        + (done ? ' · принято ' + Number(p.accepted_qty) + ' из ' + Number(p.declared_qty) + (cell ? ' → ' + escapeHTML(cell) : '') : '')
+        + (p.receiving_id ? ' · принято ' + Number(p.accepted_qty) + ' из ' + Number(p.declared_qty) + (cell ? ' → ' + escapeHTML(cell) : '') : '')
+        + (left > 0 ? ' · <b style="color:var(--yellow)">осталось разложить ' + left + ' шт.</b>' : '')
+        + (done && Number(p.accepted_qty) > 0 ? ' · нажмите — переложить' : '')
         + '</div></div>'
-        + (done ? '' : '<div class="product-row-need">' + Number(p.declared_qty) + ' шт</div>')
+        + (p.receiving_id ? '' : '<div class="product-row-need">' + Number(p.declared_qty) + ' шт</div>')
         + '</div>';
     }).join('');
     document.getElementById('sheetOverlay').classList.add('show');
@@ -2044,20 +2087,96 @@
     return it.row_num != null ? formatBlockLabel(it.row_num, it) : '';
   }
 
+  // Принятый и разложенный товар открывается: где лежит, «Переложить», «Убрать
+  // из ячейки» (задание 28.09.2026). Не принятый или не разложенный — на экран.
   function pickReceivingItemNow(i){
     const p = currentInvoice && currentInvoice.items[i];
     if(!p || !recvRun) return;
+    if(recvDone(p)) return openPlacedView(i);
     closeSheet();
-    if(p.receiving_id){
-      recvRun.preferred = null;
-      showToast(currentInvoice.items.some(it => !it.receiving_id)
-        ? '«' + p.name + '» уже принят — открыт следующий товар' : 'Все позиции приняты');
-    } else {
-      recvRun.preferred = p.id;
-    }
+    recvMove = null;
+    recvRun.preferred = p.id;
     renderCurrentItem();
   }
   window.pickReceivingItemNow = pickReceivingItemNow;
+
+  let placedView = null;   // { index, rows: [{ cellBlockId, label, qty, n }] }
+  function openPlacedView(i){
+    const p = currentInvoice.items[i];
+    const rows = (Array.isArray(p.placements) ? p.placements : []).filter(x => x.rowNum != null).map(x => ({
+      cellBlockId: x.cellBlockId, qty: Number(x.qty), n: Number(x.qty),
+      label: formatBlockLabel(x.rowNum, { rack_start: x.rackStart, rack_end: x.rackEnd, tier_start: x.tierStart, tier_end: x.tierEnd }),
+    }));
+    placedView = { index: i, rows };
+    document.getElementById('placedTitle').textContent = p.name;
+    document.getElementById('placedSub').textContent = 'Принято ' + Number(p.accepted_qty) + ' из ' + Number(p.declared_qty)
+      + ' · разложено по ' + rows.length + ' ' + pluralRu(rows.length, 'ячейке', 'ячейкам', 'ячейкам')
+      + '. Поставьте, сколько штук, и выберите действие.';
+    renderPlacedView();
+    document.getElementById('sheetOverlay').classList.add('show');
+    goSheetStep('placed');
+  }
+  function renderPlacedView(){
+    const v = placedView;
+    document.getElementById('placedList').innerHTML = v.rows.length ? v.rows.map((r, i) =>
+      '<div class="placed-row"><div class="placed-top"><b>' + escapeHTML(r.label) + '</b><span>лежит ' + r.qty + ' шт.</span></div>'
+      + '<div class="qty-stepper"><button type="button" class="qty-btn" onclick="stepPlacedQty(' + i + ', -1)" aria-label="Меньше">−</button>'
+      + '<input class="qty-value" type="text" inputmode="numeric" pattern="[0-9]*" value="' + r.n + '" aria-label="Сколько штук из ' + escapeHTML(r.label) + '"'
+      +   ' oninput="placedQtyTyped(' + i + ', this.value)" onfocus="this.select()">'
+      + '<button type="button" class="qty-btn" onclick="stepPlacedQty(' + i + ', 1)" aria-label="Больше">+</button></div>'
+      + '<div class="placed-actions"><button type="button" class="primary" onclick="placedMove(' + i + ')">Переложить</button>'
+      + '<button type="button" onclick="placedRemove(' + i + ')">Убрать из ячейки</button></div></div>').join('')
+      : '<div class="placed-empty">Товар не лежит ни в одной ячейке.</div>';
+  }
+  function setPlacedQty(i, n){
+    const r = placedView && placedView.rows[i];
+    if(!r) return;
+    r.n = Math.min(r.qty, Math.max(1, n));
+    const input = document.querySelectorAll('#placedList .placed-row input')[i];
+    if(input && input.value !== String(r.n)) input.value = r.n;
+  }
+  window.stepPlacedQty = (i, d) => setPlacedQty(i, (placedView.rows[i] ? placedView.rows[i].n : 0) + d);
+  window.placedQtyTyped = (i, raw) => { const n = Number(String(raw).replace(/[^0-9]/g, '')); if(n) setPlacedQty(i, n); };
+
+  // «Переложить» — на экране выбрать, куда (подсказка, вручную, карта).
+  function placedMove(i){
+    const v = placedView, r = v && v.rows[i];
+    if(!r) return;
+    const item = currentInvoice.items[v.index];
+    recvMove = { itemId: item.id, fromCellBlockId: r.cellBlockId, fromLabel: r.label, max: r.qty };
+    placeQty = r.n;
+    recvRun.preferred = item.id;
+    closeSheet();
+    renderCurrentItem();
+  }
+  window.placedMove = placedMove;
+
+  // «Убрать из ячейки» — штуки возвращаются в «осталось разложить», и экран
+  // сразу предлагает разложить их заново.
+  async function placedRemove(i){
+    const v = placedView, r = v && v.rows[i];
+    if(!r) return;
+    const item = currentInvoice.items[v.index];
+    try{
+      const res = await apiFetch('/api/receiving/items/' + item.id + '/remove', { method: 'POST', body: { cellBlockId: r.cellBlockId, qty: r.n } });
+      closeSheet();
+      recvMove = null;
+      recvRun.preferred = item.id;
+      await reloadCurrentInvoice();
+      cellRows = await apiFetch('/api/cells/rows');
+      showToast('Убрано ' + r.n + ' шт. из ' + r.label + ' — осталось разложить ' + res.unplaced + ' шт.');
+      renderCurrentItem();
+    } catch(e){ showToast('Не убралось: ' + e.message); }
+  }
+  window.placedRemove = placedRemove;
+
+  function cancelMove(){
+    recvMove = null;
+    placeQty = null;
+    if(recvRun) recvRun.preferred = null;
+    renderCurrentItem();
+  }
+  window.cancelMove = cancelMove;
 
   function pickProductNow(i){
     const p = currentInvoice && currentInvoice.items[i];
@@ -2098,10 +2217,11 @@
 
     let idx = findNextUnreceivedIndex();
     // Товар, который грузчик взял сам («Все товары прихода», товар на экране
-    // прихода), — первым: коробка уже в руках.
+    // прихода), — первым: коробка уже в руках. «Переложить» — тот товар,
+    // который перекладывают, хоть он и разложен.
     if(recvRun && recvRun.preferred){
-      const chosen = currentInvoice.items.findIndex(it => it.id === recvRun.preferred && !it.receiving_id);
-      if(chosen !== -1) idx = chosen; else recvRun.preferred = null;
+      const chosen = currentInvoice.items.findIndex(it => it.id === recvRun.preferred && (recvMove || !recvDone(it)));
+      if(chosen !== -1) idx = chosen; else { recvRun.preferred = null; recvMove = null; }
     }
     if(idx === -1){
       // Принимать больше нечего: приёмку заканчивает человек — одной записью
@@ -2112,11 +2232,19 @@
     }
     currentItemIndex = idx;
     const item = currentInvoice.items[idx];
-    currentQty = Number(item.declared_qty);
+    // Принятая позиция: раскладываем остаток или перекладываем — принятое уже
+    // записано и не меняется.
+    const placing = item.receiving_id != null;
+    document.getElementById('taskScreen').classList.toggle('placing', placing);
+    document.getElementById('qtyValue').readOnly = placing;
+    currentQty = placing ? Number(item.accepted_qty) : Number(item.declared_qty);
     selectedCellBlockId = null;
     selectedCellLabel = null;
+    placeQty = recvMove ? placeQty : null;
     document.getElementById('customCellDisplay').classList.remove('show');
-    resetMultiPlace(Boolean(recvRun));
+    document.getElementById('cellLabel').textContent = recvMove ? 'Куда переложить'
+      : placing ? 'Куда положить остаток' : document.getElementById('cellLabel').textContent;
+    renderPlaceInfo(item);
     resetItemNote('recv:' + item.id);
 
     const total = currentInvoice.items.length;
@@ -2166,12 +2294,12 @@
       lastSuggestionId = data.suggestionId || null;
     } catch(e){
       if(request !== cellOptionsRequest) return;
-      wrap.innerHTML = '<div style="font-size:13px; color:var(--muted); text-align:center; padding:8px;">Не удалось подобрать ячейку — выберите «Своё место»</div>';
+      wrap.innerHTML = '<div style="font-size:13px; color:var(--muted); text-align:center; padding:8px;">Не удалось подобрать ячейку — введите её вручную или выберите на карте</div>';
       return;
     }
 
     if(options.length === 0){
-      wrap.innerHTML = '<div style="font-size:13px; color:var(--muted); text-align:center; padding:8px;">Свободных ячеек не нашлось — выберите «Своё место»</div>';
+      wrap.innerHTML = '<div style="font-size:13px; color:var(--muted); text-align:center; padding:8px;">Свободных ячеек не нашлось — введите ячейку вручную или выберите на карте</div>';
       return;
     }
     const noteText = {
@@ -2180,7 +2308,7 @@
       empty: 'свободно',
     };
     wrap.innerHTML = options.map((c, i) => `
-      <div class="cell-option${multiPlace && multiPlace.some(p => p.blockId === c.blockId) ? ' added' : ''}" id="cell-${i}" data-block-id="${escapeHTML(c.blockId)}" onclick="selectCellOption('${jsArg(c.blockId)}', '${jsArg(c.label)}', ${i})">
+      <div class="cell-option" id="cell-${i}" data-block-id="${escapeHTML(c.blockId)}" onclick="selectCellOption('${jsArg(c.blockId)}', '${jsArg(c.label)}', ${i})">
         <div>
           <div class="cell-option-id">${escapeHTML(c.label)}</div>
           <div class="cell-option-note">${noteText[c.reason] || 'свободно'}</div>
@@ -2244,7 +2372,7 @@
     document.getElementById('manualCellRow').style.display = 'none';
     document.getElementById('cellSuggestLabel').style.display = 'none';
     document.getElementById('customCellDisplay').classList.remove('show');
-    resetMultiPlace(false);
+    hidePlaceUi();
 
     let idx = findNextUnpickedIndex();
     // По товарам: сперва тот, что человек выбрал сам («Все товары»).
@@ -2347,7 +2475,7 @@
       code(barcodes.length > 1 ? 'Штрихкоды' : 'Штрихкод', barcodes.map(b => barcodeHtml(b, tail || 4)).join('<br>'), 'bc')
       + code('Артикул продавца', article ? escapeHTML(article) : '')
       + code('Артикул WB', wb ? escapeHTML(wb) : '');
-    const open = currentInvoice.items.filter(p => recv ? !p.receiving_id : !p.closed).length;
+    const open = currentInvoice.items.filter(p => recv ? !recvDone(p) : !p.closed).length;
     document.getElementById('runAllCount').textContent = 'осталось ' + open + ' ›';
   }
 
@@ -2569,7 +2697,7 @@
   }
 
   function renderReturnItem(){
-    resetMultiPlace(false);
+    hidePlaceUi();
     document.getElementById('bucketBlock').classList.add('show');
     document.getElementById('manualCellRow').style.display = '';
     document.getElementById('cellSuggestLabel').style.display = 'none';
@@ -2768,12 +2896,12 @@
   setupHoldButton(document.getElementById('qtyPlus'), 1);
 
   function selectCellOption(blockId, label, i){
-    if(multiPlace) return addPlacement(blockId, label);
     document.querySelectorAll('.cell-option').forEach(el => el.classList.remove('selected'));
     document.getElementById('cell-' + i).classList.add('selected');
     document.getElementById('customCellDisplay').classList.remove('show');
     selectedCellBlockId = blockId;
     selectedCellLabel = label;
+    if(!recvMove) placeQty = null;   // новая ячейка — снова «всё, что осталось»
     updateConfirmState();
   }
 
@@ -2787,19 +2915,33 @@
     const btn = document.getElementById('confirmBtn');
     const field = document.getElementById('qtyValue');
     const empty = field && String(field.value).trim() === '';
-    if(!empty && multiPlace){
-      // Несколько ячеек: подтвердить — только когда разложено ровно всё
-      // принятое и в каждой ячейке хоть что-то лежит.
-      renderMultiLeft();
-      const left = currentQty - multiSum();
-      const zero = multiPlace.some(p => !(p.qty > 0));
-      btn.disabled = !multiPlace.length || left !== 0 || zero || currentQty === 0;
-      btn.textContent = currentQty === 0 ? 'Ничего не принято — раскладывать нечего'
-        : !multiPlace.length ? 'Выберите ячейки'
-        : left > 0 ? 'Осталось разложить ' + left + ' шт.'
-        : left < 0 ? 'Разложено больше на ' + (-left) + ' шт.'
-        : zero ? 'Поставьте количество в каждой ячейке'
-        : 'Принять ' + currentQty + ' шт — в ' + multiPlace.length + ' ' + pluralRu(multiPlace.length, 'ячейку', 'ячейки', 'ячеек');
+    if(!isPicking()){
+      // Приёмка (задание 28.09.2026): принять можно только в ячейку; сколько
+      // кладём в неё — «сюда: [N]», остаток разложат следующими шагами.
+      renderPlaceHere();
+      const it = currentInvoice.items[currentItemIndex];
+      const left = recvLeft(it);
+      const n = placeNow();
+      const where = selectedCellLabel ? ' — ' + selectedCellLabel : '';
+      if(recvMove){
+        btn.disabled = !selectedCellLabel;
+        btn.textContent = selectedCellLabel ? 'Переложить ' + n + ' шт.' + where : 'Выберите, куда переложить';
+      } else if(left !== null){
+        btn.disabled = !selectedCellLabel || left === 0;
+        btn.textContent = selectedCellLabel ? 'Положить ' + n + ' шт.' + where : 'Выберите ячейку для ' + left + ' шт.';
+      } else if(empty){
+        btn.disabled = true;
+        btn.textContent = 'Введите количество';
+      } else if(currentQty === 0){
+        btn.disabled = false;
+        btn.textContent = 'Принять 0 шт. — не приехало';
+      } else if(selectedCellLabel){
+        btn.disabled = false;
+        btn.textContent = n < currentQty ? 'Принять ' + currentQty + ' шт., положить ' + n + where : 'Принять ' + currentQty + ' шт.' + where;
+      } else {
+        btn.disabled = true;
+        btn.textContent = 'Выберите ячейку и подтвердите';
+      }
       return;
     }
     if(empty){
@@ -2822,32 +2964,49 @@
     btn.disabled = true;
     btn.textContent = 'Сохраняю…';
     let saved = false;
-    // Несколько ячеек — списком укладок, каждая отдельным шагом; одна — как было.
-    const placements = multiPlace ? multiPlace.map(p => ({ cellBlockId: p.blockId, qty: p.qty })) : null;
-    const where = multiPlace ? multiPlace.map(p => p.label + ' — ' + p.qty).join(', ') : selectedCellLabel;
+    // Каждое нажатие — один шаг раскладки: принять и положить в первую
+    // ячейку, положить остаток, переложить (задание 28.09.2026).
+    const n = placeNow();
+    const left = recvLeft(item);
     try{
-      const r = await apiFetch('/api/receiving', {
-        method: 'POST',
-        body: Object.assign({
-          invoiceItemId: item.id,
-          acceptedQty: currentQty,
-          suggestionId: lastSuggestionId,
-          pausedMs: totalPausedMs,
-          pauseReasons: pauseLog.map(p => p.reason),
-        }, placements ? { placements } : { cellBlockId: selectedCellBlockId || null }),
-      });
+      let r;
+      if(recvMove){
+        r = await apiFetch('/api/receiving/items/' + recvMove.itemId + '/move', { method: 'POST',
+          body: { fromCellBlockId: recvMove.fromCellBlockId, toCellBlockId: selectedCellBlockId, qty: n } });
+      } else if(left !== null){
+        r = await apiFetch('/api/receiving/items/' + item.id + '/place', { method: 'POST',
+          body: { cellBlockId: selectedCellBlockId, qty: n } });
+      } else {
+        r = await apiFetch('/api/receiving', {
+          method: 'POST',
+          body: Object.assign({
+            invoiceItemId: item.id,
+            acceptedQty: currentQty,
+            suggestionId: lastSuggestionId,
+            pausedMs: totalPausedMs,
+            pauseReasons: pauseLog.map(p => p.reason),
+          }, currentQty > 0 ? { placements: [{ cellBlockId: selectedCellBlockId, qty: n }] } : {}),
+        });
+        results.push({
+          name: item.name, sku: item.sku, declared: Number(item.declared_qty),
+          accepted: currentQty, cell: currentQty > 0 ? selectedCellLabel : 'не приехало',
+        });
+      }
       saved = true;
-      results.push({
-        name: item.name, sku: item.sku, declared: Number(item.declared_qty),
-        accepted: currentQty, cell: where || 'своё место',
-      });
-      if(recvRun && recvRun.preferred === item.id) recvRun.preferred = null;
+      const moved = Boolean(recvMove);
+      recvMove = null;
+      placeQty = null;
+      // Остались неразложенные — та же позиция, следующая ячейка.
+      const stay = !moved && r && r.unplaced > 0;
+      if(recvRun) recvRun.preferred = stay ? item.id : null;
       // Последняя позиция — приход принят, и заход закрылся на сервере сам
       // (третье задание 27.09.2026): сразу итог, без окна «Закончить».
       if(recvRun && r && r.invoiceStatus === 'completed') return recvCompleted(r.finished);
       await reloadCurrentInvoice();
-      if(selectedCellBlockId || placements) cellRows = await apiFetch('/api/cells/rows');
-      if(recvRun && currentInvoice.items.some(it => !it.receiving_id)) flashNext('Следующий товар');
+      cellRows = await apiFetch('/api/cells/rows');
+      if(moved) showToast('Переложено ' + n + ' шт.');
+      else if(stay) showToast('Осталось разложить ' + r.unplaced + ' шт. — выберите следующую ячейку');
+      else if(recvRun && currentInvoice.items.some(it => !recvDone(it))) flashNext('Следующий товар');
       renderCurrentItem();
     } catch(e){
       if(saved){ savedButStale(e); return; }
@@ -2880,106 +3039,89 @@
     return showReceivingDone(r);
   }
 
-  // ---------- Несколько ячеек (третье задание 27.09.2026) ----------
-  // «Положить в несколько ячеек»: грузчик выбирает ячейки (подсказка, ввод
-  // вручную, карта) и у каждой ставит, сколько кладёт. Подтвердить можно,
-  // только когда разложено ровно всё принятое. Каждая строка уходит на
-  // сервер отдельной укладкой — позже её подтвердят сканом QR ячейки.
-  let multiPlace = null;   // [{ blockId, label, qty }] — пока раскладывают по нескольким ячейкам
+  // ---------- Раскладка по ячейкам (задание 28.09.2026) ----------
+  // Выбрал ячейку — «сюда: [N]»: по умолчанию всё, что осталось разложить
+  // (при «Переложить» — сколько выбрали в «Все товары прихода»). Меньше —
+  // остаток разложат следующим шагом. Каждое подтверждение — отдельный шаг на
+  // сервере: позже его подтвердят сканом QR ячейки и товара.
+  let placeQty = null;   // сколько кладём в выбранную ячейку; null — всё, что можно
+  let recvMove = null;   // «Переложить»: { itemId, fromCellBlockId, fromLabel, max }
 
-  const multiSum = () => (multiPlace ? multiPlace.reduce((a, p) => a + p.qty, 0) : 0);
-
-  // Показать кнопку (приёмка) или спрятать всё (сборка, возврат).
-  function resetMultiPlace(available){
-    multiPlace = null;
-    document.getElementById('multiToggle').style.display = available ? '' : 'none';
-    renderMultiPlace();
+  function placeMax(){
+    if(recvMove) return recvMove.max;
+    const left = recvLeft(currentInvoice && currentInvoice.items[currentItemIndex]);
+    return left === null ? currentQty : left;
+  }
+  function placeNow(){
+    const max = placeMax();
+    return placeQty === null ? max : Math.max(1, Math.min(placeQty, max));
   }
 
-  function toggleMultiPlace(){
-    if(multiPlace){
-      multiPlace = null;
+  function hidePlaceUi(){
+    recvMove = null;
+    placeQty = null;
+    document.getElementById('placeInfo').className = 'place-info';
+    document.getElementById('placeHere').classList.remove('show');
+    document.getElementById('taskScreen').classList.remove('placing');
+    document.getElementById('qtyValue').readOnly = false;
+  }
+
+  function renderPlaceInfo(item){
+    const box = document.getElementById('placeInfo');
+    const left = recvLeft(item);
+    if(recvMove){
+      box.className = 'place-info show move';
+      box.innerHTML = '<b>Переложить из ' + escapeHTML(recvMove.fromLabel) + '</b>'
+        + '<span>Выберите ячейку, куда перекладываете, и сколько штук. В ' + escapeHTML(recvMove.fromLabel)
+        + ' сейчас ' + recvMove.max + ' шт.</span>'
+        + '<button type="button" onclick="cancelMove()">Не перекладывать</button>';
+    } else if(left > 0){
+      // Где уже лежит — с количеством в каждой ячейке.
+      const placed = (Array.isArray(item.placements) ? item.placements : []).filter(x => x.rowNum != null)
+        .map(x => formatBlockLabel(x.rowNum, { rack_start: x.rackStart, rack_end: x.rackEnd, tier_start: x.tierStart, tier_end: x.tierEnd })
+          + ' — ' + Number(x.qty) + ' шт.').join(', ');
+      box.className = 'place-info show';
+      box.innerHTML = '<b>Осталось разложить ' + left + ' шт.</b>'
+        + '<span>Принято ' + Number(item.accepted_qty) + ' шт.' + (placed ? ' Уже разложено: ' + escapeHTML(placed) : '')
+        + ' Позиция не закончится, пока всё не лежит в ячейках.</span>';
     } else {
-      multiPlace = [];
-      // Уже выбранная ячейка — первой в списке, со всем принятым.
-      if(selectedCellBlockId) multiPlace.push({ blockId: selectedCellBlockId, label: selectedCellLabel, qty: currentQty });
-      selectedCellBlockId = null;
-      selectedCellLabel = null;
-      document.getElementById('customCellDisplay').classList.remove('show');
+      box.className = 'place-info';
+      box.innerHTML = '';
     }
-    renderMultiPlace();
-    updateConfirmState();
-  }
-  window.toggleMultiPlace = toggleMultiPlace;
-
-  function addPlacement(blockId, label){
-    if(multiPlace.some(p => p.blockId === blockId)){ showToast('Ячейка ' + label + ' уже в списке'); return; }
-    multiPlace.push({ blockId, label, qty: Math.max(0, currentQty - multiSum()) });
-    renderMultiPlace();
-    updateConfirmState();
   }
 
-  function renderMultiPlace(){
-    const on = Boolean(multiPlace);
-    document.getElementById('multiPlace').classList.toggle('show', on);
-    document.getElementById('multiToggle').textContent = on ? 'Положить в одну ячейку' : 'Положить в несколько ячеек';
-    document.getElementById('cellSuggestLabel').textContent = on ? 'Подсказки — нажмите, чтобы добавить' : 'Подсказки Кладовщика';
-    document.querySelectorAll('#cellOptions .cell-option').forEach(el => {
-      if(on) el.classList.remove('selected');
-      el.classList.toggle('added', on && multiPlace.some(p => p.blockId === el.dataset.blockId));
-    });
+  function renderPlaceHere(){
+    const row = document.getElementById('placeHere');
+    const max = placeMax();
+    const on = Boolean(selectedCellLabel) && max > 0 && !isPicking() && !isReturn();
+    row.classList.toggle('show', on);
     if(!on) return;
-    document.getElementById('multiList').innerHTML = multiPlace.length ? multiPlace.map((p, i) =>
-      '<div class="multi-row"><div class="multi-cell"><b>' + escapeHTML(p.label) + '</b>' + cellInfoLink(p.blockId, p.label) + '</div>'
-      + '<div class="qty-stepper"><button type="button" class="qty-btn" onclick="stepPlace(' + i + ', -1)" aria-label="Меньше">−</button>'
-      + '<input class="qty-value" type="text" inputmode="numeric" pattern="[0-9]*" value="' + p.qty + '"'
-      +   ' aria-label="Сколько в ячейку ' + escapeHTML(p.label) + '" oninput="placeTyped(' + i + ', this.value)" onfocus="this.select()">'
-      + '<button type="button" class="qty-btn" onclick="stepPlace(' + i + ', 1)" aria-label="Больше">+</button></div>'
-      + '<button type="button" class="multi-remove" onclick="removePlace(' + i + ')" aria-label="Убрать ячейку ' + escapeHTML(p.label) + '">×</button></div>').join('')
-      : '<div class="multi-empty">Выберите ячейки — подсказкой, вводом вручную или на карте — и у каждой поставьте, сколько кладёте.</div>';
-    renderMultiLeft();
+    const n = placeNow();
+    document.getElementById('placeHereLabel').innerHTML = (recvMove ? 'Переложить в ' : 'Сюда, в ') + '<b>' + escapeHTML(selectedCellLabel) + '</b>:';
+    const input = document.getElementById('placeQty');
+    if(document.activeElement !== input) input.value = n;
+    document.getElementById('placeHereHint').textContent = n < max
+      ? (recvMove ? 'Остальные ' + (max - n) + ' шт. останутся в ' + recvMove.fromLabel + '.'
+        : 'Остальные ' + (max - n) + ' шт. — в следующую ячейку.')
+      : (recvMove ? 'Все ' + max + ' шт.' : 'Всё, что осталось разложить. Места мало — уменьшите, остаток положите в следующую ячейку.');
   }
 
-  function renderMultiLeft(){
-    if(!multiPlace) return;
-    const left = currentQty - multiSum();
-    const el = document.getElementById('multiLeft');
-    el.className = 'multi-left' + (left === 0 ? ' ok' : left < 0 ? ' bad' : '');
-    el.textContent = !multiPlace.length ? ''
-      : left > 0 ? 'Осталось разложить ' + left + ' шт.'
-      : left < 0 ? 'Разложено больше, чем принято, на ' + (-left) + ' шт.'
-      : 'Разложено всё: ' + currentQty + ' шт.';
-    document.querySelectorAll('#multiList .multi-row').forEach((row, i) => row.classList.toggle('zero', !(multiPlace[i] && multiPlace[i].qty > 0)));
-  }
-
-  function stepPlace(i, delta){
-    const p = multiPlace && multiPlace[i];
-    if(!p) return;
-    p.qty = Math.max(0, p.qty + delta);
-    const input = document.querySelectorAll('#multiList .multi-row input')[i];
-    if(input) input.value = p.qty;
+  function stepPlaceQty(delta){
+    placeQty = Math.max(1, Math.min(placeMax(), placeNow() + delta));
+    document.getElementById('placeQty').value = placeQty;
     updateConfirmState();
   }
-  window.stepPlace = stepPlace;
+  window.stepPlaceQty = stepPlaceQty;
 
-  function placeTyped(i, raw){
-    const p = multiPlace && multiPlace[i];
-    if(!p) return;
+  function placeQtyTyped(raw){
     const digits = String(raw).replace(/[^0-9]/g, '');
-    p.qty = digits === '' ? 0 : Number(digits);
-    const input = document.querySelectorAll('#multiList .multi-row input')[i];
-    if(input && digits !== '' && input.value !== String(p.qty)) input.value = p.qty;
+    if(digits === '') return;
+    placeQty = Math.max(1, Math.min(placeMax(), Number(digits)));
+    const input = document.getElementById('placeQty');
+    if(input.value !== String(placeQty)) input.value = placeQty;
     updateConfirmState();
   }
-  window.placeTyped = placeTyped;
-
-  function removePlace(i){
-    if(!multiPlace) return;
-    multiPlace.splice(i, 1);
-    renderMultiPlace();
-    updateConfirmState();
-  }
-  window.removePlace = removePlace;
+  window.placeQtyTyped = placeQtyTyped;
 
   // Следующая работа — из того же списка, откуда пришли: следующий заказ этой
   // поставки, следующий приход. Кончились — обратно к списку.
@@ -4154,17 +4296,18 @@
   window.openReceipt = openReceipt;
 
   function receiptItemsHtml(d, id, open){
-    const items = (d.items || []).slice().sort((a, b) => Boolean(a.receiving_id) - Boolean(b.receiving_id));
+    const items = (d.items || []).slice().sort((a, b) => recvDone(a) - recvDone(b));
     if(!items.length) return '';
     const tail = tailLength(items.flatMap(it => String(it.barcode || '').split(',').map(b => b.trim())));
-    const left = items.filter(it => !it.receiving_id).length;
+    const left = items.filter(it => !recvDone(it)).length;
     const code = (label, value) => value ? '<span><i>' + label + '</i>' + value + '</span>' : '';
     return '<div class="list-group-title">Товары прихода · ' + items.length + (left && left < items.length ? ' · осталось ' + left : '') + '</div>'
       + '<div class="rcv-items">' + items.map(it => {
-        const done = Boolean(it.receiving_id);
+        const done = recvDone(it);
+        const unplaced = recvLeft(it);
         const declared = Number(it.declared_qty);
-        const accepted = done ? Number(it.accepted_qty) : null;
-        const cell = done && it.row_num != null ? formatBlockLabel(it.row_num, it) : '';
+        const accepted = it.receiving_id ? Number(it.accepted_qty) : null;
+        const cell = it.receiving_id ? placedCells(it) : '';
         const bcs = String(it.barcode || '').split(',').map(b => b.trim()).filter(Boolean);
         return '<div class="rcv-item' + (done ? ' done' : '') + '"' + (done || !open ? '' : ' onclick="beginReceiving(\'' + jsArg(id) + '\', \'' + jsArg(it.id) + '\')"') + '>'
           + '<div class="rcv-item-name">' + escapeHTML(it.name) + '</div>'
@@ -4174,8 +4317,8 @@
           +   code('Арт. продавца', escapeHTML(it.sku))
           +   code('Арт. WB', it.wb_article ? escapeHTML(it.wb_article) : '')
           + '</div>'
-          + (done ? '<div class="rcv-item-done' + (accepted !== declared ? ' warn' : '') + '">Принято ' + accepted + ' из ' + declared
-            + (cell ? ' → ' + escapeHTML(cell) : ' · без ячейки') + '</div>' : '')
+          + (it.receiving_id ? '<div class="rcv-item-done' + (accepted !== declared || unplaced > 0 ? ' warn' : '') + '">Принято ' + accepted + ' из ' + declared
+            + (cell ? ' → ' + escapeHTML(cell) : '') + (unplaced > 0 ? ' · осталось разложить ' + unplaced + ' шт.' : '') + '</div>' : '')
           + '</div>';
       }).join('') + '</div>';
   }
@@ -4740,7 +4883,18 @@
     let st;
     try{ st = await apiFetch(W.path(w.id)); } catch(e){ showToast('Не удалось: ' + e.message); return; }
     const left = Math.max(0, st.total - st.taken);
+    // Принятое, но не разложенное — приёмку не закончить (задание 28.09.2026).
+    let unplaced = [];
     if(w.kind === 'receiving'){
+      let inv = currentInvoice && currentInvoice.id === w.id ? currentInvoice : null;
+      if(!inv){ try{ inv = await apiFetch('/api/invoices/' + w.id); } catch(e){ inv = null; } }
+      unplaced = inv ? inv.items.filter(it => recvLeft(it) > 0) : [];
+    }
+    if(w.kind === 'receiving' && unplaced.length){
+      document.getElementById('finishTitle').textContent = 'Сначала разложите принятое';
+      document.getElementById('finishNote').innerHTML = 'Приёмку нельзя закончить, пока принятый товар не лежит в ячейках. Не разложено:<br>'
+        + unplaced.map(it => '<b>«' + escapeHTML(it.name) + '» — ' + recvLeft(it) + ' шт.</b>').join('<br>');
+    } else if(w.kind === 'receiving'){
       document.getElementById('finishTitle').textContent = left > 0
         ? 'Закончить приёмку с тем, что принято?' : 'Всё принято — закончить приёмку';
       document.getElementById('finishNote').innerHTML = 'Приход ' + escapeHTML(st.invoice.number) + ': <b>' + escapeHTML(takenText(st)) + '</b>'
@@ -4757,8 +4911,8 @@
       .map(el => el && el.value.trim()).find(Boolean) || '';
     document.getElementById('finishComment').value = typed;
     const go = document.getElementById('finishGoBtn');
-    go.textContent = W.finish;
-    go.disabled = false;
+    go.textContent = unplaced.length ? 'Нельзя — не разложено' : W.finish;
+    go.disabled = unplaced.length > 0;
     document.getElementById('finishCancelBtn').textContent = finishAuto ? W.back : 'Назад';
     document.getElementById('sheetOverlay').classList.add('show');
     goSheetStep('finish');
@@ -5611,6 +5765,7 @@
     if(step === 'products'){
       document.getElementById('sheetStepProducts').classList.add('show');
     }
+    if(step === 'placed') document.getElementById('sheetStepPlaced').classList.add('show');
     if(step === 'pause'){
       document.getElementById('sheetStepPause').classList.add('show');
       document.getElementById('pauseCustomInput').value = '';
@@ -6034,10 +6189,10 @@
   }
 
   function applyCustomCell(blockId, label){
-    if(multiPlace){ closeSheet(); return addPlacement(blockId, label); }
     document.querySelectorAll('.cell-option').forEach(el => el.classList.remove('selected'));
     selectedCellBlockId = blockId;
     selectedCellLabel = label;
+    if(!recvMove) placeQty = null;   // новая ячейка — снова «всё, что осталось»
     document.getElementById('customCellId').textContent = label;
     document.getElementById('customCellInfo').innerHTML = cellInfoBtn(blockId, label);
     document.getElementById('customCellDisplay').classList.add('show');
