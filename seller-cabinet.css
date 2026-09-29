@@ -356,6 +356,7 @@ dialog::backdrop { background: rgba(8, 11, 18, .6); }
 .inbound-form .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .help { font-size: 14px; color: var(--muted); }
 .file-pick { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; cursor: pointer; }
+.file-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .file-pick input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .file-pick input:focus-visible + .button { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* Привоз: путь, детали, документы, переписка (владелец 26.09.2026). */

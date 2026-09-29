@@ -6142,13 +6142,20 @@
     }
     if(ordersCompanyId !== companyId) return;   // уже открыли другого продавца
     ordersRows = rows;
-    ordersSelected = new Set();
+    // Тот же продавец (вернулись с другой вкладки, список обновился) —
+    // отмеченное остаётся отмеченным, если заказ ещё можно взять; другой
+    // продавец — с чистого листа (владелец 30.09.2026: галочки сбрасывались).
+    ordersSelected = ordersSelectedFor === companyId
+      ? new Set([...ordersSelected].filter(id => rows.some(o => o.id === id && o.ready)))
+      : new Set();
+    ordersSelectedFor = companyId;
     renderPartnerOrders(companyId);
   }
 
   // Выбранные для поставки заказы. По умолчанию не выбрано ничего: поставку
   // составляет менеджер, заказ за заказом, а не одна кнопка «забрать всё».
   let ordersSelected = new Set();
+  let ordersSelectedFor = null;   // чей список отмечен
   // Поиск и порядок в списке заказов продавца. Заказов бывает полторы сотни,
   // и собирают их не подряд, а по товару: сперва то, что лежит рядом.
   let ordersSearch = '';

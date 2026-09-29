@@ -591,12 +591,15 @@
     const rows = state.data.stock; const s = state.summary || {}; const ui = state.ui.products;
     const sum = (fn) => rows.reduce((a, r) => a + Number(fn(r) || 0), 0);
     const unknown = rows.some((r) => total(r) == null);
+    // Товары без числа учёта не гасят итог, а названы под ним (30.09.2026).
+    const missing = s.unknownCount ? '\nкроме ' + counted(s.unknownCount, 'товара', 'товаров', 'товаров') + ' без учёта: '
+      + (s.unknownNames || []).map((x) => '«' + x + '»').join(', ') + (s.unknownCount > (s.unknownNames || []).length ? '…' : '') : '';
     const stats = [
-      ['Всего товара', s.total ?? (unknown ? null : sum(total)), counted(s.productCount ?? rows.length, 'наименование', 'наименования', 'наименований') + (s.updatedAt ? '\nучёт на ' + when(s.updatedAt) : '')],
+      ['Всего товара', s.total ?? (unknown ? null : sum(total)), counted(s.productCount ?? rows.length, 'наименование', 'наименования', 'наименований') + (s.updatedAt ? '\nучёт на ' + when(s.updatedAt) : '') + missing],
       ['Заказано', s.ordered ?? sum(orderedQty), 'куплено на WB, ещё не в поставке'],
       ['В сборке', s.inAssembly ?? sum(assemblyQty), 'в поставке, склад собирает'],
       ['В пути', s.inTransit ?? sum(transitQty), 'уехало на WB, ещё не принято'],
-      ['Доступно к продаже', s.available ?? (unknown ? null : sum(availableQty)), 'всего − заказано − в сборке', 'main'],
+      ['Доступно к продаже', s.available ?? (unknown ? null : sum(availableQty)), 'всего − заказано − в сборке' + (s.unknownCount ? ', по товарам с учётом' : ''), 'main'],
     ];
     const short = rows.filter(isShort).length;
     const categories = [...new Set(rows.map((r) => meta(r.sku).category || 'Без категории'))].sort((a, b) => a.localeCompare(b, 'ru'));
@@ -1134,14 +1137,18 @@
     docState[prefix] = { kind: 'УПД', file: null };
     return `<div class="doc-fields"><div class="two"><div class="field"><span>Вид документа</span>${docKindPicker(prefix)}</div><label class="field"><span>Номер</span><input id="${prefix}Number" maxlength="60" placeholder="123"></label></div>`
       + `<div class="two"><label class="field"><span>Дата документа</span><input type="date" id="${prefix}Date"></label><label class="field"><span>От кого — поставщик</span><input id="${prefix}Supplier" maxlength="200" placeholder="ООО «Поставщик»"></label></div>`
-      + `<div class="field"><span>Файл — скан или PDF, до 10 МБ</span><label class="file-pick"><input type="file" id="${prefix}File" accept="${FILE_ACCEPT}"><span class="button">${icon('document')}Выбрать файл</span><span class="help" id="${prefix}FileName">Можно без файла</span></label></div></div>`;
+      + `<div class="field"><span>Файл — скан или PDF, до 10 МБ</span><div class="file-row"><label class="file-pick"><input type="file" id="${prefix}File" accept="${FILE_ACCEPT}"><span class="button">${icon('document')}Выбрать файл</span><span class="help" id="${prefix}FileName">Можно без файла</span></label><button class="button ghost" type="button" id="${prefix}FileDrop" hidden>Убрать файл</button></div></div></div>`;
   }
   function wireDocFields(prefix, onError) {
     $(prefix + 'File').onchange = (e) => {
       const file = e.target.files[0]; if (!file) return;
       const bad = checkFile(file); e.target.value = '';
-      if (bad) { docState[prefix].file = null; $(prefix + 'FileName').textContent = 'Можно без файла'; onError(bad); return; }
-      docState[prefix].file = file; $(prefix + 'FileName').textContent = file.name + ' · ' + fileSize(file.size); onError('');
+      if (bad) { docState[prefix].file = null; $(prefix + 'FileName').textContent = 'Можно без файла'; $(prefix + 'FileDrop').hidden = true; onError(bad); return; }
+      docState[prefix].file = file; $(prefix + 'FileName').textContent = file.name + ' · ' + fileSize(file.size); $(prefix + 'FileDrop').hidden = false; onError('');
+    };
+    // Ошиблись файлом — убрать его, а не только заменить (владелец 30.09.2026).
+    $(prefix + 'FileDrop').onclick = () => {
+      docState[prefix].file = null; $(prefix + 'FileName').textContent = 'Можно без файла'; $(prefix + 'FileDrop').hidden = true; onError('');
     };
   }
   function readDocFields(prefix) {
