@@ -1839,6 +1839,20 @@
   .set-opt b{display:block; font-size:14px; font-weight:600;}
   .set-opt small{display:block; font-size:12px; color:var(--muted); margin-top:2px;}
   .set-actions{display:flex; align-items:center; gap:14px; flex-wrap:wrap;}
+  .sl-head{display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap; margin-bottom:14px;}
+  .sl-head-acts{display:flex; gap:14px; align-items:center; flex-wrap:wrap;}
+  .sl-link{color:var(--accent-2); font-size:14px;}
+  .sl-tools{display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:14px 0;}
+  .sl-search{flex:1 1 220px; width:auto;}
+  .sl-add{display:flex; gap:8px; flex:1 1 360px;}
+  .sl-add .mp-field{flex:1; width:auto;}
+  .sl-chips{display:flex; gap:6px; flex-wrap:wrap; margin-top:6px;}
+  .unm-toggle{display:flex; justify-content:space-between; align-items:center; gap:12px; cursor:pointer;}
+  .unm-toggle .mp-act{white-space:nowrap;}
+  .sp-key{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 0; border-top:1px solid var(--line-soft);}
+  .sp-key code{font-family:var(--mono); font-size:15px; letter-spacing:.5px;}
+  .sp-key .mp-card-sub{display:block; margin-top:2px;}
+  .sp-key.revoked code{color:var(--muted); text-decoration:line-through;}
   .mp-card-click{cursor:pointer; transition:border-color .15s;}
   .mp-card-click:hover{border-color:var(--accent-2);}
   .sp-sec{border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:14px; background:var(--panel-2);}
@@ -2764,28 +2778,18 @@
 
     <div class="view" id="view-mp">
       <div class="staff-wrap">
-        <div class="staff-head">
+        <!-- Одна страница — один список продавцов (владелец 01.10.2026): раньше
+             продавец был дважды — в свёрнутом списке «Компании» (ключи, 1С) и
+             карточкой в «Площадках». Теперь всё про продавца — в его окне. -->
+        <div class="sl-head">
           <div>
-            <div class="staff-title">Продавцы и площадки</div>
-            <div class="staff-sub">Компания получает ключ вида ST-4K2P7Q-K. По нему продавец видит свой товар, заказы и документы — и ничего чужого.</div>
+            <div class="staff-title">Продавцы</div>
+            <div class="staff-sub">Нажмите на продавца: ключ в его кабинет, связь с 1С, Wildberries и склады на WB.</div>
           </div>
-        </div>
-        <div class="staff-add" data-form>
-          <input type="text" id="companyNameInput" placeholder="Название компании">
-          <button onclick="addCompany()">+ Добавить компанию</button>
-        </div>
-        <div class="staff-toggle" id="companiesToggle" onclick="toggleCompaniesList()">
-          <span class="staff-toggle-arrow" id="companiesToggleArrow">▸</span>
-          <span id="companiesToggleLabel">Компании</span>
-        </div>
-        <div id="companiesList" hidden></div>
-
-        <div class="staff-head staff-section">
-          <div>
-            <div class="staff-title">Площадки</div>
-            <div class="staff-sub">Что у каждого продавца с маркетплейсом. Аргус сам забирает сборочные задания и заводит их заказами склада. По умолчанию он только читает; создавать поставки и менять статусы на площадке он будет только у того продавца, для которого вы это разрешили.</div>
+          <div class="sl-head-acts">
+            <a id="wbReconciliationLink" href="marketplace-reconciliation.html" class="sl-link">Сверка заказов WB</a>
+            <button class="wh-onboarding-btn" type="button" onclick="pullAllMarketplaces()">Забрать заказы у всех</button>
           </div>
-          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center"><a id="wbReconciliationLink" href="marketplace-reconciliation.html" style="color:var(--accent)">Сверка заказов WB</a><button class="wh-onboarding-btn" type="button" onclick="pullAllMarketplaces()">Забрать заказы у всех</button></div>
         </div>
 
         <div class="oc-status-bar" id="mpStatusBar">
@@ -2798,21 +2802,27 @@
 
         <div id="mpProgress"></div>
         <div id="mpUnresolved"></div>
+
+        <div class="sl-tools" data-form>
+          <input type="search" id="sellerSearch" class="mp-field sl-search" placeholder="Найти продавца" oninput="renderMpCards()" autocomplete="off">
+          <div class="sl-add">
+            <input type="text" id="companyNameInput" class="mp-field" placeholder="Название нового продавца" onkeydown="if(event.key==='Enter') addCompany()">
+            <button class="wh-onboarding-btn primary" type="button" onclick="addCompany()">+ Добавить продавца</button>
+          </div>
+        </div>
+
         <div id="mpList"></div>
         <div id="mpSyncResult"></div>
 
         <div class="wh-modal-overlay" id="wbWhModal" onclick="if(event.target===this) closeWbWarehouses()">
           <div class="wh-modal" style="max-width:680px;">
             <div class="wh-modal-head">
-              <div class="wh-modal-title" id="wbWhTitle">Склады WB</div>
+              <div class="wh-modal-title" id="wbWhTitle">Продавец</div>
               <button class="panel-close-btn" onclick="closeWbWarehouses()" aria-label="Закрыть">✕</button>
             </div>
             <div class="wh-modal-body" id="wbWhBody"></div>
           </div>
         </div>
-
-
-        <div class="oc-note">Аргус читает у площадки сборочные задания, склады продавца, пункты приёмки, остатки по вашим складам и фото карточек. Цены, реклама и аналитика не читаются. Менять Аргус может только поставки и статусы сборочных заданий — и только у продавца, для которого вы включили «Разрешить менять статусы».</div>
       </div>
     </div>
 
@@ -2994,7 +3004,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <script src="back.js?v=4901b838" defer></script>
 <script src="form-keys.js?v=cd462175" defer></script>
-<script src="cabinet_main.js?v=e6c5a6ae" defer></script>
+<script src="cabinet_main.js?v=6db1cfef" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->

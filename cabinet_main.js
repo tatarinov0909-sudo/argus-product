@@ -597,6 +597,8 @@
       companies = [];
     }
     renderCompaniesList();
+    renderMpCards();
+    if(document.getElementById('wbWhModal')?.classList.contains('open')) renderSellerPanel();
     renderInvoiceCompanySelect();
     renderMpCompanySelect();
     renderProductsCompanySelects();
@@ -779,13 +781,13 @@
   async function addCompany(){
     const input = document.getElementById('companyNameInput');
     const name = input.value.trim();
-    if(!name){ showWhToast('Введите название компании.'); return; }
+    if(!name){ showWhToast('Введите название продавца.'); return; }
     try{
-      await apiFetch('/api/sellers/companies', {method:'POST', body:{name}});
+      const created = await apiFetch('/api/sellers/companies', {method:'POST', body:{name}});
       input.value = '';
       await loadCompanies();
-      toggleCompaniesList(true);
-      showWhToast('Компания «' + name + '» добавлена.');
+      showWhToast('Продавец «' + name + '» добавлен. Выдайте ему ключ и подключите WB.');
+      if(created && created.id) openSellerPanel(created.id);
     } catch(e){
       showWhToast('Не удалось добавить компанию: ' + e.message);
     }
@@ -796,7 +798,7 @@
       const key = await apiFetch('/api/sellers/companies/' + companyId + '/keys', {method:'POST'});
       await loadCompanies();
       toggleCompaniesList(true);
-      showWhToast('Ключ ' + key.key_code + ' выдан.');
+      showWhToast('Ключ ' + key.key_code + ' выдан. Передайте его продавцу — по нему он войдёт в свой кабинет.');
     } catch(e){
       showWhToast('Не удалось выдать ключ: ' + e.message);
     }
@@ -4934,6 +4936,11 @@
     await loadSellerPanelData();
   }
   window.openSellerPanel = openSellerPanel;
+  async function copySellerKey(code){
+    try{ await navigator.clipboard.writeText(code); showWhToast('Ключ ' + code + ' скопирован.'); }
+    catch(e){ showWhToast('Ключ: ' + code); }
+  }
+  window.copySellerKey = copySellerKey;
   function closeWbWarehouses(){ document.getElementById('wbWhModal').classList.remove('open'); }
   window.closeWbWarehouses = closeWbWarehouses;
   async function loadSellerPanelData(){
@@ -4951,7 +4958,26 @@
     const st = mpState(cred);
     const pend = mpPending.find(x => x.companyId === id) || null;
     const q = (s) => "'" + s + "'";
-    let html = '<div class="sp-sec"><div class="sp-head"><b>Wildberries</b>'
+    const company = companies.find(c => c.id === id);
+    let html = '';
+    if(company){
+      const active = company.keys.filter(k => k.active), revoked = company.keys.filter(k => !k.active);
+      const keyRow = (k) => '<div class="sp-key' + (k.active ? '' : ' revoked') + '"><span><code>' + escapeHTML(k.keyCode) + '</code>'
+        + '<span class="mp-card-sub">выдан ' + new Date(k.issuedAt).toLocaleDateString('ru-RU') + (k.active ? '' : ' · отозван') + '</span></span>'
+        + '<span class="mp-card-acts" style="margin:0;">'
+        + (k.active ? '<span class="mp-act" onclick="copySellerKey(' + q(k.keyCode) + ')">Скопировать</span>' : '')
+        + '<span class="mp-act' + (k.active ? ' warn' : '') + '" onclick="toggleSellerKey(' + q(k.id) + ')">' + (k.active ? 'Отозвать' : 'Восстановить') + '</span>'
+        + '</span></div>';
+      html += '<div class="sp-sec"><div class="sp-head"><b>Кабинет продавца</b>'
+        + '<button class="wh-onboarding-btn" type="button" onclick="issueSellerKey(' + q(id) + ')">+ Выдать ключ</button></div>'
+        + '<div class="mp-card-sub" style="margin-bottom:6px;">По ключу продавец входит в свой кабинет и видит только свой товар, заказы и документы.</div>'
+        + (active.length ? active.map(keyRow).join('') : '<div class="mp-card-sub wbo-warn">Рабочего ключа нет — продавец не может войти.</div>')
+        + (revoked.length ? '<details class="wbo-more"><summary>Отозванные ключи — ' + revoked.length + '</summary>' + revoked.map(keyRow).join('') + '</details>' : '')
+        + '<div class="sp-key"><span>1С: ' + (company.one_c_external_id ? '<b>' + escapeHTML(company.one_c_counterparty_name || 'контрагент связан') + '</b>' : 'не связан с контрагентом') + '</span>'
+        + '<span class="mp-act" onclick="openOneCMapping(' + q(id) + ')">' + (company.one_c_external_id ? 'Изменить' : 'Связать с 1С') + '</span></div>'
+        + '</div>';
+    }
+    html += '<div class="sp-sec"><div class="sp-head"><b>Wildberries</b>'
       + (st.chip ? '<span class="mp-chip ' + st.chipCss + '">' + st.chip + '</span>' : '') + '</div>';
     if(!cred){
       html += canManageKeys()
@@ -5061,13 +5087,16 @@
     catch(e){ mpUnresolved = []; }
     if(mpUnresolved.length === 0){ box.innerHTML = ''; return; }
     const orders = mpUnresolved.reduce((s, x) => s + x.orders, 0);
+    // Свёрнуто по умолчанию: строка с числом и «Разобрать» (владелец
+    // 01.10.2026: на странице «всё не сворачивается»).
     box.innerHTML = '<div class="unm-wrap">'
-      + '<div class="unm-head"><div class="unm-title">'
+      + '<div class="unm-head unm-toggle" onclick="toggleUnresolved()"><div class="unm-title">'
       +   orders + ' ' + pluralRu(orders, 'заказ', 'заказа', 'заказов')
-      +   ' нельзя собрать</div>'
-      +   '<div class="unm-meta">' + mpUnresolved.length + ' '
-      +   pluralRu(mpUnresolved.length, 'артикул', 'артикула', 'артикулов') + '</div></div>'
-      + '<div class="unm-sub">Площадка присылает артикул продавца, а склад живёт своими.'
+      +   ' нельзя собрать · ' + mpUnresolved.length + ' '
+      +   pluralRu(mpUnresolved.length, 'артикул', 'артикула', 'артикулов') + ' не сопоставлены</div>'
+      +   '<span class="mp-act">' + (unmOpen ? 'Свернуть ▴' : 'Разобрать ▾') + '</span></div>'
+      + (unmOpen ? '' : '</div>')
+      + (!unmOpen ? '' : '<div class="unm-sub">Площадка присылает артикул продавца, а склад живёт своими.'
       +   ' Пока они не связаны, заказ виден, но собрать его нечем. Свяжите артикул с товаром —'
       +   ' лежащие заказы починятся сразу же.</div>'
       + mpUnresolved.map((u, i) => '<div class="unm-row" id="unm-' + i + '">'
@@ -5087,8 +5116,11 @@
         +   '<div class="unm-hits" id="unm-hits-' + i + '"></div>'
         + '</div>'
         + '</div>').join('')
-      + '</div>';
+      + '</div>');
   }
+  let unmOpen = false;
+  function toggleUnresolved(){ unmOpen = !unmOpen; loadUnresolved(); }
+  window.toggleUnresolved = toggleUnresolved;
 
   function openUnresolved(i){
     const row = document.getElementById('unm-' + i);
@@ -5184,10 +5216,12 @@
     const list = document.getElementById('mpList');
     if(!list) return;
     if(companies.length === 0){
-      list.innerHTML = '<div class="staff-empty">Клиентов пока нет. Добавьте продавца на экране «Сотрудники» — площадку можно подключить сразу после этого.</div>';
+      list.innerHTML = '<div class="staff-empty">Продавцов пока нет — впишите название выше и нажмите «+ Добавить продавца».</div>';
       return;
     }
-    const cards = companies.map((c) => {
+    const q = ((document.getElementById('sellerSearch') || {}).value || '').trim().toLowerCase();
+    const shownCompanies = companies.filter(c => !q || c.name.toLowerCase().includes(q));
+    const cards = shownCompanies.map((c) => {
       const cred = marketplaces.find((m) => m.companyId === c.id) || null;
       const pend = mpPending.find((x) => x.companyId === c.id) || null;
       const st = mpState(cred);
@@ -5213,6 +5247,10 @@
         +     st.word + '</div></div>'
         +   (st.chip ? '<div class="mp-chip ' + st.chipCss + '">' + st.chip + '</div>' : '')
         + '</div>'
+        + '<div class="sl-chips">'
+        +   '<span class="mp-chip ' + (hasKey ? 'live' : 'stale') + '">' + (hasKey ? 'кабинет выдан' : 'нет ключа в кабинет') + '</span>'
+        +   (c.one_c_external_id ? '<span class="mp-chip live">связан с 1С</span>' : '')
+        + '</div>'
         + (cred && cred.sellerName
             ? '<div class="mp-card-sub">Кабинет WB: ' + escapeHTML(cred.sellerName) + (cred.sellerInn ? ', ИНН ' + escapeHTML(cred.sellerInn) : '') + '</div>'
             : '')
@@ -5227,9 +5265,7 @@
                     + '</b><span>самый старый</span></div>'
                   : '')
               + '</div>'
-            : '<div class="mp-card-sub">' + (hasKey
-                ? 'Кабинет продавца выдан — клиент видит свой остаток. Заказы с маркетплейса пока не приходят.'
-                : 'Ни кабинета, ни площадки. Клиент есть только в накладных.') + '</div>')
+            : '<div class="mp-card-sub">WB не подключён — заказы с маркетплейса не приходят.</div>')
         + wbLine + writeHint
         + '<div class="mp-card-acts">' + acts + '</div>'
         + '</div>';
@@ -5242,9 +5278,11 @@
       if(marketplaces.some((m) => m.companyId === c.id)) return 1;
       return 2;
     };
-    const order = companies.map((c, i) => ({ i, w: weight(c) }))
+    const order = shownCompanies.map((c, i) => ({ i, w: weight(c) }))
       .sort((a, b) => a.w - b.w || a.i - b.i);
-    list.innerHTML = '<div class="mp-grid">' + order.map((o) => cards[o.i]).join('') + '</div>';
+    list.innerHTML = cards.length
+      ? '<div class="mp-grid">' + order.map((o) => cards[o.i]).join('') + '</div>'
+      : '<div class="staff-empty">Под «' + escapeHTML(q) + '» продавцов нет.</div>';
   }
 
   // Подключить конкретному клиенту: разворачиваем форму и подставляем его,
