@@ -221,12 +221,21 @@
     return `<div class="table-foot"><span>Показано ${n(shown)} из ${counted(total, ...noun)}</span>`
       + (shown < total ? `<button class="button" data-more>Показать ещё ${n(Math.min(state.prefs.rows, total - shown))}</button>` : '') + '</div>';
   }
+  // Смещение пояса от UTC сейчас, мс.
+  const zoneOffset = (zone) => {
+    try {
+      const now = new Date(); now.setMilliseconds(0);
+      const local = new Date(now.toLocaleString('en-US', { timeZone: zone }));
+      const utc = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
+      return local - utc;
+    } catch { return 3 * 3600e3; }
+  };
   const inPeriod = (iso, period) => {
     if (period === 'all' || !iso) return period === 'all';
-    // День — московский (склад работает по Москве), а не по часам компьютера
+    // День — по поясу склада (настройки склада), а не по часам компьютера
     // продавца: у продавца в Новосибирске «сегодня» наступало на 4 часа раньше.
-    const t = new Date(iso).getTime(); const MSK = 3 * 3600e3;
-    const start = Math.floor((Date.now() + MSK) / 864e5) * 864e5 - MSK;
+    const t = new Date(iso).getTime(); const OFF = zoneOffset(state.profile?.timezone || 'Europe/Moscow');
+    const start = Math.floor((Date.now() + OFF) / 864e5) * 864e5 - OFF;
     if (period === 'today') return t >= start;
     if (period === 'yesterday') return t >= start - 864e5 && t < start;
     if (period === '7d') return t >= Date.now() - 7 * 864e5;
@@ -732,7 +741,7 @@
     };
     $('view').innerHTML = segment('wb')
       + notice(`Ваши склады на WB у «${ff}»`, `Отметьте склады, товар для которых лежит у «${ff}»: склад собирает заказы только с отмеченных. Ваши склады у других фулфилментов сюда не попадают — их заказы «${ff}» не забирает.`)
-      + (!info.active ? notice('Ни один склад не отмечен', `Пока «${ff}» забирает заказы со всех ваших складов WB — в том числе с тех, что у других фулфилментов. Отметьте свои склады ниже.`, true) : '')
+      + (!info.active ? notice('Ни один склад не отмечен', `«${ff}» не забирает ваши заказы с WB, пока вы не отметите склады, товар для которых лежит у «${ff}».`, true) : '')
       + (!info.officesConfigured ? notice('Склад ещё не указал свои пункты приёмки WB', 'Когда менеджер склада их укажет, здесь появятся ваши склады, привязанные к этим пунктам.', true) : '')
       + (info.error ? notice('WB не отдал список складов', info.error + '. Аргус попробует ещё раз сам.', true) : '')
       + (info.warehouses.length ? `<div class="wbwh-list">${info.warehouses.map(card).join('')}</div>` : empty('Складов пока нет', 'На пунктах приёмки этого фулфилмента у вас нет складов WB.', 'box'))

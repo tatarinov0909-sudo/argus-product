@@ -209,6 +209,10 @@
   }
   .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
 
+  .setup-q{text-align:left; border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:10px;}
+  .setup-q-title{font-size:13px; font-weight:600; margin-bottom:6px;}
+  .setup-opt{display:flex; gap:8px; align-items:center; font-size:13px; padding:4px 0; cursor:pointer;}
+  .setup-tz{font-size:13px; color:var(--muted);}
   @media (max-width:720px){
     .cabinet-grid{grid-template-columns:1fr;}
     body::after{display:none;}
@@ -352,13 +356,25 @@
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7" stroke="#5FAFA6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
       <div class="form-title">Кабинет создан</div>
-      <div class="success-detail" style="margin-bottom:6px;">Передайте этот ключ сотрудникам склада — они введут его в разделе «Работник склада»</div>
-      <div class="key-generated">
-        <div class="key-generated-label">Ключ склада</div>
-        <div class="key-generated-value" id="ownerKeyValue">ARG-7734-X</div>
-        <div class="key-copy" onclick="copyText(document.getElementById('ownerKeyValue').textContent, 'Ключ скопирован')">Скопировать</div>
+      <div class="success-detail" style="margin-bottom:14px;">Три вопроса о складе — Аргус подстроится под ответы. Поменять можно в любой момент: «Настройки склада» в кабинете.</div>
+      <div class="setup-q">
+        <div class="setup-q-title">Где вы ведёте учёт остатков товара продавцов?</div>
+        <label class="setup-opt"><input type="radio" name="setupStock" value="1c"> В 1С</label>
+        <label class="setup-opt"><input type="radio" name="setupStock" value="argus"> Только в Аргусе</label>
       </div>
-      <button class="btn" onclick="window.location.href='cabinet_main.html'">Перейти в кабинет</button>
+      <div class="setup-q">
+        <div class="setup-q-title">Кто оформляет поставку в кабинете WB?</div>
+        <label class="setup-opt"><input type="radio" name="setupSupplies" value="ff"> Мы, ключом продавца</label>
+        <label class="setup-opt"><input type="radio" name="setupSupplies" value="seller"> Продавец сам</label>
+      </div>
+      <div class="setup-q">
+        <div class="setup-q-title">Часовой пояс склада</div>
+        <div class="setup-tz" id="setupTz">Москва</div>
+      </div>
+      <div class="field-error" id="setupError"></div>
+      <button class="btn" onclick="finishSetup()">Готово — в кабинет</button>
+      <div class="success-detail" style="margin-top:12px;">Ключи сотрудникам и продавцам выдаются в кабинете: разделы «Сотрудники» и «Продавцы и площадки».</div>
+      <div class="back" style="margin-top:8px;" onclick="window.location.href='cabinet_main.html'">Ответить позже</div>
     </div>
   </div>
 
@@ -509,12 +525,30 @@
       localStorage.setItem('argus_token', data.token);
       localStorage.setItem('argus_role', 'owner');
       hideAll();
-      document.getElementById('ownerKeyValue').textContent = 'ARG-' + data.warehouse.warehouse_code + '-X';
+      document.getElementById('setupTz').textContent = browserZone() + ' — по часам этого компьютера';
       document.getElementById('successOwner').classList.add('show');
     } catch(e){
       errorEl.textContent = 'Не удалось подключиться к серверу. Проверьте интернет-соединение.';
       errorEl.classList.add('show');
     }
+  }
+
+  // Пояс склада — по часам компьютера, на котором регистрируются.
+  const browserZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Moscow'; } catch(e){ return 'Europe/Moscow'; } };
+  async function finishSetup(){
+    const pick = (n) => (document.querySelector('input[name="' + n + '"]:checked') || {}).value;
+    const stock = pick('setupStock'), supplies = pick('setupSupplies');
+    const err = document.getElementById('setupError');
+    err.classList.remove('show');
+    if(!stock || !supplies){ err.textContent = 'Ответьте на оба вопроса — или нажмите «Ответить позже».'; err.classList.add('show'); return; }
+    try{
+      const res = await fetch(API_BASE + '/api/warehouses/me', {
+        method:'PATCH', headers:{'Content-Type':'application/json', Authorization: 'Bearer ' + localStorage.getItem('argus_token')},
+        body: JSON.stringify({ stockSource: stock, wbSuppliesBy: supplies, timezone: browserZone(), setupDone: true }),
+      });
+      if(!res.ok){ const d = await res.json().catch(() => ({})); err.textContent = d.error || 'Не сохранилось.'; err.classList.add('show'); return; }
+      window.location.href = 'cabinet_main.html';
+    } catch(e){ err.textContent = 'Не удалось подключиться к серверу.'; err.classList.add('show'); }
   }
 
   async function checkSellerKey(){

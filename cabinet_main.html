@@ -1829,6 +1829,16 @@
   .mp-act:hover{text-decoration:underline;}
   .mp-act.warn{color:var(--terracotta);}
   /* Склады WB: куда возит склад и склады продавцов */
+  .set-form{display:flex; flex-direction:column; gap:16px; max-width:640px;}
+  .set-field{display:flex; flex-direction:column; gap:6px; font-size:13px; color:var(--muted);}
+  .set-help{font-size:12px; color:var(--muted);}
+  .set-q{border:1px solid var(--line); border-radius:12px; padding:14px 16px; background:var(--panel-2);}
+  .set-q-title{font-size:14px; font-weight:600; margin-bottom:8px;}
+  .set-opt{display:flex; gap:10px; align-items:flex-start; padding:8px 0; cursor:pointer;}
+  .set-opt input{margin-top:3px; accent-color:var(--accent);}
+  .set-opt b{display:block; font-size:14px; font-weight:600;}
+  .set-opt small{display:block; font-size:12px; color:var(--muted); margin-top:2px;}
+  .set-actions{display:flex; align-items:center; gap:14px; flex-wrap:wrap;}
   .wbo{background:var(--panel-2); border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin-bottom:14px;}
   .wbo .staff-sub{margin:4px 0 10px;}
   .wbo-row{display:flex; justify-content:space-between; align-items:flex-start; gap:12px; padding:10px 0; border-top:1px solid var(--line-soft);}
@@ -2211,6 +2221,7 @@
 
     <div class="nav-sep"></div>
     <div class="nav-label">Настройки</div>
+    <div class="nav-item" id="nav-settings" onclick="switchView('settings')"><span class="nav-dot"></span>Настройки склада<span class="nav-badge" id="settingsBadge">!</span></div>
     <div class="nav-item" id="nav-mp" onclick="switchView('mp')"><span class="nav-dot"></span>Продавцы и площадки</div>
     <div class="nav-item" id="nav-staff" onclick="switchView('staff')"><span class="nav-dot"></span>Сотрудники</div>
     <div class="nav-item" id="nav-1c" onclick="switchView('1c')"><span class="nav-dot"></span>Подключение 1С</div>
@@ -2672,7 +2683,7 @@
           <div class="bill-card"><b>Счёт за период</b><span>итог по продавцу за месяц с расшифровкой по дням и операциям, выгрузка в Excel</span></div>
         </div>
         <div class="staff-sub" style="margin-top:18px">Что нужно от вас, чтобы включить: прайс склада (цена хранения и каждой
-          услуги) — у «Слим Тим» готовые тарифы уже есть в таблице артикулов, их возьмём за основу.</div>
+          услуги).</div>
       </div>
     </div>
 
@@ -2810,7 +2821,36 @@
           </div>
         </details>
 
-        <div class="oc-note">Аргус спрашивает у площадки только сборочные задания и список складов продавца. Карточки, цены, реклама и аналитика не читаются. Менять Аргус может только поставки и статусы сборочных заданий — и только у продавца, для которого вы включили «Разрешить менять статусы».</div>
+        <div class="oc-note">Аргус читает у площадки сборочные задания, склады продавца, пункты приёмки, остатки по вашим складам и фото карточек. Цены, реклама и аналитика не читаются. Менять Аргус может только поставки и статусы сборочных заданий — и только у продавца, для которого вы включили «Разрешить менять статусы».</div>
+      </div>
+    </div>
+
+    <div class="view" id="view-settings">
+      <div class="oc-wrap">
+        <div class="staff-head">
+          <div>
+            <div class="staff-title">Настройки склада</div>
+            <div class="staff-sub">Как работает ваш склад. Аргус подстраивается под эти ответы — под вас ничего не переделывают. Любой ответ можно поменять позже.</div>
+          </div>
+        </div>
+        <div class="set-form" data-form>
+          <label class="set-field"><span>Название склада</span><input id="setName" class="mp-field" maxlength="120"></label>
+          <label class="set-field"><span>Город</span><input id="setCity" class="mp-field" maxlength="120"></label>
+          <label class="set-field"><span>Юрлицо склада — «Хранитель» в актах</span><input id="setLegal" class="mp-field" maxlength="200"></label>
+          <div class="set-q">
+            <div class="set-q-title">Где вы ведёте учёт остатков товара продавцов?</div>
+            <label class="set-opt"><input type="radio" name="setStock" value="1c"><span><b>В 1С</b><small>«Всего товара» у продавца — число из 1С. Подключение — в разделе «Подключение 1С».</small></span></label>
+            <label class="set-opt"><input type="radio" name="setStock" value="argus"><span><b>Только в Аргусе</b><small>«Всего товара» у продавца — то, что лежит в ячейках Аргуса.</small></span></label>
+          </div>
+          <div class="set-q">
+            <div class="set-q-title">Кто оформляет поставку в кабинете WB?</div>
+            <label class="set-opt"><input type="radio" name="setSupplies" value="ff"><span><b>Мы, ключом продавца</b><small>Аргус подскажет у каждого продавца включить «Разрешить менять статусы» — с его согласия.</small></span></label>
+            <label class="set-opt"><input type="radio" name="setSupplies" value="seller"><span><b>Продавец сам</b><small>Аргус только читает заказы, поставку на WB продавец делает у себя.</small></span></label>
+          </div>
+          <label class="set-field"><span>Часовой пояс склада — по нему «сегодня», номера поставок и утренняя сводка</span><select id="setTz" class="mp-field"></select></label>
+          <label class="set-field"><span>Как ещё вас называют продавцы в своих складах на WB — через запятую</span><input id="setWbNames" class="mp-field" maxlength="300" placeholder="например: Восток, VSKHD"><small class="set-help">По названию Аргус сам отличает ваши склады у продавца от складов других фулфилментов.</small></label>
+          <div class="set-actions"><button class="wh-onboarding-btn primary" type="button" onclick="saveSettings()">Сохранить</button><span id="setResult" class="set-help"></span></div>
+        </div>
       </div>
     </div>
 

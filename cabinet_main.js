@@ -71,11 +71,16 @@
   }).then(r => { if (r.ok) document.getElementById('leadAdminLink').style.display = 'block'; }).catch(() => {});
 
   let warehouseName = '';
+  let whSettings = null;   // ответы анкеты склада (GET /api/warehouses/me)
 
   async function loadWarehouseInfo(){
     try{
       const wh = await apiFetch('/api/warehouses/me');
+      whSettings = wh;
       warehouseName = wh.name;
+      // Анкета не заполнена — отметка у «Настройки склада».
+      const setBadge = document.getElementById('settingsBadge');
+      if(setBadge) setBadge.classList.toggle('show', !wh.setup_at);
       document.getElementById('whSelectLabel').textContent = wh.name + (wh.city ? ' · ' + wh.city : '');
       // Код склада на экране «Сотрудники» до сих пор был из макета — 7734,
       // склада с таким кодом не существует. Владелец читал его как настоящий,
@@ -204,7 +209,7 @@
     }
     // «?.»: у менеджера части пунктов меню нет вовсе (их убирает блок
     // инициализации), и без проверки кабинет падал при первом же открытии.
-    for(const v of ['chat', 'journal', 'orders', 'supplies', 'receipts', 'products', 'warehouse', 'mp', 'staff', '1c', 'inv', 'acts', 'billing']){
+    for(const v of ['chat', 'journal', 'orders', 'supplies', 'receipts', 'products', 'warehouse', 'mp', 'staff', '1c', 'inv', 'acts', 'billing', 'settings']){
       document.getElementById('view-' + v)?.classList.toggle('active', view === v);
       document.getElementById('nav-' + v)?.classList.toggle('active', view === v);
     }
@@ -228,6 +233,7 @@
     // на другую вкладку и обратно. Поэтому старт теперь идёт через эту же
     // функцию (см. блок инициализации), а не через классы в HTML.
     if(view==='mp'){ loadMarketplaces(); }
+    if(view==='settings'){ loadSettings(); }
     if(view==='inv'){ loadInventory(); }
     if(view==='orders'){ loadMpOrders(); }
     if(view==='supplies'){ loadSupplies(); }
@@ -4808,6 +4814,68 @@
     loadWbOffices();
   }
 
+  /* ============ Настройки склада — анкета ============
+     Как работает склад, решает его владелец ответами здесь. Аргус под них
+     подстраивается; под конкретный склад код не переделывают. */
+  const TIMEZONES = [
+    ['Europe/Kaliningrad', 'Калининград, UTC+2'], ['Europe/Moscow', 'Москва, UTC+3'], ['Europe/Samara', 'Самара, UTC+4'],
+    ['Asia/Yekaterinburg', 'Екатеринбург, UTC+5'], ['Asia/Omsk', 'Омск, UTC+6'], ['Asia/Novosibirsk', 'Новосибирск, UTC+7'],
+    ['Asia/Krasnoyarsk', 'Красноярск, UTC+7'], ['Asia/Irkutsk', 'Иркутск, UTC+8'], ['Asia/Yakutsk', 'Якутск, UTC+9'],
+    ['Asia/Vladivostok', 'Владивосток, UTC+10'], ['Asia/Magadan', 'Магадан, UTC+11'], ['Asia/Kamchatka', 'Камчатка, UTC+12'],
+    ['Europe/Minsk', 'Минск, UTC+3'], ['Asia/Almaty', 'Алматы, UTC+5'], ['Asia/Tashkent', 'Ташкент, UTC+5'],
+  ];
+  async function loadSettings(){
+    try{ whSettings = await apiFetch('/api/warehouses/me'); }
+    catch(e){ showWhToast('Настройки не загрузились: ' + e.message); return; }
+    const s = whSettings;
+    document.getElementById('setName').value = s.name || '';
+    document.getElementById('setCity').value = s.city || '';
+    document.getElementById('setLegal').value = s.legal_name || '';
+    document.querySelectorAll('input[name="setStock"]').forEach(r => { r.checked = r.value === s.stock_source; });
+    document.querySelectorAll('input[name="setSupplies"]').forEach(r => { r.checked = r.value === s.wb_supplies_by; });
+    const tz = document.getElementById('setTz');
+    const zones = TIMEZONES.some(z => z[0] === s.timezone) ? TIMEZONES : [[s.timezone, s.timezone], ...TIMEZONES];
+    tz.innerHTML = zones.map(z => '<option value="' + escapeHTML(z[0]) + '"' + (z[0] === s.timezone ? ' selected' : '') + '>' + escapeHTML(z[1]) + '</option>').join('');
+    document.getElementById('setWbNames').value = (s.wb_names || []).join(', ');
+    document.getElementById('setResult').textContent = s.setup_at ? '' : 'Ответьте на вопросы и нажмите «Сохранить».';
+  }
+  async function saveSettings(){
+    const pick = (n) => (document.querySelector('input[name="' + n + '"]:checked') || {}).value;
+    const body = {
+      name: document.getElementById('setName').value.trim(),
+      city: document.getElementById('setCity').value.trim(),
+      legalName: document.getElementById('setLegal').value.trim(),
+      timezone: document.getElementById('setTz').value,
+      wbNames: document.getElementById('setWbNames').value.split(',').map(x => x.trim()).filter(Boolean),
+    };
+    const stock = pick('setStock'), supplies = pick('setSupplies');
+    if(stock) body.stockSource = stock;
+    if(supplies) body.wbSuppliesBy = supplies;
+    if(!body.name){ showWhToast('Название склада не может быть пустым.'); return; }
+    if(!stock || !supplies){ showWhToast('Ответьте на оба вопроса: про учёт остатков и про поставки WB.'); return; }
+    // Смена учёта меняет «Всего товара» у всех продавцов — показываем, насколько.
+    if(whSettings && whSettings.stock_source && stock !== whSettings.stock_source){
+      let totals = null;
+      try{ totals = await apiFetch('/api/warehouses/me/stock-sources'); } catch(e){ totals = null; }
+      const n = (v) => Number(v || 0).toLocaleString('ru-RU');
+      const ok = await askConfirm((stock === 'argus' ? 'Считать остатки по ячейкам Аргуса, а не по 1С?' : 'Считать остатки по 1С, а не по ячейкам Аргуса?')
+        + '\n\n' + (totals ? 'Сейчас товара продавцов: по 1С — ' + n(totals.onec) + ' шт., в ячейках Аргуса — ' + n(totals.cells) + ' шт. '
+          + 'У продавцов «Всего товара» станет ' + (stock === 'argus' ? 'числом из ячеек' : 'числом из 1С') + '. ' : '')
+        + (stock === 'argus' ? 'Если товар ещё не разложен по ячейкам в Аргусе, у продавцов будет меньше, чем есть на самом деле.'
+          : 'Числа появятся после первого обмена с 1С.'));
+      if(!ok) return;
+    }
+    body.setupDone = true;
+    try{
+      whSettings = await apiFetch('/api/warehouses/me', { method: 'PATCH', body });
+      document.getElementById('setResult').textContent = 'Сохранено.';
+      document.getElementById('settingsBadge').classList.remove('show');
+      loadWarehouseInfo();
+      showWhToast('Настройки склада сохранены.');
+    } catch(e){ showWhToast('Не сохранилось: ' + e.message); }
+  }
+  window.saveSettings = saveSettings;
+
   /* ============ Склады WB ============
      Продавец заводит на WB «склад продавца» под каждый фулфилмент и город.
      Аргус берёт в работу заказы только складов, отмеченных вашими: их
@@ -4845,10 +4913,10 @@
       + '<div class="staff-title" style="font-size:15px;">Куда вы возите на WB</div>'
       + '<div class="staff-sub">Пункты приёмки WB, куда вы отвозите поставки. Склад продавца на WB, привязанный к такому пункту и с «'
       + escapeHTML(ff) + '» в названии, Аргус отметит вашим сам; остальные отмечает продавец в своём кабинете или вы — «Склады WB» у продавца ниже. '
-      + 'Заказы Аргус забирает только с ваших складов, а пока у продавца ни один склад не отмечен — со всех.</div>'
+      + 'Заказы Аргус забирает только с ваших складов.</div>'
       + (on.length
           ? on.map(o => row(o, '<span class="mp-act warn" onclick="setWbOffice(\'' + o.id + '\', false)">Убрать</span>')).join('')
-          : '<div class="mp-card-sub wbo-warn" style="margin:6px 0;">Пункты ещё не указаны — Аргус пока забирает заказы со всех складов продавцов.</div>')
+          : '<div class="mp-card-sub wbo-warn" style="margin:6px 0;">Пункты не указаны — заказы с WB не забираются. Добавьте пункты, куда вы возите.</div>')
       + (hint.length ? '<div class="wbo-head">Похоже на ваши — у продавцов есть склады с вашим именем'
           + (hint.length > 1 ? ' · <span class="mp-act" onclick="addAllWbOffices()">Добавить все ' + hint.length + '</span>' : '') + ':</div>'
           + hint.map(o => row(o, add(o))).join('') : '')
@@ -4923,7 +4991,7 @@
       : (w.ours ? 'отметил ' : 'снял ') + w.decidedBy;
     body.innerHTML = '<div class="staff-sub" style="margin-bottom:6px;">Отметьте склады продавца на WB, товар для которых лежит у вас. '
       + 'Заказы Аргус забирает только с отмеченных; заказы остальных складов убирает из работы, не удаляя. На WB ничего не меняется.</div>'
-      + (!d.active ? '<div class="oc-note wbo-warn">Ни один склад не отмечен — Аргус забирает заказы со всех складов продавца на WB, в том числе у других фулфилментов.</div>' : '')
+      + (!d.active ? '<div class="oc-note wbo-warn">Ни один склад не отмечен — заказы этого продавца не забираются. Отметьте склады, товар для которых лежит у вас.</div>' : '')
       + (!d.officesConfigured ? '<div class="oc-note">Сначала укажите «Куда вы возите на WB» на экране «Площадки» — здесь появятся склады продавца на этих пунктах.</div>' : '')
       + (d.error ? '<div class="oc-note">WB не отдал список складов: ' + escapeHTML(d.error) + '. Аргус попробует ещё раз сам.</div>' : '')
       + d.warehouses.map(w => '<label class="wbw-row"><input type="checkbox" ' + (w.ours ? 'checked' : '')
@@ -5120,12 +5188,14 @@
           + cred.marketplace + '\')">Отключить</span>'
         : '<span class="mp-act" onclick="connectMpFor(\'' + c.id + '\')">Подключить площадку</span>';
       const ws = (wbOffices.sellers || []).find((s) => s.companyId === c.id);
+      const writeHint = cred && cred.marketplace === 'wb' && !cred.writeEnabled && whSettings && whSettings.wb_supplies_by === 'ff'
+        ? '<div class="mp-card-sub wbo-warn">Поставки на WB оформляете вы — включите «Разрешить менять статусы», если продавец согласен.</div>'
+        : '';
       const wbLine = cred && cred.marketplace === 'wb'
         ? '<div class="mp-card-sub">' + (!ws ? 'Склады WB ещё не прочитаны.'
             : ws.ours ? 'Склады WB: ваших ' + ws.ours + ' из ' + ws.total
               + (ws.hidden ? ' · заказов других фулфилментов не в работе: ' + ws.hidden : '')
-            : '<span class="wbo-warn">Склады WB не отмечены — заказы забираются со всех ' + ws.total + ' '
-              + pluralRu(ws.total, 'склада', 'складов', 'складов') + ' продавца.</span>')
+            : '<span class="wbo-warn">Ни один склад WB продавца не отмечен вашим — его заказы не забираются.</span>')
           + ' <span class="mp-act" onclick="openWbWarehouses(\'' + c.id + '\')">Склады WB</span></div>'
         : '';
       return '<div class="mp-card ' + st.css + '">'
@@ -5155,7 +5225,7 @@
             : '<div class="mp-card-sub">' + (hasKey
                 ? 'Кабинет продавца выдан — клиент видит свой остаток. Заказы с маркетплейса пока не приходят.'
                 : 'Ни кабинета, ни площадки. Клиент есть только в накладных.') + '</div>')
-        + wbLine
+        + wbLine + writeHint
         + '<div class="mp-card-acts">' + acts + '</div>'
         + '</div>';
     });
@@ -6377,7 +6447,11 @@
     }, 300);
   };
   window.setOrdersShipDate = (companyId, value) => { ordersShipDate = value; renderPartnerOrders(companyId); };
-  const moscowToday = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Moscow' });
+  // «Сегодня» — по поясу склада (настройки склада), не по часам компьютера.
+  const moscowToday = () => {
+    try { return new Date().toLocaleDateString('sv-SE', { timeZone: (whSettings && whSettings.timezone) || 'Europe/Moscow' }); }
+    catch(e){ return new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Moscow' }); }
+  };
   function loadShippingPoints(companyId){
     if(ordersPoints[companyId]) return;
     ordersPoints[companyId] = 'loading';
@@ -7229,7 +7303,7 @@
   // дверь и не сыпал отказами.
   const CAN_WAREHOUSE = !IS_MANAGER || (authPayload.grants || []).includes('warehouse');
   if(IS_MANAGER){
-    const hidden = ['nav-chat', 'nav-staff', 'nav-1c', 'nav-mp'];
+    const hidden = ['nav-chat', 'nav-staff', 'nav-1c', 'nav-mp', 'nav-settings'];
     if(!CAN_WAREHOUSE) hidden.push('nav-warehouse', 'nav-inv');
     // Расчёты — право «Тариф и деньги».
     if(!(authPayload.grants || []).includes('billing')) hidden.push('nav-billing');
