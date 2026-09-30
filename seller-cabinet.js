@@ -316,6 +316,9 @@
     ws.views = [{ state: 'frozen', ySplit: head }];
     ws.autoFilter = { from: { row: head, column: 1 }, to: { row: head + rows.length, column: last } };
     ws.pageSetup.printTitlesRow = `${head}:${head}`;
+    await saveXlsx(wb, file);
+  }
+  async function saveXlsx(wb, file) {
     const buf = await wb.xlsx.writeBuffer();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
@@ -613,11 +616,14 @@
         + dropdown('p-extra', { label: 'Ещё фильтры', multi: true, value: ui.extra, options: EXTRA, onPick: (v) => { if (ui.extra.has(v)) ui.extra.delete(v); else ui.extra.add(v); ui.shown = state.prefs.rows; renderProducts(); } })
         + (categories.length > 1 ? dropdown('p-cat', { label: 'Категория', value: ui.category, options: [{ value: 'all', text: 'Все' }, ...categories.map((c) => ({ value: c, text: c }))], onPick: (v) => { ui.category = v; ui.shown = state.prefs.rows; renderProducts(); } }) : '')
         + resetLink('products'),
-        columnChooser('products', PRODUCT_COLUMNS, renderProducts) + excelButton)
+        columnChooser('products', PRODUCT_COLUMNS, renderProducts) + excelButton
+        + `<button class="button" type="button" data-wb-stock title="Файл для WB: «Остатки» → склад продавца → «Загрузить Excel»">${icon('download')}Остатки для WB</button>`)
       + '<div id="rows"></div>';
     const shortBtn = $('view').querySelector('[data-shortage]');
     if (shortBtn) shortBtn.onclick = () => { if (ui.extra.has('shortage')) ui.extra.delete('shortage'); else ui.extra.add('shortage'); ui.shown = state.prefs.rows; renderProducts(); };
     wireView(ui, renderProducts, renderProductRows, exportProducts);
+    const wbBtn = $('view').querySelector('[data-wb-stock]');
+    wbBtn.onclick = () => runExport(wbBtn, exportWbStock);
     renderProductRows();
   }
   function renderProductRows() {
@@ -651,6 +657,37 @@
       { header: 'Карточка WB', type: 'link', get: (r) => wbLink(wbIds(r.sku)[0]) },
     ],
   });
+
+  // Файл для загрузки остатков в WB (FBS): как шаблон WB — одна таблица
+  // «Баркод | Количество», первая строка — заголовки, без шапки. Число —
+  // «Доступно к продаже»: заказы, которые WB уже принял, он держит сам.
+  // Все товары, без учёта фильтров: ноль тоже нужен — WB снимет товар с продажи.
+  async function exportWbStock() {
+    const lines = []; const noCode = []; const manyCodes = []; const noQty = [];
+    for (const r of state.data.stock) {
+      const codes = meta(r.sku).wbBarcodes || []; const qty = availableQty(r);
+      if (!codes.length) noCode.push(productName(r));
+      else if (codes.length > 1) manyCodes.push(productName(r));
+      else if (qty == null) noQty.push(productName(r));
+      else lines.push([codes[0], Math.max(0, qty)]);
+    }
+    if (!lines.length) { toast('Нечего выгружать: ни у одного товара нет баркода WB и остатка.'); return; }
+    await loadExcel();
+    const wb = new window.ExcelJS.Workbook(); wb.creator = 'Аргус'; wb.created = new Date();
+    const ws = wb.addWorksheet('Остатки');
+    ws.addRow(['Баркод', 'Количество']);
+    lines.forEach((l) => ws.addRow(l));
+    ws.getColumn(1).numFmt = '@'; ws.getColumn(1).width = 18; ws.getColumn(2).width = 12;
+    ws.getRow(1).font = { bold: true };
+    await saveXlsx(wb, 'Остатки для WB');
+    const names = (list) => list.slice(0, 3).map((x) => '«' + x + '»').join(', ') + (list.length > 3 ? ' и ещё ' + (list.length - 3) : '');
+    const left = [
+      noCode.length && `без баркода WB (по ним ещё не было заказов) — ${names(noCode)}`,
+      manyCodes.length && `несколько баркодов WB — ${names(manyCodes)}`,
+      noQty.length && `остаток ещё не получен — ${names(noQty)}`,
+    ].filter(Boolean);
+    toast(`В файле ${counted(lines.length, 'товар', 'товара', 'товаров')}.` + (left.length ? ' Не вошли: ' + left.join('; ') + '.' : ''));
+  }
 
   // ---------- Товары: возвраты ----------
   const RETURN_STATUS = { open: ['Ждёт разбора', 'waiting'], in_progress: ['Разбирается', 'working'], completed: ['Разобран', 'ready'] };
