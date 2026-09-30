@@ -4805,7 +4805,157 @@
     if(companies.length === 0) await loadCompanies();
     renderMarketplaces();
     loadUnresolved();
+    loadWbOffices();
   }
+
+  /* ============ Склады WB ============
+     Продавец заводит на WB «склад продавца» под каждый фулфилмент и город.
+     Аргус берёт в работу заказы только складов, отмеченных вашими: их
+     отмечает правило (ваш пункт приёмки + ваше имя в названии), продавец
+     в своём кабинете или вы здесь. WB Аргус только читает. */
+  let wbOffices = { offices: [], sellers: [], ffName: '' };
+  async function loadWbOffices(){
+    try{ wbOffices = await apiFetch('/api/marketplaces/wb/offices'); }
+    catch(e){ wbOffices = { offices: [], sellers: [], ffName: '' }; }
+    renderWbOffices();
+    renderMpCards();
+  }
+  const wbPlace = (o) => [o.city, o.address || o.name].filter(Boolean).join(', ') || ('пункт WB ' + o.id);
+  function wbMoved(r){
+    return (r && r.hidden ? ' Из работы убрано заказов других фулфилментов: ' + r.hidden + '.' : '')
+      + (r && r.restored ? ' Вернулось в работу заказов: ' + r.restored + '.' : '');
+  }
+  function renderWbOffices(){
+    const box = document.getElementById('wbOffices');
+    if(!box) return;
+    if(!marketplaces.some(m => m.marketplace === 'wb')){ box.innerHTML = ''; return; }
+    const ff = wbOffices.ffName || 'ваш склад';
+    const on = wbOffices.offices.filter(o => o.configured);
+    const hint = wbOffices.offices.filter(o => !o.configured && o.ourNames.length);
+    const rest = wbOffices.offices.filter(o => !o.configured && !o.ourNames.length);
+    const row = (o, act) => '<div class="wbo-row"><div><div class="wbo-place">' + escapeHTML(wbPlace(o)) + '</div>'
+      + '<div class="mp-card-sub">' + (o.warehouses
+          ? o.warehouses + ' ' + pluralRu(o.warehouses, 'склад', 'склада', 'складов') + ' продавцов'
+            + (o.sellers ? ' у ' + o.sellers + ' ' + pluralRu(o.sellers, 'продавца', 'продавцов', 'продавцов') : '')
+          : 'складов продавцов на нём сейчас нет')
+      + (o.ourNames.length ? ' · с вашим именем: ' + o.ourNames.map(n => '«' + escapeHTML(n) + '»').join(', ') : '')
+      + '</div></div>' + act + '</div>';
+    const add = (o) => '<span class="mp-act" onclick="setWbOffice(\'' + o.id + '\', true)">Добавить</span>';
+    box.innerHTML = '<div class="wbo">'
+      + '<div class="staff-title" style="font-size:15px;">Куда вы возите на WB</div>'
+      + '<div class="staff-sub">Пункты приёмки WB, куда вы отвозите поставки. Склад продавца на WB, привязанный к такому пункту и с «'
+      + escapeHTML(ff) + '» в названии, Аргус отметит вашим сам; остальные отмечает продавец в своём кабинете или вы — «Склады WB» у продавца ниже. '
+      + 'Заказы Аргус забирает только с ваших складов, а пока у продавца ни один склад не отмечен — со всех.</div>'
+      + (on.length
+          ? on.map(o => row(o, '<span class="mp-act warn" onclick="setWbOffice(\'' + o.id + '\', false)">Убрать</span>')).join('')
+          : '<div class="mp-card-sub wbo-warn" style="margin:6px 0;">Пункты ещё не указаны — Аргус пока забирает заказы со всех складов продавцов.</div>')
+      + (hint.length ? '<div class="wbo-head">Похоже на ваши — у продавцов есть склады с вашим именем'
+          + (hint.length > 1 ? ' · <span class="mp-act" onclick="addAllWbOffices()">Добавить все ' + hint.length + '</span>' : '') + ':</div>'
+          + hint.map(o => row(o, add(o))).join('') : '')
+      + (rest.length ? '<details class="wbo-more"><summary>Другие пункты приёмки у ваших продавцов — ' + rest.length + '</summary>'
+          + rest.map(o => row(o, add(o))).join('') + '</details>' : '')
+      + (!wbOffices.offices.length ? '<div class="mp-card-sub">Склады продавцов на WB ещё не прочитаны — Аргус читает их при обмене с WB, раз в пять минут.</div>' : '')
+      + '</div>';
+  }
+  async function setWbOffice(id, on){
+    const o = wbOffices.offices.find(x => x.id === id);
+    if(!o) return;
+    const ff = wbOffices.ffName || 'ваш склад';
+    const q = on
+      ? 'Добавить пункт приёмки «' + wbPlace(o) + '»?\n\n'
+        + (o.ourNames.length ? 'Вашими станут склады продавцов на нём с «' + ff + '» в названии: ' + o.ourNames.map(n => '«' + n + '»').join(', ') + '. ' : '')
+        + 'У таких продавцов Аргус будет забирать заказы только с ваших складов, а заказы остальных их складов уберёт из работы — '
+        + 'не удалит: отметите склад вашим, заказы вернутся. Если вы возите и в другие пункты, добавьте их тоже, иначе заказы тех складов уйдут из работы.'
+      : 'Убрать пункт приёмки «' + wbPlace(o) + '»?\n\n'
+        + 'Склады продавцов на нём, которые Аргус отметил вашими сам, перестанут быть вашими — заказы с них уйдут из работы. '
+        + 'Склады, отмеченные людьми, останутся как есть.';
+    if(!await askConfirm(q)) return;
+    try{
+      const r = await apiFetch('/api/marketplaces/wb/offices/' + encodeURIComponent(id), { method: 'PUT', body: { on } });
+      showWhToast((on ? 'Пункт добавлен.' : 'Пункт убран.') + wbMoved(r)
+        + ' Заказы, у которых склад WB ещё не известен, Аргус разберёт при следующем обмене.');
+      await loadMarketplaces();
+    } catch(e){ showWhToast('Не удалось: ' + e.message); }
+  }
+  window.setWbOffice = setWbOffice;
+  async function addAllWbOffices(){
+    const hint = wbOffices.offices.filter(o => !o.configured && o.ourNames.length);
+    if(!hint.length) return;
+    const ff = wbOffices.ffName || 'ваш склад';
+    if(!await askConfirm('Добавить ' + hint.length + ' ' + pluralRu(hint.length, 'пункт', 'пункта', 'пунктов') + ' приёмки?\n\n'
+        + hint.map(o => wbPlace(o) + ' — ' + o.ourNames.map(n => '«' + n + '»').join(', ')).join('\n') + '\n\n'
+        + 'Склады продавцов на них с «' + ff + '» в названии станут вашими. Заказы остальных складов этих продавцов уйдут из работы — не удалятся.')) return;
+    let hidden = 0, restored = 0;
+    try{
+      for(const o of hint){
+        const r = await apiFetch('/api/marketplaces/wb/offices/' + encodeURIComponent(o.id), { method: 'PUT', body: { on: true } });
+        hidden += r.hidden || 0; restored += r.restored || 0;
+      }
+      showWhToast('Пункты добавлены.' + wbMoved({ hidden, restored }));
+    } catch(e){ showWhToast('Не все пункты добавились: ' + e.message); }
+    await loadMarketplaces();
+  }
+  window.addAllWbOffices = addAllWbOffices;
+
+  let wbWh = { companyId: null, data: null, error: '' };
+  async function openWbWarehouses(companyId){
+    wbWh = { companyId, data: null, error: '' };
+    const c = companies.find(x => x.id === companyId);
+    document.getElementById('wbWhTitle').textContent = 'Склады WB — ' + (c ? c.name : 'продавец');
+    document.getElementById('wbWhModal').classList.add('open');
+    renderWbWarehouses();
+    try{ const d = await apiFetch('/api/marketplaces/' + companyId + '/wb/warehouses'); if(wbWh.companyId === companyId) wbWh.data = d; }
+    catch(e){ if(wbWh.companyId === companyId) wbWh.error = e.message; }
+    renderWbWarehouses();
+  }
+  window.openWbWarehouses = openWbWarehouses;
+  function closeWbWarehouses(){ document.getElementById('wbWhModal').classList.remove('open'); }
+  window.closeWbWarehouses = closeWbWarehouses;
+  function renderWbWarehouses(){
+    const body = document.getElementById('wbWhBody');
+    if(!body) return;
+    if(wbWh.error){ body.innerHTML = '<div class="oc-note">Не загрузилось: ' + escapeHTML(wbWh.error) + '</div>'; return; }
+    const d = wbWh.data;
+    if(!d){ body.innerHTML = '<div class="mp-card-sub">Загружаю склады продавца…</div>'; return; }
+    const ff = d.ffName || 'ваш склад';
+    const who = (w) => w.auto
+      ? (w.ours ? 'отмечен Аргусом: в названии «' + ff + '»' : 'не отмечен' + (w.nameMatches ? '' : ' — в названии нет «' + ff + '»'))
+      : (w.ours ? 'отметил ' : 'снял ') + w.decidedBy;
+    body.innerHTML = '<div class="staff-sub" style="margin-bottom:6px;">Отметьте склады продавца на WB, товар для которых лежит у вас. '
+      + 'Заказы Аргус забирает только с отмеченных; заказы остальных складов убирает из работы, не удаляя. На WB ничего не меняется.</div>'
+      + (!d.active ? '<div class="oc-note wbo-warn">Ни один склад не отмечен — Аргус забирает заказы со всех складов продавца на WB, в том числе у других фулфилментов.</div>' : '')
+      + (!d.officesConfigured ? '<div class="oc-note">Сначала укажите «Куда вы возите на WB» на экране «Площадки» — здесь появятся склады продавца на этих пунктах.</div>' : '')
+      + (d.error ? '<div class="oc-note">WB не отдал список складов: ' + escapeHTML(d.error) + '. Аргус попробует ещё раз сам.</div>' : '')
+      + d.warehouses.map(w => '<label class="wbw-row"><input type="checkbox" ' + (w.ours ? 'checked' : '')
+          + ' onchange="markWbWarehouse(\'' + w.id + '\', this.checked, this)"><span><b>' + escapeHTML(w.name) + '</b>'
+          + (w.gone ? ' <span class="mp-chip stale">удалён на WB</span>' : '')
+          + '<span class="mp-card-sub">' + escapeHTML([w.office.city, w.office.address || w.office.name].filter(Boolean).join(', ') || 'пункт приёмки не указан') + '</span>'
+          + '<span class="mp-card-sub">В работе заказов: ' + w.openOrders + (w.hidden ? ' · не в работе: ' + w.hidden : '') + ' · ' + escapeHTML(who(w)) + '</span>'
+          + '</span></label>').join('')
+      + (!d.warehouses.length && d.officesConfigured ? '<div class="mp-card-sub">На ваших пунктах приёмки у продавца складов нет.</div>' : '')
+      + (d.otherCount ? '<div class="mp-card-sub" style="margin-top:12px;">Ещё ' + d.otherCount + ' ' + pluralRu(d.otherCount, 'склад', 'склада', 'складов')
+          + ' продавца — на пунктах приёмки, куда вы не возите' + (d.otherHidden ? '; заказов с них не в работе: ' + d.otherHidden : '') + '.</div>' : '')
+      + (d.unknownOrders ? '<div class="mp-card-sub">У ' + d.unknownOrders + ' ' + pluralRu(d.unknownOrders, 'заказа', 'заказов', 'заказов')
+          + ' в работе склад WB ещё не известен — Аргус узнаёт его у WB при обмене.</div>' : '')
+      + '<div class="mp-card-sub" style="margin-top:8px;">' + (d.stocksError ? 'Остатки WB не читаются: ' + escapeHTML(d.stocksError)
+          : d.stocksAt ? 'Остатки WB по вашим складам прочитаны ' + escapeHTML(formatLastSeen(d.stocksAt)) : 'Остатки WB ещё не прочитаны') + '.</div>';
+  }
+  async function markWbWarehouse(id, ours, box){
+    const w = wbWh.data && wbWh.data.warehouses.find(x => x.id === id);
+    if(!ours && w && !await askConfirm('Снять отметку со склада «' + w.name + '»?\n\nЗаказы с него уйдут из работы'
+        + (w.openOrders ? ' (сейчас в работе ' + w.openOrders + ')' : '') + ' — не удалятся: отметите снова, вернутся. '
+        + 'Заказы, по которым склад уже работает (в поставке, с отбором), останутся.')){ box.checked = true; return; }
+    box.disabled = true;
+    const companyId = wbWh.companyId;
+    try{
+      const r = await apiFetch('/api/marketplaces/' + companyId + '/wb/warehouses/' + encodeURIComponent(id), { method: 'PATCH', body: { ours } });
+      showWhToast((ours ? 'Склад отмечен вашим.' : 'Отметка снята.') + wbMoved(r));
+      const d = await apiFetch('/api/marketplaces/' + companyId + '/wb/warehouses');
+      if(wbWh.companyId === companyId){ wbWh.data = d; renderWbWarehouses(); }
+      loadMarketplaces();
+    } catch(e){ showWhToast('Не удалось: ' + e.message); box.checked = !ours; box.disabled = false; }
+  }
+  window.markWbWarehouse = markWbWarehouse;
 
   let mpPending = [];
   let mpUnresolved = [];
@@ -4969,6 +5119,15 @@
           + '<span class="mp-act warn" onclick="disconnectMarketplace(\'' + c.id + '\', \''
           + cred.marketplace + '\')">Отключить</span>'
         : '<span class="mp-act" onclick="connectMpFor(\'' + c.id + '\')">Подключить площадку</span>';
+      const ws = (wbOffices.sellers || []).find((s) => s.companyId === c.id);
+      const wbLine = cred && cred.marketplace === 'wb'
+        ? '<div class="mp-card-sub">' + (!ws ? 'Склады WB ещё не прочитаны.'
+            : ws.ours ? 'Склады WB: ваших ' + ws.ours + ' из ' + ws.total
+              + (ws.hidden ? ' · заказов других фулфилментов не в работе: ' + ws.hidden : '')
+            : '<span class="wbo-warn">Склады WB не отмечены — заказы забираются со всех ' + ws.total + ' '
+              + pluralRu(ws.total, 'склада', 'складов', 'складов') + ' продавца.</span>')
+          + ' <span class="mp-act" onclick="openWbWarehouses(\'' + c.id + '\')">Склады WB</span></div>'
+        : '';
       return '<div class="mp-card ' + st.css + '">'
         + '<div class="mp-card-top">'
         +   '<div><div class="mp-card-name">' + escapeHTML(c.name) + '</div>'
@@ -4996,6 +5155,7 @@
             : '<div class="mp-card-sub">' + (hasKey
                 ? 'Кабинет продавца выдан — клиент видит свой остаток. Заказы с маркетплейса пока не приходят.'
                 : 'Ни кабинета, ни площадки. Клиент есть только в накладных.') + '</div>')
+        + wbLine
         + '<div class="mp-card-acts">' + acts + '</div>'
         + '</div>';
     });
@@ -5133,7 +5293,8 @@
     try{
       const r = await apiFetch('/api/marketplaces/sync', { method: 'POST', body: { companyId } });
       let text = 'Заданий у площадки: <b>' + r.seen + '</b>. Новых заказов заведено: <b>'
-        + r.created + '</b>, уже были: ' + r.existed + '.';
+        + r.created + '</b>, уже были: ' + r.existed + '.'
+        + (r.foreign ? ' Со складов продавца у других фулфилментов: ' + r.foreign + ' — в работу не взяты.' : '');
       if(r.unmapped && r.unmapped.length){
         // Несопоставленное показываем всегда и поимённо: такой заказ склад
         // физически не соберёт, и узнать об этом надо здесь, а не у полки.
@@ -6148,6 +6309,7 @@
     ordersSelected = ordersSelectedFor === companyId
       ? new Set([...ordersSelected].filter(id => rows.some(o => o.id === id && o.ready)))
       : new Set();
+    if(ordersSelectedFor !== companyId) ordersWbWh = 'all';
     ordersSelectedFor = companyId;
     renderPartnerOrders(companyId);
   }
@@ -6257,7 +6419,15 @@
   window.setOrdersShortOnly = setOrdersShortOnly;
   // Видна ли строка: поиск и «Только с нехваткой». Галка «выбрать все» стоит
   // над видимым списком и обязана означать ровно его.
-  const orderVisible = (o) => matchesOrderSearch(o) && (!ordersShortOnly || Boolean(orderShortLevel(o)));
+  const orderVisible = (o) => matchesOrderSearch(o) && (!ordersShortOnly || Boolean(orderShortLevel(o)))
+    && (ordersWbWh === 'all' || (o.wbWarehouseId || '') === (ordersWbWh === 'none' ? '' : ordersWbWh));
+  // Склад продавца на WB: поставка WB берёт заказы только одного склада.
+  let ordersWbWh = 'all';
+  function setOrdersWbWh(companyId, value){
+    ordersWbWh = value;
+    renderPartnerOrders(companyId);
+  }
+  window.setOrdersWbWh = setOrdersWbWh;
 
   // Необязательные столбцы — человек включает сам; выбор помним в этом
   // браузере отдельно на склад и роль: владелец и менеджер за одним
@@ -6371,6 +6541,10 @@
     if(isWb) loadShippingPoints(companyId);
     const points = isWb && Array.isArray(ordersPoints[companyId]) ? ordersPoints[companyId] : null;
     const needShipping = !!points && (!ordersPointId || !ordersShipDate);
+    // WB не примет в одну поставку заказы разных складов продавца.
+    const whNames = new Map(ordersRows.filter(o => o.wbWarehouseId).map(o => [o.wbWarehouseId, o.wbWarehouse]));
+    const pickedWh = [...new Set(ordersRows.filter(o => ordersSelected.has(o.id) && o.wbWarehouseId).map(o => o.wbWarehouseId))];
+    const mixedWh = pickedWh.length > 1;
     // Годный остаток в ячейках Аргуса. Жёлтой строке — сколько нужно: «1» и
     // «нужно 3» читаются как «1 из 3».
     const stockCell = (o) => {
@@ -6393,7 +6567,8 @@
         <td>${escapeHTML(o.name || '—')}<div class="ord-mono">${escapeHTML(o.sku || 'не сопоставлен')}</div></td>
         <td class="ord-mono">${escapeHTML(o.article || '—')}${o.nmId ? `<div class="ord-sub">WB ${escapeHTML(o.nmId)}</div>` : ''}</td>
         <td class="ord-mono">${escapeHTML(o.barcode || '—')}</td>
-        <td>${(o.offices || []).length ? escapeHTML(o.offices.join(', ')) : '<span class="ord-sub">—</span>'}</td>
+        <td>${(o.offices || []).length ? escapeHTML(o.offices.join(', ')) : '<span class="ord-sub">—</span>'}${o.wbWarehouse
+          ? `<div class="ord-sub">склад WB: ${escapeHTML(o.wbWarehouse)}</div>` : ''}</td>
         <td class="num">${o.qty === null ? '—' : o.qty}${o.salePriceKopecks != null
           ? `<div class="ord-sub">${(o.salePriceKopecks / 100).toLocaleString('ru-RU')} ₽</div>` : ''}</td>
         ${withStock ? stockCell(o) : ''}
@@ -6425,9 +6600,10 @@
                value="${escapeHTML(ordersPlace)}" oninput="setOrdersPlace(this.value)">
         <datalist id="ordPlaceList">${[...new Set((supplyRows || []).map(s => s.destination).filter(Boolean))]
           .map(d => `<option value="${escapeHTML(d)}">`).join('')}</datalist>`}
-        <button class="wh-onboarding-btn${n > 0 && !needShipping ? ' primary' : ''}" type="button"
-                onclick="makeSupply('${companyId}')" ${n === 0 || needShipping ? 'disabled' : ''}>
+        <button class="wh-onboarding-btn${n > 0 && !needShipping && !mixedWh ? ' primary' : ''}" type="button"
+                onclick="makeSupply('${companyId}')" ${n === 0 || needShipping || mixedWh ? 'disabled' : ''}>
           ${n === 0 ? 'Выберите заказы для поставки'
+            : mixedWh ? 'Выберите заказы одного склада WB'
             : needShipping ? 'Выберите пункт WB и дату отгрузки'
             : `Составить поставку — ${n} ${pluralRu(n, 'заказ', 'заказа', 'заказов')}`}
         </button>
@@ -6440,11 +6616,19 @@
           return short ? `<span class="ord-meta ord-warn">${short} ${pluralRu(short, 'заказ', 'заказа', 'заказов')}
             из выбранных — товара на полках не хватит</span>` : '';
         })()}
+        ${mixedWh ? `<span class="ord-meta ord-warn">Выбраны заказы ${pickedWh.length} складов WB
+          (${pickedWh.map(id => '«' + escapeHTML(whNames.get(id) || id) + '»').join(', ')}) — WB принимает в поставку заказы только одного склада.
+          Отберите их фильтром «Склад WB».</span>` : ''}
         ${stuck > 0 ? `<span class="ord-meta ord-warn">${stuck} ${
           pluralRu(stuck, 'заказ', 'заказа', 'заказов')} не сопоставить с номенклатурой — свяжите артикул на экране «Площадки», и они починятся</span>` : ''}
         <span class="ord-tools">
           <input class="ord-search" type="search" placeholder="Товар, артикул WB, штрихкод или номер заказа"
                  value="${escapeHTML(ordersSearch)}" oninput="setOrdersSearch('${companyId}', this.value)">
+          ${whNames.size > 1 || ordersWbWh !== 'all' ? `<select class="ord-sort" onchange="setOrdersWbWh('${companyId}', this.value)" aria-label="Склад WB">
+            <option value="all"${ordersWbWh === 'all' ? ' selected' : ''}>Все склады WB</option>
+            ${[...whNames].sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'ru')).map(([id, name]) => `<option value="${escapeHTML(id)}"${ordersWbWh === id ? ' selected' : ''}>${escapeHTML(name)}</option>`).join('')}
+            ${ordersRows.some(o => !o.wbWarehouseId) ? `<option value="none"${ordersWbWh === 'none' ? ' selected' : ''}>Склад WB не известен</option>` : ''}
+          </select>` : ''}
           <select class="ord-sort" onchange="setOrdersSort('${companyId}', this.value)">
             <option value="product"${ordersSort === 'product' ? ' selected' : ''}>По товару</option>
             <option value="number"${ordersSort === 'number' ? ' selected' : ''}>По номеру заказа</option>

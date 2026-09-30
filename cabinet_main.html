@@ -1828,6 +1828,20 @@
   .mp-act{font-size:13px; color:var(--accent-2); cursor:pointer;}
   .mp-act:hover{text-decoration:underline;}
   .mp-act.warn{color:var(--terracotta);}
+  /* Склады WB: куда возит склад и склады продавцов */
+  .wbo{background:var(--panel-2); border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin-bottom:14px;}
+  .wbo .staff-sub{margin:4px 0 10px;}
+  .wbo-row{display:flex; justify-content:space-between; align-items:flex-start; gap:12px; padding:10px 0; border-top:1px solid var(--line-soft);}
+  .wbo-row .mp-act{white-space:nowrap;}
+  .wbo-place{font-size:14px; font-weight:600;}
+  .wbo-head{font-size:13px; color:var(--muted); margin:14px 0 2px;}
+  .wbo-more{margin-top:12px;}
+  .wbo-more summary{font-size:13px; color:var(--accent-2); cursor:pointer;}
+  .wbo-warn{color:var(--yellow);}
+  .wbw-row{display:flex; gap:12px; align-items:flex-start; padding:12px 0; border-top:1px solid var(--line-soft); cursor:pointer;}
+  .wbw-row input{width:18px; height:18px; margin-top:2px; flex:none; accent-color:var(--accent);}
+  .wbw-row b{font-weight:600; overflow-wrap:anywhere;}
+  .wbw-row .mp-card-sub{display:block;}
   /* Ждут сопоставления. Тревожная рамка нарочно: пока строка здесь, заказы
      этого артикула склад собрать не может, и это не «когда-нибудь». */
   .unm-wrap{background:var(--panel-2); border:1px solid var(--terracotta); border-radius:12px; padding:16px;}
@@ -2766,9 +2780,20 @@
         </div>
 
         <div id="mpProgress"></div>
+        <div id="wbOffices"></div>
         <div id="mpUnresolved"></div>
         <div id="mpList"></div>
         <div id="mpSyncResult"></div>
+
+        <div class="wh-modal-overlay" id="wbWhModal" onclick="if(event.target===this) closeWbWarehouses()">
+          <div class="wh-modal" style="max-width:640px;">
+            <div class="wh-modal-head">
+              <div class="wh-modal-title" id="wbWhTitle">Склады WB</div>
+              <button class="panel-close-btn" onclick="closeWbWarehouses()" aria-label="Закрыть">✕</button>
+            </div>
+            <div class="wh-modal-body" id="wbWhBody"></div>
+          </div>
+        </div>
 
         <details class="mp-fold" id="mpConnectFold">
           <summary>Подключить площадку клиенту</summary>
@@ -2923,7 +2948,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <script src="back.js?v=4901b838" defer></script>
 <script src="form-keys.js?v=cd462175" defer></script>
-<script src="cabinet_main.js?v=b8aa5eb9" defer></script>
+<script src="cabinet_main.js?v=9462eb14" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->

@@ -41,6 +41,7 @@
   const PAGES = {
     products: { title: 'Товары', subtitle: 'Сколько вашего товара на складе и сколько можно продавать.', data: 'stock', nav: 'products' },
     returns: { title: 'Товары', subtitle: 'Что вернулось на склад и в каком состоянии.', data: 'documents', nav: 'products' },
+    wb: { title: 'Товары', subtitle: 'Ваши склады на Wildberries у этого фулфилмента.', data: 'wb', nav: 'products' },
     orders: { title: 'Заказы', subtitle: 'Как склад готовит ваши заказы с Wildberries.', data: 'orders', nav: 'orders' },
     supplies: { title: 'Поставки на WB', subtitle: 'Склад собирает их из ваших заказов и везёт на Wildberries.', data: 'supplies', nav: 'supplies' },
     documents: { title: 'Приходы', subtitle: 'Товар, который вы привозите на склад на хранение.', data: 'documents', nav: 'documents' },
@@ -50,7 +51,7 @@
     billing: { title: 'Расчёты', subtitle: 'Сколько стоит работа склада с вашим товаром.', data: null, nav: 'billing' },
   };
   const API_PATH = { stock: '/api/sellers/stock', orders: '/api/sellers/orders', supplies: '/api/sellers/supplies',
-    documents: '/api/sellers/documents', defects: '/api/sellers/defects' };
+    documents: '/api/sellers/documents', defects: '/api/sellers/defects', wb: '/api/sellers/wb-warehouses' };
 
   const blankUi = () => ({ q: '', shown: 0 });
   const state = {
@@ -61,7 +62,8 @@
     ui: {
       products: { ...blankUi(), stock: 'all', orders: 'all', sort: 'name', extra: new Set(), category: 'all' },
       returns: { ...blankUi(), status: 'all', quality: 'all', period: 'all' },
-      orders: { ...blankUi(), status: 'all', period: 'all', supply: 'all', sort: 'new' },
+      wb: { ...blankUi(), confirm: null },
+      orders: { ...blankUi(), status: 'all', period: 'all', supply: 'all', wbwh: 'all', sort: 'new' },
       supplies: { ...blankUi(), status: 'all', dest: 'all', period: 'all', sort: 'new' },
       documents: { ...blankUi(), status: 'all', diff: 'all', period: 'all', sort: 'new' },
       defects: { ...blankUi(), source: 'all', kind: 'all', period: 'all' },
@@ -463,7 +465,11 @@
       if (refresh) { try { const c = await api('/api/sellers/catalog'); if (run !== state.viewRun) return; state.catalog = Object.fromEntries(c.products.map((r) => [r.sku, r])); } catch { toast('Каталог не обновился — показаны прошлые данные.'); } }
       if (refresh || !state.data[key]) {
         const payload = await api(API_PATH[key] + (key === 'stock' && state.owner ? '?view=seller' : ''));
-        if (key === 'stock') { state.data.stock = payload.rows || []; state.summary = payload.summary || null; }
+        if (key === 'stock') {
+          state.data.stock = payload.rows || []; state.summary = payload.summary || null;
+          // Склады WB и выставленное на WB — дополнение: не загрузились — остатки всё равно показываем.
+          try { state.data.wb = await api(API_PATH.wb); state.fetchedAt.wb = new Date(); } catch { state.data.wb = null; }
+        }
         else if (key === 'supplies') { state.data.supplies = payload.rows || []; state.suppliesMore = !!payload.hasMore; }
         else state.data[key] = payload;
         state.fetchedAt[key] = new Date();
@@ -471,7 +477,7 @@
       if (!state.data.orders && key !== 'orders') api(API_PATH.orders).then((o) => { state.data.orders = o; state.fetchedAt.orders = new Date(); renderNav(); }).catch(() => {});
       if (run !== state.viewRun) return;
       const ui = state.ui[state.view]; if (!ui.shown) ui.shown = state.prefs.rows;
-      ({ products: renderProducts, returns: renderReturns, orders: renderOrders, supplies: renderSupplies, documents: renderDocuments, defects: renderDefects })[state.view]();
+      ({ products: renderProducts, returns: renderReturns, wb: renderWb, orders: renderOrders, supplies: renderSupplies, documents: renderDocuments, defects: renderDefects })[state.view]();
       renderNav();
       $('updateTime').textContent = 'Обновлено в ' + clock(state.fetchedAt[key]);
     } catch (e) {
@@ -499,14 +505,15 @@
   state.defaults = {
     products: () => ({ q: '', stock: 'all', orders: 'all', sort: 'name', extra: new Set(), category: 'all' }),
     returns: () => ({ q: '', status: 'all', quality: 'all', period: 'all' }),
-    orders: () => ({ q: '', status: 'all', period: 'all', supply: 'all', sort: 'new' }),
+    orders: () => ({ q: '', status: 'all', period: 'all', supply: 'all', wbwh: 'all', sort: 'new' }),
     supplies: () => ({ q: '', status: 'all', dest: 'all', period: 'all', sort: 'new' }),
     documents: () => ({ q: '', status: 'all', diff: 'all', period: 'all', sort: 'new' }),
     defects: () => ({ q: '', source: 'all', kind: 'all', period: 'all' }),
   };
   const isDefault = (view) => { const d = state.defaults[view](); const ui = state.ui[view]; return Object.keys(d).every((k) => k === 'q' || (d[k] instanceof Set ? ui[k].size === 0 : ui[k] === d[k])); };
   const resetLink = (view) => (isDefault(view) ? '' : '<button type="button" class="reset-filters" data-reset>Сбросить фильтры</button>');
-  const segment = (current) => `<nav class="segmented" aria-label="Товары"><a href="#products" ${current === 'products' ? 'aria-current="page"' : ''}>Остатки</a><a href="#returns" ${current === 'returns' ? 'aria-current="page"' : ''}>Возвраты</a></nav>`;
+  const segment = (current) => `<nav class="segmented" aria-label="Товары">${[['products', 'Остатки'], ['returns', 'Возвраты'], ['wb', 'Склады WB']]
+    .map(([k, t]) => `<a href="#${k}" ${current === k ? 'aria-current="page"' : ''}>${t}</a>`).join('')}</nav>`;
 
   // ---------- Товары: остатки ----------
   const total = (r) => r.total ?? null;
@@ -538,6 +545,7 @@
     { key: 'assembly', title: 'В сборке', cls: 'n', cell: (r) => bucketNum(r, 'assembly') },
     { key: 'transit', title: 'В пути', cls: 'n', cell: (r) => bucketNum(r, 'transit') },
     { key: 'available', title: 'Доступно', cls: 'n', cell: (r) => num(availableQty(r), true) },
+    { key: 'wbStock', title: 'На WB', cls: 'n', cell: wbStockCell },
     { key: 'defective', title: 'Брак', cls: 'n', hidden: true, cell: (r) => num(r.defective || 0) },
     { key: 'category', title: 'Категория', hidden: true, cell: (r) => h(meta(r.sku).category || '—') },
     { key: 'updated', title: 'Учёт на', cls: 'n', hidden: true, cell: (r) => (r.updatedAt ? h(when(r.updatedAt)) : '—') },
@@ -545,7 +553,7 @@
   const STOCK_FILTER = [{ value: 'all', text: 'Все товары' }, { value: 'available', text: 'Есть к продаже' }, { value: 'low', text: 'Заканчивается (≤ 5 шт.)' }, { value: 'none', text: 'Нет к продаже' }];
   const ORDERS_FILTER = [{ value: 'all', text: 'Любые' }, { value: 'any', text: 'Есть заказы' }, { value: 'ordered', text: 'Заказано, ждёт поставки' }, { value: 'assembly', text: 'В сборке' }, { value: 'transit', text: 'В пути на WB' }, { value: 'none', text: 'Без заказов' }];
   const SORTS = [{ value: 'name', text: 'По названию' }, { value: 'availDesc', text: 'Больше доступно' }, { value: 'availAsc', text: 'Меньше доступно' }, { value: 'ordersDesc', text: 'Больше заказов' }, { value: 'totalDesc', text: 'Больше всего на складе' }, { value: 'transitDesc', text: 'Больше в пути' }];
-  const EXTRA = [{ value: 'shortage', text: 'Заказов больше, чем товара' }, { value: 'defect', text: 'Есть брак на складе' }, { value: 'withPhoto', text: 'С фото' }, { value: 'noPhoto', text: 'Без фото' }, { value: 'noWb', text: 'Без артикула WB' }, { value: 'unknown', text: 'Остаток ещё не получен' }];
+  const EXTRA = [{ value: 'shortage', text: 'Заказов больше, чем товара' }, { value: 'wbOver', text: 'На WB больше, чем доступно' }, { value: 'defect', text: 'Есть брак на складе' }, { value: 'withPhoto', text: 'С фото' }, { value: 'noPhoto', text: 'Без фото' }, { value: 'noWb', text: 'Без артикула WB' }, { value: 'unknown', text: 'Остаток ещё не получен' }];
   function filteredProducts() {
     const ui = state.ui.products;
     const rows = state.data.stock.filter((r) => {
@@ -564,6 +572,7 @@
       if (ui.category !== 'all' && (meta(r.sku).category || 'Без категории') !== ui.category) return false;
       const x = ui.extra;
       if (x.has('shortage') && !isShort(r)) return false;
+      if (x.has('wbOver') && !wbOver(r)) return false;
       if (x.has('defect') && !r.defective) return false;
       if (x.has('withPhoto') && !photoUrl(r.sku)) return false;
       if (x.has('noPhoto') && photoUrl(r.sku)) return false;
@@ -588,6 +597,7 @@
     if (ui.orders !== 'all') t.push(ORDERS_FILTER.find((o) => o.value === ui.orders).text.toLowerCase());
     ui.extra.forEach((v) => t.push(EXTRA.find((o) => o.value === v).text.toLowerCase()));
     if (ui.category !== 'all') t.push('категория ' + ui.category);
+    if (ui.wbwh && ui.wbwh !== 'all') t.push('склад WB ' + wbName(ui.wbwh));
     return t.length ? 'фильтр: ' + t.join(', ') : 'все товары';
   }
   function renderProducts() {
@@ -605,20 +615,26 @@
       ['Доступно к продаже', s.available ?? (unknown ? null : sum(availableQty)), 'всего − заказано − в сборке' + (s.unknownCount ? ', по товарам с учётом' : ''), 'main'],
     ];
     const short = rows.filter(isShort).length;
+    const over = rows.filter(wbOver).length;
+    const ours = ourWb();
     const categories = [...new Set(rows.map((r) => meta(r.sku).category || 'Без категории'))].sort((a, b) => a.localeCompare(b, 'ru'));
     $('view').innerHTML = segment('products')
       + `<section class="stock-strip" aria-label="Состояние товаров">${stats.map(([label, value, note, cls]) => `<div class="stat ${cls || ''}"><div class="stat-label">${h(label)}</div><div class="stat-value">${value == null ? '—' : n(value) + '<small>шт.</small>'}</div><div class="stat-note">${h(note).replace('\n', '<br>')}</div></div>`).join('')}</section>`
+      + (over ? `<button type="button" class="alert-line ${ui.extra.has('wbOver') ? 'on' : ''}" data-wb-over>${icon('alert')}<span><b>${counted(over, 'товар', 'товара', 'товаров')}:</b> на WB выставлено больше, чем доступно на складе — WB может продать то, чего нет. Обновите остатки на WB файлом «Остатки для WB».</span><span class="alert-action">${ui.extra.has('wbOver') ? 'Показаны только они' : 'Показать'}</span></button>` : '')
       + (short ? `<button type="button" class="alert-line ${ui.extra.has('shortage') ? 'on' : ''}" data-shortage>${icon('alert')}<span><b>${counted(short, 'товар', 'товара', 'товаров')}:</b> заказов больше, чем товара по учёту — склад проверяет, «Доступно» по ним ноль.</span><span class="alert-action">${ui.extra.has('shortage') ? 'Показаны только они' : 'Показать'}</span></button>` : '')
       + toolbar(searchBox('Название, артикул WB, штрихкод', ui.q),
         dropdown('p-stock', { label: 'Наличие', value: ui.stock, options: STOCK_FILTER, onPick: (v) => { ui.stock = v; ui.shown = state.prefs.rows; renderProducts(); } })
         + dropdown('p-orders', { label: 'Заказы', value: ui.orders, options: ORDERS_FILTER, onPick: (v) => { ui.orders = v; ui.shown = state.prefs.rows; renderProducts(); } })
         + dropdown('p-sort', { label: 'Сортировка', value: ui.sort, options: SORTS, onPick: (v) => { ui.sort = v; renderProducts(); } })
         + dropdown('p-extra', { label: 'Ещё фильтры', multi: true, value: ui.extra, options: EXTRA, onPick: (v) => { if (ui.extra.has(v)) ui.extra.delete(v); else ui.extra.add(v); ui.shown = state.prefs.rows; renderProducts(); } })
+        + (ours.length > 1 ? dropdown('p-wbwh', { label: 'Склад WB', value: ui.wbwh || 'all', options: [{ value: 'all', text: 'Все ваши склады' }, ...ours.map((w) => ({ value: w.id, text: w.name }))], onPick: (v) => { ui.wbwh = v; renderProducts(); } }) : '')
         + (categories.length > 1 ? dropdown('p-cat', { label: 'Категория', value: ui.category, options: [{ value: 'all', text: 'Все' }, ...categories.map((c) => ({ value: c, text: c }))], onPick: (v) => { ui.category = v; ui.shown = state.prefs.rows; renderProducts(); } }) : '')
         + resetLink('products'),
         columnChooser('products', PRODUCT_COLUMNS, renderProducts) + excelButton
         + `<button class="button" type="button" data-wb-stock title="Файл для WB: «Остатки» → склад продавца → «Загрузить Excel»">${icon('download')}Остатки для WB</button>`)
       + '<div id="rows"></div>';
+    const overBtn = $('view').querySelector('[data-wb-over]');
+    if (overBtn) overBtn.onclick = () => { if (ui.extra.has('wbOver')) ui.extra.delete('wbOver'); else ui.extra.add('wbOver'); ui.shown = state.prefs.rows; renderProducts(); };
     const shortBtn = $('view').querySelector('[data-shortage]');
     if (shortBtn) shortBtn.onclick = () => { if (ui.extra.has('shortage')) ui.extra.delete('shortage'); else ui.extra.add('shortage'); ui.shown = state.prefs.rows; renderProducts(); };
     wireView(ui, renderProducts, renderProductRows, exportProducts);
@@ -652,11 +668,86 @@
       { header: 'В сборке, шт.', type: 'num', total: true, get: assemblyQty },
       { header: 'В пути, шт.', type: 'num', total: true, get: transitQty },
       { header: 'Доступно к продаже, шт.', type: 'num', total: true, get: availableQty },
+      { header: 'Выставлено на WB, шт.', type: 'num', total: true, get: (r) => wbStockOf(r.sku) },
       { header: 'Брак на складе, шт.', type: 'num', total: true, get: (r) => r.defective || 0 },
       { header: 'Учёт на', type: 'date', get: (r) => r.updatedAt },
       { header: 'Карточка WB', type: 'link', get: (r) => wbLink(wbIds(r.sku)[0]) },
     ],
   });
+
+  // ---------- Склады WB ----------
+  // Склады продавца на WB у этого фулфилмента и сколько он выставил на WB по
+  // каждому (владелец 30.09.2026). Аргус WB только читает.
+  const ourWb = () => (state.data.wb?.warehouses || []).filter((w) => w.ours);
+  const wbName = (id) => (state.data.wb?.warehouses || []).find((w) => w.id === id)?.name || 'склад WB ' + id;
+  // Выставлено на WB: по выбранному складу или по всем нашим; null — WB не
+  // сказал (товар ни разу не заказывали — размера WB мы не знаем).
+  function wbStockOf(sku, whId = state.ui.products.wbwh) {
+    const s = state.data.wb?.stock?.[sku]; if (!s) return null;
+    const ids = whId && whId !== 'all' ? [whId] : ourWb().map((w) => w.id);
+    return ids.some((id) => s[id] != null) ? ids.reduce((a, id) => a + (s[id] || 0), 0) : null;
+  }
+  // Всегда по всем нашим складам: WB продаёт с любого из них один и тот же товар.
+  const wbOver = (r) => { const v = wbStockOf(r.sku, 'all'); const a = availableQty(r); return v != null && a != null && v > a; };
+  function wbStockCell(r) {
+    const v = wbStockOf(r.sku);
+    if (v == null) return num(null);
+    return wbOver(r) ? `<span class="warn-num" title="На WB выставлено больше, чем доступно на складе">${n(v)}</span>` : num(v);
+  }
+  async function markWb(id, ours) {
+    const path = state.owner ? `/api/marketplaces/${encodeURIComponent(state.companyId)}/wb/warehouses/${encodeURIComponent(id)}`
+      : `/api/sellers/wb-warehouses/${encodeURIComponent(id)}`;
+    try {
+      const r = await api(path, { method: 'PATCH', body: { ours } });
+      state.ui.wb.confirm = null;
+      // Какие заказы в работе, поменялось — остатки и заказы перечитаем.
+      delete state.data.orders; delete state.data.stock;
+      state.data.wb = await api(API_PATH.wb);
+      renderWb();
+      toast(ours ? `Склад отмечен вашим.${r.restored ? ` Вернулось в работу ${counted(r.restored, 'заказ', 'заказа', 'заказов')}.` : ''}`
+        : `Отметка снята.${r.hidden ? ` Из работы убрано ${counted(r.hidden, 'заказ', 'заказа', 'заказов')}.` : ''}`);
+    } catch (e) { toast(e.message); renderWb(); }
+  }
+  function renderWb() {
+    const info = state.data.wb; const ui = state.ui.wb;
+    if (!info?.connected) {
+      $('view').innerHTML = segment('wb') + empty('Wildberries не подключён', 'Склад ещё не подключил ваш ключ WB. Попросите менеджера склада — после этого здесь появятся ваши склады на WB.', 'truck');
+      return;
+    }
+    const ff = info.ffName || 'этого фулфилмента';
+    const whStock = (id) => Object.values(info.stock || {}).reduce((a, s) => a + (s[id] || 0), 0);
+    const who = (w) => (w.auto ? (w.ours ? `Отмечен Аргусом: в названии «${ff}»` : 'Не отмечен') : `${w.ours ? 'Отметил' : 'Снял'}: ${w.decidedBy}${w.decidedAt ? ', ' + when(w.decidedAt) : ''}`);
+    const card = (w) => {
+      const place = [w.office.city, w.office.address || w.office.name].filter(Boolean).join(', ');
+      const facts = [
+        `<span>${counted(w.openOrders, 'заказ', 'заказа', 'заказов')} в работе</span>`,
+        w.ours ? `<span><b>${n(whStock(w.id))}</b> шт. выставлено на WB</span>` : '',
+        w.hidden ? `<span>${counted(w.hidden, 'заказ', 'заказа', 'заказов')} склад не собирает</span>` : '',
+      ].filter(Boolean).join('');
+      const confirm = ui.confirm === w.id
+        ? `<div class="wbwh-confirm"><p>Снять отметку? Склад перестанет собирать заказы с «${h(w.name)}»${w.openOrders ? ` — ${counted(w.openOrders, 'заказ', 'заказа', 'заказов')} в работе уйдут из списка` : ''}. Если товар для этого склада лежит у «${h(ff)}», не снимайте.</p><div class="wbwh-actions"><button class="button" type="button" data-wb-off="${h(w.id)}">Снять отметку</button><button class="button ghost" type="button" data-wb-cancel>Оставить</button></div></div>`
+        : '';
+      return `<div class="wbwh ${w.ours ? 'on' : ''}"><label class="check-line"><input type="checkbox" data-wb-mark="${h(w.id)}" ${w.ours ? 'checked' : ''}><span><strong>${h(w.name)}</strong>${w.gone ? ' <span class="badge issue">удалён на WB</span>' : ''}<small>${h(place || 'пункт приёмки WB не указан')}</small></span></label>`
+        + `<div class="wbwh-facts">${facts}</div><p class="wbwh-who">${h(who(w))}</p>${confirm}</div>`;
+    };
+    $('view').innerHTML = segment('wb')
+      + notice(`Ваши склады на WB у «${ff}»`, `Отметьте склады, товар для которых лежит у «${ff}»: склад собирает заказы только с отмеченных. Ваши склады у других фулфилментов сюда не попадают — их заказы «${ff}» не забирает.`)
+      + (!info.active ? notice('Ни один склад не отмечен', `Пока «${ff}» забирает заказы со всех ваших складов WB — в том числе с тех, что у других фулфилментов. Отметьте свои склады ниже.`, true) : '')
+      + (!info.officesConfigured ? notice('Склад ещё не указал свои пункты приёмки WB', 'Когда менеджер склада их укажет, здесь появятся ваши склады, привязанные к этим пунктам.', true) : '')
+      + (info.error ? notice('WB не отдал список складов', info.error + '. Аргус попробует ещё раз сам.', true) : '')
+      + (info.warehouses.length ? `<div class="wbwh-list">${info.warehouses.map(card).join('')}</div>` : empty('Складов пока нет', 'На пунктах приёмки этого фулфилмента у вас нет складов WB.', 'box'))
+      + (info.otherCount ? `<p class="help wbwh-note">Ещё ${counted(info.otherCount, 'ваш склад', 'ваших склада', 'ваших складов')} на WB — у других фулфилментов${info.otherHidden ? `: ${counted(info.otherHidden, 'заказ', 'заказа', 'заказов')} с них «${h(ff)}» не собирает` : ''}.</p>` : '')
+      + `<p class="help wbwh-note">${info.stocksError ? `Остатки WB не читаются: ${h(info.stocksError)}.` : info.stocksAt ? `«Выставлено на WB» — по данным WB на ${h(when(info.stocksAt))}. Аргус в WB ничего не меняет.` : 'Остатки WB ещё не прочитаны — это займёт до получаса.'}${info.unknownOrders ? ` У ${counted(info.unknownOrders, 'заказа', 'заказов', 'заказов')} склад WB ещё не известен — Аргус узнаёт его у WB.` : ''}</p>`;
+    $('view').querySelectorAll('[data-wb-mark]').forEach((box) => {
+      box.onchange = () => {
+        if (box.checked) { box.disabled = true; markWb(box.dataset.wbMark, true); return; }
+        box.checked = true; ui.confirm = box.dataset.wbMark; renderWb();
+      };
+    });
+    $('view').querySelectorAll('[data-wb-off]').forEach((b) => { b.onclick = () => { b.disabled = true; markWb(b.dataset.wbOff, false); }; });
+    const cancel = $('view').querySelector('[data-wb-cancel]');
+    if (cancel) cancel.onclick = () => { ui.confirm = null; renderWb(); };
+  }
 
   // Файл для загрузки остатков в WB (FBS): как шаблон WB — одна таблица
   // «Баркод | Количество», первая строка — заголовки, без шапки. Число —
@@ -765,7 +856,8 @@
     const ui = state.ui.orders;
     const rows = state.data.orders.rows.filter((r) => matches(ui.q, [r.number, r.name, r.sku, r.mp_rid, r.mp_nm_id, r.mp_article, r.mp_barcode, r.supply_number, ...wbIds(r.sku)])
       && orderMatchesStatus(r, ui.status) && inPeriod(orderAt(r), ui.period)
-      && (ui.supply === 'all' || (ui.supply === 'none' ? !r.supply_number : r.supply_number === ui.supply)));
+      && (ui.supply === 'all' || (ui.supply === 'none' ? !r.supply_number : r.supply_number === ui.supply))
+      && (ui.wbwh === 'all' || (ui.wbwh === 'none' ? !r.mp_warehouse_id : r.mp_warehouse_id === ui.wbwh)));
     const by = { new: (a, b) => new Date(orderAt(b)) - new Date(orderAt(a)), old: (a, b) => new Date(orderAt(a)) - new Date(orderAt(b)),
       product: (a, b) => String(productName(a)).localeCompare(String(productName(b)), 'ru'), qty: (a, b) => Number(b.qty) - Number(a.qty) };
     return rows.sort(by[ui.sort]);
@@ -777,17 +869,21 @@
     { key: 'wb', title: 'Артикул WB', cell: (r) => idCell(r.mp_nm_id ? [r.mp_nm_id] : wbIds(r.sku), r.mp_barcode) },
     { key: 'qty', title: 'Кол-во', cls: 'n', cell: (r) => num(r.qty) },
     { key: 'at', title: 'Оформлен на WB', cls: 'n', cell: (r) => h(when(orderAt(r))) },
+    { key: 'wbwh', title: 'Склад WB', cell: (r) => (r.mp_warehouse_id ? h(r.mp_warehouse_name || 'склад WB ' + r.mp_warehouse_id) : '<span class="zero">—</span>') },
     { key: 'supply', title: 'Поставка', cell: (r) => (r.supply_number ? `<span class="cell-main nowrap">${h(r.supply_number)}</span>${r.supply_destination ? `<span class="cell-sub">${h(r.supply_destination)}</span>` : ''}` : '<span class="zero">—</span>') },
     { key: 'status', title: 'Статус', cls: 'c', cell: (r) => badge(orderStatus(r), orderStyle(r)) + (r.stock_conflict ? '<span class="row-note warn">Склад сверяет заказ</span>' : '') },
     { key: 'loaded', title: 'Загружен в Аргус', cls: 'n', hidden: true, cell: (r) => h(when(r.created_at)) },
   ];
   function renderOrders() {
     const ui = state.ui.orders; const supplies = [...new Set(state.data.orders.rows.map((r) => r.supply_number).filter(Boolean))].sort().reverse();
+    const whs = [...new Map(state.data.orders.rows.filter((r) => r.mp_warehouse_id).map((r) => [r.mp_warehouse_id, r.mp_warehouse_name || 'склад WB ' + r.mp_warehouse_id])).entries()]
+      .sort((a, b) => a[1].localeCompare(b[1], 'ru'));
     $('view').innerHTML = (state.data.orders.hasMore ? notice('Показана часть заказов', 'Загружены последние 1 000 позиций.', true) : '')
       + toolbar(searchBox('Номер заказа, товар, артикул WB, штрихкод', ui.q),
         dropdown('o-status', { label: 'Статус', value: ui.status, options: ORDER_STATUS, onPick: (v) => { ui.status = v; ui.shown = state.prefs.rows; renderOrders(); } })
         + dropdown('o-period', { label: 'Период', value: ui.period, options: PERIODS, onPick: (v) => { ui.period = v; ui.shown = state.prefs.rows; renderOrders(); } })
         + dropdown('o-supply', { label: 'Поставка', value: ui.supply, options: [{ value: 'all', text: 'Любая' }, { value: 'none', text: 'Без поставки' }, ...supplies.map((x) => ({ value: x, text: x }))], onPick: (v) => { ui.supply = v; ui.shown = state.prefs.rows; renderOrders(); } })
+        + (whs.length > 1 ? dropdown('o-wbwh', { label: 'Склад WB', value: ui.wbwh, options: [{ value: 'all', text: 'Любой' }, ...whs.map(([value, text]) => ({ value, text })), { value: 'none', text: 'Склад не известен' }], onPick: (v) => { ui.wbwh = v; ui.shown = state.prefs.rows; renderOrders(); } }) : '')
         + dropdown('o-sort', { label: 'Сортировка', value: ui.sort, options: [{ value: 'new', text: 'Сначала новые' }, { value: 'old', text: 'Сначала старые' }, { value: 'product', text: 'По товару' }, { value: 'qty', text: 'Больше штук' }], onPick: (v) => { ui.sort = v; renderOrders(); } })
         + resetLink('orders'),
         columnChooser('orders', ORDER_COLUMNS, renderOrders) + excelButton)
@@ -804,6 +900,7 @@
         { header: 'Штрихкод', type: 'text', get: (r) => r.mp_barcode || '', min: 15 },
         { header: 'Кол-во, шт.', type: 'num', total: true, get: (r) => r.qty },
         { header: 'Оформлен на WB', type: 'date', get: orderAt },
+        { header: 'Склад WB', type: 'text', get: (r) => r.mp_warehouse_name || '' },
         { header: 'Поставка', type: 'text', get: (r) => r.supply_number || '' },
         { header: 'Куда', type: 'text', get: (r) => r.supply_destination || '' },
         { header: 'Статус', type: 'text', get: (r) => orderStatus(r) + (r.stock_conflict ? ' · склад сверяет' : ''), min: 18 },
