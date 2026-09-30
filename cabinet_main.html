@@ -1839,6 +1839,12 @@
   .set-opt b{display:block; font-size:14px; font-weight:600;}
   .set-opt small{display:block; font-size:12px; color:var(--muted); margin-top:2px;}
   .set-actions{display:flex; align-items:center; gap:14px; flex-wrap:wrap;}
+  .mp-card-click{cursor:pointer; transition:border-color .15s;}
+  .mp-card-click:hover{border-color:var(--accent-2);}
+  .sp-sec{border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:14px; background:var(--panel-2);}
+  .sp-head{display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px; font-size:15px;}
+  .sp-count{font-size:14px; font-weight:600; margin:6px 0 2px;}
+  .wbw-row.on b{color:var(--accent-2);}
   .wbo{background:var(--panel-2); border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin-bottom:14px;}
   .wbo .staff-sub{margin:4px 0 10px;}
   .wbo-row{display:flex; justify-content:space-between; align-items:flex-start; gap:12px; padding:10px 0; border-top:1px solid var(--line-soft);}
@@ -2791,13 +2797,12 @@
         </div>
 
         <div id="mpProgress"></div>
-        <div id="wbOffices"></div>
         <div id="mpUnresolved"></div>
         <div id="mpList"></div>
         <div id="mpSyncResult"></div>
 
         <div class="wh-modal-overlay" id="wbWhModal" onclick="if(event.target===this) closeWbWarehouses()">
-          <div class="wh-modal" style="max-width:640px;">
+          <div class="wh-modal" style="max-width:680px;">
             <div class="wh-modal-head">
               <div class="wh-modal-title" id="wbWhTitle">Склады WB</div>
               <button class="panel-close-btn" onclick="closeWbWarehouses()" aria-label="Закрыть">✕</button>
@@ -2806,20 +2811,6 @@
           </div>
         </div>
 
-        <details class="mp-fold" id="mpConnectFold">
-          <summary>Подключить площадку клиенту</summary>
-          <div class="mp-fold-body" data-form>
-            <div class="staff-sub" style="margin-bottom:12px;">Нужен только ключ API продавца и его согласие. Ключ сохраняется зашифрованным и обратно не показывается никому — ни здесь, ни продавцу.</div>
-            <div style="display:flex; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
-              <select id="mpCompanySelect" class="mp-field" style="flex:1; min-width:180px; width:auto;"></select>
-              <select id="mpMarketSelect" class="mp-field" style="flex:0 0 190px; width:auto;">
-                <option value="wb">Wildberries</option>
-              </select>
-            </div>
-            <textarea id="mpTokenInput" class="mp-field" rows="3" placeholder="Ключ API продавца — длинная строка вида eyJhbGciOiJFUzI1NiIs…" style="resize:vertical; margin-bottom:10px;"></textarea>
-            <button type="button" onclick="connectMarketplace()" style="background:var(--accent); color:#182422; border:none; border-radius:8px; padding:10px 16px; font-size:14px; font-weight:700; cursor:pointer;">Подключить</button>
-          </div>
-        </details>
 
         <div class="oc-note">Аргус читает у площадки сборочные задания, склады продавца, пункты приёмки, остатки по вашим складам и фото карточек. Цены, реклама и аналитика не читаются. Менять Аргус может только поставки и статусы сборочных заданий — и только у продавца, для которого вы включили «Разрешить менять статусы».</div>
       </div>
@@ -2848,7 +2839,11 @@
             <label class="set-opt"><input type="radio" name="setSupplies" value="seller"><span><b>Продавец сам</b><small>Аргус только читает заказы, поставку на WB продавец делает у себя.</small></span></label>
           </div>
           <label class="set-field"><span>Часовой пояс склада — по нему «сегодня», номера поставок и утренняя сводка</span><select id="setTz" class="mp-field"></select></label>
-          <label class="set-field"><span>Как ещё вас называют продавцы в своих складах на WB — через запятую</span><input id="setWbNames" class="mp-field" maxlength="300" placeholder="например: Восток, VSKHD"><small class="set-help">По названию Аргус сам отличает ваши склады у продавца от складов других фулфилментов.</small></label>
+          <div class="set-q">
+            <div class="set-q-title">Как вас называют продавцы на WB</div>
+            <div class="set-help" style="margin-bottom:8px;">Продавец сам называет склад на WB, который завёл под вас, — например «ФФ Восход СПБ». Склады со словом из названия вашего склада Аргус отмечает вашими сам. Если продавцы пишут вас иначе, впишите эти слова через запятую.</div>
+            <input id="setWbNames" class="mp-field" maxlength="300" placeholder="например: Восток, VSKHD">
+          </div>
           <div class="set-actions"><button class="wh-onboarding-btn primary" type="button" onclick="saveSettings()">Сохранить</button><span id="setResult" class="set-help"></span></div>
         </div>
         <div class="set-form" data-form style="margin-top:28px;">
@@ -2999,7 +2994,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <script src="back.js?v=4901b838" defer></script>
 <script src="form-keys.js?v=cd462175" defer></script>
-<script src="cabinet_main.js?v=23a261aa" defer></script>
+<script src="cabinet_main.js?v=e6c5a6ae" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->

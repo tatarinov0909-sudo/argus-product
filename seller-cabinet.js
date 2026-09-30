@@ -41,7 +41,7 @@
   const PAGES = {
     products: { title: 'Товары', subtitle: 'Сколько вашего товара на складе и сколько можно продавать.', data: 'stock', nav: 'products' },
     returns: { title: 'Товары', subtitle: 'Что вернулось на склад и в каком состоянии.', data: 'documents', nav: 'products' },
-    wb: { title: 'Товары', subtitle: 'Ваши склады на Wildberries у этого фулфилмента.', data: 'wb', nav: 'products' },
+    wb: { title: 'Товары', subtitle: 'Все ваши склады на Wildberries — отметьте, товар для каких лежит у этого фулфилмента.', data: 'wb', nav: 'products' },
     orders: { title: 'Заказы', subtitle: 'Как склад готовит ваши заказы с Wildberries.', data: 'orders', nav: 'orders' },
     supplies: { title: 'Поставки на WB', subtitle: 'Склад собирает их из ваших заказов и везёт на Wildberries.', data: 'supplies', nav: 'supplies' },
     documents: { title: 'Приходы', subtitle: 'Товар, который вы привозите на склад на хранение.', data: 'documents', nav: 'documents' },
@@ -725,7 +725,7 @@
     }
     const ff = info.ffName || 'этого фулфилмента';
     const whStock = (id) => Object.values(info.stock || {}).reduce((a, s) => a + (s[id] || 0), 0);
-    const who = (w) => (w.auto ? (w.ours ? `Отмечен Аргусом: в названии «${ff}»` : 'Не отмечен') : `${w.ours ? 'Отметил' : 'Снял'}: ${w.decidedBy}${w.decidedAt ? ', ' + when(w.decidedAt) : ''}`);
+    const who = (w) => (w.auto ? (w.ours ? (w.nameMatches ? `Отмечен Аргусом: в названии «${ff}»` : 'Отмечен Аргусом: ваш единственный склад') : 'Не отмечен') : `${w.ours ? 'Отметил' : 'Снял'}: ${w.decidedBy}${w.decidedAt ? ', ' + when(w.decidedAt) : ''}`);
     const card = (w) => {
       const place = [w.office.city, w.office.address || w.office.name].filter(Boolean).join(', ');
       const facts = [
@@ -739,14 +739,15 @@
       return `<div class="wbwh ${w.ours ? 'on' : ''}"><label class="check-line"><input type="checkbox" data-wb-mark="${h(w.id)}" ${w.ours ? 'checked' : ''}><span><strong>${h(w.name)}</strong>${w.gone ? ' <span class="badge issue">удалён на WB</span>' : ''}<small>${h(place || 'пункт приёмки WB не указан')}</small></span></label>`
         + `<div class="wbwh-facts">${facts}</div><p class="wbwh-who">${h(who(w))}</p>${confirm}</div>`;
     };
+    const ours = info.warehouses.filter((w) => w.ours).length;
     $('view').innerHTML = segment('wb')
-      + notice(`Ваши склады на WB у «${ff}»`, `Отметьте склады, товар для которых лежит у «${ff}»: склад собирает заказы только с отмеченных. Ваши склады у других фулфилментов сюда не попадают — их заказы «${ff}» не забирает.`)
-      + (!info.active ? notice('Ни один склад не отмечен', `«${ff}» не забирает ваши заказы с WB, пока вы не отметите склады, товар для которых лежит у «${ff}».`, true) : '')
-      + (!info.officesConfigured ? notice('Склад ещё не указал свои пункты приёмки WB', 'Когда менеджер склада их укажет, здесь появятся ваши склады, привязанные к этим пунктам.', true) : '')
-      + (info.error ? notice('WB не отдал список складов', info.error + '. Аргус попробует ещё раз сам.', true) : '')
-      + (info.warehouses.length ? `<div class="wbwh-list">${info.warehouses.map(card).join('')}</div>` : empty('Складов пока нет', 'На пунктах приёмки этого фулфилмента у вас нет складов WB.', 'box'))
-      + (info.otherCount ? `<p class="help wbwh-note">Ещё ${counted(info.otherCount, 'ваш склад', 'ваших склада', 'ваших складов')} на WB — у других фулфилментов${info.otherHidden ? `: ${counted(info.otherHidden, 'заказ', 'заказа', 'заказов')} с них «${h(ff)}» не собирает` : ''}.</p>` : '')
-      + `<p class="help wbwh-note">${info.stocksError ? `Остатки WB не читаются: ${h(info.stocksError)}.` : info.stocksAt ? `«Выставлено на WB» — по данным WB на ${h(when(info.stocksAt))}. Аргус в WB ничего не меняет.` : 'Остатки WB ещё не прочитаны — это займёт до получаса.'}${info.unknownOrders ? ` У ${counted(info.unknownOrders, 'заказа', 'заказов', 'заказов')} склад WB ещё не известен — Аргус узнаёт его у WB.` : ''}</p>`;
+      + notice(`Все ваши склады на WB`, `Отметьте склады, товар для которых лежит у «${ff}»: «${ff}» собирает заказы только с отмеченных. Заказы остальных складов не удаляются — поставите галочку, вернутся.`)
+      + (!ours && info.warehouses.length ? notice('Ни один склад не отмечен', `«${ff}» не забирает ваши заказы с WB, пока вы не отметите склады, товар для которых лежит у «${ff}».`, true) : '')
+      + (info.error ? notice('WB не отдал список складов', info.error + '. Нажмите «Обновить из WB» чуть позже.', true) : '')
+      + `<div class="wbwh-bar"><strong>${info.warehouses.length ? `Отмечено ${ours} из ${info.warehouses.length}` : 'Складов пока нет'}</strong>`
+      + `<button class="button" type="button" id="wbRefresh">${icon('refresh')}Обновить из WB</button></div>`
+      + (info.warehouses.length ? `<div class="wbwh-list">${info.warehouses.map(card).join('')}</div>` : empty('Складов пока нет', 'Заведите склад в кабинете WB и нажмите «Обновить из WB».', 'box'))
+      + `<p class="help wbwh-note">${info.refreshedAt ? `Список складов получен из WB ${h(when(info.refreshedAt))}; Аргус обновляет его сам раз в час. ` : ''}${info.stocksError ? `Остатки WB не читаются: ${h(info.stocksError)}.` : info.stocksAt ? `«Выставлено на WB» — по данным WB на ${h(when(info.stocksAt))}. Аргус в WB ничего не меняет.` : 'Остатки WB ещё не прочитаны — это займёт до получаса.'}${info.unknownOrders ? ` У ${counted(info.unknownOrders, 'заказа', 'заказов', 'заказов')} склад WB ещё не известен — Аргус узнаёт его у WB.` : ''}</p>`;
     $('view').querySelectorAll('[data-wb-mark]').forEach((box) => {
       box.onchange = () => {
         if (box.checked) { box.disabled = true; markWb(box.dataset.wbMark, true); return; }
@@ -756,6 +757,18 @@
     $('view').querySelectorAll('[data-wb-off]').forEach((b) => { b.onclick = () => { b.disabled = true; markWb(b.dataset.wbOff, false); }; });
     const cancel = $('view').querySelector('[data-wb-cancel]');
     if (cancel) cancel.onclick = () => { ui.confirm = null; renderWb(); };
+    const refresh = $('wbRefresh');
+    if (refresh) refresh.onclick = async () => {
+      refresh.disabled = true; refresh.innerHTML = '<span class="spinner"></span>Спрашиваю WB…';
+      const path = state.owner ? `/api/marketplaces/${encodeURIComponent(state.companyId)}/wb/warehouses/refresh` : '/api/sellers/wb-warehouses/refresh';
+      try {
+        await api(path, { method: 'POST' });
+        state.data.wb = await api(API_PATH.wb);
+        delete state.data.orders; delete state.data.stock;
+        toast('Склады обновлены из WB.');
+      } catch (e) { toast(e.message); }
+      renderWb();
+    };
   }
 
   // Файл для загрузки остатков в WB (FBS): как шаблон WB — одна таблица
