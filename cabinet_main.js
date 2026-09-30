@@ -234,6 +234,7 @@
     // функцию (см. блок инициализации), а не через классы в HTML.
     if(view==='mp'){ loadMarketplaces(); }
     if(view==='settings'){ loadSettings(); }
+    if(view==='1c'){ load1CKey(); }
     if(view==='inv'){ loadInventory(); }
     if(view==='orders'){ loadMpOrders(); }
     if(view==='supplies'){ loadSupplies(); }
@@ -1660,14 +1661,33 @@
   async function load1CKey(){
     const el = document.getElementById('ocActivationCode');
     if(!el) return;
+    const issue = document.getElementById('ocIssueKey');
+    const copy = document.getElementById('ocCodeCopy');
+    // Учёт только в Аргусе (анкета склада) — 1С не нужна, но экран остаётся.
+    const noOneC = document.getElementById('ocNoOneC');
+    if(noOneC) noOneC.style.display = whSettings && whSettings.stock_source === 'argus' ? '' : 'none';
     try{
       const keys = await apiFetch('/api/sync/keys');
       const active = keys.find(k => k.active);
       el.textContent = active ? active.key_code : 'Ключ ещё не выпущен';
+      if(issue) issue.style.display = active ? 'none' : '';
+      if(copy) copy.style.display = active ? '' : 'none';
     } catch(e){
       el.textContent = 'Не удалось загрузить ключ';
     }
   }
+  // Ключ 1С владелец выпускает сам — раньше это делал разработчик на сервере.
+  async function issue1CKey(){
+    const btn = document.getElementById('ocIssueKey');
+    if(btn) btn.disabled = true;
+    try{
+      await apiFetch('/api/sync/keys', { method: 'POST', body: { label: 'Модуль 1С' } });
+      showWhToast('Ключ для 1С выпущен. Передайте его администратору 1С.');
+      await load1CKey();
+    } catch(e){ showWhToast('Не удалось выпустить ключ: ' + e.message); }
+    finally { if(btn) btn.disabled = false; }
+  }
+  window.issue1CKey = issue1CKey;
 
   /* ===================== Конструктор склада =====================
 
@@ -4875,6 +4895,16 @@
     } catch(e){ showWhToast('Не сохранилось: ' + e.message); }
   }
   window.saveSettings = saveSettings;
+  async function changePassword(){
+    const oldEl = document.getElementById('pwdOld'), newEl = document.getElementById('pwdNew');
+    if(newEl.value.length < 8){ showWhToast('Новый пароль — не меньше 8 символов.'); return; }
+    try{
+      await apiFetch('/api/auth/owner/password', { method: 'POST', body: { currentPassword: oldEl.value, newPassword: newEl.value } });
+      oldEl.value = ''; newEl.value = '';
+      showWhToast('Пароль изменён.');
+    } catch(e){ showWhToast('Не получилось: ' + e.message); }
+  }
+  window.changePassword = changePassword;
 
   /* ============ Склады WB ============
      Продавец заводит на WB «склад продавца» под каждый фулфилмент и город.
@@ -4953,14 +4983,11 @@
     if(!await askConfirm('Добавить ' + hint.length + ' ' + pluralRu(hint.length, 'пункт', 'пункта', 'пунктов') + ' приёмки?\n\n'
         + hint.map(o => wbPlace(o) + ' — ' + o.ourNames.map(n => '«' + n + '»').join(', ')).join('\n') + '\n\n'
         + 'Склады продавцов на них с «' + ff + '» в названии станут вашими. Заказы остальных складов этих продавцов уйдут из работы — не удалятся.')) return;
-    let hidden = 0, restored = 0;
     try{
-      for(const o of hint){
-        const r = await apiFetch('/api/marketplaces/wb/offices/' + encodeURIComponent(o.id), { method: 'PUT', body: { on: true } });
-        hidden += r.hidden || 0; restored += r.restored || 0;
-      }
-      showWhToast('Пункты добавлены.' + wbMoved({ hidden, restored }));
-    } catch(e){ showWhToast('Не все пункты добавились: ' + e.message); }
+      // Одним запросом: пересчёт отметок и заказов — один, после всех пунктов.
+      const r = await apiFetch('/api/marketplaces/wb/offices', { method: 'PUT', body: { on: true, ids: hint.map(o => o.id) } });
+      showWhToast('Пункты добавлены.' + wbMoved(r));
+    } catch(e){ showWhToast('Пункты не добавились: ' + e.message); }
     await loadMarketplaces();
   }
   window.addAllWbOffices = addAllWbOffices;
@@ -5205,6 +5232,9 @@
         +     st.word + '</div></div>'
         +   (st.chip ? '<div class="mp-chip ' + st.chipCss + '">' + st.chip + '</div>' : '')
         + '</div>'
+        + (cred && cred.sellerName
+            ? '<div class="mp-card-sub">Кабинет WB: ' + escapeHTML(cred.sellerName) + (cred.sellerInn ? ', ИНН ' + escapeHTML(cred.sellerInn) : '') + '</div>'
+            : '')
         + (cred
             ? '<div class="mp-card-sub">' + (cred.writeEnabled
                 ? 'Аргус сам создаёт поставку на площадке и меняет статусы заказов.'
@@ -5693,7 +5723,9 @@
     if(!box) return;
     let invoicesAll, suppliesAll;
     try{
-      [invoicesAll, suppliesAll] = await Promise.all([apiFetch('/api/invoices'), apiFetch('/api/supplies')]);
+      // Только приходы и последние поставки: раньше экран тянул все документы
+      // склада (каждый заказ WB — документ), чтобы показать 60 строк.
+      [invoicesAll, suppliesAll] = await Promise.all([apiFetch('/api/invoices?direction=in'), apiFetch('/api/supplies?limit=60')]);
     } catch(e){ box.textContent = 'Не удалось загрузить: ' + e.message; return; }
     const receipts = invoicesAll.filter(i => i.direction === 'in')
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 60);

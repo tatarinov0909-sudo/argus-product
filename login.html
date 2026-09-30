@@ -525,7 +525,7 @@
       localStorage.setItem('argus_token', data.token);
       localStorage.setItem('argus_role', 'owner');
       hideAll();
-      document.getElementById('setupTz').textContent = browserZone() + ' — по часам этого компьютера';
+      document.getElementById('setupTz').textContent = zoneLabel(browserZone()) + ' — по часам этого компьютера. Поменять можно в «Настройки склада».';
       document.getElementById('successOwner').classList.add('show');
     } catch(e){
       errorEl.textContent = 'Не удалось подключиться к серверу. Проверьте интернет-соединение.';
@@ -535,6 +535,16 @@
 
   // Пояс склада — по часам компьютера, на котором регистрируются.
   const browserZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Moscow'; } catch(e){ return 'Europe/Moscow'; } };
+  const ZONE_NAMES = { 'Europe/Kaliningrad': 'Калининград', 'Europe/Moscow': 'Москва', 'Europe/Samara': 'Самара',
+    'Asia/Yekaterinburg': 'Екатеринбург', 'Asia/Omsk': 'Омск', 'Asia/Novosibirsk': 'Новосибирск', 'Asia/Krasnoyarsk': 'Красноярск',
+    'Asia/Irkutsk': 'Иркутск', 'Asia/Yakutsk': 'Якутск', 'Asia/Vladivostok': 'Владивосток', 'Asia/Magadan': 'Магадан',
+    'Asia/Kamchatka': 'Камчатка', 'Europe/Minsk': 'Минск', 'Asia/Almaty': 'Алматы', 'Asia/Tashkent': 'Ташкент' };
+  const zoneLabel = (z) => {
+    let off = '';
+    try { off = new Intl.DateTimeFormat('ru-RU', { timeZone: z, timeZoneName: 'shortOffset' }).formatToParts(new Date())
+      .find(p => p.type === 'timeZoneName').value.replace('GMT', 'UTC'); } catch(e){ off = ''; }
+    return (ZONE_NAMES[z] || z) + (off ? ', ' + off : '');
+  };
   async function finishSetup(){
     const pick = (n) => (document.querySelector('input[name="' + n + '"]:checked') || {}).value;
     const stock = pick('setupStock'), supplies = pick('setupSupplies');

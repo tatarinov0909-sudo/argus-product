@@ -2851,6 +2851,14 @@
           <label class="set-field"><span>Как ещё вас называют продавцы в своих складах на WB — через запятую</span><input id="setWbNames" class="mp-field" maxlength="300" placeholder="например: Восток, VSKHD"><small class="set-help">По названию Аргус сам отличает ваши склады у продавца от складов других фулфилментов.</small></label>
           <div class="set-actions"><button class="wh-onboarding-btn primary" type="button" onclick="saveSettings()">Сохранить</button><span id="setResult" class="set-help"></span></div>
         </div>
+        <div class="set-form" data-form style="margin-top:28px;">
+          <div class="set-q">
+            <div class="set-q-title">Пароль владельца</div>
+            <label class="set-field"><span>Нынешний пароль</span><input id="pwdOld" class="mp-field" type="password" autocomplete="current-password"></label>
+            <label class="set-field" style="margin-top:10px;"><span>Новый пароль — не меньше 8 символов</span><input id="pwdNew" class="mp-field" type="password" autocomplete="new-password"></label>
+            <div class="set-actions" style="margin-top:12px;"><button class="wh-onboarding-btn" type="button" onclick="changePassword()">Сменить пароль</button></div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -2877,22 +2885,24 @@
             </div>
           </div>
 
-          <div class="oc-note">Прямого открытого API у большинства версий 1С нет, поэтому подключение идёт не по ключу API, а через небольшой файл-модуль (внешнюю обработку), который устанавливается один раз.</div>
+          <div class="oc-note" id="ocNoOneC" style="display:none;">В настройках склада указано, что учёт остатков вы ведёте только в Аргусе — 1С подключать не нужно. Если это не так, поменяйте ответ в «Настройки склада».</div>
+          <div class="oc-note">Прямого открытого API у большинства версий 1С нет, поэтому подключение идёт не по ключу API, а через небольшой модуль (внешнюю обработку), который устанавливается один раз.</div>
+          <div class="oc-note"><b>Что поддерживается сейчас:</b> 1С:Управление торговлей 10.3 (обычные формы), платформа 8.3. Модуль передаёт товары, у которых код в 1С начинается с «PB». Другая конфигурация или другие коды — напишите нам, подключение проверим вместе, до этого остатки можно вести только в Аргусе.</div>
 
           <div class="oc-steps">
             <div class="oc-step">
               <div class="oc-step-num">1</div>
               <div class="oc-step-body">
                 <div class="oc-step-title">Скачайте модуль для 1С</div>
-                <div class="oc-step-text">Исходник для УТ 10.3 обновляет существующую внешнюю обработку. Он только читает базу и передаёт данные в Аргус.</div>
-                <a class="wh-onboarding-btn wh-onboarding-btn-link" href="argus-sync-1c-10.3.bsl" download>Скачать исходник (.bsl)</a>
+                <div class="oc-step-text">Модуль только читает базу 1С и передаёт данные в Аргус. В архиве — исходный текст модуля и пошаговая инструкция для администратора 1С.</div>
+                <a class="wh-onboarding-btn wh-onboarding-btn-link" href="argus-sync-1c-10.3.zip" download>Скачать модуль и инструкцию (.zip)</a>
               </div>
             </div>
             <div class="oc-step">
               <div class="oc-step-num">2</div>
               <div class="oc-step-body">
                 <div class="oc-step-title">Установите его в 1С</div>
-                <div class="oc-step-text">Файл → Открыть → выбрать скачанный файл. Стандартная процедура, прав администратора на сервере не требует.</div>
+                <div class="oc-step-text">Это делает администратор 1С: создаёт внешнюю обработку в Конфигураторе, вставляет текст модуля, проверяет и сохраняет — по инструкции из архива. Прав администратора на сервере не нужно.</div>
               </div>
             </div>
             <div class="oc-step">
@@ -2901,9 +2911,10 @@
                 <div class="oc-step-title">Введите код активации в модуле</div>
                 <div class="oc-step-text">Этот код привязывает вашу базу 1С именно к этому кабинету Аргус — никто другой с его помощью подключиться не сможет.</div>
                 <div class="oc-code-box">
-                  <span id="ocActivationCode">ARG-7734-1C</span>
-                  <span class="oc-code-copy" onclick="copyActivationCode()">Скопировать</span>
+                  <span id="ocActivationCode">Загружаю…</span>
+                  <span class="oc-code-copy" id="ocCodeCopy" onclick="copyActivationCode()">Скопировать</span>
                 </div>
+                <button class="wh-onboarding-btn primary" type="button" id="ocIssueKey" style="display:none; margin-top:10px;" onclick="issue1CKey()">Выпустить ключ для 1С</button>
               </div>
             </div>
             <div class="oc-step">
@@ -2988,7 +2999,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <script src="back.js?v=4901b838" defer></script>
 <script src="form-keys.js?v=cd462175" defer></script>
-<script src="cabinet_main.js?v=9462eb14" defer></script>
+<script src="cabinet_main.js?v=23a261aa" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->
