@@ -725,7 +725,8 @@
     }
     const ff = info.ffName || 'этого фулфилмента';
     const whStock = (id) => Object.values(info.stock || {}).reduce((a, s) => a + (s[id] || 0), 0);
-    const who = (w) => (w.auto ? (w.ours ? (w.nameMatches ? `Отмечен Аргусом: в названии «${ff}»` : 'Отмечен Аргусом: ваш единственный склад') : 'Не отмечен') : `${w.ours ? 'Отметил' : 'Снял'}: ${w.decidedBy}${w.decidedAt ? ', ' + when(w.decidedAt) : ''}`);
+    const single = info.warehouses.filter((w) => !w.gone).length === 1;
+    const who = (w) => (w.auto ? (w.ours ? (w.nameMatches ? `Отмечен Аргусом: в названии «${ff}»` : single ? 'Отмечен Аргусом: ваш единственный склад' : 'Отмечен Аргусом') : 'Не отмечен') : `${w.ours ? 'Отметил' : 'Снял'}: ${w.decidedBy}${w.decidedAt ? ', ' + when(w.decidedAt) : ''}`);
     const card = (w) => {
       const place = [w.office.city, w.office.address || w.office.name].filter(Boolean).join(', ');
       const facts = [

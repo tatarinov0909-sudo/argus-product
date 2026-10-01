@@ -448,6 +448,13 @@ dialog::backdrop { background: rgba(8, 11, 18, .6); }
   .tabbar .nav-count { position: absolute; top: 2px; right: 10%; margin: 0; font-size: 10px; min-width: 18px; padding: 0 5px; }
   .owner-switch { padding-right: 8px; margin-right: 0; }
   .owner-switch a { display: none; }
+  /* Шапка владельца: длинное имя продавца сжимается, а не выталкивает
+     страницу вбок (проверка 01.10.2026: 391 px на экране 375). */
+  .fulfilment, .top-actions, .owner-switch, .owner-switch .dd { min-width: 0; }
+  .owner-switch .dd-btn { max-width: 100%; }
+  .owner-switch .dd-label { display: none; }
+  .owner-switch .dd-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .owner-switch .dd-menu { left: auto; right: 0; max-width: calc(100vw - 2 * var(--page-x)); }
   .toast { bottom: calc(84px + env(safe-area-inset-bottom)); }
   .login-main { grid-template-columns: 1fr; gap: 28px; align-items: start; padding-top: 32px; }
   .login-intro h1 { font-size: 34px; letter-spacing: -1px; }

@@ -3548,17 +3548,33 @@
     }, 25000);
   }
 
+  // День и время записи — по поясу склада (настройки склада), а не по часам
+  // компьютера: «Сегодня» у склада в Новосибирске начинается раньше
+  // (проверка 01.10.2026).
+  let whFmt = null, whFmtZone = null;
+  function whParts(d){
+    const zone = (whSettings && whSettings.timezone) || 'Europe/Moscow';
+    if(zone !== whFmtZone){
+      const opts = (z) => ({ timeZone: z, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+      try { whFmt = new Intl.DateTimeFormat('en-CA', opts(zone)); }
+      catch(e){ whFmt = new Intl.DateTimeFormat('en-CA', opts('Europe/Moscow')); }
+      whFmtZone = zone;
+    }
+    const p = {};
+    whFmt.formatToParts(d).forEach(function(x){ p[x.type] = x.value; });
+    return p;
+  }
+  const whDay = (d) => { const p = whParts(d); return p.year + '-' + p.month + '-' + p.day; };
+
   function formatEntryTime(iso){
-    const d = new Date(iso);
-    return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+    const p = whParts(new Date(iso));
+    return p.hour + ':' + p.minute;
   }
 
   const STATUS_LABEL = {auto:'закрыто автоматически', pending:'требует внимания', answered:'решено', confirmed:'принято вами', rolled_back:'отклонено вами'};
 
   function journalDayKey(iso){
-    const d = new Date(iso);
-    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
-      + '-' + String(d.getDate()).padStart(2, '0');
+    return whDay(new Date(iso));
   }
 
   const MONTHS_RU = ['января','февраля','марта','апреля','мая','июня',
@@ -3566,10 +3582,8 @@
 
   function journalDayLabel(key){
     const [y, m, d] = key.split('-').map(Number);
-    const today = new Date();
-    const isToday = today.getFullYear() === y && today.getMonth() + 1 === m && today.getDate() === d;
-    const yest = new Date(Date.now() - 86400000);
-    const isYest = yest.getFullYear() === y && yest.getMonth() + 1 === m && yest.getDate() === d;
+    const isToday = key === whDay(new Date());
+    const isYest = key === whDay(new Date(Date.now() - 86400000));
     const base = d + ' ' + MONTHS_RU[m - 1];
     if(isToday) return 'Сегодня, ' + base;
     if(isYest) return 'Вчера, ' + base;
@@ -4881,7 +4895,8 @@
       try{ totals = await apiFetch('/api/warehouses/me/stock-sources'); } catch(e){ totals = null; }
       const n = (v) => Number(v || 0).toLocaleString('ru-RU');
       const ok = await askConfirm((stock === 'argus' ? 'Считать остатки по ячейкам Аргуса, а не по 1С?' : 'Считать остатки по 1С, а не по ячейкам Аргуса?')
-        + '\n\n' + (totals ? 'Сейчас товара продавцов: по 1С — ' + n(totals.onec) + ' шт., в ячейках Аргуса — ' + n(totals.cells) + ' шт. '
+        + '\n\n' + (totals ? 'Сейчас товара продавцов: по 1С — ' + n(totals.onec) + ' шт., по Аргусу — ' + n(Number(totals.cells || 0) + Number(totals.staged || 0)) + ' шт.'
+          + (totals.staged ? ' (в ячейках ' + n(totals.cells) + ' и собрано к отгрузке ' + n(totals.staged) + ')' : '') + '. '
           + 'У продавцов «Всего товара» станет ' + (stock === 'argus' ? 'числом из ячеек' : 'числом из 1С') + '. ' : '')
         + (stock === 'argus' ? 'Если товар ещё не разложен по ячейкам в Аргусе, у продавцов будет меньше, чем есть на самом деле.'
           : 'Числа появятся после первого обмена с 1С.'));
@@ -5015,8 +5030,9 @@
       else if(!d) html += '<div class="mp-card-sub">Загружаю склады продавца…</div>';
       else {
         const ours = d.warehouses.filter(w => w.ours).length;
+        const single = d.warehouses.filter(w => !w.gone).length === 1;
         const who = (w) => w.auto
-          ? (w.ours ? (w.nameMatches ? 'отмечен Аргусом: в названии «' + ff + '»' : 'отмечен Аргусом: единственный склад продавца') : 'не отмечен')
+          ? (w.ours ? (w.nameMatches ? 'отмечен Аргусом: в названии «' + ff + '»' : single ? 'отмечен Аргусом: единственный склад продавца' : 'отмечен Аргусом') : 'не отмечен')
           : (w.ours ? 'отметил ' : 'снял ') + w.decidedBy;
         html += '<div class="sp-count' + (ours ? '' : ' wbo-warn') + '">' + (d.warehouses.length
             ? (ours ? 'Вашими отмечены ' + ours + ' из ' + d.warehouses.length : 'Ни один склад не отмечен — заказы этого продавца не забираются')
@@ -5254,7 +5270,9 @@
         + (cred && cred.sellerName
             ? '<div class="mp-card-sub">Кабинет WB: ' + escapeHTML(cred.sellerName) + (cred.sellerInn ? ', ИНН ' + escapeHTML(cred.sellerInn) : '') + '</div>'
             : '')
-        + (cred
+        // Заказы, которые уже пришли, ждут поставки и без ключа (ключ
+        // отключили): шапка их считает — карточка тоже показывает.
+        + (cred || orders > 0
             ? '<div class="mp-facts">'
               + '<div class="mp-fact"><b class="' + (orders > 0 ? 'hot' : 'zero') + '">' + orders
               +   '</b><span>' + pluralRu(orders, 'заказ ждёт', 'заказа ждут', 'заказов ждут') + '</span></div>'
@@ -5265,7 +5283,8 @@
                     + '</b><span>самый старый</span></div>'
                   : '')
               + '</div>'
-            : '<div class="mp-card-sub">WB не подключён — заказы с маркетплейса не приходят.</div>')
+            : '')
+        + (cred ? '' : '<div class="mp-card-sub">WB не подключён — ' + (orders > 0 ? 'новые ' : '') + 'заказы с маркетплейса не приходят.</div>')
         + wbLine + writeHint
         + '<div class="mp-card-acts">' + acts + '</div>'
         + '</div>';
