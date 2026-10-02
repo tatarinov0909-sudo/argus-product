@@ -231,6 +231,10 @@ main { padding: 28px var(--page-x) 64px; }
 .vw-ask-form .field { margin-top: 10px; }
 .vw-ask-form .drawer-actions, .vw-notes .drawer-actions { margin-top: 10px; }
 .vw-move { margin-top: 16px; display: grid; gap: 12px; }
+.vw-split { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-top: 12px; }
+.vw-split .field small { display: block; font-size: 12px; color: var(--muted); margin-top: 4px; }
+.vw-split b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.vw-split-sum { margin-top: 8px; }
 .vw-move .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .grid { width: 100%; border-collapse: collapse; font-size: 18px; }
 .grid th {

@@ -1376,6 +1376,7 @@
   // переноса.
   let productsVw = 'all';      // 'all' | 'main' | id склада
   let productTransfers = [];
+  let productDecisions = [];   // спорные ситуации, которые ждут продавца
   let productVws = [];
 
   const nfmt = (v) => (v === null || v === undefined ? '—' : Number(v).toLocaleString('ru-RU'));
@@ -1498,11 +1499,13 @@
     if(productsFor !== companyId) return;   // пока ждали, открыли другого продавца
     productRows = rows.filter(r => r.listed);
     // Склады продавца и переносы, ждущие решения, — только если склады есть.
-    productTransfers = []; productVws = [];
+    productTransfers = []; productVws = []; productDecisions = [];
     if(productRows.some(r => r.byWarehouse)){
       try{
         productVws = (await vwOf(companyId, true)).warehouses;
-        productTransfers = await apiFetch('/api/vwarehouses/transfers?open=1&companyId=' + encodeURIComponent(companyId));
+        [productTransfers, productDecisions] = await Promise.all([
+          apiFetch('/api/vwarehouses/transfers?open=1&companyId=' + encodeURIComponent(companyId)),
+          apiFetch('/api/vwarehouses/decisions?open=1&companyId=' + encodeURIComponent(companyId))]);
       } catch(e){ showWhToast('Склады продавца не загрузились: ' + e.message); }
       if(productsFor !== companyId) return;
     }
@@ -1518,12 +1521,22 @@
   window.setProductsVw = setProductsVw;
 
   // Перенос между складами продавца: учёт, физически ничего не двигается.
-  function openTransfer(sku){
-    const r = productRows.find(x => x.sku === sku); if(!r || !r.byWarehouse) return;
+  // pre: { companyId, to, qty, note, after } — из карточки поставки, когда
+  // складу поставки не хватает товара (владелец 02.10.2026).
+  async function openTransfer(sku, pre = {}){
+    const companyId = pre.companyId || productsFor;
+    let r = companyId === productsFor ? productRows.find(x => x.sku === sku) : null;
+    if(!r){
+      try{ r = (await apiFetch('/api/sellers/stock?companyId=' + encodeURIComponent(companyId))).find(x => x.sku === sku); }
+      catch(e){ showWhToast('Остатки продавца не загрузились: ' + e.message); return; }
+    }
+    if(!r || !r.byWarehouse){ showWhToast('У этого продавца нет складов, переносить некуда.'); return; }
     const opts = (sel) => r.byWarehouse.map(w => '<option value="' + vwKey(w.id) + '"' + (sel === vwKey(w.id) ? ' selected' : '') + '>'
       + escapeHTML(w.name) + ' — ' + nfmt(w.onHand) + ' шт.</option>').join('');
-    const from = productsVw !== 'all' ? productsVw : vwKey((r.byWarehouse.find(w => w.onHand > 0) || r.byWarehouse[0]).id);
-    const to = vwKey((r.byWarehouse.find(w => vwKey(w.id) !== from) || r.byWarehouse[0]).id);
+    const richest = (skip) => r.byWarehouse.filter(w => vwKey(w.id) !== skip).sort((a, b) => (b.onHand || 0) - (a.onHand || 0))[0] || r.byWarehouse[0];
+    const from = pre.to ? vwKey(richest(pre.to).id)
+      : productsVw !== 'all' ? productsVw : vwKey((r.byWarehouse.find(w => w.onHand > 0) || r.byWarehouse[0]).id);
+    const to = pre.to || vwKey((r.byWarehouse.find(w => vwKey(w.id) !== from) || r.byWarehouse[0]).id);
     const overlay = document.createElement('div');
     overlay.className = 'ask-overlay';
     overlay.innerHTML = '<div class="ask-box" role="dialog" aria-modal="true" data-form>'
@@ -1531,8 +1544,8 @@
       + '<div class="ask-text">' + escapeHTML(r.name || r.sku) + '. Товар остаётся в тех же ячейках — меняется только, за каким складом он числится. Продавцу придёт уведомление.</div>'
       + '<div class="tr-grid"><label>Откуда<select class="mp-field" id="trFrom">' + opts(from) + '</select></label>'
       + '<label>Куда<select class="mp-field" id="trTo">' + opts(to) + '</select></label>'
-      + '<label>Сколько штук<input class="mp-field" id="trQty" type="number" min="1" inputmode="numeric"></label>'
-      + '<label>Комментарий — не обязательно<input class="mp-field" id="trNote" maxlength="300" placeholder="Например: под поставку на Озон"></label></div>'
+      + '<label>Сколько штук<input class="mp-field" id="trQty" type="number" min="1" inputmode="numeric" value="' + escapeHTML(pre.qty || '') + '"></label>'
+      + '<label>Комментарий — не обязательно<input class="mp-field" id="trNote" maxlength="300" placeholder="Например: под поставку на Озон" value="' + escapeHTML(pre.note || '') + '"></label></div>'
       + '<div class="ask-actions"><button type="button" class="wh-onboarding-btn ask-cancel">Отмена</button>'
       + '<button type="button" class="wh-onboarding-btn primary ask-ok">Перенести</button></div></div>';
     const close = () => overlay.remove();
@@ -1546,13 +1559,13 @@
       const btn = overlay.querySelector('.ask-ok'); btn.disabled = true;
       try{
         const res = await apiFetch('/api/vwarehouses/transfers', { method: 'POST', body: {
-          companyId: productsFor, sku, qty, fromVw: f === 'main' ? null : f, toVw: t === 'main' ? null : t,
+          companyId, sku, qty, fromVw: f === 'main' ? null : f, toVw: t === 'main' ? null : t,
           note: overlay.querySelector('#trNote').value.trim() || undefined } });
         close();
         showWhToast(res.status === 'waiting_seller'
-          ? 'Продавец отключил складу переносы без согласия — просьба отправлена ему, перенос сделается после «Согласен».'
-          : 'Перенесено: ' + res.fromName + ' → ' + res.toName + ', ' + nfmt(res.qty) + ' шт. Продавцу пришло уведомление.');
-        loadProducts();
+          ? 'Продавец запретил складу решать такое без него — просьба отправлена ему, перенос сделается после «Согласен».'
+          : 'Перенесено: ' + res.fromName + ' → ' + res.toName + ', ' + nfmt(res.qty) + ' шт. Продавцу пришло уведомление «обратите внимание».');
+        if(pre.after) pre.after(); else loadProducts();
       } catch(e){ showWhToast(e.message); btn.disabled = false; }
     };
     document.body.appendChild(overlay);
@@ -1662,12 +1675,18 @@
       ? '<div class="rc-card pr-transfers"><div class="staff-title" style="font-size:15px;">Переносы ждут решения · ' + productTransfers.length + '</div>'
         + productTransfers.map(t => '<div class="sp-key"><span><b>' + escapeHTML(t.number) + '</b> «' + escapeHTML(t.name || t.sku) + '», ' + nfmt(t.qty) + ' шт.: '
           + escapeHTML(t.fromName) + ' → ' + escapeHTML(t.toName)
-          + '<span class="mp-card-sub">' + (t.status === 'requested' ? 'просит продавец' : 'ждёт согласия продавца — он отключил переносы без согласия')
+          + '<span class="mp-card-sub">' + (t.status === 'requested' ? 'просит продавец' : 'ждёт согласия продавца — он запретил складу решать такое без него')
           + (t.note ? ' · ' + escapeHTML(t.note) : '') + '</span></span>'
           + (t.status === 'requested' ? '<span class="mp-card-acts" style="margin:0;"><span class="mp-act" onclick="decideTransfer(\'' + t.id + '\', true)">Выполнить</span>'
             + '<span class="mp-act warn" onclick="decideTransfer(\'' + t.id + '\', false)">Отказать</span></span>' : '')
           + '</div>').join('') + '</div>'
       : '';
+    // Спорные ситуации ждут продавца — склад их видит, решить не может.
+    if(productDecisions.length) document.getElementById('productsTransfers').innerHTML +=
+      '<div class="rc-card pr-transfers"><div class="staff-title" style="font-size:15px;">Ждёт решения продавца · ' + productDecisions.length + '</div>'
+      + productDecisions.map(d => '<div class="sp-key"><span>' + escapeHTML(d.title)
+        + '<span class="mp-card-sub">пока записано по правилу: ' + escapeHTML(d.parts.map(x => x.name + ' — ' + x.value).join(', '))
+        + ' · продавец запретил складу решать такое без него</span></span></div>').join('') + '</div>';
     document.getElementById('productsMeta').textContent = productRows.length
       ? nfmt(productRows.length) + ' ' + pluralRu(productRows.length, 'товар', 'товара', 'товаров') : '';
     if(productRows.length === 0){ box.innerHTML = '<div class="staff-empty">У продавца пока нет товаров. Заведите первый кнопкой «+ Добавить товар».</div>'; return; }
@@ -7414,8 +7433,15 @@
           : '<span class="warn">не в ячейках Аргуса</span>';
       // По учёту на полках меньше, чем нужно поставке: этим заказам
       // собираться не из чего. Решают до сборки — убрать их из поставки.
-      const short = taken < r.qty && p && p.shortfall > 0
-        ? '<div class="warn">не хватает ' + p.shortfall + ' шт</div>' : '';
+      // Сервер отдаёт, сколько осталось взять (qty) и сколько лежит в ячейках
+      // склада поставки (available); поля shortfall в карточке нет — раньше
+      // «не хватает» здесь не показывалось никогда.
+      const shortBy = p ? Math.max(0, Number(p.qty || 0) - Number(p.available || 0)) : 0;
+      const short = taken < r.qty && shortBy > 0
+        ? '<div class="warn">не хватает ' + shortBy + ' шт</div>'
+          + (d.supply && d.supply.virtualWarehouseName && d.supply.status === 'collecting'
+            ? '<span class="mp-act" onclick="takeFromOtherVw(\'' + id + '\', \'' + escapeHTML(r.sku).replace(/'/g, '&#39;') + '\', ' + shortBy + ')">Взять с другого склада продавца</span>' : '')
+        : '';
       return '<tr>'
         + '<td>' + escapeHTML(r.name || '—')
         +   '<div class="sku">' + escapeHTML(r.article || r.sku || '') + '</div></td>'
@@ -7431,6 +7457,17 @@
       + '<th class="num">Штук</th><th>Где лежит</th></tr></thead><tbody>'
       + body + '</tbody></table>';
   }
+
+  // Складу поставки не хватает товара, а на другом складе продавца он есть:
+  // перенос учёта (владелец 02.10.2026). Продавец запретил складу решать
+  // без него — перенос ждёт его «Согласен».
+  function takeFromOtherVw(supplyId, sku, qty){
+    const d = supplyInside[supplyId]; if(!d || !d.supply) return;
+    openTransfer(sku, { companyId: d.supply.companyId, to: vwKey(d.supply.virtualWarehouseId || null), qty,
+      note: 'не хватало для поставки ' + d.supply.number,
+      after: async () => { try{ supplyInside[supplyId] = await apiFetch('/api/supplies/' + supplyId); } catch(_){} renderSupplies(); } });
+  }
+  window.takeFromOtherVw = takeFromOtherVw;
 
   async function loadSupplies(){
     const box = document.getElementById('suppliesList');

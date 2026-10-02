@@ -441,11 +441,13 @@
   $('accountMenu').addEventListener('toggle', (e) => { for (const id of ['accountButton', 'mobileAccount']) $(id).setAttribute('aria-expanded', String(e.newState === 'open' && $(id) === accountTrigger)); });
   const draftPrefs = {};
   function renderSettings() {
-    // Права склада (владелец 02.10.2026): по умолчанию склад переносит товар
-    // между складами продавца сам, продавцу приходит уведомление. Выключил —
-    // перенос ждёт его согласия. Меняет только сам продавец.
+    // Права склада (владелец 02.10.2026): одна галочка. Не стоит — склад сам
+    // решает спорные ситуации с количеством, продавцу «обратите внимание».
+    // Стоит — каждая такая ситуация ждёт решения продавца. Поставки, приёмку
+    // и отгрузку склад ведёт всегда сам. Меняет только сам продавец.
     const rights = !state.owner && hasVw() ? `<div class="field"><span>Права склада — для всего вашего кабинета</span>`
-      + `<label class="check-line"><input type="checkbox" id="rightTransfer" ${draftPrefs.rightTransfer ? 'checked' : ''}><span>Склад может переносить товар между вашими складами без вашего согласия<small>Вам всё равно придёт уведомление. Выключите — каждый перенос будет ждать вашего «Согласен».</small></span></label></div>` : '';
+      + `<label class="check-line"><input type="checkbox" id="rightForbid" ${draftPrefs.forbid ? 'checked' : ''}><span>Запретить складу решать без меня спорные ситуации с количеством`
+      + `<small>Перенос товара между вашими складами, с какого склада списать недостачу при пересчёте и куда записать лишнее, расхождение приёмки по складам, с какого склада брак. Без галочки склад решает сам, а вам приходит уведомление «обратите внимание». С галочкой — каждый такой случай ждёт вашего решения. Составлять поставки, принимать и отгружать товар склад может всегда.</small></span></label></div>` : '';
     $('settingsFields').innerHTML = rights + `<div class="field"><span>Сколько строк показывать за раз</span>${dropdown('pref-rows', {
       label: 'Строк', value: String(draftPrefs.rows), options: [15, 30, 50, 100].map((v) => ({ value: String(v), text: String(v) })),
       onPick: (v) => { draftPrefs.rows = Number(v); renderSettings(); },
@@ -457,18 +459,18 @@
   $('accountSettings').onclick = () => {
     $('accountMenu').hidePopover(); Object.assign(draftPrefs, state.prefs);
     $('settingsCompany').textContent = state.profile.name + ' · фулфилмент ' + $('warehouseName').textContent;
-    draftPrefs.rightTransfer = state.vw?.rights?.transfer !== false;
+    draftPrefs.forbid = state.vw?.rights?.decide === false;
     renderSettings(); $('settingsDialog').showModal();
   };
-  $('settingsFields').addEventListener('change', (e) => { if (e.target.id === 'rightTransfer') draftPrefs.rightTransfer = e.target.checked; });
+  $('settingsFields').addEventListener('change', (e) => { if (e.target.id === 'rightForbid') draftPrefs.forbid = e.target.checked; });
   $('closeSettings').onclick = () => $('settingsDialog').close();
   $('settingsForm').onsubmit = async (e) => {
     e.preventDefault();
-    if (!state.owner && hasVw() && draftPrefs.rightTransfer !== (state.vw.rights?.transfer !== false)) {
-      try { state.vw.rights = (await api('/api/vwarehouses/rights', { method: 'PATCH', body: { rights: { transfer: draftPrefs.rightTransfer } } })).rights; }
+    if (!state.owner && hasVw() && draftPrefs.forbid !== (state.vw.rights?.decide === false)) {
+      try { state.vw.rights = (await api('/api/vwarehouses/rights', { method: 'PATCH', body: { rights: { decide: !draftPrefs.forbid } } })).rights; }
       catch (err) { toast('Права склада не сохранились: ' + err.message); return; }
     }
-    const { rightTransfer, ...prefs } = draftPrefs;
+    const { forbid, ...prefs } = draftPrefs;
     writePref('preferences', prefs); loadPreferences();
     Object.values(state.ui).forEach((ui) => { ui.shown = 0; });
     $('settingsDialog').close(); navigate(); toast('Настройки сохранены');
@@ -744,33 +746,74 @@
   // Часть товара под своё назначение (площадка, юрлицо). Заводит склад;
   // продавец видит раскладку, просит перенести, отвечает на просьбы склада.
   async function loadVw() {
-    const [d, notes, transfers] = await Promise.all([api('/api/vwarehouses'), api('/api/vwarehouses/notifications'),
-      api('/api/vwarehouses/transfers?open=1')]);
-    return { ...d, notes, transfers };
+    const [d, notes, transfers, decisions] = await Promise.all([api('/api/vwarehouses'), api('/api/vwarehouses/notifications'),
+      api('/api/vwarehouses/transfers?open=1'), api('/api/vwarehouses/decisions?open=1')]);
+    return { ...d, notes, transfers, decisions };
   }
   function vwNoticeHtml() {
     const v = state.vw; if (!v) return '';
     const mine = !state.owner;
     const ask = (v.transfers || []).filter((t) => t.status === 'waiting_seller').map((t) => `<div class="notice warning vw-ask">${icon('alert')}<div>`
       + `<strong>Склад просит перенести «${h(t.name || t.sku)}», ${n(t.qty)} шт.: «${h(t.fromName)}» → «${h(t.toName)}»</strong>`
-      + `<p>${t.note ? 'Комментарий склада: ' + h(t.note) + '. ' : ''}${mine ? 'Вы отключили складу переносы без согласия — решите сами.' : 'Ждёт согласия продавца.'} Товар останется в тех же ячейках.</p>`
+      + `<p>${t.note ? 'Комментарий склада: ' + h(t.note) + '. ' : ''}${mine ? 'Вы запретили складу решать такое без вас — решите сами.' : 'Ждёт согласия продавца.'} Товар останется в тех же ячейках.</p>`
       + (mine ? `<div class="vw-ask-form"><label class="field"><span>Причина отказа — не обязательно, склад её увидит</span><input id="vwReason-${h(t.id)}" maxlength="300"></label>`
         + `<div class="drawer-actions"><button class="button primary" type="button" data-vw-yes="${h(t.id)}">Согласен</button><button class="button" type="button" data-vw-no="${h(t.id)}">Отказать</button></div></div>` : '')
       + '</div></div>').join('');
     const open = (v.transfers || []).filter((t) => t.status === 'requested');
     const asked = open.length ? notice(mine ? 'Ваши заявки на перенос ждут склада' : 'Заявки продавца на перенос ждут склада',
       open.map((t) => `${t.number}: «${t.name || t.sku}», ${n(t.qty)} шт., «${t.fromName}» → «${t.toName}»`).join('; ')) : '';
-    // Просьбы склада о согласии — не здесь: ждущие стоят сверху с кнопками,
-    // а на решённые продавец уже ответил сам.
-    const unseen = (v.notes || []).filter((x) => x.unseen && x.kind !== 'vw_transfer_consent');
-    const notes = unseen.length ? `<div class="notice vw-notes">${icon('info')}<div><strong>От склада · ${n(unseen.length)}</strong>`
-      + unseen.slice(0, 5).map((x) => `<p>${h(when(x.at))} — ${h(x.text)}</p>`).join('')
-      + (unseen.length > 5 ? `<p>и ещё ${n(unseen.length - 5)}</p>` : '')
-      + (mine ? '<div class="drawer-actions"><button class="button" type="button" data-vw-seen>Понятно</button></div>' : '') + '</div></div>' : '';
-    return ask + asked + notes;
+    // Спорные ситуации, которые ждут продавца (он запретил складу решать без
+    // него): как записано по правилу и поле на каждый склад.
+    const LABEL = { inventory: ['было', 'останется'], receiving: ['заявлено', 'принято'], defect: ['годного было', 'брак с этого склада'] };
+    const decide = (v.decisions || []).map((d) => `<div class="notice warning vw-ask vw-decision" data-decision="${h(d.id)}">${icon('alert')}<div>`
+      + `<strong>${h(d.title)}</strong>`
+      + `<p>${mine ? 'Вы запретили складу решать такое без вас. Пока учёт записан по правилу склада — согласитесь или разделите по-своему.' : 'Ждёт решения продавца: он запретил складу решать такое без него.'}</p>`
+      + `<div class="vw-split">${d.parts.map((x) => `<label class="field"><span>«${h(x.name)}» · ${LABEL[d.kind][0]} ${n(x.before)}</span>`
+        + (mine ? `<input type="number" inputmode="numeric" min="${x.min}" max="${x.max}" value="${x.value}" data-part="${h(x.vw || '')}" aria-label="${h(x.name)}: ${LABEL[d.kind][1]}">`
+          : `<b>${n(x.value)}</b>`) + `<small>${LABEL[d.kind][1]}</small></label>`).join('')}</div>`
+      + (mine ? `<p class="vw-split-sum">Всего должно получиться ${n(d.parts.reduce((a, x) => a + x.value, 0))} шт.</p>`
+        + `<div class="drawer-actions"><button class="button primary" type="button" data-decision-ok="${h(d.id)}">Согласен</button>`
+        + `<button class="button" type="button" data-decision-save="${h(d.id)}">Сохранить по-моему</button></div>` : '')
+      + '</div></div>').join('');
+    // Просьбы склада о согласии и о решении — не здесь: ждущие стоят сверху с
+    // кнопками, на решённые продавец уже ответил сам. Что склад решил сам —
+    // отдельно и заметно: «обратите внимание» (владелец 02.10.2026).
+    const unseen = (v.notes || []).filter((x) => x.unseen && !['vw_transfer_consent', 'vw_decision'].includes(x.kind));
+    const block = (list, cls, ico, title, seenBtn) => (list.length ? `<div class="notice ${cls}">${icon(ico)}<div><strong>${title} · ${n(list.length)}</strong>`
+      + list.slice(0, 5).map((x) => `<p>${h(when(x.at))} — ${h(x.text)}</p>`).join('')
+      + (list.length > 5 ? `<p>и ещё ${n(list.length - 5)}</p>` : '')
+      + (mine && seenBtn ? '<div class="drawer-actions"><button class="button" type="button" data-vw-seen>Понятно</button></div>' : '') + '</div></div>' : '');
+    const self = unseen.filter((x) => x.kind === 'ff_decided');
+    const rest = unseen.filter((x) => x.kind !== 'ff_decided');
+    return decide + ask + asked
+      + block(self, 'warning vw-notes', 'alert', 'Склад решил сам — обратите внимание', !rest.length)
+      + block(rest, 'vw-notes', 'info', 'От склада', true);
   }
   function wireVwNotices() {
     const host = $('view');
+    host.querySelectorAll('[data-decision-ok], [data-decision-save]').forEach((b) => {
+      b.onclick = async () => {
+        const id = b.dataset.decisionOk || b.dataset.decisionSave;
+        const box = host.querySelector(`[data-decision="${CSS.escape(id)}"]`);
+        const chosen = [...box.querySelectorAll('[data-part]')].map((i) => ({ vw: i.dataset.part || null, qty: Number(i.value) }));
+        b.disabled = true;
+        try {
+          const d = await api('/api/vwarehouses/decisions/' + encodeURIComponent(id), { method: 'POST',
+            body: b.dataset.decisionOk ? { confirm: true } : { chosen } });
+          toast(d.status === 'changed' ? 'Сделано по-вашему: ' + (d.transfers || []).join(', ') : 'Записано: вы согласились.');
+          navigate(true);
+        } catch (e) { b.disabled = false; toast(e.message); }
+      };
+    });
+    // Сумма по складам — сразу под полями.
+    host.querySelectorAll('.vw-decision').forEach((box) => {
+      const sum = box.querySelector('.vw-split-sum'); if (!sum) return;
+      const need = sum.textContent;
+      box.querySelectorAll('[data-part]').forEach((i) => { i.oninput = () => {
+        const got = [...box.querySelectorAll('[data-part]')].reduce((a, x) => a + Number(x.value || 0), 0);
+        sum.textContent = need + ' Сейчас: ' + n(got) + ' шт.';
+      }; });
+    });
     const seen = host.querySelector('[data-vw-seen]');
     if (seen) seen.onclick = async () => {
       seen.disabled = true;
