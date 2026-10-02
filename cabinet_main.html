@@ -176,7 +176,6 @@
   .connected-agent{display:flex; align-items:center; gap:7px; position:relative; cursor:pointer;}
   .mini-avatar{width:24px; height:24px; border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; position:relative; flex-shrink:0;}
   .mini-avatar.warehouse{background:var(--terracotta-soft); color:var(--terracotta);}
-  .mini-avatar.analyst{background:var(--an-soft); color:var(--an);}
   .mini-dot{width:7px; height:7px; border-radius:50%; background:var(--green); position:absolute; bottom:-1px; right:-1px; border:1.5px solid var(--panel);}
   .connected-agent-name{font-size:14px; color:var(--muted);}
   .connected-agent-tip{
@@ -198,7 +197,6 @@
   .connected-agent-tip-head{display:flex; align-items:center; gap:6px; margin-bottom:5px;}
   .connected-agent-tip-dot{width:6px; height:6px; border-radius:50%; flex-shrink:0;}
   .connected-agent-tip-dot.warehouse{background:var(--terracotta);}
-  .connected-agent-tip-dot.analyst{background:var(--an);}
   .connected-agent-tip-title{font-size:14px; font-weight:700; color:var(--text);}
   .connected-agent-tip-text{font-size:13px; line-height:1.55; color:var(--muted);}
   .msg-detail-trigger{position:relative; color:var(--accent); font-weight:600; cursor:pointer; text-decoration:underline; text-decoration-style:dotted;}
@@ -235,7 +233,6 @@
   }
   .avatar.agent{background:var(--accent-soft); color:var(--accent);}
   .avatar.agent.warehouse{background:var(--terracotta-soft); color:var(--terracotta);}
-  .avatar.agent.analyst{background:var(--an-soft); color:var(--an);}
   .avatar.user{background:var(--panel-2); color:var(--muted); border:1px solid var(--line);}
   .bubble{background:var(--panel); border:1px solid var(--line); border-left:3px solid transparent; border-radius:10px; padding:13px 15px; font-size:16px; line-height:1.65;}
   .msg.user .bubble{background:var(--panel-2);}
@@ -463,7 +460,6 @@
   .j-entry{display:flex; gap:12px; padding:15px 16px; background:var(--panel); border:1px solid var(--line); border-left:2px solid transparent; border-radius:10px; margin-bottom:10px;}
   .j-entry.orchestrator{background:var(--panel-orch); border-left-color:var(--accent);}
   .j-entry.warehouse{background:var(--panel-wh); border-left-color:var(--terracotta);}
-  .j-entry.analyst{background:var(--panel-an); border-left-color:var(--an);}
   .j-check{
     appearance:none; -webkit-appearance:none; width:18px; height:18px; margin-top:2px; flex-shrink:0;
     cursor:pointer; border:1.5px solid var(--line); border-radius:5px; background:var(--panel-2);
@@ -478,12 +474,10 @@
   .j-avatar{width:32px; height:32px; border-radius:9px; background:var(--panel-2); display:flex; align-items:center; justify-content:center; flex-shrink:0;}
   .j-entry.orchestrator .j-avatar{background:rgba(95,175,166,0.14); color:var(--accent);}
   .j-entry.warehouse .j-avatar{background:rgba(217,142,110,0.14); color:var(--terracotta);}
-  .j-entry.analyst .j-avatar{background:rgba(183,166,94,0.16); color:var(--an);}
   .j-body{flex:1; min-width:0;}
   .j-top{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;}
   .j-agent{font-size:14px; font-weight:700; color:var(--accent);}
   .j-agent.warehouse{color:var(--terracotta);}
-  .j-agent.analyst{color:var(--an);}
   .j-time{font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums;}
   .j-text{font-size:16px; line-height:1.6; margin-bottom:8px; color:var(--text);}
   .j-meta{display:flex; align-items:center; gap:10px;}
@@ -2313,18 +2307,7 @@
                   <span class="connected-agent-tip-dot warehouse"></span>
                   <span class="connected-agent-tip-title">Кладовщик</span>
                 </div>
-                <div class="connected-agent-tip-text">Принимает поставки по штрихкоду, сверяет ячейки и остатки с 1С, находит расхождения и присылает их вам на подтверждение.</div>
-              </div>
-            </div>
-            <div class="connected-agent" tabindex="0" onclick="togglePin(this)">
-              <div class="mini-avatar analyst">АН<span class="mini-dot"></span></div>
-              <span class="connected-agent-name">Аналитик</span>
-              <div class="connected-agent-tip">
-                <div class="connected-agent-tip-head">
-                  <span class="connected-agent-tip-dot analyst"></span>
-                  <span class="connected-agent-tip-title">Аналитик</span>
-                </div>
-                <div class="connected-agent-tip-text">Считает оборачиваемость и заполненность склада, собирает периодические отчёты и предупреждает о переполнении секторов.</div>
+                <div class="connected-agent-tip-text">Отвечает, где лежит товар и сколько его, что в документах, что ждёт работы и вашего решения. Сам напоминает о проблемах склада и подсказывает грузчику ячейку.</div>
               </div>
             </div>
           </div>
