@@ -583,6 +583,7 @@
   .ord-date{width:170px;}
   .ord-point{width:460px;}
   .ord-vw{width:300px; cursor:pointer;}
+  .ord-vw-line{background:var(--panel-2); border:1px solid var(--line); border-radius:6px; color:var(--text); font-size:13px; padding:2px 6px; margin-top:2px;}
   .ord-sort, .sup-filters select{background:var(--panel-2); border:1px solid var(--line); border-radius:8px;
     padding:9px 12px; color:var(--text); font-family:var(--sans); font-size:15px;}
   .sup-filters{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:14px;}
@@ -1883,6 +1884,11 @@
   /* Склады продавца: форма склада внутри окна продавца (02.10.2026). */
   .rc-vw-line{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid var(--line-soft); font-size:14px;}
   .rc-vw-line select{width:auto; max-width:220px;}
+  .sp-check{display:flex; gap:10px; align-items:flex-start; font-size:14px; cursor:pointer;}
+  .sp-check input{width:18px; height:18px; margin-top:2px; accent-color:var(--accent); flex:none;}
+  .sp-check small{display:block; color:var(--muted); font-size:12.5px; margin-top:2px;}
+  #vwSepMore{display:flex; flex-direction:column; gap:8px; padding-left:28px;}
+  #vwSepMore[hidden]{display:none;}
   .sp-vw-form{display:flex; flex-direction:column; gap:8px; padding:10px 0; border-top:1px solid var(--line-soft);}
   .sp-head{display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px; font-size:15px;}
   .sp-count{font-size:14px; font-weight:600; margin:6px 0 2px;}
@@ -2893,6 +2899,10 @@
             <div class="set-help" style="margin-bottom:8px;">Продавец сам называет склад на WB, который завёл под вас, — например «ФФ Восход СПБ». Склады со словом из названия вашего склада Аргус отмечает вашими сам. Если продавцы пишут вас иначе, впишите эти слова через запятую.</div>
             <input id="setWbNames" class="mp-field" maxlength="300" placeholder="например: Восток, VSKHD">
           </div>
+          <div class="set-q">
+            <div class="set-q-title">Напоминания о складах продавцов</div>
+            <label class="sp-check"><input type="checkbox" id="setVwReminders"><span>Кладовщик напоминает о складах продавцов<small>В утренней сводке и в ответе «что сейчас на складе»: заявки продавцов на перенос, переносы и решения, которые ждут продавца, заполненные зоны складов, задания «переложить».</small></span></label>
+          </div>
           <div class="set-actions"><button class="wh-onboarding-btn primary" type="button" onclick="saveSettings()">Сохранить</button><span id="setResult" class="set-help"></span></div>
         </div>
         <div class="set-form" data-form style="margin-top:28px;">
@@ -3043,7 +3053,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <script src="back.js?v=4901b838" defer></script>
 <script src="form-keys.js?v=02a92e0e" defer></script>
-<script src="cabinet_main.js?v=adfca917" defer></script>
+<script src="cabinet_main.js?v=6c78f97a" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->

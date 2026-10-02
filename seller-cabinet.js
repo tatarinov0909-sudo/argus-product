@@ -836,7 +836,9 @@
   // Карточка товара: сколько на каждом складе и заявка складу на перенос.
   function productVwHtml(r) {
     if (!hasVw() || !r.warehouses) return '';
-    const cols = [{ title: 'Склад', cell: (w) => h(w.name) }, { title: 'На складе', cls: 'n', cell: (w) => num(w.onHand) },
+    // «Хранится отдельно» включает склад (владелец 02.10.2026): продавец видит пометку.
+    const apart = (w) => (state.vw.warehouses.find((x) => x.id === w.id) || {}).keepSeparate;
+    const cols = [{ title: 'Склад', cell: (w) => h(w.name) + (apart(w) ? '<span class="cell-sub">хранится отдельно</span>' : '') },{ title: 'На складе', cls: 'n', cell: (w) => num(w.onHand) },
       { title: 'В сборке', cls: 'n', cell: (w) => num(w.inAssembly) }, { title: 'Доступно', cls: 'n', cell: (w) => num(w.available, true) },
       { title: 'Брак', cls: 'n', cell: (w) => num(w.defect) }];
     return `<section class="detail-section" style="margin-top:0"><h3>По вашим складам</h3>${table(cols, r.warehouses)}`

@@ -3402,7 +3402,9 @@
   function isUrgentWaiting(e){ return Boolean(e.urgent) && isWaiting(e); }
   // Записка грузчика о товаре (третье задание 27.09.2026): решать там нечего —
   // её отмечают «Принял к сведению».
-  function isNote(e){ return e.entity_type === 'item_note'; }
+  // «Принял к сведению» — записка грузчика о товаре и предупреждение «зона
+  // склада продавца заполнена» (02.10.2026).
+  function isNote(e){ return e.entity_type === 'item_note' || e.entity_type === 'vw_zone'; }
   // Текст срочной отметки уже начинается с «ОЧЕНЬ ВАЖНО:» — рядом с красной
   // меткой эти слова дублировались бы.
   function urgentText(text){
@@ -4535,7 +4537,8 @@
           : e.urgent && e.invoice_supply_id
             ? 'Убранный заказ вернётся в очередь, поставка уедет без него. Данные 1С не изменяются.'
           : isNote(e)
-            ? 'Грузчик написал о товаре. Отметка «Принял к сведению» сохранится в журнале с вашим именем.'
+            ? (e.entity_type === 'vw_zone' ? 'Зона склада продавца заполнена. Расширьте зону в окне продавца — иначе товар положат рядом.'
+              : 'Грузчик написал о товаре.') + ' Отметка «Принял к сведению» сохранится в журнале с вашим именем.'
             : 'Решение сохранится в журнале вместе с вашим именем. Данные 1С не изменяются.'}</div>
       </div>
     `;}).join('');
@@ -5237,6 +5240,7 @@
     const zones = TIMEZONES.some(z => z[0] === s.timezone) ? TIMEZONES : [[s.timezone, s.timezone], ...TIMEZONES];
     tz.innerHTML = zones.map(z => '<option value="' + escapeHTML(z[0]) + '"' + (z[0] === s.timezone ? ' selected' : '') + '>' + escapeHTML(z[1]) + '</option>').join('');
     document.getElementById('setWbNames').value = (s.wb_names || []).join(', ');
+    document.getElementById('setVwReminders').checked = s.vw_reminders !== false;
     document.getElementById('setResult').textContent = s.setup_at ? '' : 'Ответьте на вопросы и нажмите «Сохранить».';
   }
   async function saveSettings(){
@@ -5247,6 +5251,7 @@
       legalName: document.getElementById('setLegal').value.trim(),
       timezone: document.getElementById('setTz').value,
       wbNames: document.getElementById('setWbNames').value.split(',').map(x => x.trim()).filter(Boolean),
+      vwReminders: document.getElementById('setVwReminders').checked,
     };
     const stock = pick('setStock'), supplies = pick('setSupplies');
     if(stock) body.stockSource = stock;
@@ -5333,7 +5338,12 @@
   window.vwOf = vwOf;
   async function loadSellerVw(){
     const id = sp.companyId;
-    try{ const d = await vwOf(id, true); if(sp.companyId === id){ sp.vw = d; renderSellerPanel(); } }
+    try{
+      const d = await vwOf(id, true);
+      let tasks = [];
+      if(d.warehouses.length){ try{ tasks = (await apiFetch('/api/vwarehouses/move-tasks')).filter(t => t.companyId === id); } catch(_){} }
+      if(sp.companyId === id){ sp.vw = d; sp.vwTasks = tasks; renderSellerPanel(); }
+    }
     catch(e){ if(sp.companyId === id){ sp.vw = { error: e.message }; renderSellerPanel(); } }
   }
   function vwSectionHtml(){
@@ -5341,18 +5351,31 @@
     let html = '<div class="sp-sec"><div class="sp-head"><b>Склады продавца</b>'
       + (v && !v.error && !sp.vwForm ? '<button class="wh-onboarding-btn" type="button" onclick="openVwForm()">+ Склад</button>' : '') + '</div>'
       + '<div class="mp-card-sub" style="margin-bottom:6px;">Часть товара продавца под своё назначение — площадку, юрлицо, опт. '
-      + 'Товар лежит в тех же ячейках, меняется только учёт. Продавец видит склады и выбирает их в привозе. '
-      + '«Основной» — всё, что не разнесено по складам.</div>';
+      + 'По умолчанию товар лежит в тех же ячейках, меняется только учёт; «хранить отдельно» — у склада свои ячейки, можно закрепить зону. '
+      + 'Продавец видит склады и выбирает их в привозе. «Основной» — всё, что не разнесено по складам.</div>';
     if(!v) return html + '<div class="mp-card-sub">Загружаю…</div></div>';
     if(v.error) return html + '<div class="mp-card-sub wbo-warn">Не загрузилось: ' + escapeHTML(v.error) + '</div></div>';
     html += '<div class="sp-key"><span><b>Основной</b> <span class="mp-card-sub">любая площадка</span></span></div>';
     for(const w of v.warehouses){
       if(sp.vwForm && sp.vwForm.id === w.id){ html += vwFormHtml(); continue; }
-      html += '<div class="sp-key"><span><b>' + escapeHTML(w.name) + '</b> <span class="mp-card-sub">' + escapeHTML(VW_MP[w.marketplace]) + '</span></span>'
+      const tags = [VW_MP[w.marketplace]];
+      if(w.keepSeparate) tags.push(w.defectSeparate ? 'хранится отдельно, брак тоже' : 'хранится отдельно');
+      if(w.zone && w.zone.cells) tags.push('зона: ' + w.zone.text + ' (пустых ' + w.zone.empty + ' из ' + w.zone.cells + ')');
+      html += '<div class="sp-key"><span><b>' + escapeHTML(w.name) + '</b> <span class="mp-card-sub">' + escapeHTML(tags.join(' · ')) + '</span>'
+        + (w.zone && w.zone.cells && !w.zone.empty ? '<span class="mp-card-sub wbo-warn">в зоне нет пустых ячеек — новый товар положат рядом</span>' : '') + '</span>'
         + '<span class="mp-card-acts" style="margin:0;"><span class="mp-act" onclick="openVwForm(\'' + w.id + '\')">Изменить</span>'
         + '<span class="mp-act warn" onclick="archiveVw(\'' + w.id + '\')">Убрать</span></span></div>';
     }
     if(sp.vwForm && !sp.vwForm.id) html += vwFormHtml();
+    // Задания грузчику «переложить» по складам этого продавца.
+    const tasks = (sp.vwTasks || []);
+    if(tasks.length){
+      html += '<div class="mp-card-sub" style="margin-top:8px;"><b>Задания грузчику «переложить» · ' + tasks.length + '</b></div>'
+        + tasks.map(t => '<div class="sp-key"><span>«' + escapeHTML(t.name || t.sku) + '», осталось ' + nfmt(t.left) + ' из ' + nfmt(t.qty) + ' шт. из ячейки ' + escapeHTML(t.fromLabel)
+          + '<span class="mp-card-sub">' + (t.kind === 'transfer' ? 'перенос ' + escapeHTML(t.transfer || '') + ': «' + escapeHTML(t.fromName) + '» → «' + escapeHTML(t.toName) + '»'
+            : 'разделить: товар склада «' + escapeHTML(t.toName) + '» лежит вместе с другим') + '</span></span>'
+          + '<span class="mp-card-acts" style="margin:0;"><span class="mp-act warn" onclick="cancelVwTask(\'' + t.id + '\')">Снять</span></span></div>').join('');
+    }
     return html + '</div>';
   }
   function vwFormHtml(){
@@ -5363,27 +5386,88 @@
       + Object.entries(VW_MP).map(([k, t]) => '<option value="' + k + '"' + (f.marketplace === k ? ' selected' : '') + '>' + (k === 'other' ? 'Иное — вне площадок' : t) + '</option>').join('')
       + '</select>'
       + '<div class="mp-card-sub">С какого склада можно собрать поставку на WB: с «Основного» и со складов WB. Склад «иное» — отгрузка вне площадок.</div>'
+      + '<label class="sp-check"><input type="checkbox" id="vwSep"' + (f.keepSeparate ? ' checked' : '') + ' onchange="document.getElementById(\'vwSepMore\').hidden = !this.checked">'
+      + '<span>Хранить отдельно<small>Товар этого склада не лежит в одной ячейке с товаром других складов продавца. Грузчику подсказываются отдельные ячейки.</small></span></label>'
+      + '<div id="vwSepMore"' + (f.keepSeparate ? '' : ' hidden') + '>'
+      +   '<label class="sp-check"><input type="checkbox" id="vwSepDefect"' + (f.defectSeparate ? ' checked' : '') + '><span>И брак тоже отдельно<small>Иначе брак этого склада лежит в общих ячейках брака.</small></span></label>'
+      +   '<input class="mp-field" id="vwZone" maxlength="2000" placeholder="Зона — не обязательно: «ряд 3» или ячейки «4.1.2, 4.1.3»" value="' + escapeHTML(f.zoneText || '') + '">'
+      +   '<div class="mp-card-sub">Зона — закреплённые ячейки: ничего другого туда не кладут. Заполнится — товар положат рядом, а вам придёт предупреждение.</div>'
+      + '</div>'
       + '<div class="rc-actions"><span class="grow"></span><button type="button" class="wh-onboarding-btn" onclick="closeVwForm()">Отмена</button>'
       + '<button type="button" class="wh-onboarding-btn primary" id="vwSave" onclick="saveVw()">' + (f.id ? 'Сохранить' : 'Завести склад') + '</button></div></div>';
   }
   function openVwForm(id){
     const w = id ? (sp.vw.warehouses || []).find(x => x.id === id) : null;
-    sp.vwForm = w ? { id: w.id, name: w.name, marketplace: w.marketplace } : { id: null, name: '', marketplace: 'wb' };
+    sp.vwForm = w ? { id: w.id, name: w.name, marketplace: w.marketplace, keepSeparate: w.keepSeparate, defectSeparate: w.defectSeparate,
+        zoneText: w.zone ? w.zone.text : '', was: w }
+      : { id: null, name: '', marketplace: 'wb', keepSeparate: false, defectSeparate: false, zoneText: '' };
     renderSellerPanel();
     const el = document.getElementById('vwName'); if(el) el.focus();
   }
   function closeVwForm(){ sp.vwForm = null; renderSellerPanel(); }
+  // «ряд 3, 4.1.2» → { rows: [3], cells: ['4.1.2'] }.
+  function parseZone(text){
+    const rows = [], cells = [];
+    String(text || '').split(/[,;]+/).map(x => x.trim()).filter(Boolean).forEach(x => {
+      const m = x.match(/^(?:ряд\s*)?(\d+)$/i);
+      if(m) rows.push(Number(m[1])); else cells.push(x);
+    });
+    return { rows, cells };
+  }
+  // Три ответа: задания, только новое, отмена (null).
+  function askSeparate(name, n){
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.className = 'ask-overlay';
+      overlay.innerHTML = '<div class="ask-box" role="dialog" aria-modal="true"><div class="ask-title"></div><div class="ask-text"></div>'
+        + '<div class="ask-actions" style="flex-wrap:wrap;"><button type="button" class="wh-onboarding-btn ask-cancel">Отмена</button>'
+        + '<button type="button" class="wh-onboarding-btn ask-new">Только новый товар</button>'
+        + '<button type="button" class="wh-onboarding-btn primary ask-tasks">Создать задания</button></div></div>';
+      overlay.querySelector('.ask-title').textContent = 'Товар склада «' + name + '» уже лежит вместе с другим';
+      overlay.querySelector('.ask-text').textContent = 'В ' + n + ' ' + pluralRu(n, 'ячейке', 'ячейках', 'ячейках')
+        + ' товар этого склада лежит вместе с товаром других складов продавца. Создать грузчику задания переложить его отдельно — или разделять только новый товар, а уже лежащее оставить как есть?';
+      const done = (v) => { overlay.remove(); resolve(v); };
+      overlay.addEventListener('click', (e) => { if(e.target === overlay) done(null); });
+      overlay.querySelector('.ask-cancel').onclick = () => done(null);
+      overlay.querySelector('.ask-new').onclick = () => done('new');
+      overlay.querySelector('.ask-tasks').onclick = () => done('tasks');
+      document.body.appendChild(overlay);
+    });
+  }
   async function saveVw(){
     const f = sp.vwForm; if(!f) return;
     const name = document.getElementById('vwName').value.trim();
     const marketplace = document.getElementById('vwMp').value;
+    const keepSeparate = document.getElementById('vwSep').checked;
+    const defectSeparate = keepSeparate && document.getElementById('vwSepDefect').checked;
+    const zoneText = keepSeparate ? document.getElementById('vwZone').value.trim() : '';
     if(!name){ showWhToast('Назовите склад.'); return; }
+    const body = { companyId: sp.companyId, name, marketplace, keepSeparate, defectSeparate };
+    const was = f.was || {};
+    if(zoneText !== (was.zone ? was.zone.text : '')) body.zone = parseZone(zoneText);
     const btn = document.getElementById('vwSave'); btn.disabled = true;
     try{
-      if(f.id) await apiFetch('/api/vwarehouses/' + f.id, { method: 'PATCH', body: { companyId: sp.companyId, name, marketplace } });
-      else await apiFetch('/api/vwarehouses', { method: 'POST', body: { companyId: sp.companyId, name, marketplace } });
-      sp.vwForm = null;
-      showWhToast(f.id ? 'Склад сохранён.' : 'Склад «' + name + '» заведён — продавцу пришло уведомление.');
+      if(f.id){
+        // Включают «хранить отдельно», а товар уже лежит вместе — спросить.
+        const turnedOn = (keepSeparate && !was.keepSeparate) || (defectSeparate && !was.defectSeparate);
+        if(turnedOn){
+          const m = await apiFetch('/api/vwarehouses/' + f.id + '/mixed?companyId=' + encodeURIComponent(sp.companyId) + (defectSeparate ? '&defect=1' : ''));
+          if(m.cells){
+            const answer = await askSeparate(name, m.cells);
+            if(!answer){ btn.disabled = false; return; }
+            body.separateExisting = answer;
+          }
+        }
+        const r = await apiFetch('/api/vwarehouses/' + f.id, { method: 'PATCH', body });
+        sp.vwForm = null;
+        showWhToast('Склад сохранён.' + (r.tasks ? ' Грузчику созданы задания «переложить»: ' + r.tasks + '.' : '')
+          + (r.zone && r.zone.foreign ? ' В зоне лежит чужой товар в ' + r.zone.foreign + ' яч. — его надо убрать.' : ''));
+      } else {
+        if(body.zone === undefined && zoneText) body.zone = parseZone(zoneText);
+        await apiFetch('/api/vwarehouses', { method: 'POST', body });
+        sp.vwForm = null;
+        showWhToast('Склад «' + name + '» заведён — продавцу пришло уведомление.');
+      }
       await loadSellerVw();
     } catch(e){ showWhToast('Не получилось: ' + e.message); btn.disabled = false; }
   }
@@ -5396,6 +5480,15 @@
       await loadSellerVw();
     } catch(e){ showWhToast(e.message); }
   }
+  async function cancelVwTask(id){
+    if(!await askConfirm('Снять задание «переложить»?\n\nНепереложенное останется там, где лежит, и числится за прежним складом.')) return;
+    try{
+      await apiFetch('/api/vwarehouses/move-tasks/' + id + '/cancel', { method: 'POST', body: {} });
+      showWhToast('Задание снято.');
+      await loadSellerVw();
+    } catch(e){ showWhToast(e.message); }
+  }
+  window.cancelVwTask = cancelVwTask;
   Object.assign(window, { openVwForm, closeVwForm, saveVw, archiveVw });
   async function copySellerKey(code){
     try{ await navigator.clipboard.writeText(code); showWhToast('Ключ ' + code + ' скопирован.'); }
@@ -6358,8 +6451,10 @@
       + (align.busy === 'apply' ? 'Записываю…' : 'Выровнять по документу') + '</button>';
   }
 
+  // defaultVw — склад продавца для строк без столбца «Склад» ('' — «Основной»),
+  // vws — склады выбранного продавца (владелец 02.10.2026).
   const stockLoad = { companyId: '', rows: null, blank: 0, fileName: '', preview: null, error: '',
-    busy: '', seq: 0, batches: null };
+    busy: '', seq: 0, batches: null, defaultVw: '', vws: [] };
 
   function openStockLoad(){
     document.getElementById('stockLoadModal').classList.add('open');
@@ -6367,7 +6462,7 @@
     if(!id || !companies.some(c => c.id === id)) id = companies.length === 1 ? companies[0].id : '';
     // Проверка с прошлого раза могла устареть — открываем со свежей.
     stockLoad.preview = null;
-    if(id !== stockLoad.companyId || stockLoad.rows) setStockLoadCompany(id); else renderStockLoad();
+    setStockLoadCompany(id);   // склады продавца — свежие при каждом открытии
     loadStockBatches();
   }
   window.openStockLoad = openStockLoad;
@@ -6413,11 +6508,20 @@
     stockLoad.companyId = id;
     stockLoad.preview = null;
     stockLoad.error = '';
+    stockLoad.defaultVw = '';
+    stockLoad.vws = [];
+    if(id) vwOf(id).then(d => { if(stockLoad.companyId === id){ stockLoad.vws = d.warehouses; renderStockLoad(); } }).catch(() => {});
     // Файл уже выбран — проверяем его заново для нового продавца: артикулы
     // и «уже лежит» у каждого продавца свои.
     if(stockLoad.rows && id) previewStockLoad(); else renderStockLoad();
   }
   window.setStockLoadCompany = setStockLoadCompany;
+  function setStockLoadVw(id){
+    stockLoad.defaultVw = id;
+    stockLoad.preview = null;
+    if(stockLoad.rows && stockLoad.companyId) previewStockLoad(); else renderStockLoad();
+  }
+  window.setStockLoadVw = setStockLoadVw;
 
   // Бланк на весь каталог продавца. Ячейка подставлена там, где её знает 1С;
   // количество пустое — его вписывают у полки. «По 1С» — только для сверки.
@@ -6428,12 +6532,13 @@
       data = await apiFetch('/api/cells/initial-stock/template?companyId=' + encodeURIComponent(stockLoad.companyId));
     } catch(e){ showWhToast('Не удалось получить бланк: ' + e.message); return; }
     const rows = [];
+    const withVw = stockLoad.vws.length > 0;
     data.products.forEach(p => {
       // «Продавец» — чтобы бланк одного продавца нельзя было загрузить другому:
       // сервер отклонит строки с чужим именем.
       const base = { 'Артикул': p.sku, 'Товар': p.name, 'Штрихкод': p.barcode || '',
         'По 1С (для сверки)': p.stock1c == null ? '' : p.stock1c, 'Количество': '', 'Состояние': '',
-        'Продавец': data.seller.name };
+        ...(withVw ? { 'Склад': '' } : {}), 'Продавец': data.seller.name };
       (p.cells1c && p.cells1c.length ? p.cells1c : ['']).forEach(cell => rows.push(Object.assign({ 'Ячейка': cell }, base)));
     });
     // Колонка «Ячейка» — текстом, и с запасом пустых строк под дописанное
@@ -6448,7 +6553,7 @@
       range.e.r = Math.max(range.e.r, last);
       ws['!ref'] = XLSX.utils.encode_range(range);
     };
-    saveXlsx('Бланк остатков — ' + data.seller.name, 'Остатки', rows, [14, 16, 42, 16, 12, 12, 14, 22], asText);
+    saveXlsx('Бланк остатков — ' + data.seller.name, 'Остатки', rows, [14, 16, 42, 16, 12, 12, 14].concat(withVw ? [16] : [], [22]), asText);
   }
   window.downloadStockTemplate = downloadStockTemplate;
 
@@ -6490,6 +6595,7 @@
       qty: ['количество', 'кол-во', 'посчитано'],
       quality: ['состояние', 'состояние товара'],
       seller: ['продавец'],
+      warehouse: ['склад', 'склад продавца', 'виртуальный склад'],
     };
     let head = -1;
     let cols = {};
@@ -6512,6 +6618,7 @@
         qty: number(r, cols.qty),
         quality: cols.quality != null ? text(r, cols.quality) : '',
         seller: cols.seller != null ? text(r, cols.seller) : '',
+        warehouse: cols.warehouse != null ? text(r, cols.warehouse) : '',
       };
       if(!row.cell && !row.sku && !row.qty) continue;
       // Не посчитано — строка бланка, до которой не дошли. На сервер её не
@@ -6574,7 +6681,7 @@
     let error = '';
     try{
       preview = await apiFetch('/api/cells/initial-stock', { method: 'POST',
-        body: { companyId: stockLoad.companyId, rows: stockLoad.rows } });
+        body: { companyId: stockLoad.companyId, rows: stockLoad.rows, defaultVw: stockLoad.defaultVw || null } });
     } catch(e){
       error = 'Проверка не прошла: ' + e.message;
     }
@@ -6599,7 +6706,7 @@
     let r;
     try{
       r = await apiFetch('/api/cells/initial-stock', { method: 'POST',
-        body: { companyId: stockLoad.companyId, rows: stockLoad.rows, apply: true,
+        body: { companyId: stockLoad.companyId, rows: stockLoad.rows, apply: true, defaultVw: stockLoad.defaultVw || null,
           expect: { ok: s.ok, units: s.units } } });
     } catch(e){
       // Ответ не дошёл — неизвестно, записалось ли. Перепроверяем: повтор
@@ -6681,7 +6788,7 @@
               + pluralRu(s.notInFile, 'товара', 'товаров', 'товаров') + ', которых нет в файле. Их можно загрузить следующим файлом.</div>'
             : '')
         + '<table class="sl-table"><thead><tr><th>Строка</th><th>Ячейка</th><th>Товар</th>'
-        + '<th class="num">Кол-во</th><th>Состояние</th><th>Проверка</th></tr></thead><tbody>'
+        + '<th class="num">Кол-во</th><th>Состояние</th>' + (stockLoad.vws.length ? '<th>Склад</th>' : '') + '<th>Проверка</th></tr></thead><tbody>'
         + shown.map(l => '<tr' + (l.error ? ' class="bad"' : l.already ? ' class="done"' : '') + '>'
           + '<td class="num">' + l.line + '</td>'
           // Вписанное и найденное — рядом, когда они различаются: подмену
@@ -6693,6 +6800,7 @@
               : '<span class="mono">' + escapeHTML(l.sku || '—') + '</span>') + '</td>'
           + '<td class="num">' + (l.qty == null ? '—' : l.qty) + '</td>'
           + '<td>' + escapeHTML(SL_QUALITY[l.quality] || '') + '</td>'
+          + (stockLoad.vws.length ? '<td>' + escapeHTML(l.vwName || '') + '</td>' : '')
           + '<td>' + (l.error ? '<span class="err">' + escapeHTML(l.error) + '</span>'
               : l.already ? 'уже загружено ' + escapeHTML(l.already)
               : '<span class="okay">загрузится</span>') + '</td>'
@@ -6711,6 +6819,12 @@
       + '<div class="sl-field"><label for="stockLoadCompany">Продавец</label>'
       + '<select class="mp-field" id="stockLoadCompany" onchange="setStockLoadCompany(this.value)"'
       + (stockLoad.busy ? ' disabled' : '') + '>' + options + '</select></div>'
+      // Склады продавца: куда идут строки без столбца «Склад».
+      + (stockLoad.vws.length ? '<div class="sl-field"><label for="stockLoadVw">Склад продавца по умолчанию</label>'
+        + '<select class="mp-field" id="stockLoadVw" onchange="setStockLoadVw(this.value)"' + (stockLoad.busy ? ' disabled' : '') + '>'
+        + '<option value="">Основной</option>'
+        + stockLoad.vws.map(w => '<option value="' + escapeHTML(w.id) + '"' + (w.id === stockLoad.defaultVw ? ' selected' : '') + '>' + escapeHTML(w.name) + '</option>').join('')
+        + '</select><div class="ord-meta">Для строк без столбца «Склад». В файле можно указать склад у каждой строки — столбец «Склад».</div></div>' : '')
       + '<div class="sl-row">'
       +   '<button class="wh-onboarding-btn" type="button" onclick="downloadStockTemplate()"'
       +     (stockLoad.companyId ? '' : ' disabled') + '>Скачать бланк</button>'
@@ -7150,6 +7264,14 @@
           : '')
         + '</td>';
     };
+    // Заказ из 1С собирают с того склада продавца, который выбрал менеджер
+    // (владелец 02.10.2026); по умолчанию «Основной».
+    const allVw = vwCache[companyId] && vwCache[companyId].warehouses.length
+      ? [{ id: null, name: 'Основной' }].concat(vwCache[companyId].warehouses) : [];
+    const lineVw = (o) => (o.marketplace === '1c' && o.itemId && allVw.length
+      ? `<div class="ord-sub">склад: <select class="ord-vw-line" aria-label="Склад продавца" onchange="setOrderLineVw('${companyId}', '${o.itemId}', this.value, this)">`
+        + allVw.map(w => `<option value="${w.id || ''}"${(w.id || null) === (o.vw || null) ? ' selected' : ''}>${escapeHTML(w.name)}</option>`).join('')
+        + '</select></div>' : '');
     const row = (o, selectable) => `
       <tr class="${selectable ? '' : 'not-ready'}${orderShortLevel(o) ? ' st-' + orderShortLevel(o) : ''}">
         <td>${selectable
@@ -7158,7 +7280,7 @@
         <td class="ord-mono ord-no">${escapeHTML(o.number)}${o.rid
           ? `<div class="ord-sub" title="${escapeHTML(o.rid)}">${escapeHTML(String(o.rid).slice(0, 14))}…</div>` : ''}</td>
         <td class="ord-when">${orderWhen(o)}</td>
-        <td>${escapeHTML(o.name || '—')}<div class="ord-mono">${escapeHTML(o.sku || 'не сопоставлен')}</div></td>
+        <td>${escapeHTML(o.name || '—')}<div class="ord-mono">${escapeHTML(o.sku || 'не сопоставлен')}</div>${lineVw(o)}</td>
         <td class="ord-mono">${escapeHTML(o.article || '—')}${o.nmId ? `<div class="ord-sub">WB ${escapeHTML(o.nmId)}</div>` : ''}</td>
         <td class="ord-mono">${escapeHTML(o.barcode || '—')}</td>
         <td>${(o.offices || []).length ? escapeHTML(o.offices.join(', ')) : '<span class="ord-sub">—</span>'}${o.wbWarehouse
@@ -7839,6 +7961,16 @@
     }
   }
   window.makeSupply = makeSupply;
+
+  async function setOrderLineVw(companyId, itemId, value, el){
+    el.disabled = true;
+    try{
+      await apiFetch('/api/vwarehouses/items', { method: 'POST', body: { itemIds: [itemId], vw: value || null } });
+      showWhToast('Склад строки заказа поменян — продавцу пришло уведомление «обратите внимание».');
+    } catch(e){ showWhToast(e.message); }
+    loadPartnerOrders(companyId);
+  }
+  window.setOrderLineVw = setOrderLineVw;
 
   /* ===================== Инициализация ===================== */
 

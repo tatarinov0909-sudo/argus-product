@@ -392,6 +392,11 @@
   .mret-comment{margin-top:12px;}
   .mret-go{margin-top:12px;}
   .mret-new{margin-bottom:12px;}
+  .mret-vws{margin:6px 0 10px;}
+  .vwm-cell{display:inline-block; margin:4px 6px 0 0; padding:8px 10px; border-radius:10px; border:1px solid var(--line); background:var(--panel-2); color:var(--text); font-size:14px; cursor:pointer;}
+  .vwm-cell span{color:var(--muted); font-size:12px;}
+  .vwm-qty{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:10px; font-size:14px; color:var(--muted);}
+  .vwm-qty input{width:90px; padding:10px; border-radius:10px; border:1px solid var(--line); background:var(--panel-2); color:var(--text); font-size:16px; text-align:center;}
   .item-note-sent.show{display:block;}
 
   /* ---------- Разбор возврата по состоянию товара ----------
@@ -1735,6 +1740,16 @@
       <div class="job-body" id="defectBody"></div>
     </div>
 
+    <!-- Задания «переложить»: склад продавца хранится отдельно (02.10.2026). -->
+    <div class="job-screen" id="vwMoveScreen">
+      <div class="job-head">
+        <div class="job-back" onclick="showHome()">← Что делаем?</div>
+        <div class="job-title">Переложить</div>
+        <div class="job-sub" id="vwMoveSub">—</div>
+      </div>
+      <div class="job-body" id="vwMoveBody"></div>
+    </div>
+
     <!-- Новый возврат: пока возвраты не приходят из WB, коробку заводят здесь. -->
     <div class="job-screen" id="manualReturnScreen">
       <div class="job-head">
@@ -2398,7 +2413,11 @@
       // уже сложилась своя зона: склад работал по своему порядку до нас.
       const company = currentInvoice && currentInvoice.company_id
         ? '&companyId=' + encodeURIComponent(currentInvoice.company_id) : '';
-      const data = await apiFetch('/api/agents/kladovshchik/suggest-cell?sku=' + encodeURIComponent(sku) + company);
+      // Склад продавца строки (02.10.2026): не смешать «хранить отдельно» и
+      // вести в зону склада.
+      const it = currentInvoice && currentInvoice.items && currentInvoice.items[currentItemIndex];
+      const vwArg = it && 'virtual_warehouse_id' in it ? '&vw=' + encodeURIComponent(it.virtual_warehouse_id || 'main') : '';
+      const data = await apiFetch('/api/agents/kladovshchik/suggest-cell?sku=' + encodeURIComponent(sku) + company + vwArg);
       if(request !== cellOptionsRequest) return;   // уже листают другой товар
       options = data.options;
       lastSuggestionId = data.suggestionId || null;
@@ -2416,6 +2435,8 @@
       same_sku: 'тот же товар уже здесь',
       near_company: 'рядом с товаром этого продавца',
       empty: 'свободно',
+      vw_zone: 'зона склада продавца',
+      zone_full: 'зона склада заполнена — рядом',
     };
     wrap.innerHTML = options.map((c, i) => `
       <div class="cell-option" id="cell-${i}" data-block-id="${escapeHTML(c.blockId)}" onclick="selectCellOption('${jsArg(c.blockId)}', '${jsArg(c.label)}', ${i})">
@@ -3363,7 +3384,8 @@
     renderKitScreen();
     try{
       const r = await apiFetch('/api/agents/kladovshchik/suggest-cell?sku='
-        + encodeURIComponent(line.sku) + '&companyId=' + encodeURIComponent(line.companyId));
+        + encodeURIComponent(line.sku) + '&companyId=' + encodeURIComponent(line.companyId)
+        + ('vw' in line ? '&vw=' + encodeURIComponent(line.vw || 'main') : ''));
       kitState.options = r.options || [];
     } catch(e){
       // Оборвавшаяся связь и полный склад выглядят одинаково только в коде.
@@ -3392,7 +3414,8 @@
     renderKitScreen();
     try{
       const r = await apiFetch('/api/agents/kladovshchik/suggest-cell?sku='
-        + encodeURIComponent(line.sku) + '&companyId=' + encodeURIComponent(line.companyId));
+        + encodeURIComponent(line.sku) + '&companyId=' + encodeURIComponent(line.companyId)
+        + ('vw' in line ? '&vw=' + encodeURIComponent(line.vw || 'main') : ''));
       kitState.options = r.options || [];
     } catch(e){
       kitState.error = e.message;
@@ -3515,6 +3538,8 @@
     same_sku: 'этот набор здесь уже лежит',
     near_company: 'зона этого продавца',
     empty: 'свободная ячейка',
+    vw_zone: 'зона склада продавца',
+    zone_full: 'зона склада заполнена — рядом',
   };
 
   async function confirmKit(){
@@ -3854,7 +3879,7 @@
   }
 
   const ALL_SCREENS = ['homeScreen', 'suppliesScreen', 'supplyScreen', 'paperScreen', 'docsScreen', 'receiptScreen',
-    'pickListScreen', 'moveScreen', 'kitScreen', 'invScreen', 'defectScreen', 'manualReturnScreen'];
+    'pickListScreen', 'moveScreen', 'kitScreen', 'invScreen', 'defectScreen', 'manualReturnScreen', 'vwMoveScreen'];
 
   function hideAllScreens(){
     ALL_SCREENS.forEach(id => document.getElementById(id).classList.remove('show'));
@@ -3909,6 +3934,9 @@
     try{ counting = (await apiFetch('/api/inventory/tasks')).length; } catch(e){ counting = null; }
     let defectCount = null;
     try{ defectCount = (await apiFetch('/api/defects/tasks')).length; } catch(e){ defectCount = null; }
+    // Задания «переложить» — плитка появляется, только когда они есть.
+    let vwMoveCount = 0;
+    try{ vwMoveCount = (await apiFetch('/api/vwarehouses/move-tasks')).length; } catch(e){ vwMoveCount = 0; }
 
     // Поставка без заказов (их принял WB мимо Аргуса) — собирать нечего.
     const collecting = supplies.filter(s => s.status === 'collecting' && Number(s.orders) > 0);
@@ -3952,6 +3980,7 @@
         collecting.length + loose)
       + tile("openDocs('in')", 'Приёмка товара', 'приходы, которые привезли на склад', receipts)
       + tile("openDocs('return')", 'Возвраты', 'разобрать вернувшийся товар по состоянию', returns)
+      + (vwMoveCount ? tile('openVwMoves()', 'Переложить', 'товар склада продавца — в его отдельные ячейки', vwMoveCount) : '')
       + tile('openDefectTasks()', 'Склад брака', 'решения продавцов: выдать, утилизировать, перепаковать', defectCount)
       + tile('openMove()', 'Перепаковка и перестановка', 'переложить товар в другую ячейку или отметить брак', null)
       + tile('openInventory()', 'Пересчёт ячеек', 'задания руководителя', counting);
@@ -6230,13 +6259,71 @@
   }
   window.doDefectTask = doDefectTask;
 
+  // ---------- Переложить: склад продавца хранится отдельно ----------
+  // Задание — взять товар из ячейки и положить туда, где лежит только его
+  // склад (или в зону склада). Каждая переложенная штука сразу на новом месте
+  // и на новом складе: можно перекладывать частями.
+  let vwMoves = [];
+  const VW_REASON = { same_sku: 'тот же товар этого склада', vw_zone: 'зона склада', zone_full: 'зона заполнена — рядом',
+    near_company: 'рядом с товаром продавца', empty: 'свободно' };
+  async function openVwMoves(){
+    openJob('vwMoveScreen');
+    document.getElementById('vwMoveSub').textContent = 'Загружаю…';
+    document.getElementById('vwMoveBody').innerHTML = '';
+    try{ vwMoves = await apiFetch('/api/vwarehouses/move-tasks'); }
+    catch(e){ document.getElementById('vwMoveSub').textContent = 'Не удалось загрузить: ' + e.message; return; }
+    renderVwMoves();
+  }
+  window.openVwMoves = openVwMoves;
+  function renderVwMoves(){
+    const n = vwMoves.length;
+    document.getElementById('vwMoveSub').textContent = n ? n + ' ' + pluralRu(n, 'задание', 'задания', 'заданий') : 'Заданий нет';
+    document.getElementById('vwMoveBody').innerHTML = n ? vwMoves.map((t, i) => '<div class="def-task">'
+      + '<div class="def-task-act">Переложить · ' + t.left + ' шт' + (t.moved ? ' (уже ' + t.moved + ')' : '') + '</div>'
+      + '<div class="def-task-name">' + escapeHTML(t.name || t.sku) + '</div>'
+      + '<div class="def-task-sub">' + escapeHTML(t.seller) + ' · ' + (t.kind === 'transfer'
+        ? 'перенос на склад «' + escapeHTML(t.toName) + '»' : 'склад «' + escapeHTML(t.toName) + '» хранится отдельно') + '</div>'
+      + '<div class="def-task-sub">Взять из: <b>' + escapeHTML(t.fromLabel) + '</b>' + (t.fromName !== t.toName ? ' (товар склада «' + escapeHTML(t.fromName) + '»)' : '') + '</div>'
+      + (t.suggest && t.suggest.length ? '<div class="def-task-sub">Куда: ' + t.suggest.map(o => '<button type="button" class="vwm-cell" onclick="vwMovePick(' + i + ', \'' + escapeHTML(o.label) + '\')">'
+        + escapeHTML(o.label) + ' <span>' + escapeHTML(VW_REASON[o.reason] || '') + '</span></button>').join('') + '</div>' : '')
+      + '<input type="text" class="cell-manual-input def-task-cell" id="vwmCell-' + i + '" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Куда положили: 1.7.3">'
+      + '<div class="vwm-qty"><span>Сколько переложили</span><input type="number" inputmode="numeric" min="1" max="' + t.left + '" id="vwmQty-' + i + '" value="' + t.left + '"></div>'
+      + '<button type="button" class="confirm-btn def-task-go" id="vwmGo-' + i + '" onclick="doVwMove(' + i + ')">Переложил</button></div>').join('')
+      : '<div class="job-empty">Перекладывать нечего. Когда склад продавца начнут хранить отдельно или перенесут на него товар — задание появится здесь.</div>';
+  }
+  function vwMovePick(i, label){ const el = document.getElementById('vwmCell-' + i); if(el) el.value = label; }
+  async function doVwMove(i){
+    const t = vwMoves[i];
+    if(!t) return;
+    const val = document.getElementById('vwmCell-' + i).value.trim();
+    const found = val && findCellByLabel(val);
+    if(!found){ showToast(val ? 'Ячейки ' + val + ' на складе нет. Адрес — ряд.стеллаж.ярус, например 1.7.3' : 'Укажите ячейку, куда положили'); return; }
+    const qty = Number(document.getElementById('vwmQty-' + i).value);
+    if(!Number.isInteger(qty) || qty < 1 || qty > t.left){ showToast('Сколько штук переложили — от 1 до ' + t.left); return; }
+    const btn = document.getElementById('vwmGo-' + i);
+    btn.disabled = true; btn.textContent = 'Сохраняю…';
+    try{
+      const r = await apiFetch('/api/vwarehouses/move-tasks/' + encodeURIComponent(t.id) + '/step', { method: 'POST', body: { toCellBlockId: found.id, qty } });
+      showToast(r && r.status === 'done' ? 'Готово: всё переложено' : 'Переложено ' + qty + ' шт, осталось ' + (t.left - qty));
+    } catch(e){
+      showToast('Не удалось: ' + e.message);
+      btn.disabled = false; btn.textContent = 'Переложил';
+      return;
+    }
+    try{ cellRows = await apiFetch('/api/cells/rows'); } catch(e){ /* обновим при следующем входе */ }
+    openVwMoves();
+  }
+  Object.assign(window, { vwMovePick, doVwMove });
+
   // ---------- Новый возврат (пока возвраты не приходят из WB) ----------
   // Коробка возврата приехала — грузчик заводит её сам: товары одного
   // продавца и сколько штук, — и сразу разбирает на годное и брак.
   let mret = null;   // { companyId, companyName, lines: [{sku,name,qty}], query, products, status, comment, saving }
   let mretSearch = 0;
   function openManualReturn(){
-    mret = { companyId: null, companyName: '', lines: [], query: '', products: [], status: '', comment: '', saving: false };
+    // vws — склады продавца, vw — куда ляжет возврат ('' — «Основной»;
+    // владелец 02.10.2026: у ручного возврата заказа нет — по умолчанию «Основной»).
+    mret = { companyId: null, companyName: '', lines: [], query: '', products: [], status: '', comment: '', saving: false, vws: [], vw: '' };
     openJob('manualReturnScreen');
     renderManualReturn();
   }
@@ -6244,6 +6331,9 @@
   function renderManualReturn(){
     document.getElementById('manualReturnBody').innerHTML =
       '<div class="def-task-sub mret-who">' + (mret.companyName ? 'Продавец: <b>' + escapeHTML(mret.companyName) + '</b>' : 'Найдите первый товар — продавец определится по нему.') + '</div>'
+      + (mret.vws.length ? '<div class="def-task-sub">Склад продавца, на который ляжет возврат:</div><div class="def-kinds mret-vws">'
+        + [{ id: '', name: 'Основной' }].concat(mret.vws).map(w => '<button type="button" class="def-kind' + (mret.vw === w.id ? ' selected' : '') + '" onclick="mretVw(\'' + escapeHTML(w.id) + '\')"><b>'
+          + escapeHTML(w.name) + '</b><span>' + (w.id ? 'продавцу придёт уведомление' : 'по умолчанию') + '</span></button>').join('') + '</div>' : '')
       + mret.lines.map((l, i) => '<div class="mret-line"><div class="mret-line-name"><div class="def-task-name">' + escapeHTML(l.name) + '</div>'
         + '<div class="def-task-sub">' + escapeHTML(l.sku) + '</div></div>'
         + '<div class="mret-qty"><button type="button" onclick="mretQty(' + i + ', -1)" aria-label="Меньше">−</button><b>' + l.qty + '</b>'
@@ -6286,6 +6376,12 @@
   function mretAdd(i){
     const p = mret.products[i];
     if(!p) return;
+    if(mret.companyId !== p.companyId){
+      mret.vws = []; mret.vw = '';
+      const id = p.companyId;
+      apiFetch('/api/vwarehouses?companyId=' + encodeURIComponent(id))
+        .then(d => { if(mret && mret.companyId === id){ mret.vws = d.warehouses || []; renderManualReturn(); } }).catch(() => {});
+    }
     mret.companyId = p.companyId;
     mret.companyName = p.companyName || '';
     const have = mret.lines.find(l => l.sku === p.sku);
@@ -6301,7 +6397,7 @@
     if(!l) return;
     l.qty += d;
     if(l.qty < 1) mret.lines.splice(i, 1);
-    if(!mret.lines.length){ mret.companyId = null; mret.companyName = ''; }
+    if(!mret.lines.length){ mret.companyId = null; mret.companyName = ''; mret.vws = []; mret.vw = ''; }
     renderManualReturn();
   }
   async function mretSave(){
@@ -6311,7 +6407,7 @@
     let r;
     try{
       r = await apiFetch('/api/returns/manual', { method: 'POST', body: { companyId: mret.companyId,
-        items: mret.lines.map(l => ({ sku: l.sku, qty: l.qty })), comment: mret.comment.trim() || undefined } });
+        items: mret.lines.map(l => ({ sku: l.sku, qty: l.qty })), comment: mret.comment.trim() || undefined, vw: mret.vw || null } });
     } catch(e){
       mret.saving = false;
       renderManualReturn();
@@ -6323,7 +6419,8 @@
     try{ await refreshWork(); } catch(e){ /* откроем и без свежего списка */ }
     openOrder(r.id);
   }
-  Object.assign(window, { mretFind, mretAdd, mretQty, mretSave });
+  function mretVw(id){ mret.vw = id; renderManualReturn(); }
+  Object.assign(window, { mretFind, mretAdd, mretQty, mretSave, mretVw });
 
   // ---------- «Написать руководителю о товаре» ----------
   // Приёмка — к строке прихода, сборка — к товару поставки. На сервере это
