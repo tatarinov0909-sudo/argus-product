@@ -71,7 +71,7 @@
   const TOKEN = localStorage.getItem('argus_token');
   const ROLE = localStorage.getItem('argus_role');
   const params = new URLSearchParams(location.search);
-  const KIND = params.get('kind') === 'shipment' ? 'shipment' : 'receipt';
+  const KIND = ['shipment', 'defect'].includes(params.get('kind')) ? params.get('kind') : 'receipt';
   const ID = params.get('id') || '';
 
   const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -91,7 +91,46 @@
     return data;
   }
 
+  // Акт выдачи брака продавцу и акт утилизации (склад брака, 02.10.2026).
+  function renderDefect(a){
+    const dispose = a.action === 'dispose';
+    const title = dispose ? 'Акт утилизации брака' : 'Акт выдачи брака';
+    document.title = title + ' № ' + a.number;
+    document.getElementById('barTitle').textContent = title + ' № ' + a.number;
+    document.getElementById('barStatus').textContent = a.finished
+      ? (dispose ? 'брак утилизирован' : 'брак выдан') : 'склад ещё не выполнил решение — в акте то, что решено';
+    const total = a.items.reduce((s, i) => s + Number(i.qty || 0), 0);
+    const from = (a.cells || []).map((c) => c.label + ' — ' + nf(c.qty) + ' шт').join(', ');
+    document.getElementById('sheet').innerHTML =
+      '<h1>' + esc(title) + ' № ' + esc(a.number) + ' от ' + esc(day(a.date)) + '</h1>'
+      + '<div class="fields">'
+      +   '<span class="k">Хранитель:</span><span id="keeper" contenteditable="true" data-placeholder="юр. лицо склада">' + esc(a.warehouse.legalName || '') + '</span>'
+      +   '<span class="k">Поклажедатель (юр. лицо):</span><span>' + esc(a.seller) + '</span>'
+      +   '<span class="k">СКЛАД:</span><span>' + esc([a.warehouse.name, a.warehouse.city].filter(Boolean).join(', ')) + '</span>'
+      +   '<span class="k">Решение принял:</span><span>' + esc(a.decidedBy) + '</span>'
+      +   (a.doneBy ? '<span class="k">Выполнил:</span><span>' + esc(a.doneBy) + '</span>' : '')
+      +   (from ? '<span class="k">Из ячеек брака:</span><span>' + esc(from) + '</span>' : '')
+      +   (a.note ? '<span class="k">Комментарий:</span><span>' + esc(a.note) + '</span>' : '')
+      +   (dispose ? '<span class="k">Способ утилизации:</span><span>' + edit('например: вывоз на полигон ТБО', '') + '</span>' : '')
+      + '</div>'
+      + '<table><colgroup><col style="width:5%"><col style="width:16%"><col style="width:15%"><col><col style="width:14%"><col style="width:10%"></colgroup>'
+      + '<thead><tr><th>№</th><th>Артикул</th><th>ШК</th><th>Номенклатура</th><th>Состояние</th><th>Кол-во шт</th></tr></thead><tbody>'
+      + a.items.map((i, n) => '<tr><td class="num">' + (n + 1) + '</td><td class="code">' + esc(i.article) + '</td>'
+        + '<td class="code">' + esc(i.barcode || '') + '</td><td>' + esc(i.name) + '</td><td>' + esc(i.bucket) + '</td>'
+        + '<td class="num">' + nf(i.qty) + '</td></tr>').join('')
+      + '<tr class="total"><td colspan="5">ИТОГО</td><td class="num">' + nf(total) + '</td></tr></tbody></table>'
+      + '<div class="sign">'
+      +   (dispose
+          ? '<div>Утилизировал (склад)<br>ФИО: ' + edit('фамилия', a.doneBy || '') + '<br>Число/подпись</div>'
+            + '<div>Утверждаю (руководитель склада)<br>ФИО: ' + edit('фамилия', '') + '<br>Число/подпись/Печать</div>'
+          : '<div>Выдал (склад)<br>ФИО: ' + edit('фамилия', a.doneBy || '') + '<br>Число/подпись/Печать</div>'
+            + '<div>Получил (поклажедатель или курьер)<br>ФИО: ' + edit('фамилия', '') + '<br>Число/подпись/Печать</div>')
+      + '</div>';
+    document.getElementById('saveKeeper').hidden = ROLE !== 'owner';
+  }
+
   function render(a){
+    if(a.kind === 'defect') return renderDefect(a);
     const receipt = a.kind === 'receipt';
     const title = receipt ? 'Акт приемки на хранение' : 'Акт отгрузки с хранения';
     document.title = title + ' № ' + a.number;

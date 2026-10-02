@@ -37,7 +37,7 @@
   const paintIcons = (root = document) => root.querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = icon(el.dataset.icon); });
 
   const NAV = [['products', 'Товары', 'box'], ['orders', 'Заказы', 'orders'], ['supplies', 'Поставки на WB', 'truck'],
-    ['documents', 'Приходы', 'inbox'], ['defects', 'Брак', 'alert'], ['billing', 'Расчёты', 'wallet']];
+    ['documents', 'Приходы', 'inbox'], ['defects', 'Склад брака', 'alert'], ['billing', 'Расчёты', 'wallet']];
   const PAGES = {
     products: { title: 'Товары', subtitle: 'Сколько вашего товара на складе и сколько можно продавать.', data: 'stock', nav: 'products' },
     returns: { title: 'Товары', subtitle: 'Что вернулось на склад и в каком состоянии.', data: 'documents', nav: 'products' },
@@ -45,7 +45,7 @@
     orders: { title: 'Заказы', subtitle: 'Как склад готовит ваши заказы с Wildberries.', data: 'orders', nav: 'orders' },
     supplies: { title: 'Поставки на WB', subtitle: 'Склад собирает их из ваших заказов и везёт на Wildberries.', data: 'supplies', nav: 'supplies' },
     documents: { title: 'Приходы', subtitle: 'Товар, который вы привозите на склад на хранение.', data: 'documents', nav: 'documents' },
-    defects: { title: 'Брак', subtitle: 'Что склад признал браком. Решение по нему — вместе с менеджером склада.', data: 'defects', nav: 'defects' },
+    defects: { title: 'Склад брака', subtitle: 'Ваш брак лежит отдельно от товара в продаже. Решите, что с ним делать, — склад выполнит.', data: 'defects', nav: 'defects' },
     // Заглушка (владелец 27.09.2026): расчёт за хранение и упаковку появится,
     // когда склад утвердит прайс. Данных у страницы пока нет.
     billing: { title: 'Расчёты', subtitle: 'Сколько стоит работа склада с вашим товаром.', data: null, nav: 'billing' },
@@ -55,7 +55,8 @@
 
   const blankUi = () => ({ q: '', shown: 0 });
   const state = {
-    token: localStorage.getItem('argus_token'), owner: localStorage.getItem('argus_role') === 'owner',
+    token: localStorage.getItem('argus_token'), role: localStorage.getItem('argus_role'),
+    owner: ['owner', 'manager'].includes(localStorage.getItem('argus_role')),
     companyId: null, profile: null, catalog: {}, companies: [],
     prefs: { rows: 30, textSize: 'normal' },
     data: {}, summary: null, fetchedAt: {}, view: 'products', viewRun: 0, drawerRun: 0,
@@ -366,7 +367,8 @@
 
   // ---------- Вход, запуск, меню ----------
   function renderNav() {
-    const counts = { orders: state.data.orders ? new Set(state.data.orders.rows.filter(orderActive).map((r) => r.id)).size : 0 };
+    const counts = { orders: state.data.orders ? new Set(state.data.orders.rows.filter(orderActive).map((r) => r.id)).size : 0,
+      defects: defectAttention() };
     const current = PAGES[state.view]?.nav;
     document.querySelectorAll('[data-nav-list]').forEach((host) => {
       host.innerHTML = NAV.map(([key, title, ico]) => `<a href="#${key}" ${key === current ? 'aria-current="page"' : ''}>${icon(ico)}<span>${h(title)}</span>${counts[key] ? `<span class="nav-count">${n(counts[key])}</span>` : ''}</a>`).join('');
@@ -375,7 +377,7 @@
   async function boot() {
     // Роль в самом входе должна совпадать с подписью (27.09.2026): иначе
     // кабинет работал бы чужим входом из соседней вкладки.
-    if (state.token && jwtOf(state.token).role !== (state.owner ? 'owner' : 'seller')) {
+    if (state.token && jwtOf(state.token).role !== (state.owner ? state.role : 'seller')) {
       state.token = null; localStorage.removeItem('argus_token'); localStorage.removeItem('argus_role');
     }
     if (!state.token) { $('loginScreen').hidden = false; return; }
@@ -1073,35 +1075,78 @@
       + card('Счёт за период', 'итог за месяц с расшифровкой по дням и операциям, выгрузка в Excel') + '</div>';
   }
 
-  // ---------- Брак ----------
+  // ---------- Склад брака ----------
+  // Владелец 02.10.2026: у каждого продавца свой склад брака. Брак попадает
+  // туда с приёмки, сборки, возврата или пересчёта; продавец решает, что с
+  // ним делать (частями можно), склад выполняет. Склад может решить за
+  // продавца — тогда продавцу приходит уведомление здесь же.
   const BUCKET = { defective: 'Брак', packaging_defect: 'Повреждена упаковка', good: 'Годное' };
+  const ACTIONS = {
+    return_to_seller: { title: 'Вернуть мне', text: 'Склад выдаст брак вам или вашему курьеру по акту выдачи. Когда забрать — договоритесь с менеджером склада.' },
+    dispose: { title: 'Утилизировать', text: 'Склад утилизирует брак и составит акт утилизации. Товар уйдёт с вашего остатка навсегда.' },
+    repack: { title: 'Перепаковать и вернуть в продажу', text: 'Когда сам товар цел, а повреждена упаковка. Склад переупакует его, и он вернётся в обычный остаток — его снова можно продавать.' },
+    markdown: { title: 'Уценка отдельным товаром', text: 'Что такое уценка: товар с дефектом продаётся дешевле, отдельной карточкой на Wildberries. Сначала создайте в кабинете WB карточку уценённого товара, потом впишите сюда её штрихкод. Склад наклеит этот штрихкод, и товар появится в остатке как «название — уценка».' },
+  };
+  const DONE = { return_to_seller: 'выдан', dispose: 'утилизирован', repack: 'перепакован, в продаже', markdown: 'в продаже как уценка' };
+  function defectAttention() {
+    const d = state.data.defects; if (!d) return 0;
+    const waiting = d.balances.filter((b) => b.undecided > 0).length;
+    return waiting + (state.owner ? 0 : d.decisions.filter((x) => x.unseen).length);
+  }
   function filteredDefects() {
     const ui = state.ui.defects;
-    return state.data.defects.events.filter((e) => matches(ui.q, [e.name, e.sku, e.note, e.document, ...wbIds(e.sku)])
+    return state.data.defects.moves.filter((e) => matches(ui.q, [e.name, e.sku, e.note, e.document, e.number, ...wbIds(e.sku)])
       && (ui.source === 'all' || e.source === ui.source) && (ui.kind === 'all' || e.bucket === ui.kind) && inPeriod(e.at, ui.period));
   }
+  const whoDecided = (x) => (x.decidedRole === 'seller' ? (state.owner ? 'Продавец' : 'Вы') : `${x.decidedName || 'Склад'}, по просьбе продавца`);
+  const actLink = (x) => (x.status === 'done' && (x.action === 'return_to_seller' || x.action === 'dispose')
+    ? `<a class="link-button" href="act_print.html?kind=defect&id=${encodeURIComponent(x.id)}" target="_blank" rel="noopener">${x.action === 'dispose' ? 'Акт утилизации' : 'Акт выдачи'}</a>` : '');
   function renderDefects() {
     const ui = state.ui.defects; const d = state.data.defects;
-    const nowQty = d.now.reduce((s, r) => s + r.defective + r.packaging, 0);
-    const sources = [...new Set(d.events.map((e) => e.source))];
-    $('view').innerHTML = `<p class="note-line">Фото брака со склада появятся здесь, когда склад начнёт их прикладывать. Сейчас видно описание, товар и откуда брак.</p>`
-      + `<div class="section-title" style="margin-top:0"><h2>Сейчас на складе</h2><span>${nowQty ? counted(nowQty, 'штука', 'штуки', 'штук') + ' · ' + counted(d.now.length, 'товар', 'товара', 'товаров') : 'брака нет'}</span></div>`
-      + (d.now.length ? table([
+    const total = d.balances.reduce((s, r) => s + r.qty, 0);
+    const undecided = d.balances.reduce((s, r) => s + r.undecided, 0);
+    const unseen = state.owner ? [] : d.decisions.filter((x) => x.unseen);
+    const sources = [...new Map(d.moves.map((e) => [e.source, e.sourceName])).entries()];
+    $('view').innerHTML = (unseen.length ? `<div class="notice">${icon('info')}<div><strong>Склад решил по вашему браку без вас: ${counted(unseen.length, 'решение', 'решения', 'решений')}</strong>`
+        + unseen.slice(0, 5).map((x) => `<p>${h(x.decidedName || 'Склад')}: «${h(ACTIONS[x.action].title)}» — ${h(x.name || x.sku)}, ${n(x.qty)} шт.${x.note ? ' · ' + h(x.note) : ''}</p>`).join('')
+        + `<p><button class="link-button" id="defectSeen">Понятно</button></p></div></div>` : '')
+      + (undecided ? notice(state.owner ? `Продавец не решил по ${counted(undecided, 'штуке', 'штукам', 'штукам')} брака` : `${counted(undecided, 'штука', 'штуки', 'штук')} брака ждут вашего решения`,
+        state.owner ? 'Решите за продавца, если он попросил по телефону: продавец увидит, кто решил.' : 'Нажмите «Решить» у товара: вернуть вам, утилизировать, перепаковать или продать уценкой. Можно частями.', true) : '')
+      + `<div class="section-title" style="margin-top:0"><h2>Сейчас на складе брака</h2><span>${total ? counted(total, 'штука', 'штуки', 'штук') + ' · ' + counted(d.balances.length, 'товар', 'товара', 'товаров') : 'брака нет'}</span></div>`
+      + (d.balances.length ? table([
         { title: 'Фото', cls: 'w-photo', cell: (r) => photo(r.sku) },
-        { title: 'Товар', cell: (r) => `<button class="link-button" data-open-product="${h(r.sku)}">${h(r.name)}</button>` },
-        { title: 'Артикул WB', cell: (r) => idCell(wbIds(r.sku), state.data.stock?.find((x) => x.sku === r.sku)?.barcode) },
-        { title: 'Брак', cls: 'n', cell: (r) => num(r.defective) },
-        { title: 'Повреждена упаковка', cls: 'n', cell: (r) => num(r.packaging) },
-      ], d.now) : '<div class="table-wrap">' + empty('Брака на складе нет', 'Если склад признает ваш товар браком, он появится здесь.', 'check') + '</div>')
-      + (d.hasMore ? notice('Показана часть случаев', 'Загружены последние 1 000 случаев брака.', true) : '')
-      + `<div class="section-title"><h2>Когда признан браком</h2><span>${counted(d.events.length, 'случай', 'случая', 'случаев')}</span></div>`
-      + toolbar(searchBox('Товар, артикул WB, описание', ui.q),
-        dropdown('f-source', { label: 'Откуда', value: ui.source, options: [{ value: 'all', text: 'Отовсюду' }, ...sources.map((x) => ({ value: x, text: x }))], onPick: (v) => { ui.source = v; ui.shown = state.prefs.rows; renderDefects(); } })
+        { title: 'Товар', cell: (r) => `<button class="link-button" data-open-product="${h(r.sku)}">${h(r.name)}</button>${wbIds(r.sku).length ? `<span class="cell-sub">Артикул WB: ${h(wbIds(r.sku).join(', '))}</span>` : ''}` },
+        { title: 'Что с товаром', cell: (r) => badge(BUCKET[r.bucket] || r.bucket, 'issue') },
+        { title: 'Всего', cls: 'n', cell: (r) => num(r.qty, true) },
+        { title: 'Ждёт решения', cls: 'n', cell: (r) => num(r.undecided) },
+        { title: 'Решено', cls: 'n', cell: (r) => num(r.decided) },
+        { title: 'Лежит с', cls: 'n', cell: (r) => h(r.since ? day(r.since) : '—') },
+        { title: 'Решение', cell: (r) => (r.undecided > 0 ? `<button class="button primary" type="button" data-decide="${h(r.sku)}" data-bucket="${h(r.bucket)}">Решить</button>` : '<span class="muted">решено</span>') },
+      ], d.balances) : '<div class="table-wrap">' + empty('Брака на складе нет', 'Если склад признает ваш товар браком, он появится здесь, и вы решите, что с ним делать.', 'check') + '</div>')
+      + `<div class="section-title"><h2>Решения</h2><span>${counted(d.decisions.length, 'решение', 'решения', 'решений')}</span></div>`
+      + (d.decisions.length ? table([
+        { title: 'Товар', cell: (x) => `<span class="cell-main">${h(x.name || x.sku)}</span><span class="cell-sub">${h(x.number)} · ${h(BUCKET[x.bucket] || x.bucket)}</span>` },
+        { title: 'Решение', cell: (x) => `<span class="cell-main">${h(ACTIONS[x.action].title)}</span>${x.markdownBarcode ? `<span class="cell-sub">Штрихкод уценки: ${h(x.markdownBarcode)}</span>` : ''}${x.note ? `<span class="cell-sub">${h(x.note)}</span>` : ''}` },
+        { title: 'Кол-во', cls: 'n', cell: (x) => num(x.qty) },
+        { title: 'Кто решил', cell: (x) => `<span class="cell-main">${h(whoDecided(x))}</span><span class="cell-sub">${h(when(x.decidedAt))}</span>` },
+        { title: 'Склад', cell: (x) => (x.status === 'done' ? `${badge('Готово: ' + DONE[x.action], 'ready')}<span class="cell-sub">${h(when(x.doneAt))}</span>${actLink(x)}` : badge('Ждёт склада', 'waiting')) },
+      ], d.decisions) : '<div class="table-wrap">' + empty('Решений пока нет', 'Здесь будет видно, что вы решили по браку и когда склад это выполнил.', 'document') + '</div>')
+      + (d.hasMore ? notice('Показана часть документов', 'Загружены последние 1 000 перемещений на склад брака.', true) : '')
+      + `<div class="section-title"><h2>Как брак попал на склад</h2><span>${counted(d.moves.length, 'документ', 'документа', 'документов')}</span></div>`
+      + toolbar(searchBox('Товар, артикул WB, описание, номер', ui.q),
+        dropdown('f-source', { label: 'Откуда', value: ui.source, options: [{ value: 'all', text: 'Отовсюду' }, ...sources.map(([value, text]) => ({ value, text }))], onPick: (v) => { ui.source = v; ui.shown = state.prefs.rows; renderDefects(); } })
         + dropdown('f-kind', { label: 'Что с товаром', value: ui.kind, options: [{ value: 'all', text: 'Любое' }, { value: 'defective', text: 'Брак' }, { value: 'packaging_defect', text: 'Повреждена упаковка' }], onPick: (v) => { ui.kind = v; ui.shown = state.prefs.rows; renderDefects(); } })
         + dropdown('f-period', { label: 'Период', value: ui.period, options: PERIODS, onPick: (v) => { ui.period = v; ui.shown = state.prefs.rows; renderDefects(); } })
         + resetLink('defects'))
       + '<div id="rows"></div>';
     wirePhotos($('view'));
+    $('view').querySelectorAll('[data-decide]').forEach((b) => { b.onclick = () => openDecision(b.dataset.decide, b.dataset.bucket); });
+    if ($('defectSeen')) {
+      $('defectSeen').onclick = async () => {
+        try { await api('/api/sellers/defects/seen', { method: 'POST' }); d.decisions.forEach((x) => { x.unseen = false; }); renderDefects(); renderNav(); }
+        catch (e) { toast(e.message); }
+      };
+    }
     wireView(ui, renderDefects, renderDefectRows);
     renderDefectRows();
   }
@@ -1109,14 +1154,59 @@
     const ui = state.ui.defects; const rows = filteredDefects(); const host = $('rows');
     host.innerHTML = rows.length ? table([
       { title: 'Фото', cls: 'w-photo', cell: (e) => photo(e.sku) },
-      { title: 'Товар', cell: (e) => `<span class="cell-main">${h(e.name)}</span>${wbIds(e.sku).length ? `<span class="cell-sub">Артикул WB: ${h(wbIds(e.sku).join(', '))}</span>` : ''}` },
+      { title: 'Товар', cell: (e) => `<span class="cell-main">${h(e.name || e.sku)}</span>${wbIds(e.sku).length ? `<span class="cell-sub">Артикул WB: ${h(wbIds(e.sku).join(', '))}</span>` : ''}` },
       { title: 'Кол-во', cls: 'n', cell: (e) => num(e.qty) },
-      { title: 'Что с товаром', cell: (e) => `${badge(BUCKET[e.bucket] || e.bucket, 'issue')}${e.note ? `<span class="cell-sub">${h(e.note)}</span>` : ''}` },
-      { title: 'Откуда', cell: (e) => `<span class="cell-main">${h(e.source)}</span>${e.document ? `<span class="cell-sub">${h(e.document)}</span>` : ''}` },
+      { title: 'Что с товаром', cell: (e) => `${badge(BUCKET[e.bucket] || e.bucket, 'issue')}${e.note ? `<span class="cell-sub">${h(e.note)}</span>` : ''}${e.hasPhoto ? `<button class="link-button" type="button" data-defect-photo="${h(e.id)}">Фото брака</button>` : ''}` },
+      { title: 'Откуда', cell: (e) => `<span class="cell-main">${h(e.sourceName)}</span><span class="cell-sub">${h([e.number, e.document].filter(Boolean).join(' · '))}</span>` },
       { title: 'Когда', cls: 'n', cell: (e) => h(when(e.at)) },
-    ], rows.slice(0, ui.shown)) + moreFooter(ui, rows.length, ['случай', 'случая', 'случаев'])
-      : '<div class="table-wrap">' + empty('Ничего не найдено', state.data.defects.events.length ? 'Под выбранные фильтры случаев нет.' : 'Склад ещё не признавал ваш товар браком.', 'check') + '</div>';
+    ], rows.slice(0, ui.shown)) + moreFooter(ui, rows.length, ['документ', 'документа', 'документов'])
+      : '<div class="table-wrap">' + empty('Ничего не найдено', state.data.defects.moves.length ? 'Под выбранные фильтры документов нет.' : 'Склад ещё не признавал ваш товар браком.', 'check') + '</div>';
+    host.querySelectorAll('[data-defect-photo]').forEach((b) => {
+      b.onclick = async () => {
+        // Окно открываем сразу, по нажатию: иначе браузер примет его за всплывающее.
+        const w = window.open('', '_blank'); b.disabled = true;
+        try {
+          const response = await fetch('https://api.argus-ai.online/api/defects/moves/' + encodeURIComponent(b.dataset.defectPhoto) + '/photo', { headers: { Authorization: 'Bearer ' + state.token }, cache: 'no-store' });
+          if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || 'Фото не открылось');
+          const url = URL.createObjectURL(await response.blob());
+          if (w) w.location.href = url; else location.href = url;
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
+        } catch (e) { if (w) w.close(); toast(e.message); }
+        b.disabled = false;
+      };
+    });
     wireRows(host, ui, renderDefectRows);
+  }
+  // Решение по браку: что сделать, сколько штук (можно часть), для уценки —
+  // штрихкод карточки уценки на WB.
+  function openDecision(sku, bucket) {
+    const r = state.data.defects.balances.find((x) => x.sku === sku && x.bucket === bucket); if (!r) return;
+    openDrawer(r.name, 'Решение по браку');
+    const pick = { action: '' };
+    const draw = () => {
+      $('drawerBody').innerHTML = `<div class="mini-stats">${mini('На складе брака', r.qty)}${mini('Ждёт решения', r.undecided)}${mini('Уже решено', r.decided)}</div>`
+        + `<p class="help" style="margin-bottom:12px">${h(BUCKET[r.bucket])}${r.since ? ', лежит с ' + h(day(r.since)) : ''} — что с ним сделать?</p>`
+        + `<div class="decide-options">${Object.entries(ACTIONS).map(([key, a]) => `<button type="button" class="decide-option" data-action="${key}" aria-pressed="${pick.action === key}"><strong>${h(a.title)}</strong><span>${h(a.text)}</span></button>`).join('')}</div>`
+        + (pick.action ? '<div class="settings-form" style="margin-top:16px">'
+          + `<label class="field"><span>Сколько штук — можно часть, остальное решите потом</span><input id="decQty" type="number" inputmode="numeric" min="1" max="${r.undecided}" value="${r.undecided}"></label>`
+          + (pick.action === 'markdown' ? '<label class="field"><span>Штрихкод карточки уценки на WB</span><input id="decBarcode" inputmode="numeric" maxlength="64" placeholder="Например: 2040000000017"></label>' : '')
+          + `<label class="field"><span>Комментарий складу — не обязательно</span><textarea id="decNote" rows="2" maxlength="300" placeholder="${pick.action === 'return_to_seller' ? 'Например: заберёт курьер в пятницу' : 'Например: только те, где вмятина'}"></textarea></label>`
+          + (state.owner ? '<p class="help">Вы решаете за продавца: в его кабинете будет видно, кто решил, и придёт уведомление.</p>' : '')
+          + '<div class="drawer-actions"><button class="button primary" type="button" id="decSend">Отправить складу</button></div><p class="error-text" id="decError"></p></div>' : '');
+      $('drawerBody').querySelectorAll('[data-action]').forEach((b) => { b.onclick = () => { pick.action = b.dataset.action; draw(); $('decQty')?.scrollIntoView({ block: 'nearest' }); }; });
+      if (!$('decSend')) return;
+      $('decSend').onclick = async () => {
+        const qty = Number($('decQty').value); const barcode = $('decBarcode')?.value.trim();
+        if (!Number.isInteger(qty) || qty < 1 || qty > r.undecided) { $('decError').textContent = `Сколько штук — от 1 до ${n(r.undecided)}`; return; }
+        if (pick.action === 'markdown' && !barcode) { $('decError').textContent = 'Впишите штрихкод карточки уценки'; $('decBarcode').focus(); return; }
+        $('decSend').disabled = true;
+        try {
+          await api('/api/sellers/defects/decisions', { method: 'POST', body: { sku: r.sku, bucket: r.bucket, qty, action: pick.action, markdownBarcode: barcode || undefined, note: $('decNote').value.trim() || undefined } });
+          $('drawer').close(); toast(`Решение отправлено складу: ${ACTIONS[pick.action].title.toLowerCase()}, ${n(qty)} шт.`); navigate(true);
+        } catch (e) { $('decError').textContent = e.message; $('decSend').disabled = false; }
+      };
+    };
+    draw();
   }
 
   // ---------- Карточки ----------
@@ -1141,7 +1231,7 @@
 
   async function openProduct(sku, bucket = null) {
     const r = (state.data.stock || []).find((x) => x.sku === sku)
-      || (state.data.defects?.now || []).find((x) => x.sku === sku) || { sku, name: sku };
+      || (state.data.defects?.balances || []).find((x) => x.sku === sku) || { sku, name: sku };
     const run = openDrawer(productName(r), 'Карточка товара');
     const ids = wbIds(sku);
     $('drawerBody').innerHTML = `<div class="drawer-meta"><span>Артикул WB <b>${h(ids.join(', ') || 'не передан')}</b></span><span>Штрихкод <b>${h(r.barcode || 'не указан')}</b></span>${vendorCodes(sku).length ? `<span>Артикул продавца <b>${h(vendorCodes(sku).join(', '))}</b></span>` : ''}</div>`
@@ -1206,7 +1296,7 @@
   }
 
   function historyEvent(e) {
-    const labels = { received: 'Принято на склад', picked: 'Собрано для заказа', shipped: 'Отгружено со склада', returned: 'Возврат', add: 'Добавлено', remove: 'Списано', move: 'Перемещение', adjust: 'Корректировка', set: 'Пересчёт', inventory_adjust: 'Пересчёт', inventory: 'Пересчёт', kit_assemble: 'Собран набор', repack: 'Перепаковка', canceled_pick_return: 'Возвращено после отмены WB', initial_load: 'Начальный остаток на складе', initial_load_undo: 'Отмена начального остатка' };
+    const labels = { received: 'Принято на склад', picked: 'Собрано для заказа', shipped: 'Отгружено со склада', returned: 'Возврат', add: 'Добавлено', remove: 'Списано', move: 'Перемещение', adjust: 'Корректировка', set: 'Пересчёт', inventory_adjust: 'Пересчёт', inventory: 'Пересчёт', kit_assemble: 'Собран набор', repack: 'Перепаковка', canceled_pick_return: 'Возвращено после отмены WB', initial_load: 'Начальный остаток на складе', initial_load_undo: 'Отмена начального остатка', defect_in: 'Отмечено браком — на складе брака', defect_return_to_seller: 'Брак выдан вам', defect_dispose: 'Брак утилизирован', defect_repack: 'Брак перепакован — снова в продаже', defect_markdown: 'Брак переклеен на уценку' };
     const sign = ['received', 'returned', 'initial_load'].includes(e.kind) ? '+' : ['shipped', 'initial_load_undo'].includes(e.kind) ? '−' : '';
     return `<li><div class="timeline-line"><strong>${h(labels[e.kind] || 'Операция склада')}</strong><span>${sign}${n(e.qty)} шт.</span></div><time>${e.at ? h(when(e.at)) : 'время не сохранено'}</time>${e.document ? `<p>${h(e.document)}</p>` : ''}${e.supplyNumber ? `<p>Поставка ${h(e.supplyNumber)}</p>` : ''}${e.quality ? `<p>${h(BUCKET[e.quality] || e.quality)}</p>` : ''}${e.note ? `<p>${h(e.note)}</p>` : ''}</li>`;
   }

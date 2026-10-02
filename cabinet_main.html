@@ -1414,6 +1414,9 @@
   .wh-row-group.visible{display:block; animation:fadeInUp 0.3s var(--ease) both;}
   .wh-row-group-head{display:flex; align-items:center; gap:14px; margin-bottom:14px; flex-wrap:wrap;}
   .wh-cell.merged{border-radius:5px;}
+  /* Ячейка брака — формой, а не цветом: цвет на карте значит заполненность. */
+  .wh-cell .wh-defect-mark{position:absolute; left:3px; bottom:2px; font-size:9px; line-height:1; font-weight:700;
+    color:var(--text, #EDEBE6); opacity:.75; pointer-events:none;}
   .wh-row-group-title{font-size:14px; font-weight:700; color:var(--text); flex-shrink:0;}
   .wh-row-group-meter{flex:1 1 auto; min-width:40px; height:5px; background:var(--bg); border-radius:3px; overflow:hidden;}
   .wh-row-group-meter-fill{display:block; height:100%; background:linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius:3px; transition:width 0.4s var(--ease);}
@@ -3003,8 +3006,8 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <script src="back.js?v=4901b838" defer></script>
-<script src="form-keys.js?v=cd462175" defer></script>
-<script src="cabinet_main.js?v=76917963" defer></script>
+<script src="form-keys.js?v=02a92e0e" defer></script>
+<script src="cabinet_main.js?v=994a80a4" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->

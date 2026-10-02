@@ -348,6 +348,50 @@
   #taskScreen.run .item-note-btn{display:block;}
   .item-note-btn:active{border-color:var(--accent); color:var(--accent);}
   .item-note-sent{display:none; margin-top:8px; font-size:13px; color:var(--green); text-align:center;}
+  /* «Брак» — одна кнопка на приёмке и сборке (владелец 02.10.2026). */
+  .item-defect-btn{display:none; width:100%; margin-top:10px; padding:11px 14px; border-radius:12px;
+    border:1px solid var(--terracotta); background:var(--terracotta-soft); color:var(--terracotta);
+    font:inherit; font-size:14px; font-weight:600; cursor:pointer; text-align:center;}
+  .item-defect-btn.show{display:block;}
+  .def-label{font-size:13px; color:var(--muted); margin:14px 0 8px;}
+  .def-kinds{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .def-kind{padding:12px; border-radius:12px; border:1.5px solid var(--line); background:var(--panel-2);
+    color:var(--text); font:inherit; text-align:left; cursor:pointer;}
+  .def-kind b{display:block; font-size:14px;}
+  .def-kind span{display:block; font-size:12px; color:var(--muted); margin-top:2px;}
+  .def-kind.selected{border-color:var(--accent); background:var(--accent-soft);}
+  .def-cells{display:flex; flex-wrap:wrap; gap:8px;}
+  .def-cell{padding:10px 12px; border-radius:10px; border:1.5px solid var(--line); background:var(--panel-2);
+    color:var(--text); font:inherit; font-size:15px; font-weight:600; cursor:pointer; text-align:left;}
+  .def-cell small{display:block; font-size:11.5px; font-weight:400; color:var(--muted); margin-top:2px;}
+  .def-cell.selected{border-color:var(--accent); background:var(--accent-soft);}
+  .def-qty{display:flex; align-items:center; gap:10px;}
+  .def-qty button{width:46px; height:46px; border-radius:12px; border:1.5px solid var(--line); background:var(--panel-2);
+    color:var(--text); font-size:22px; cursor:pointer;}
+  .def-qty input{width:90px; height:46px; border-radius:12px; border:1.5px solid var(--line); background:var(--panel-2);
+    color:var(--sky); font:inherit; font-size:20px; font-weight:700; text-align:center;}
+  .def-photo{display:flex; align-items:center; justify-content:center; gap:8px; margin-top:10px; padding:12px;
+    border-radius:12px; border:1px dashed var(--line); color:var(--text); font-size:14px; cursor:pointer;}
+  .def-photo.done{border-style:solid; border-color:var(--green); color:var(--green);}
+  .def-hint{font-size:12px; color:var(--muted); margin-top:6px; line-height:1.4;}
+  .def-task{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:14px 16px; margin-bottom:10px;}
+  .def-task-act{font-size:13px; font-weight:700; color:var(--terracotta); margin-bottom:4px;}
+  .def-task-name{font-size:15px; font-weight:600;}
+  .def-task-sub{font-size:12.5px; color:var(--muted); margin-top:3px; line-height:1.4;}
+  .def-task-code{font-size:14px; margin-top:8px; padding:8px 10px; border-radius:10px; background:var(--yellow-soft); color:var(--yellow);}
+  .def-task-warn{font-size:12.5px; margin-top:8px; color:var(--terracotta);}
+  .def-task-cell{width:100%; margin-top:10px;}
+  .def-task-go{margin-top:10px;}
+  .mret-who{margin-bottom:10px;}
+  .mret-line{display:flex; justify-content:space-between; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--line-soft);}
+  .mret-line-name{min-width:0;}
+  .mret-qty{display:flex; align-items:center; gap:8px; flex-shrink:0;}
+  .mret-qty button{width:38px; height:38px; border-radius:10px; border:1px solid var(--line); background:var(--panel-2); color:var(--text); font-size:18px; cursor:pointer;}
+  .mret-qty b{min-width:28px; text-align:center; font-size:16px; color:var(--sky);}
+  .cell-manual-input.mret-search{flex:none; width:100%; margin-top:12px; font-size:16px;}
+  .mret-comment{margin-top:12px;}
+  .mret-go{margin-top:12px;}
+  .mret-new{margin-bottom:12px;}
   .item-note-sent.show{display:block;}
 
   /* ---------- Разбор возврата по состоянию товара ----------
@@ -386,19 +430,6 @@
   }
   .defect-input:focus{outline:none; border-color:var(--accent);}
   .defect-input::placeholder{color:var(--muted);}
-  /* Заглушка фото. Намеренно не притворяется рабочей: файлы Аргус пока не
-     хранит нигде, и кнопка, которая молча ничего не делает, хуже честной
-     надписи — на таком этот проект уже обжигался. */
-  .photo-stub{
-    margin-top:12px; padding:18px 14px; border-radius:12px; border:1px dashed var(--line);
-    display:flex; align-items:center; gap:12px; color:var(--muted); cursor:not-allowed;
-  }
-  .photo-stub-icon{
-    width:38px; height:38px; border-radius:10px; background:var(--panel-2);
-    display:flex; align-items:center; justify-content:center; flex-shrink:0;
-  }
-  .photo-stub-title{font-size:13.5px; font-weight:600; color:var(--text); opacity:0.75;}
-  .photo-stub-note{font-size:12px; margin-top:2px;}
   /* ---------- Лист грузчика и перепаковка ----------
      Оба экрана не привязаны к документу: лист сводит несколько заказов, а
      перепаковка вообще про полку, а не про накладную. Поэтому живут рядом с
@@ -1327,6 +1358,7 @@
                в журнале (третье задание 27.09.2026). -->
           <button type="button" class="item-note-btn" id="itemNoteBtn" onclick="openItemNote()">Написать руководителю о товаре</button>
           <div class="item-note-sent" id="itemNoteSent"></div>
+          <button type="button" class="item-defect-btn" id="itemDefectBtn" onclick="openDefect()">Брак</button>
         </div>
 
         <div class="shortfall-note" id="shortfallNote"></div>
@@ -1377,15 +1409,8 @@
           <div class="cell-label">Что именно не так</div>
           <textarea class="defect-input" id="defectNote" rows="2" maxlength="300"
             placeholder="Например: раздавлена коробка, потёк сироп"></textarea>
-          <div class="photo-stub">
-            <div class="photo-stub-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 8.5A2.5 2.5 0 015.5 6h1.2l1-1.6A1 1 0 018.5 4h7a1 1 0 01.8.4l1 1.6h1.2A2.5 2.5 0 0121 8.5v8A2.5 2.5 0 0118.5 19h-13A2.5 2.5 0 013 16.5v-8Z" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="1.5"/></svg>
-            </div>
-            <div>
-              <div class="photo-stub-title">Фото дефекта</div>
-              <div class="photo-stub-note">Появится позже — снимки пока негде хранить</div>
-            </div>
-          </div>
+          <label class="def-photo" id="retPhotoBox"><input type="file" accept="image/*" capture="environment" id="retPhoto" hidden onchange="photoPicked(this, 'ret')"><span id="retPhotoText">Сфотографировать брак</span></label>
+          <div class="def-hint">Фото не обязательно, но с ним продавцу проще решить, что делать с браком.</div>
         </div>
         <div class="qty-block">
           <div class="qty-label" id="qtyLabel">Сколько приняли по факту</div>
@@ -1571,6 +1596,40 @@
           </div>
         </div>
 
+        <!-- «Брак»: какой, сколько, что не так, фото по желанию, ячейка брака. -->
+        <div class="sheet-step" id="sheetStepDefect">
+          <div class="sheet-title">Брак</div>
+          <div class="sheet-sub" id="defItemName"></div>
+          <div class="def-label">Что с товаром</div>
+          <div class="def-kinds">
+            <button type="button" class="def-kind" data-kind="defective" onclick="defKind('defective')"><b>Брак</b><span>товар испорчен</span></button>
+            <button type="button" class="def-kind" data-kind="packaging_defect" onclick="defKind('packaging_defect')"><b>Брак упаковки</b><span>товар цел, упаковка нет</span></button>
+          </div>
+          <div id="defFromWrap"><div class="def-label">Из какой ячейки</div><div class="def-cells" id="defFrom"></div></div>
+          <div class="def-label">Сколько штук</div>
+          <div class="def-qty">
+            <button type="button" onclick="defStep(-1)" aria-label="Меньше">−</button>
+            <input type="text" id="defQty" inputmode="numeric" pattern="[0-9]*" aria-label="Сколько брака" oninput="defQtyTyped(this.value)" onblur="defStep(0)" onfocus="this.select()">
+            <button type="button" onclick="defStep(1)" aria-label="Больше">+</button>
+          </div>
+          <div class="def-hint" id="defQtyHint"></div>
+          <div class="def-label">Что именно не так</div>
+          <textarea class="defect-input" id="defNote" rows="2" maxlength="300" placeholder="Например: треснула крышка, вмятина на банке"></textarea>
+          <label class="def-photo" id="defPhotoBox"><input type="file" accept="image/*" capture="environment" id="defPhoto" hidden onchange="photoPicked(this, 'def')"><span id="defPhotoText">Сфотографировать брак</span></label>
+          <div class="def-hint">Фото не обязательно, но с ним продавцу проще решить, что делать с браком.</div>
+          <div class="def-label">Ячейка брака</div>
+          <div class="def-cells" id="defCells"></div>
+          <div class="cell-manual-row" style="margin:10px 0 0;">
+            <input type="text" class="cell-manual-input" id="defCellInput" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done"
+                   placeholder="Другая ячейка: 1.7.3" onkeydown="if(event.key === 'Enter'){ event.preventDefault(); defCellManual(); }">
+            <button type="button" class="cell-manual-go" onclick="defCellManual()">Выбрать</button>
+          </div>
+          <div class="sheet-two">
+            <button class="sheet-confirm" id="defGo" type="button" onclick="defSave()" disabled>Выберите, что с товаром</button>
+            <button class="sheet-cancel sheet-back-btn" type="button" onclick="closeSheet()">Отмена</button>
+          </div>
+        </div>
+
         <div class="sheet-step" id="sheetStepPause">
           <div class="sheet-title">Причина паузы</div>
           <div class="sheet-sub">Начальник склада увидит это в отчёте по накладной</div>
@@ -1665,6 +1724,26 @@
         <div id="moveBody"></div>
       </div>
     </div>
+    <!-- Склад брака: решения продавцов — задания грузчику (02.10.2026). -->
+    <div class="job-screen" id="defectScreen">
+      <div class="job-head">
+        <div class="job-back" onclick="showHome()">← Что делаем?</div>
+        <div class="job-title">Склад брака</div>
+        <div class="job-sub" id="defectSub">—</div>
+      </div>
+      <div class="job-body" id="defectBody"></div>
+    </div>
+
+    <!-- Новый возврат: пока возвраты не приходят из WB, коробку заводят здесь. -->
+    <div class="job-screen" id="manualReturnScreen">
+      <div class="job-head">
+        <div class="job-back" onclick="openDocs('return')">← К возвратам</div>
+        <div class="job-title">Новый возврат</div>
+        <div class="job-sub">Пока возвраты не приходят из WB сами — заведите коробку здесь и разберите</div>
+      </div>
+      <div class="job-body" id="manualReturnBody"></div>
+    </div>
+
     <div class="done-screen" id="doneScreen">
       <div class="done-top">
         <div class="done-back" onclick="goBackFromTask()">← К списку</div>
@@ -1985,6 +2064,7 @@
       supply_id: productRun.supplyId,
       supply_number: sup.number || '',
       company_name: sup.companyName || sup.company_name || '',
+      company_id: sup.companyId || null,
       status: items.every(i => i.closed) ? 'ready' : 'in_progress',
       items,
     };
@@ -2129,6 +2209,7 @@
     const rows = (Array.isArray(p.placements) ? p.placements : []).filter(x => x.rowNum != null).map(x => ({
       cellBlockId: x.cellBlockId, qty: Number(x.qty), n: Number(x.qty),
       label: formatBlockLabel(x.rowNum, { rack_start: x.rackStart, rack_end: x.rackEnd, tier_start: x.tierStart, tier_end: x.tierEnd }),
+      defect: Boolean(x.quality) && x.quality !== 'good',
     }));
     placedView = { index: i, rows };
     document.getElementById('placedTitle').textContent = p.name;
@@ -2141,8 +2222,11 @@
   }
   function renderPlacedView(){
     const v = placedView;
-    document.getElementById('placedList').innerHTML = v.rows.length ? v.rows.map((r, i) =>
-      '<div class="placed-row"><div class="placed-top"><b>' + escapeHTML(r.label) + '</b><span>лежит ' + r.qty + ' шт.</span></div>'
+    document.getElementById('placedList').innerHTML = v.rows.length ? v.rows.map((r, i) => r.defect
+      // Брак — уже на складе брака продавца: его не перекладывают и не убирают здесь.
+      ? '<div class="placed-row"><div class="placed-top"><b>' + escapeHTML(r.label) + '</b><span>брак ' + r.qty + ' шт.</span></div>'
+        + '<div class="def-hint">На складе брака продавца — что с ним делать, решит продавец.</div></div>'
+      : '<div class="placed-row"><div class="placed-top"><b>' + escapeHTML(r.label) + '</b><span>лежит ' + r.qty + ' шт.</span></div>'
       + '<div class="qty-stepper"><button type="button" class="qty-btn" onclick="stepPlacedQty(' + i + ', -1)" aria-label="Меньше">−</button>'
       + '<input class="qty-value" type="text" inputmode="numeric" pattern="[0-9]*" value="' + r.n + '" aria-label="Сколько штук из ' + escapeHTML(r.label) + '"'
       +   ' oninput="placedQtyTyped(' + i + ', this.value)" onfocus="this.select()">'
@@ -2214,6 +2298,7 @@
   function renderCurrentItem(){
     document.getElementById('allProductsBtn').classList.toggle('show', Boolean(productRun));
     document.getElementById('missingBtn').style.display = isPicking() ? '' : 'none';
+    document.getElementById('itemDefectBtn').classList.toggle('show', !isReturn());
     const kind = document.getElementById('taskKind');
     if(kind){
       kind.innerHTML = isPicking()
@@ -2731,6 +2816,8 @@
     document.getElementById('customCellDisplay').classList.remove('show');
     document.getElementById('defectBlock').classList.remove('show');
     document.getElementById('defectNote').value = '';
+    photos.ret = null;
+    paintPhoto('ret');
 
     const idx = findNextUnsortedIndex();
     if(idx === -1){ showDone(); return; }
@@ -2796,16 +2883,12 @@
       document.getElementById('manualCellBtn').style.display = '';
       renderCellOptions(item.sku);
     } else {
-      // А вот брак Кладовщик подсказывать НЕ должен: он предлагает ячейку по
-      // артикулу, то есть отправил бы испорченный товар к годному тому же
-      // самому. Место для брака работник указывает сам — это отдельные ячейки
-      // склада, и знает о них человек, а не подсказка по артикулу.
-      document.getElementById('cellLabel').textContent = 'Куда отнесли — можно не указывать';
+      // Брак — на склад брака продавца, в ячейку брака (владелец 02.10.2026):
+      // сначала ячейки, где уже лежит брак этого продавца, потом отмеченные
+      // руководителем «ячейки брака», потом свободные. К годному — никогда.
+      document.getElementById('cellLabel').textContent = 'Ячейка брака — обязательно';
       document.getElementById('manualCellBtn').style.display = '';
-      cancelCellOptions();
-      document.getElementById('cellOptions').innerHTML =
-        '<div style="font-size:13px; color:var(--muted); text-align:center; padding:8px;">'
-        + 'Для брака ячейку подбирает не Кладовщик, а вы — укажите своё место или пропустите.</div>';
+      loadReturnDefectCells();
     }
     updateReturnConfirm();
   }
@@ -2825,6 +2908,11 @@
       btn.textContent = 'Выберите состояние товара';
       return;
     }
+    if(selectedBucket !== 'good' && !selectedCellBlockId){
+      btn.disabled = true;
+      btn.textContent = 'Выберите ячейку брака';
+      return;
+    }
     btn.disabled = false;
     const tail = selectedCellLabel ? ' → ' + selectedCellLabel : '';
     btn.textContent = currentQty + ' шт — ' + BUCKET_NAME[selectedBucket] + tail;
@@ -2837,7 +2925,7 @@
     btn.textContent = 'Сохраняю…';
     let saved = false;
     try{
-      await apiFetch('/api/returns', {
+      const r = await apiFetch('/api/returns', {
         method: 'POST',
         body: {
           invoiceItemId: item.id,
@@ -2850,6 +2938,7 @@
         },
       });
       saved = true;
+      if(r && r.move) await sendPhoto(r.move.id, 'ret');
       results.push({
         name: item.name, sku: item.sku, declared: Number(item.declared_qty),
         accepted: currentQty, cell: selectedCellLabel || BUCKET_NAME[selectedBucket],
@@ -3102,7 +3191,7 @@
       // Где уже лежит — с количеством в каждой ячейке.
       const placed = (Array.isArray(item.placements) ? item.placements : []).filter(x => x.rowNum != null)
         .map(x => formatBlockLabel(x.rowNum, { rack_start: x.rackStart, rack_end: x.rackEnd, tier_start: x.tierStart, tier_end: x.tierEnd })
-          + ' — ' + Number(x.qty) + ' шт.').join(', ');
+          + ' — ' + Number(x.qty) + ' шт.' + (x.quality && x.quality !== 'good' ? ' брака' : '')).join(', ');
       box.className = 'place-info show';
       box.innerHTML = '<b>Осталось разложить ' + left + ' шт.</b>'
         + '<span>Принято ' + Number(item.accepted_qty) + ' шт.' + (placed ? ' Уже разложено: ' + escapeHTML(placed) : '')
@@ -3761,7 +3850,7 @@
   }
 
   const ALL_SCREENS = ['homeScreen', 'suppliesScreen', 'supplyScreen', 'paperScreen', 'docsScreen', 'receiptScreen',
-    'pickListScreen', 'moveScreen', 'kitScreen', 'invScreen'];
+    'pickListScreen', 'moveScreen', 'kitScreen', 'invScreen', 'defectScreen', 'manualReturnScreen'];
 
   function hideAllScreens(){
     ALL_SCREENS.forEach(id => document.getElementById(id).classList.remove('show'));
@@ -3814,6 +3903,8 @@
     catch(e){ document.getElementById('homeSub').textContent = 'Не удалось обновить: ' + e.message; }
     let counting = null;
     try{ counting = (await apiFetch('/api/inventory/tasks')).length; } catch(e){ counting = null; }
+    let defectCount = null;
+    try{ defectCount = (await apiFetch('/api/defects/tasks')).length; } catch(e){ defectCount = null; }
 
     // Поставка без заказов (их принял WB мимо Аргуса) — собирать нечего.
     const collecting = supplies.filter(s => s.status === 'collecting' && Number(s.orders) > 0);
@@ -3857,7 +3948,8 @@
         collecting.length + loose)
       + tile("openDocs('in')", 'Приёмка товара', 'приходы, которые привезли на склад', receipts)
       + tile("openDocs('return')", 'Возвраты', 'разобрать вернувшийся товар по состоянию', returns)
-      + tile('openMove()', 'Перепаковка и перестановка', 'переложить товар или вернуть его в продажу', null)
+      + tile('openDefectTasks()', 'Склад брака', 'решения продавцов: выдать, утилизировать, перепаковать', defectCount)
+      + tile('openMove()', 'Перепаковка и перестановка', 'переложить товар в другую ячейку или отметить брак', null)
       + tile('openInventory()', 'Пересчёт ячеек', 'задания руководителя', counting);
   }
   window.showHome = showHome;
@@ -4054,7 +4146,9 @@
     const open = all.filter(isOpenDoc).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
     const done = all.filter(i => !isOpenDoc(i)).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 20);
     document.getElementById('docsSub').textContent = open.length ? 'ждут: ' + open.length : 'Всё обработано';
-    document.getElementById('docsBody').innerHTML = (open.length
+    document.getElementById('docsBody').innerHTML = (dir === 'return'
+        ? '<button type="button" class="confirm-btn mret-new" onclick="openManualReturn()">+ Новый возврат</button>' : '')
+      + (open.length
       ? open.map(i => orderRowHtml(i, (i.company_name || '') + ' · пришла ' + fmtWhen(i.created_at))).join('')
       : '<div class="job-empty">' + DOC_TITLES[dir].empty + '</div>')
       + (done.length ? '<div class="list-group-title">Недавно готовые</div>'
@@ -5564,10 +5658,9 @@
     const st = moveState.stock;
     const state = QUALITY_NAME[st.quality] || 'годный';
     document.getElementById('moveSub').textContent = st.sku + ' в ячейке ' + moveState.cellLabel;
-    // Перепаковку предлагаем только тому, что её ждёт: годный товар
-    // перепаковывать незачем, а настоящий брак ею не чинится — это и есть
-    // разница между двумя видами брака, о которой говорил владелец склада.
-    const canRepack = st.quality === 'packaging_defect';
+    // Брак обратно в продажу — только решением продавца (владелец
+    // 02.10.2026): задание придёт в «Склад брака». Годное можно отметить браком.
+    const isDefect = Boolean(st.quality) && st.quality !== 'good';
     document.getElementById('moveBody').innerHTML =
       '<div class="job-back" onclick="pickMoveCell(\'' + jsArg(moveState.cellBlockId) + '\', \'' + jsArg(moveState.cellLabel) + '\')">← Другой товар</div>'
       + '<div class="pick-line"><div class="pick-line-name">' + escapeHTML(st.sku) + '</div>'
@@ -5579,9 +5672,9 @@
       + '<div class="qty-value" id="moveQty">' + moveState.qty + '</div>'
       + '<button class="qty-btn" onclick="stepMoveQty(1)">+</button>'
       + '</div></div></div>'
-      + (canRepack
-        ? '<button class="confirm-btn" style="margin-top:14px;" onclick="doRepack()">Перепаковал — товар снова годный</button>'
-        : '')
+      + (isDefect
+        ? '<div class="def-hint" style="margin-top:14px;">Это брак продавца. В продажу он вернётся, только если так решит продавец, — задание придёт в «Склад брака».</div>'
+        : '<button type="button" class="item-defect-btn show" style="margin-top:14px;" onclick="openDefectFromMove()">Это брак</button>')
       + '<div class="cell-manual" style="margin-top:12px;" onclick="startMoveToCell()">Переставить в другую ячейку</div>';
   }
 
@@ -5610,10 +5703,6 @@
           + '<div class="stock-row-state">' + busy + '</div></div>'
           + ((o.block.stock || []).length ? cellInfoBtn(o.block.id, label) : '') + '</div>';
       }).join('');
-  }
-
-  async function doRepack(){
-    await sendMove({ toQuality: 'good' }, 'Перепаковал ' + moveState.qty + ' шт — товар снова в продаже');
   }
 
   async function doMoveToCell(toBlockId){
@@ -5802,7 +5891,7 @@
   // так не закрыть — только их кнопками (третье задание 27.09.2026): 27.09
   // окно «Закончить приёмку» закрылось случайным касанием, и грузчик остался
   // на уже принятом товаре без кнопки «Завершить».
-  const STICKY_STEPS = ['sheetStepFinish', 'sheetStepAbandon', 'sheetStepNote'];
+  const STICKY_STEPS = ['sheetStepFinish', 'sheetStepAbandon', 'sheetStepNote', 'sheetStepDefect'];
   function sheetOutside(){
     if(STICKY_STEPS.some(id => document.getElementById(id).classList.contains('show'))) return;
     closeSheet();
@@ -5833,7 +5922,395 @@
     if(step === 'abandon') document.getElementById('sheetStepAbandon').classList.add('show');
     if(step === 'print') document.getElementById('sheetStepPrint').classList.add('show');
     if(step === 'note') document.getElementById('sheetStepNote').classList.add('show');
+    if(step === 'defect') document.getElementById('sheetStepDefect').classList.add('show');
   }
+
+  // ---------- Брак (владелец 02.10.2026) ----------
+  // Одна кнопка «Брак» на приёмке и на сборке (и «Это брак» в перестановке):
+  // какой брак, сколько, что не так, фото по желанию и ячейка брака. Брак
+  // ложится на склад брака продавца — что с ним делать, решает продавец.
+  const DEF_KIND = { defective: 'Брак', packaging_defect: 'Брак упаковки' };
+  let def = null;   // { mode, item, companyId, kind, qty, max, from: [{id,label,qty}], fromId, cell, cells, saving }
+  let defRun = 0;
+  const photos = { def: null, ret: null };   // сжатые фото, ждут отправки
+
+  // Фото с телефона — до 1600 px в JPEG: снимок камеры весит 3–8 МБ, по
+  // складскому вайфаю он уходил бы минуту.
+  async function shrinkPhoto(file){
+    try{
+      const bmp = await createImageBitmap(file);
+      const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+      c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+      const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.75));
+      if(blob) return blob;
+    } catch(e){ /* браузер не разобрал снимок — отправим как есть */ }
+    return file.size <= 3 * 1048576 ? file : null;
+  }
+  async function photoPicked(input, key){
+    const file = input.files && input.files[0];
+    input.value = '';
+    if(!file) return;
+    const blob = await shrinkPhoto(file);
+    if(!blob){ showToast('Фото больше 3 МБ — снимите ещё раз'); return; }
+    photos[key] = blob;
+    paintPhoto(key);
+  }
+  window.photoPicked = photoPicked;
+  function paintPhoto(key){
+    const box = document.getElementById(key + 'PhotoBox');
+    if(!box) return;
+    box.classList.toggle('done', Boolean(photos[key]));
+    document.getElementById(key + 'PhotoText').textContent = photos[key] ? 'Фото есть — снять заново' : 'Сфотографировать брак';
+  }
+  // Фото — к записанному браку. Не ушло — брак всё равно записан.
+  async function sendPhoto(moveId, key){
+    const blob = photos[key];
+    photos[key] = null;
+    paintPhoto(key);
+    if(!blob || !moveId) return;
+    try{
+      const res = await fetch(API_BASE + '/api/defects/moves/' + encodeURIComponent(moveId) + '/photo', {
+        method: 'PUT', body: blob,
+        headers: { 'Content-Type': blob.type || 'image/jpeg', 'Authorization': 'Bearer ' + TOKEN },
+      });
+      if(!res.ok) throw new Error(((await res.json().catch(() => null)) || {}).error || 'фото не ушло');
+    } catch(e){ showToast('Брак записан, а фото не ушло: ' + e.message); }
+  }
+
+  function openDefect(){
+    const item = currentInvoice && currentInvoice.items[currentItemIndex];
+    if(!item || pauseStart) return;
+    if(isPicking()){
+      const cells = pickSuggestion && pickSuggestion.item && pickSuggestion.item.id === item.id ? pickSuggestion.cells : [];
+      const from = cells.filter(c => Number(c.available) > 0)
+        .map(c => ({ id: c.cellBlockId, label: blockLabel(c), qty: Number(c.available) }));
+      if(!from.length){ showToast('Этого товара нет в ячейках — отмечать браком нечего'); return; }
+      const sel = from.find(c => c.id === selectedCellBlockId) || from[0];
+      return startDefect({ mode: 'picking', item, companyId: currentInvoice.company_id, from, fromId: sel.id, qty: 1 });
+    }
+    const left = recvLeft(item);
+    const max = left === null ? currentQty : left;
+    if(!(max > 0)){
+      showToast(left === null ? 'Сначала укажите, сколько приняли' : 'Всё принятое уже разложено — брак отметьте в «Перепаковка и перестановка»');
+      return;
+    }
+    startDefect({ mode: 'receiving', item, companyId: currentInvoice.company_id, from: [], max, qty: 1 });
+  }
+  window.openDefect = openDefect;
+
+  function openDefectFromMove(){
+    const st = moveState.stock;
+    if(!st || !st.companyId){ showToast('Не знаю, чей это товар, — брак отметить нельзя'); return; }
+    startDefect({ mode: 'move', item: { sku: st.sku, name: st.sku }, companyId: st.companyId,
+      from: [{ id: moveState.cellBlockId, label: moveState.cellLabel, qty: Number(st.qty) }],
+      fromId: moveState.cellBlockId, qty: moveState.qty });
+  }
+  window.openDefectFromMove = openDefectFromMove;
+
+  async function startDefect(opts){
+    const run = ++defRun;
+    def = Object.assign({ kind: null, cell: null, cells: [], saving: false }, opts);
+    document.getElementById('defItemName').textContent = def.item.name + (def.item.name === def.item.sku ? '' : ' · ' + def.item.sku);
+    document.getElementById('defNote').value = '';
+    document.getElementById('defCellInput').value = '';
+    photos.def = null;
+    paintPhoto('def');
+    renderDefect();
+    document.getElementById('sheetOverlay').classList.add('show');
+    goSheetStep('defect');
+    try{ def.cells = await apiFetch('/api/defects/cells?companyId=' + encodeURIComponent(def.companyId)); }
+    catch(e){ if(run === defRun) showToast('Не удалось подобрать ячейку брака — введите её вручную'); }
+    if(run === defRun) renderDefect();
+  }
+
+  function defMax(){
+    if(!def.from.length) return def.max;
+    const f = def.from.find(c => c.id === def.fromId);
+    return f ? f.qty : 0;
+  }
+  function renderDefect(){
+    if(!def) return;
+    document.querySelectorAll('#sheetStepDefect .def-kind').forEach(b => b.classList.toggle('selected', b.getAttribute('data-kind') === def.kind));
+    document.getElementById('defFromWrap').style.display = def.from.length > 1 ? '' : 'none';
+    document.getElementById('defFrom').innerHTML = def.from.map((c, i) => '<button type="button" class="def-cell'
+      + (c.id === def.fromId ? ' selected' : '') + '" onclick="defFrom(' + i + ')">' + escapeHTML(c.label)
+      + '<small>лежит ' + c.qty + ' шт</small></button>').join('');
+    const max = defMax();
+    def.qty = Math.max(1, Math.min(def.qty || 1, max));
+    document.getElementById('defQty').value = def.qty;
+    document.getElementById('defQtyHint').textContent = def.mode === 'receiving'
+      ? 'Брак входит в принятое: можно до ' + max + ' шт. Годное разложите потом.'
+      : 'Из ячейки ' + (def.from.find(c => c.id === def.fromId) || {}).label + ', там ' + max + ' шт.';
+    const list = def.cells.slice();
+    if(def.cell && !list.some(c => c.cellBlockId === def.cell.id)) list.unshift({ cellBlockId: def.cell.id, label: def.cell.label, reason: 'введена вручную' });
+    document.getElementById('defCells').innerHTML = list.length
+      ? list.map(c => '<button type="button" class="def-cell' + (def.cell && def.cell.id === c.cellBlockId ? ' selected' : '')
+        + '" onclick="defCell(\'' + jsArg(c.cellBlockId) + '\', \'' + jsArg(c.label) + '\')">' + escapeHTML(c.label)
+        + '<small>' + escapeHTML(c.reason) + '</small></button>').join('')
+      : '<div class="def-hint">Подсказок нет — введите ячейку брака ниже.</div>';
+    const go = document.getElementById('defGo');
+    go.disabled = !def.kind || !def.cell || def.saving;
+    go.textContent = def.saving ? 'Сохраняю…' : !def.kind ? 'Выберите, что с товаром'
+      : !def.cell ? 'Выберите ячейку брака' : 'Брак ' + def.qty + ' шт → ' + def.cell.label;
+  }
+  function defKind(kind){ if(def){ def.kind = kind; renderDefect(); } }
+  function defFrom(i){ if(def && def.from[i]){ def.fromId = def.from[i].id; renderDefect(); } }
+  function defStep(d){ if(def){ def.qty = (def.qty || 1) + d; renderDefect(); } }
+  function defQtyTyped(v){
+    if(!def) return;
+    const n = parseInt(String(v).replace(/\D/g, ''), 10);
+    if(n > 0){ def.qty = Math.min(n, defMax()); }
+    const go = document.getElementById('defGo');
+    if(def.kind && def.cell && !def.saving) go.textContent = 'Брак ' + def.qty + ' шт → ' + def.cell.label;
+  }
+  function defCell(id, label){ if(def){ def.cell = { id, label }; renderDefect(); } }
+  function defCellManual(){
+    const box = document.getElementById('defCellInput');
+    const val = box.value.trim();
+    if(!val || !def) return;
+    const found = findCellByLabel(val);
+    if(!found){ showToast('Ячейки ' + val + ' на складе нет. Адрес — ряд.стеллаж.ярус, например 1.7.3'); return; }
+    box.value = '';
+    box.blur();
+    defCell(found.id, found.label);
+  }
+  Object.assign(window, { defKind, defFrom, defStep, defQtyTyped, defCell, defCellManual, defSave });
+
+  async function defSave(){
+    if(!def || def.saving || !def.kind || !def.cell) return;
+    const d = def;
+    d.saving = true;
+    renderDefect();
+    const note = document.getElementById('defNote').value.trim() || undefined;
+    const defect = { qty: d.qty, bucket: d.kind, note, cellBlockId: d.cell.id };
+    const fresh = d.mode === 'receiving' && recvLeft(d.item) === null;
+    let r;
+    try{
+      if(d.mode !== 'receiving'){
+        r = await apiFetch('/api/defects/moves', { method: 'POST', body: { companyId: d.companyId, sku: d.item.sku,
+          fromCellBlockId: d.fromId, toCellBlockId: d.cell.id, qty: d.qty, bucket: d.kind, note, source: d.mode } });
+      } else if(fresh){
+        r = await apiFetch('/api/receiving', { method: 'POST', body: { invoiceItemId: d.item.id, acceptedQty: d.max, defect,
+          suggestionId: lastSuggestionId, pausedMs: totalPausedMs, pauseReasons: pauseLog.map(p => p.reason) } });
+      } else {
+        r = await apiFetch('/api/receiving/items/' + d.item.id + '/defect', { method: 'POST', body: defect });
+      }
+    } catch(e){
+      d.saving = false;
+      renderDefect();
+      showToast('Не удалось: ' + e.message);
+      return;
+    }
+    def = null;
+    closeSheet();
+    await sendPhoto(r && ((r.move && r.move.id) || (r.defects && r.defects[0] && r.defects[0].id) || r.id), 'def');
+    showToast('Брак ' + d.qty + ' шт — в ячейке ' + d.cell.label + '. Что с ним делать, решит продавец.');
+    if(fresh){
+      results.push({ name: d.item.name, sku: d.item.sku, declared: Number(d.item.declared_qty),
+        accepted: d.max, cell: 'брак ' + d.qty + ' шт → ' + d.cell.label });
+    }
+    try{ cellRows = await apiFetch('/api/cells/rows'); } catch(e){ /* обновим при следующем шаге */ }
+    if(d.mode === 'move') return renderMoveCells();
+    if(d.mode === 'receiving'){
+      if(recvRun && !recvRun.legacy && r && r.invoiceStatus === 'completed') return recvCompleted(r.finished);
+      if(recvRun) recvRun.preferred = r && r.unplaced > 0 ? d.item.id : null;
+    }
+    try{
+      // Сборка по товарам — «поставка», а не накладная: свой способ обновиться.
+      if(productRun){ productRun.preferred = d.item.sku; await reloadProductRun(); }
+      else await reloadCurrentInvoice();
+    } catch(e){ return savedButStale(e); }
+    renderCurrentItem();
+  }
+
+  // Возврат: брак — только в ячейку брака (подсказки — как у кнопки «Брак»).
+  let retDefectCells = [];
+  async function loadReturnDefectCells(){
+    const wrap = document.getElementById('cellOptions');
+    const request = ++cellOptionsRequest;
+    wrap.innerHTML = '<div style="font-size:13px; color:var(--muted); text-align:center; padding:8px;">Подбираю ячейку брака…</div>';
+    let cells = [];
+    try{ cells = await apiFetch('/api/defects/cells?companyId=' + encodeURIComponent(currentInvoice.company_id)); } catch(e){ cells = []; }
+    if(request !== cellOptionsRequest) return;
+    retDefectCells = cells;
+    wrap.innerHTML = cells.length
+      ? cells.map((c, i) => '<div class="cell-option" id="cell-' + i + '" onclick="pickRetDefectCell(' + i + ')">'
+        + '<div><div class="cell-option-id">' + escapeHTML(c.label) + '</div><div class="cell-option-note">' + escapeHTML(c.reason) + '</div></div>'
+        + '<div class="cell-option-check"></div></div>').join('')
+      : '<div style="font-size:13px; color:var(--muted); text-align:center; padding:8px;">Подсказок нет — введите ячейку брака вручную или выберите на карте.</div>';
+  }
+  function pickRetDefectCell(i){
+    const c = retDefectCells[i];
+    if(!c) return;
+    selectedCellBlockId = c.cellBlockId;
+    selectedCellLabel = c.label;
+    document.querySelectorAll('.cell-option').forEach(el => el.classList.remove('selected'));
+    const el = document.getElementById('cell-' + i);
+    if(el) el.classList.add('selected');
+    document.getElementById('customCellDisplay').classList.remove('show');
+    updateReturnConfirm();
+  }
+  window.pickRetDefectCell = pickRetDefectCell;
+
+  // ---------- Склад брака: задания грузчику ----------
+  // Продавец (или склад за него) решил — грузчик выполняет: выдать продавцу,
+  // утилизировать, перепаковать или переклеить на уценку и положить в продажу.
+  const DEF_ACTION = { return_to_seller: 'Выдать продавцу', dispose: 'Утилизировать',
+    repack: 'Перепаковать и вернуть в продажу', markdown: 'Уценка: переклеить штрихкод' };
+  const DEF_DONE = { return_to_seller: 'Выдал продавцу', dispose: 'Утилизировал',
+    repack: 'Перепаковал и положил', markdown: 'Переклеил и положил' };
+  let defectTasks = [];
+  async function openDefectTasks(){
+    openJob('defectScreen');
+    document.getElementById('defectSub').textContent = 'Загружаю…';
+    document.getElementById('defectBody').innerHTML = '';
+    try{ defectTasks = await apiFetch('/api/defects/tasks'); }
+    catch(e){ document.getElementById('defectSub').textContent = 'Не удалось загрузить: ' + e.message; return; }
+    renderDefectTasks();
+  }
+  window.openDefectTasks = openDefectTasks;
+  function renderDefectTasks(){
+    const n = defectTasks.length;
+    document.getElementById('defectSub').textContent = n ? n + ' ' + pluralRu(n, 'задание', 'задания', 'заданий') : 'Заданий нет';
+    document.getElementById('defectBody').innerHTML = n ? defectTasks.map((t, i) => {
+      const toSale = t.action === 'repack' || t.action === 'markdown';
+      const have = t.cells.reduce((s, c) => s + Number(c.qty), 0);
+      return '<div class="def-task">'
+        + '<div class="def-task-act">' + escapeHTML(DEF_ACTION[t.action]) + ' · ' + t.qty + ' шт</div>'
+        + '<div class="def-task-name">' + escapeHTML(t.name || t.sku) + '</div>'
+        + '<div class="def-task-sub">' + escapeHTML([t.company, DEF_KIND[t.bucket], t.number].filter(Boolean).join(' · ')) + '</div>'
+        + '<div class="def-task-sub">Взять из: ' + (t.cells.length ? escapeHTML(t.cells.map(c => c.label + ' — ' + c.qty + ' шт').join(', ')) : 'в ячейках этого брака нет') + '</div>'
+        + (t.action === 'markdown' ? '<div class="def-task-code">Наклейте штрихкод уценки: <b>' + escapeHTML(t.markdownBarcode) + '</b></div>' : '')
+        + (t.note ? '<div class="def-task-sub">Комментарий: ' + escapeHTML(t.note) + '</div>' : '')
+        + '<div class="def-task-sub">Решил: ' + escapeHTML(t.decidedRole === 'seller' ? 'продавец' : (t.decidedName || 'склад') + ' по просьбе продавца') + '</div>'
+        + (have < t.qty ? '<div class="def-task-warn">В ячейках брака ' + have + ' шт из ' + t.qty + ' — скажите руководителю, пусть пересчитают.</div>' : '')
+        + (toSale ? '<input type="text" class="cell-manual-input def-task-cell" id="defTaskCell-' + i + '" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Куда кладёте для продажи: 1.7.3">' : '')
+        + '<button type="button" class="confirm-btn def-task-go" id="defTaskGo-' + i + '" onclick="doDefectTask(' + i + ')"' + (have < t.qty ? ' disabled' : '') + '>'
+        + escapeHTML(DEF_DONE[t.action]) + ' — ' + t.qty + ' шт</button></div>';
+    }).join('') : '<div class="job-empty">Продавцы пока ничего не решили по браку. Когда решат — задание появится здесь.</div>';
+  }
+  async function doDefectTask(i){
+    const t = defectTasks[i];
+    if(!t) return;
+    const body = {};
+    if(t.action === 'repack' || t.action === 'markdown'){
+      const val = document.getElementById('defTaskCell-' + i).value.trim();
+      const found = val && findCellByLabel(val);
+      if(!found){ showToast(val ? 'Ячейки ' + val + ' на складе нет. Адрес — ряд.стеллаж.ярус, например 1.7.3' : 'Укажите ячейку, куда кладёте товар для продажи'); return; }
+      body.cellBlockId = found.id;
+    }
+    const btn = document.getElementById('defTaskGo-' + i);
+    btn.disabled = true;
+    btn.textContent = 'Сохраняю…';
+    try{ await apiFetch('/api/defects/tasks/' + encodeURIComponent(t.id) + '/done', { method: 'POST', body }); }
+    catch(e){
+      showToast('Не удалось: ' + e.message);
+      btn.disabled = false;
+      btn.textContent = DEF_DONE[t.action] + ' — ' + t.qty + ' шт';
+      return;
+    }
+    showToast('Готово: ' + DEF_DONE[t.action].toLowerCase() + ' ' + t.qty + ' шт');
+    try{ cellRows = await apiFetch('/api/cells/rows'); } catch(e){ /* обновим при следующем входе */ }
+    openDefectTasks();
+  }
+  window.doDefectTask = doDefectTask;
+
+  // ---------- Новый возврат (пока возвраты не приходят из WB) ----------
+  // Коробка возврата приехала — грузчик заводит её сам: товары одного
+  // продавца и сколько штук, — и сразу разбирает на годное и брак.
+  let mret = null;   // { companyId, companyName, lines: [{sku,name,qty}], query, products, status, comment, saving }
+  let mretSearch = 0;
+  function openManualReturn(){
+    mret = { companyId: null, companyName: '', lines: [], query: '', products: [], status: '', comment: '', saving: false };
+    openJob('manualReturnScreen');
+    renderManualReturn();
+  }
+  window.openManualReturn = openManualReturn;
+  function renderManualReturn(){
+    document.getElementById('manualReturnBody').innerHTML =
+      '<div class="def-task-sub mret-who">' + (mret.companyName ? 'Продавец: <b>' + escapeHTML(mret.companyName) + '</b>' : 'Найдите первый товар — продавец определится по нему.') + '</div>'
+      + mret.lines.map((l, i) => '<div class="mret-line"><div class="mret-line-name"><div class="def-task-name">' + escapeHTML(l.name) + '</div>'
+        + '<div class="def-task-sub">' + escapeHTML(l.sku) + '</div></div>'
+        + '<div class="mret-qty"><button type="button" onclick="mretQty(' + i + ', -1)" aria-label="Меньше">−</button><b>' + l.qty + '</b>'
+        + '<button type="button" onclick="mretQty(' + i + ', 1)" aria-label="Больше">+</button></div></div>').join('')
+      + '<input type="search" class="cell-manual-input mret-search" id="mretQuery" autocomplete="off" placeholder="Товар: название, артикул или штрихкод" oninput="mretFind(this.value)">'
+      + '<div id="mretFound"></div>'
+      + '<textarea class="defect-input mret-comment" id="mretComment" rows="2" maxlength="300" oninput="mret.comment = this.value" placeholder="Комментарий — не обязательно: откуда коробка, номер возврата WB"></textarea>'
+      + '<button type="button" class="confirm-btn mret-go" onclick="mretSave()"' + (mret.lines.length && !mret.saving ? '' : ' disabled') + '>'
+      + (mret.saving ? 'Сохраняю…' : 'Завести возврат и разобрать') + '</button>';
+    document.getElementById('mretQuery').value = mret.query;
+    document.getElementById('mretComment').value = mret.comment;
+    renderMretFound();
+  }
+  async function mretFind(q){
+    mret.query = q;
+    const request = ++mretSearch;
+    if(q.trim().length < 2){ mret.products = []; mret.status = ''; renderMretFound(); return; }
+    mret.status = 'Ищу…';
+    renderMretFound();
+    try{
+      const found = await apiFetch('/api/inventory/products?q=' + encodeURIComponent(q.trim()));
+      if(request !== mretSearch || !mret) return;
+      mret.products = mret.companyId ? found.filter(p => p.companyId === mret.companyId) : found;
+      mret.status = mret.products.length ? ''
+        : found.length ? 'У этого продавца такого товара нет: в одном возврате — товары одного продавца.' : 'Товар не найден.';
+    } catch(e){
+      if(request !== mretSearch || !mret) return;
+      mret.products = [];
+      mret.status = e.message;
+    }
+    renderMretFound();
+  }
+  function renderMretFound(){
+    const box = document.getElementById('mretFound');
+    if(!box || !mret) return;
+    box.innerHTML = (mret.status ? '<div class="inv-search-status">' + escapeHTML(mret.status) + '</div>' : '')
+      + mret.products.slice(0, 20).map((p, i) => '<button type="button" class="inv-search-result" onclick="mretAdd(' + i + ')">'
+        + escapeHTML(p.name) + '<span>Артикул: ' + escapeHTML(p.sku) + '</span><span>Продавец: ' + escapeHTML(p.companyName || '') + '</span></button>').join('');
+  }
+  function mretAdd(i){
+    const p = mret.products[i];
+    if(!p) return;
+    mret.companyId = p.companyId;
+    mret.companyName = p.companyName || '';
+    const have = mret.lines.find(l => l.sku === p.sku);
+    if(have) have.qty += 1; else mret.lines.push({ sku: p.sku, name: p.name, qty: 1 });
+    mret.query = '';
+    mret.products = [];
+    mret.status = '';
+    ++mretSearch;
+    renderManualReturn();
+  }
+  function mretQty(i, d){
+    const l = mret.lines[i];
+    if(!l) return;
+    l.qty += d;
+    if(l.qty < 1) mret.lines.splice(i, 1);
+    if(!mret.lines.length){ mret.companyId = null; mret.companyName = ''; }
+    renderManualReturn();
+  }
+  async function mretSave(){
+    if(!mret || mret.saving || !mret.lines.length) return;
+    mret.saving = true;
+    renderManualReturn();
+    let r;
+    try{
+      r = await apiFetch('/api/returns/manual', { method: 'POST', body: { companyId: mret.companyId,
+        items: mret.lines.map(l => ({ sku: l.sku, qty: l.qty })), comment: mret.comment.trim() || undefined } });
+    } catch(e){
+      mret.saving = false;
+      renderManualReturn();
+      showToast('Не удалось: ' + e.message);
+      return;
+    }
+    mret = null;
+    showToast('Возврат ' + r.number + ' заведён — разберите его');
+    try{ await refreshWork(); } catch(e){ /* откроем и без свежего списка */ }
+    openOrder(r.id);
+  }
+  Object.assign(window, { mretFind, mretAdd, mretQty, mretSave });
 
   // ---------- «Написать руководителю о товаре» ----------
   // Приёмка — к строке прихода, сборка — к товару поставки. На сервере это

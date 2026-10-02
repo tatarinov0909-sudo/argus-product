@@ -2163,7 +2163,7 @@
         const block = {
           r0: b.rack_start, r1: b.rack_end, t0: b.tier_start, t1: b.tier_end,
           state: b.state, blockId: b.id, stock: b.stock || [], fill: b.fill || null,
-          label: b.label || null, stock1c: b.stock_1c || [],
+          label: b.label || null, stock1c: b.stock_1c || [], defectZone: b.defect_zone === true,
         };
         blockById[b.id] = {block, rowNum: row.row_num};
         return block;
@@ -2365,8 +2365,8 @@
       }
       const hint = (tall
         ? addr + ' — высокий отсек: ' + missing + ' ' + pluralRu(missing, 'балки', 'балок', 'балок') + ' не хватает'
-        : addr) + (b.state === 'occupied' ? ' · ' + cellFillText(b.fill) : '');
-      cellsHtml += `<div class="wh-cell in-grid ${b.state}${mergedClass}${tall ? ' tall' : ''}${paint.cls}" data-row="${rowNum}" data-id="${b.r0}" data-tier="${b.t0}" data-addr="${escapeHTML(addr)}" data-state="${b.state}" data-block-id="${b.blockId}"${style} onclick="selectCell(this)" title="${escapeHTML(hint)}">${beams}</div>`;
+        : addr) + (b.state === 'occupied' ? ' · ' + cellFillText(b.fill) : '') + (b.defectZone ? ' · ячейка брака' : '');
+      cellsHtml += `<div class="wh-cell in-grid ${b.state}${mergedClass}${tall ? ' tall' : ''}${paint.cls}" data-row="${rowNum}" data-id="${b.r0}" data-tier="${b.t0}" data-addr="${escapeHTML(addr)}" data-state="${b.state}" data-block-id="${b.blockId}"${style} onclick="selectCell(this)" title="${escapeHTML(hint)}">${beams}${b.defectZone ? '<b class="wh-defect-mark" aria-hidden="true">Б</b>' : ''}</div>`;
     });
 
     let labelsHtml = '';
@@ -3301,11 +3301,32 @@
         <button class="wh-onboarding-btn" style="margin-top:14px; width:100%;" type="button"
                 data-history-cell="${escapeHTML(el.dataset.blockId)}" data-history-label="${escapeHTML(displayAddr)}">Что здесь происходило</button>
         ${stock.length ? `<button class="wh-onboarding-btn" style="margin-top:8px; width:100%;" type="button" onclick="exportCell('${el.dataset.blockId}')">Выгрузить в Excel</button>` : ''}
+        ${entry ? `<button class="wh-onboarding-btn" style="margin-top:8px; width:100%;" type="button" onclick="toggleDefectZone('${el.dataset.blockId}')">${entry.block.defectZone ? 'Снять отметку «ячейка брака»' : 'Сделать ячейкой брака'}</button>
+        <div class="wh-detail-note" style="margin-top:6px;">${entry.block.defectZone ? 'Ячейка брака: сюда Аргус первой предложит грузчику класть брак продавцов.' : 'Ячейку брака Аргус предложит грузчику первой, когда тот отмечает брак.'}</div>` : ''}
       </div>
     `;
     keepStill(el, () => detail.classList.add('open'));
     if(stock.length) loadCellItems(el.dataset.blockId);
   }
+
+  // Ячейка брака (владелец 02.10.2026): её Аргус первой предлагает грузчику,
+  // когда тот отмечает брак, — после ячеек, где уже лежит брак этого продавца.
+  async function toggleDefectZone(blockId){
+    const entry = blockById[blockId];
+    if(!entry) return;
+    const on = !entry.block.defectZone;
+    try{ await apiFetch('/api/defects/zones/' + encodeURIComponent(blockId), { method: 'PATCH', body: { on } }); }
+    catch(e){ showWhToast('Не получилось: ' + e.message); return; }
+    entry.block.defectZone = on;
+    const el = document.querySelector('.wh-cell[data-block-id="' + blockId + '"]');
+    if(el){
+      el.querySelector('.wh-defect-mark')?.remove();
+      if(on) el.insertAdjacentHTML('beforeend', '<b class="wh-defect-mark" aria-hidden="true">Б</b>');
+      selectCell(el);
+    }
+    showWhToast(on ? 'Ячейка ' + (el ? el.dataset.addr : '') + ' — ячейка брака' : 'Отметка «ячейка брака» снята');
+  }
+  window.toggleDefectZone = toggleDefectZone;
 
   const CELL_QUALITY_CLASS = { good: '', defective: ' bad', packaging_defect: ' bad' };
   async function loadCellItems(blockId){
@@ -3455,6 +3476,7 @@
     ['onec',     'Обмен с 1С',             '#E3C75A', ICO('<ellipse cx="8" cy="4" rx="5" ry="1.8"/><path d="M3 4v8c0 1 2.2 1.8 5 1.8s5-.8 5-1.8V4"/><path d="M3 8c0 1 2.2 1.8 5 1.8s5-.8 5-1.8"/>')],
     ['docs',     'Акты и документы',       '#B9B2A5', ICO('<path d="M4 2.5h5.5L12.5 6v7.5H4z"/><path d="M6 8.5h4.5M6 11h3"/>')],
     ['cells',    'Склад и ячейки',         '#D98E6E', ICO('<rect x="2.5" y="2.5" width="11" height="11" rx="1.6"/><path d="M2.5 8h11M8 2.5v11"/>')],
+    ['defects',  'Брак',                   '#E07A6A', ICO('<path d="M8 2 1.8 13h12.4z"/><path d="M8 6.5v3M8 11.4v.1"/>')],
     ['staff',    'Сотрудники',             '#86C08A', ICO('<circle cx="8" cy="5.5" r="2.5"/><path d="M3 13.5c.6-2.6 2.6-4 5-4s4.4 1.4 5 4"/>')],
     ['agent',    'Кладовщик',              '#9AA7FF', '<svg width="16" height="16" viewBox="0 0 22 22" aria-hidden="true"><use href="#icon-warehouse-agent"/></svg>'],
   ].map(function(c){ return { key: c[0], label: c[1], color: c[2], icon: c[3] }; });
@@ -4985,6 +5007,8 @@
         + '</span></div>';
       html += '<div class="sp-sec"><div class="sp-head"><b>Кабинет продавца</b>'
         + '<button class="wh-onboarding-btn" type="button" onclick="issueSellerKey(' + q(id) + ')">+ Выдать ключ</button></div>'
+        + '<div class="sp-key"><span>Остатки, заказы, склад брака — как видит продавец. Решить по браку за продавца можно там же.</span>'
+        + '<a class="mp-act" href="client_access.html?companyId=' + encodeURIComponent(id) + '#products">Открыть кабинет продавца</a></div>'
         + '<div class="mp-card-sub" style="margin-bottom:6px;">По ключу продавец входит в свой кабинет и видит только свой товар, заказы и документы.</div>'
         + (active.length ? active.map(keyRow).join('') : '<div class="mp-card-sub wbo-warn">Рабочего ключа нет — продавец не может войти.</div>')
         + (revoked.length ? '<details class="wbo-more"><summary>Отозванные ключи — ' + revoked.length + '</summary>' + revoked.map(keyRow).join('') + '</details>' : '')
