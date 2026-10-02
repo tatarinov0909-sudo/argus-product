@@ -513,9 +513,10 @@
     const by = new Map();
     list.forEach((data) => data.picking.filter((r) => SELECTED.has(keyOf(data, r))).forEach((r) => {
       // По продавцу, а не по названию: у двух продавцов название может совпасть.
-      const key = (data.supply.companyId || data.supply.companyName) + '|' + r.sku;
+      // И по складу продавца (02.10.2026): товар «Озона» и «Основного» — разные строки.
+      const key = (data.supply.companyId || data.supply.companyName) + '|' + (data.supply.virtualWarehouseId || '') + '|' + r.sku;
       const m = by.get(key) || Object.assign({}, r, {
-        qty: 0, total: 0, picked: 0, perSupply: [], companyName: data.supply.companyName,
+        qty: 0, total: 0, picked: 0, perSupply: [], companyName: data.supply.companyName + vwSuffix(data.supply),
         cells: (r.cells || []).map((c) => Object.assign({}, c)),
       });
       m.qty += Number(r.qty || 0);
@@ -538,7 +539,8 @@
         || String(a.name).localeCompare(String(b.name), 'ru');
     });
     // Продавца в строке пишем, только когда их в листе несколько.
-    const companies = [...new Set(list.map((d) => d.supply.companyName))];
+    // Складов продавца — тоже: «Озон» и «Основной» одного продавца — разные строки.
+    const companies = [...new Set(list.map((d) => d.supply.companyName + vwSuffix(d.supply)))];
     if(companies.length < 2) rows.forEach((m) => { m.companyName = ''; });
     const dests = [...new Set(list.map((d) => d.supply.destination || ''))];
     const s = {
@@ -625,12 +627,14 @@
       + '</div>';
   }
 
+  // Склад продавца, с которого собирают: у продавца без складов — пусто.
+  const vwSuffix = (s) => (s.virtualWarehouseName ? ' · склад «' + s.virtualWarehouseName + '»' : '');
   function head(s, title, sub){
     return '<div class="doc-head">'
       + '<div><div class="doc-title">' + esc(title) + '</div>'
       +   '<div class="doc-sub">' + esc(sub) + '</div></div>'
       + '<div class="doc-num">' + esc(s.number)
-      +   '<span>' + esc(s.companyName) + '</span></div>'
+      +   '<span>' + esc(s.companyName + vwSuffix(s)) + '</span></div>'
       + '</div>'
       + '<div class="doc-where">'
       +   '<span class="dest">→ ' + esc(s.destination || 'адрес не указан') + '</span><span class="grow"></span>'

@@ -550,6 +550,7 @@
   .pick-line{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:20px 22px;}
   .pick-line-top{display:flex; align-items:flex-start; justify-content:space-between; gap:18px;}
   .pick-line-name{font-size:18px; font-weight:600; line-height:1.35; letter-spacing:-0.2px;}
+  .pick-line-vw{font-size:14px; font-weight:500; color:var(--accent); margin-top:2px; letter-spacing:0;}
   .pick-line-need{flex-shrink:0; text-align:right; line-height:1.1;}
   .pick-line-need b{display:block; color:var(--accent); font-family:var(--mono); font-size:30px; font-weight:700;}
   .pick-line-need span{font-size:12px; color:var(--muted); letter-spacing:0.6px; text-transform:uppercase;}
@@ -2063,7 +2064,8 @@
       direction: 'out',
       supply_id: productRun.supplyId,
       supply_number: sup.number || '',
-      company_name: sup.companyName || sup.company_name || '',
+      company_name: (sup.companyName || sup.company_name || '')
+        + (sup.virtualWarehouseName ? ' · склад «' + sup.virtualWarehouseName + '»' : ''),
       company_id: sup.companyId || null,
       status: items.every(i => i.closed) ? 'ready' : 'in_progress',
       items,
@@ -3528,6 +3530,8 @@
           kitSku: kitState.line.sku,
           qty: kitState.qty,
           toCellBlockId: kitState.cellBlockId,
+          // Компоненты — со склада продавца этой строки листа отбора.
+          ...('vw' in kitState.line ? { vw: kitState.line.vw || null } : {}),
         },
       });
       showToast('Собрано ' + kitState.qty + ' — в ячейке ' + kitState.cellLabel);
@@ -3972,7 +3976,8 @@
     return '<div class="sup-card" onclick="openSupply(\'' + jsArg(s.id) + '\')">'
       + '<div class="sup-card-top"><span class="sup-card-num">' + escapeHTML(s.number) + '</span>'
       +   '<span class="sup-card-state ' + escapeHTML(s.status) + '">' + (s.status === 'ready' ? 'собрана' : 'собирается') + '</span></div>'
-      + '<div class="sup-card-company">' + escapeHTML(s.company_name || '') + '</div>'
+      + '<div class="sup-card-company">' + escapeHTML(s.company_name || '')
+      +   (s.vw_name ? ' · склад «' + escapeHTML(s.vw_name) + '»' : '') + '</div>'
       + '<div class="sup-card-dest">→ ' + escapeHTML(s.destination || 'куда — не указано') + '</div>'
       + '<div class="sup-card-meta">'
       +   (s.ship_date ? 'отгрузка ' + escapeHTML(fmtDay(s.ship_date)) + ' · ' : '')
@@ -4031,6 +4036,7 @@
     // Номер поставки — по центру шапки, один раз (владелец 27.09.2026).
     document.getElementById('supplyTitle').textContent = s.number;
     document.getElementById('supplySub').textContent = (s.company_name || '')
+      + (s.vw_name ? ' · склад «' + s.vw_name + '»' : '')
       + (s.destination ? ' → ' + s.destination : '')
       + (s.ship_date ? ' · отгрузка ' + fmtDay(s.ship_date) : '');
     const st = s.assembly || null;
@@ -4765,7 +4771,8 @@
       return '<div class="pick-line" data-company="' + escapeHTML(owner) + '"'
         + (hidden ? ' style="display:none;"' : '') + '>'
         + '<div class="pick-line-top">'
-        +   '<div class="pick-line-name">' + escapeHTML(l.name) + '</div>'
+        +   '<div class="pick-line-name">' + escapeHTML(l.name)
+        +     (l.vwName ? '<div class="pick-line-vw">склад продавца «' + escapeHTML(l.vwName) + '»</div>' : '') + '</div>'
         +   '<div class="pick-line-need"><b>' + l.needQty + '</b><span>шт</span></div>'
         + '</div>'
         + '<div class="pick-line-codes">'
@@ -5432,6 +5439,7 @@
     }
     document.getElementById('paperTitle').textContent = 'По листу · ' + (d.supply && d.supply.number || '');
     document.getElementById('paperSub').textContent = (d.supply && d.supply.companyName || '')
+      + (d.supply && d.supply.virtualWarehouseName ? ' · склад «' + d.supply.virtualWarehouseName + '»' : '')
       + (d.supply && d.supply.destination ? ' → ' + d.supply.destination : '');
     renderPaper();
     renderPaperTimer();
@@ -6089,8 +6097,13 @@
     let r;
     try{
       if(d.mode !== 'receiving'){
-        r = await apiFetch('/api/defects/moves', { method: 'POST', body: { companyId: d.companyId, sku: d.item.sku,
-          fromCellBlockId: d.fromId, toCellBlockId: d.cell.id, qty: d.qty, bucket: d.kind, note, source: d.mode } });
+        // При отборе брак берут с того склада продавца, с которого собирают
+        // поставку (виртуальные склады, 02.10.2026): сервер узнаёт его по
+        // поставке или по строке заказа.
+        const sid = d.mode === 'picking' ? currentSupplyId() : null;
+        const from = d.mode !== 'picking' ? {} : sid ? { supplyId: sid } : { invoiceItemId: d.item.id };
+        r = await apiFetch('/api/defects/moves', { method: 'POST', body: Object.assign({ companyId: d.companyId, sku: d.item.sku,
+          fromCellBlockId: d.fromId, toCellBlockId: d.cell.id, qty: d.qty, bucket: d.kind, note, source: d.mode }, from) });
       } else if(fresh){
         r = await apiFetch('/api/receiving', { method: 'POST', body: { invoiceItemId: d.item.id, acceptedQty: d.max, defect,
           suggestionId: lastSuggestionId, pausedMs: totalPausedMs, pauseReasons: pauseLog.map(p => p.reason) } });

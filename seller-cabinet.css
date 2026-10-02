@@ -225,6 +225,13 @@ main { padding: 28px var(--page-x) 64px; }
 
 /* ---------- Таблицы ---------- */
 .table-wrap { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow-x: auto; }
+/* Список внутри таблицы предпросмотра привоза — меню не обрезается. */
+.table-wrap.open-menus { overflow: visible; }
+/* Склады продавца (02.10.2026). */
+.vw-ask-form .field { margin-top: 10px; }
+.vw-ask-form .drawer-actions, .vw-notes .drawer-actions { margin-top: 10px; }
+.vw-move { margin-top: 16px; display: grid; gap: 12px; }
+.vw-move .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .grid { width: 100%; border-collapse: collapse; font-size: 18px; }
 .grid th {
   position: sticky; top: 0; z-index: 1; padding: 12px 14px; background: var(--panel-2);
@@ -484,6 +491,7 @@ dialog::backdrop { background: rgba(8, 11, 18, .6); }
   .inbound-form .two { grid-template-columns: 1fr; }
   .inbound-form .three { grid-template-columns: 1fr 1fr; }
   .doc-fields .two { grid-template-columns: 1fr; }
+  .vw-move .two { grid-template-columns: 1fr; }
   .steps { grid-template-columns: 1fr; gap: 0; }
   .steps li { border-top: 0; border-left: 3px solid var(--line-2); padding: 4px 0 8px 12px; }
   .steps li.done { border-left-color: var(--accent); }

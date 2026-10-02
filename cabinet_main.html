@@ -582,6 +582,7 @@
   .ord-place:focus, .ord-search:focus{outline:none; border-color:var(--accent);}
   .ord-date{width:170px;}
   .ord-point{width:460px;}
+  .ord-vw{width:300px; cursor:pointer;}
   .ord-sort, .sup-filters select{background:var(--panel-2); border:1px solid var(--line); border-radius:8px;
     padding:9px 12px; color:var(--text); font-family:var(--sans); font-size:15px;}
   .sup-filters{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:14px;}
@@ -1081,6 +1082,15 @@
   .pr-name{font-weight:600; color:var(--accent);}
   .pr-table td.strong{font-weight:700;}
   .pr-total td{font-weight:700; border-bottom:none;}
+  /* Склады продавца в «Остатках продавцов» (02.10.2026). */
+  #productsVwBar:empty, #productsTransfers:empty{display:none;}
+  .pr-vw{display:flex; align-items:center; gap:8px; font-size:14px; color:var(--muted);}
+  .pr-vw select{max-width:240px;}
+  .pr-split{margin-top:2px;}
+  .pr-move{display:inline-block; margin-top:4px; font-size:12.5px;}
+  .pr-transfers{margin-bottom:12px;}
+  .tr-grid{display:flex; flex-direction:column; gap:10px; margin:12px 0 4px;}
+  .tr-grid label{display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--muted);}
   .pr-bar input{max-width:360px; flex:1; min-width:200px;}
   .pr-table{width:100%; border-collapse:collapse; font-size:14px;}
   .pr-table th{text-align:left; font-size:12px; color:var(--muted); font-weight:600; letter-spacing:.04em;
@@ -1870,6 +1880,10 @@
   .mp-card-click{cursor:pointer; transition:border-color .15s;}
   .mp-card-click:hover{border-color:var(--accent-2);}
   .sp-sec{border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:14px; background:var(--panel-2);}
+  /* Склады продавца: форма склада внутри окна продавца (02.10.2026). */
+  .rc-vw-line{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid var(--line-soft); font-size:14px;}
+  .rc-vw-line select{width:auto; max-width:220px;}
+  .sp-vw-form{display:flex; flex-direction:column; gap:8px; padding:10px 0; border-top:1px solid var(--line-soft);}
   .sp-head{display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px; font-size:15px;}
   .sp-count{font-size:14px; font-weight:600; margin:6px 0 2px;}
   .wbw-row.on b{color:var(--accent-2);}
@@ -2794,6 +2808,8 @@
             <button type="button" class="wh-onboarding-btn" onclick="exportProducts()">Выгрузить в Excel</button>
           </div>
           <div class="pr-filters" id="productsFilters"></div>
+          <div class="pr-bar" id="productsVwBar"></div>
+          <div id="productsTransfers"></div>
           <div id="productsList"></div>
         </div>
       </div>
@@ -3027,7 +3043,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <script src="back.js?v=4901b838" defer></script>
 <script src="form-keys.js?v=02a92e0e" defer></script>
-<script src="cabinet_main.js?v=9fcd41d4" defer></script>
+<script src="cabinet_main.js?v=c59332ff" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->

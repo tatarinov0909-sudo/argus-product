@@ -61,7 +61,7 @@
     prefs: { rows: 30, textSize: 'normal' },
     data: {}, summary: null, fetchedAt: {}, view: 'products', viewRun: 0, drawerRun: 0,
     ui: {
-      products: { ...blankUi(), stock: 'all', orders: 'all', sort: 'name', extra: new Set(), category: 'all' },
+      products: { ...blankUi(), stock: 'all', orders: 'all', sort: 'name', extra: new Set(), category: 'all', vw: 'all' },
       returns: { ...blankUi(), status: 'all', quality: 'all', period: 'all' },
       wb: { ...blankUi(), confirm: null },
       orders: { ...blankUi(), status: 'all', period: 'all', supply: 'all', wbwh: 'all', sort: 'new' },
@@ -87,7 +87,7 @@
     return !!x.role && x.role === y.role && id(x) === id(y) && x.warehouseId === y.warehouseId;
   };
   async function api(path, options = {}) {
-    if (state.owner && state.companyId && path.startsWith('/api/sellers/')) path += (path.includes('?') ? '&' : '?') + 'companyId=' + encodeURIComponent(state.companyId);
+    if (state.owner && state.companyId && (path.startsWith('/api/sellers/') || path.startsWith('/api/vwarehouses'))) path += (path.includes('?') ? '&' : '?') + 'companyId=' + encodeURIComponent(state.companyId);
     const response = await fetch('https://api.argus-ai.online' + path, {
       method: options.method || 'GET', cache: 'no-store',
       headers: { 'Content-Type': 'application/json', ...(state.token ? { Authorization: 'Bearer ' + state.token } : {}) },
@@ -393,6 +393,8 @@
         renderOwnerSwitch();
       }
       state.profile = await api('/api/sellers/profile'); loadPreferences();
+      // Склады продавца нужны не только «Товарам»: привозу, карточке прихода.
+      try { state.vw = await loadVw(); } catch { state.vw = null; }
       try { const catalog = await api('/api/sellers/catalog'); state.catalog = Object.fromEntries(catalog.products.map((r) => [r.sku, r])); }
       catch { toast('Не удалось загрузить артикулы WB. Обновите страницу.'); }
       $('companyName').textContent = state.profile.name;
@@ -439,7 +441,12 @@
   $('accountMenu').addEventListener('toggle', (e) => { for (const id of ['accountButton', 'mobileAccount']) $(id).setAttribute('aria-expanded', String(e.newState === 'open' && $(id) === accountTrigger)); });
   const draftPrefs = {};
   function renderSettings() {
-    $('settingsFields').innerHTML = `<div class="field"><span>Сколько строк показывать за раз</span>${dropdown('pref-rows', {
+    // Права склада (владелец 02.10.2026): по умолчанию склад переносит товар
+    // между складами продавца сам, продавцу приходит уведомление. Выключил —
+    // перенос ждёт его согласия. Меняет только сам продавец.
+    const rights = !state.owner && hasVw() ? `<div class="field"><span>Права склада — для всего вашего кабинета</span>`
+      + `<label class="check-line"><input type="checkbox" id="rightTransfer" ${draftPrefs.rightTransfer ? 'checked' : ''}><span>Склад может переносить товар между вашими складами без вашего согласия<small>Вам всё равно придёт уведомление. Выключите — каждый перенос будет ждать вашего «Согласен».</small></span></label></div>` : '';
+    $('settingsFields').innerHTML = rights + `<div class="field"><span>Сколько строк показывать за раз</span>${dropdown('pref-rows', {
       label: 'Строк', value: String(draftPrefs.rows), options: [15, 30, 50, 100].map((v) => ({ value: String(v), text: String(v) })),
       onPick: (v) => { draftPrefs.rows = Number(v); renderSettings(); },
     })}</div><div class="field"><span>Размер текста в таблицах</span>${dropdown('pref-text', {
@@ -450,11 +457,19 @@
   $('accountSettings').onclick = () => {
     $('accountMenu').hidePopover(); Object.assign(draftPrefs, state.prefs);
     $('settingsCompany').textContent = state.profile.name + ' · фулфилмент ' + $('warehouseName').textContent;
+    draftPrefs.rightTransfer = state.vw?.rights?.transfer !== false;
     renderSettings(); $('settingsDialog').showModal();
   };
+  $('settingsFields').addEventListener('change', (e) => { if (e.target.id === 'rightTransfer') draftPrefs.rightTransfer = e.target.checked; });
   $('closeSettings').onclick = () => $('settingsDialog').close();
-  $('settingsForm').onsubmit = (e) => {
-    e.preventDefault(); writePref('preferences', { ...draftPrefs }); loadPreferences();
+  $('settingsForm').onsubmit = async (e) => {
+    e.preventDefault();
+    if (!state.owner && hasVw() && draftPrefs.rightTransfer !== (state.vw.rights?.transfer !== false)) {
+      try { state.vw.rights = (await api('/api/vwarehouses/rights', { method: 'PATCH', body: { rights: { transfer: draftPrefs.rightTransfer } } })).rights; }
+      catch (err) { toast('Права склада не сохранились: ' + err.message); return; }
+    }
+    const { rightTransfer, ...prefs } = draftPrefs;
+    writePref('preferences', prefs); loadPreferences();
     Object.values(state.ui).forEach((ui) => { ui.shown = 0; });
     $('settingsDialog').close(); navigate(); toast('Настройки сохранены');
   };
@@ -480,6 +495,8 @@
           state.data.stock = payload.rows || []; state.summary = payload.summary || null;
           // Склады WB и выставленное на WB — дополнение: не загрузились — остатки всё равно показываем.
           try { state.data.wb = await api(API_PATH.wb); state.fetchedAt.wb = new Date(); } catch { state.data.wb = null; }
+          // Склады продавца, уведомления склада и переносы — дополнение тоже.
+          if (refresh || !state.vw) { try { state.vw = await loadVw(); } catch { state.vw = null; } }
         }
         else if (key === 'supplies') { state.data.supplies = payload.rows || []; state.suppliesMore = !!payload.hasMore; }
         else state.data[key] = payload;
@@ -514,7 +531,7 @@
     wirePhotos(host);
   }
   state.defaults = {
-    products: () => ({ q: '', stock: 'all', orders: 'all', sort: 'name', extra: new Set(), category: 'all' }),
+    products: () => ({ q: '', stock: 'all', orders: 'all', sort: 'name', extra: new Set(), category: 'all', vw: 'all' }),
     returns: () => ({ q: '', status: 'all', quality: 'all', period: 'all' }),
     orders: () => ({ q: '', status: 'all', period: 'all', supply: 'all', wbwh: 'all', sort: 'new' }),
     supplies: () => ({ q: '', status: 'all', dest: 'all', period: 'all', sort: 'new' }),
@@ -527,11 +544,31 @@
     .map(([k, t]) => `<a href="#${k}" ${current === k ? 'aria-current="page"' : ''}>${t}</a>`).join('')}</nav>`;
 
   // ---------- Товары: остатки ----------
-  const total = (r) => r.total ?? null;
-  const orderedQty = (r) => Number(r.ordered || 0);
-  const assemblyQty = (r) => Number(r.inAssembly || 0);
-  const transitQty = (r) => Number(r.inTransit || 0);
-  const availableQty = (r) => (r.available == null ? null : Number(r.available));
+  // Склады продавца (виртуальные склады, 02.10.2026): выбран склад — числа
+  // по нему. «Заказано» и «В пути» склада не имеют: склад у заказа появляется
+  // с поставкой.
+  const hasVw = () => !!state.vw?.warehouses?.length;
+  const vwKey = (id) => id || 'main';
+  const vwOn = () => hasVw() && state.ui.products.vw !== 'all';
+  const vwPart = (r) => (!vwOn() || !r.warehouses ? null
+    : r.warehouses.find((w) => vwKey(w.id) === state.ui.products.vw) || { onHand: 0, inAssembly: 0, available: 0, defect: 0 });
+  const total = (r) => { const w = vwPart(r); return w ? w.onHand : r.total ?? null; };
+  const orderedQty = (r) => (vwPart(r) ? null : Number(r.ordered || 0));
+  const assemblyQty = (r) => { const w = vwPart(r); return w ? w.inAssembly : Number(r.inAssembly || 0); };
+  const transitQty = (r) => (vwPart(r) ? null : Number(r.inTransit || 0));
+  const availableQty = (r) => { const w = vwPart(r); if (w) return w.available; return r.available == null ? null : Number(r.available); };
+  const defectQty = (r) => { const w = vwPart(r); return w ? w.defect : Number(r.defective || 0); };
+  const vwName = (id) => (id ? (state.vw?.warehouses || []).find((w) => w.id === id)?.name || 'убранный склад' : 'Основной');
+  const splitText = (r) => (r.warehouses || []).filter((w) => w.onHand).map((w) => w.name + ' ' + n(w.onHand)).join(' · ');
+  // Доступно для WB: только «Основной» и склады WB — товар склада Озон на WB
+  // не продаётся. Заказы WB без поставки ждут как раз этого товара.
+  const wbAvailable = (r) => {
+    if (!r.warehouses || !state.vw?.wbChoices) return r.available == null ? null : Number(r.available);
+    const ids = new Set(state.vw.wbChoices.map((c) => vwKey(c.id)));
+    const parts = r.warehouses.filter((w) => ids.has(vwKey(w.id)));
+    if (parts.some((w) => w.available == null)) return null;
+    return Math.max(0, parts.reduce((a, w) => a + w.available, 0) - Number(r.ordered || 0));
+  };
   const isShort = (r) => r.shortage === true || (total(r) != null && orderedQty(r) + assemblyQty(r) > Number(total(r)));
   // Что стоит за числами (владелец 27.09.2026): нажал на «Заказано», «В сборке»
   // или «В пути» — видишь сами заказы. Какая строка под каким числом, решает
@@ -557,17 +594,23 @@
     { key: 'transit', title: 'В пути', cls: 'n', cell: (r) => bucketNum(r, 'transit') },
     { key: 'available', title: 'Доступно', cls: 'n', cell: (r) => num(availableQty(r), true) },
     { key: 'wbStock', title: 'На WB', cls: 'n', cell: wbStockCell },
-    { key: 'defective', title: 'Брак', cls: 'n', hidden: true, cell: (r) => num(r.defective || 0) },
+    { key: 'defective', title: 'Брак', cls: 'n', hidden: true, cell: (r) => num(defectQty(r)) },
+    { key: 'vwsplit', title: 'По складам', cell: (r) => (splitText(r) ? h(splitText(r)) : '<span class="zero">—</span>') },
     { key: 'category', title: 'Категория', hidden: true, cell: (r) => h(meta(r.sku).category || '—') },
     { key: 'updated', title: 'Учёт на', cls: 'n', hidden: true, cell: (r) => (r.updatedAt ? h(when(r.updatedAt)) : '—') },
   ];
   const STOCK_FILTER = [{ value: 'all', text: 'Все товары' }, { value: 'available', text: 'Есть к продаже' }, { value: 'low', text: 'Заканчивается (≤ 5 шт.)' }, { value: 'none', text: 'Нет к продаже' }];
   const ORDERS_FILTER = [{ value: 'all', text: 'Любые' }, { value: 'any', text: 'Есть заказы' }, { value: 'ordered', text: 'Заказано, ждёт поставки' }, { value: 'assembly', text: 'В сборке' }, { value: 'transit', text: 'В пути на WB' }, { value: 'none', text: 'Без заказов' }];
   const SORTS = [{ value: 'name', text: 'По названию' }, { value: 'availDesc', text: 'Больше доступно' }, { value: 'availAsc', text: 'Меньше доступно' }, { value: 'ordersDesc', text: 'Больше заказов' }, { value: 'totalDesc', text: 'Больше всего на складе' }, { value: 'transitDesc', text: 'Больше в пути' }];
+  // «По складам» — только когда склады заведены и выбраны «Все склады».
+  const productColumns = () => PRODUCT_COLUMNS.filter((c) => c.key !== 'vwsplit' || (hasVw() && !vwOn()));
   const EXTRA = [{ value: 'shortage', text: 'Заказов больше, чем товара' }, { value: 'wbOver', text: 'На WB больше, чем доступно' }, { value: 'defect', text: 'Есть брак на складе' }, { value: 'withPhoto', text: 'С фото' }, { value: 'noPhoto', text: 'Без фото' }, { value: 'noWb', text: 'Без артикула WB' }, { value: 'unknown', text: 'Остаток ещё не получен' }];
   function filteredProducts() {
     const ui = state.ui.products;
     const rows = state.data.stock.filter((r) => {
+      // Выбран склад — только товар, который на нём есть (лежит, в сборке или брак).
+      const w = vwPart(r);
+      if (w && !w.onHand && !w.inAssembly && !w.defect) return false;
       if (!matches(ui.q, [r.name, r.barcode, ...wbIds(r.sku), ...vendorCodes(r.sku), meta(r.sku).category])) return false;
       const avail = availableQty(r);
       if (ui.stock === 'available' && !(avail > 0)) return false;
@@ -584,7 +627,7 @@
       const x = ui.extra;
       if (x.has('shortage') && !isShort(r)) return false;
       if (x.has('wbOver') && !wbOver(r)) return false;
-      if (x.has('defect') && !r.defective) return false;
+      if (x.has('defect') && !defectQty(r)) return false;
       if (x.has('withPhoto') && !photoUrl(r.sku)) return false;
       if (x.has('noPhoto') && photoUrl(r.sku)) return false;
       if (x.has('noWb') && wbIds(r.sku).length) return false;
@@ -609,6 +652,7 @@
     ui.extra.forEach((v) => t.push(EXTRA.find((o) => o.value === v).text.toLowerCase()));
     if (ui.category !== 'all') t.push('категория ' + ui.category);
     if (ui.wbwh && ui.wbwh !== 'all') t.push('склад WB ' + wbName(ui.wbwh));
+    if (vwOn()) t.push('ваш склад «' + vwName(ui.vw === 'main' ? null : ui.vw) + '»');
     return t.length ? 'фильтр: ' + t.join(', ') : 'все товары';
   }
   function renderProducts() {
@@ -618,7 +662,14 @@
     // Товары без числа учёта не гасят итог, а названы под ним (30.09.2026).
     const missing = s.unknownCount ? '\nкроме ' + counted(s.unknownCount, 'товара', 'товаров', 'товаров') + ' без учёта: '
       + (s.unknownNames || []).map((x) => '«' + x + '»').join(', ') + (s.unknownCount > (s.unknownNames || []).length ? '…' : '') : '';
-    const stats = [
+    const byVw = vwOn();
+    const stats = byVw ? [
+      ['На складе', sum(total), 'склад «' + vwName(ui.vw === 'main' ? null : ui.vw) + '»'],
+      ['Заказано', null, 'у заказа склада ещё нет — он появится с поставкой'],
+      ['В сборке', sum(assemblyQty), 'в поставках с этого склада'],
+      ['В пути', null, 'считается по всем складам'],
+      ['Доступно', sum(availableQty), 'на складе − в сборке', 'main'],
+    ] : [
       ['Всего товара', s.total ?? (unknown ? null : sum(total)), counted(s.productCount ?? rows.length, 'наименование', 'наименования', 'наименований') + (s.updatedAt ? '\nучёт на ' + when(s.updatedAt) : '') + missing],
       ['Заказано', s.ordered ?? sum(orderedQty), 'куплено на WB, ещё не в поставке'],
       ['В сборке', s.inAssembly ?? sum(assemblyQty), 'в поставке, склад собирает'],
@@ -629,7 +680,7 @@
     const over = rows.filter(wbOver).length;
     const ours = ourWb();
     const categories = [...new Set(rows.map((r) => meta(r.sku).category || 'Без категории'))].sort((a, b) => a.localeCompare(b, 'ru'));
-    $('view').innerHTML = segment('products')
+    $('view').innerHTML = segment('products') + vwNoticeHtml()
       + `<section class="stock-strip" aria-label="Состояние товаров">${stats.map(([label, value, note, cls]) => `<div class="stat ${cls || ''}"><div class="stat-label">${h(label)}</div><div class="stat-value">${value == null ? '—' : n(value) + '<small>шт.</small>'}</div><div class="stat-note">${h(note).replace('\n', '<br>')}</div></div>`).join('')}</section>`
       + (over ? `<button type="button" class="alert-line ${ui.extra.has('wbOver') ? 'on' : ''}" data-wb-over>${icon('alert')}<span><b>${counted(over, 'товар', 'товара', 'товаров')}:</b> на WB выставлено больше, чем доступно на складе — WB может продать то, чего нет. Обновите остатки на WB файлом «Остатки для WB».</span><span class="alert-action">${ui.extra.has('wbOver') ? 'Показаны только они' : 'Показать'}</span></button>` : '')
       + (short ? `<button type="button" class="alert-line ${ui.extra.has('shortage') ? 'on' : ''}" data-shortage>${icon('alert')}<span><b>${counted(short, 'товар', 'товара', 'товаров')}:</b> заказов больше, чем товара по учёту — склад проверяет, «Доступно» по ним ноль.</span><span class="alert-action">${ui.extra.has('shortage') ? 'Показаны только они' : 'Показать'}</span></button>` : '')
@@ -639,9 +690,10 @@
         + dropdown('p-sort', { label: 'Сортировка', value: ui.sort, options: SORTS, onPick: (v) => { ui.sort = v; renderProducts(); } })
         + dropdown('p-extra', { label: 'Ещё фильтры', multi: true, value: ui.extra, options: EXTRA, onPick: (v) => { if (ui.extra.has(v)) ui.extra.delete(v); else ui.extra.add(v); ui.shown = state.prefs.rows; renderProducts(); } })
         + (ours.length > 1 ? dropdown('p-wbwh', { label: 'Склад WB', value: ui.wbwh || 'all', options: [{ value: 'all', text: 'Все ваши склады' }, ...ours.map((w) => ({ value: w.id, text: w.name }))], onPick: (v) => { ui.wbwh = v; renderProducts(); } }) : '')
+        + (hasVw() ? dropdown('p-vw', { label: 'Ваш склад', value: ui.vw, options: [{ value: 'all', text: 'Все склады' }, { value: 'main', text: 'Основной' }, ...state.vw.warehouses.map((w) => ({ value: w.id, text: w.name }))], onPick: (v) => { ui.vw = v; ui.shown = state.prefs.rows; renderProducts(); } }) : '')
         + (categories.length > 1 ? dropdown('p-cat', { label: 'Категория', value: ui.category, options: [{ value: 'all', text: 'Все' }, ...categories.map((c) => ({ value: c, text: c }))], onPick: (v) => { ui.category = v; ui.shown = state.prefs.rows; renderProducts(); } }) : '')
         + resetLink('products'),
-        columnChooser('products', PRODUCT_COLUMNS, renderProducts) + excelButton
+        columnChooser('products', productColumns(), renderProducts) + excelButton
         + `<button class="button" type="button" data-wb-stock title="Файл для WB: «Остатки» → склад продавца → «Загрузить Excel»">${icon('download')}Остатки для WB</button>`)
       + '<div id="rows"></div>';
     const overBtn = $('view').querySelector('[data-wb-over]');
@@ -649,6 +701,7 @@
     const shortBtn = $('view').querySelector('[data-shortage]');
     if (shortBtn) shortBtn.onclick = () => { if (ui.extra.has('shortage')) ui.extra.delete('shortage'); else ui.extra.add('shortage'); ui.shown = state.prefs.rows; renderProducts(); };
     wireView(ui, renderProducts, renderProductRows, exportProducts);
+    wireVwNotices();
     const wbBtn = $('view').querySelector('[data-wb-stock]');
     wbBtn.onclick = () => runExport(wbBtn, exportWbStock);
     renderProductRows();
@@ -656,7 +709,7 @@
   function renderProductRows() {
     const ui = state.ui.products; const rows = filteredProducts(); const host = $('rows');
     host.innerHTML = rows.length
-      ? table(visibleColumns('products', PRODUCT_COLUMNS), rows.slice(0, ui.shown), { rowAttrs: (r) => `class="clickable" data-product="${h(r.sku)}"` }) + moreFooter(ui, rows.length, ['товар', 'товара', 'товаров'])
+      ? table(visibleColumns('products', productColumns()), rows.slice(0, ui.shown), { rowAttrs: (r) => `class="clickable" data-product="${h(r.sku)}"` }) + moreFooter(ui, rows.length, ['товар', 'товара', 'товаров'])
       : empty('Товары не найдены', ui.q ? 'Проверьте название, артикул WB или штрихкод.' : 'Под выбранные фильтры не подошёл ни один товар.');
     host.querySelectorAll('[data-product]').forEach((tr) => { tr.onclick = () => openProduct(tr.dataset.product); });
     // Число в строке — сразу к заказам за ним, а не просто в карточку.
@@ -680,11 +733,107 @@
       { header: 'В пути, шт.', type: 'num', total: true, get: transitQty },
       { header: 'Доступно к продаже, шт.', type: 'num', total: true, get: availableQty },
       { header: 'Выставлено на WB, шт.', type: 'num', total: true, get: (r) => wbStockOf(r.sku) },
-      { header: 'Брак на складе, шт.', type: 'num', total: true, get: (r) => r.defective || 0 },
+      { header: 'Брак на складе, шт.', type: 'num', total: true, get: defectQty },
+      ...(hasVw() && !vwOn() ? [{ header: 'По складам', type: 'text', get: splitText, min: 20, max: 60 }] : []),
       { header: 'Учёт на', type: 'date', get: (r) => r.updatedAt },
       { header: 'Карточка WB', type: 'link', get: (r) => wbLink(wbIds(r.sku)[0]) },
     ],
   });
+
+  // ---------- Склады продавца ----------
+  // Часть товара под своё назначение (площадка, юрлицо). Заводит склад;
+  // продавец видит раскладку, просит перенести, отвечает на просьбы склада.
+  async function loadVw() {
+    const [d, notes, transfers] = await Promise.all([api('/api/vwarehouses'), api('/api/vwarehouses/notifications'),
+      api('/api/vwarehouses/transfers?open=1')]);
+    return { ...d, notes, transfers };
+  }
+  function vwNoticeHtml() {
+    const v = state.vw; if (!v) return '';
+    const mine = !state.owner;
+    const ask = (v.transfers || []).filter((t) => t.status === 'waiting_seller').map((t) => `<div class="notice warning vw-ask">${icon('alert')}<div>`
+      + `<strong>Склад просит перенести «${h(t.name || t.sku)}», ${n(t.qty)} шт.: «${h(t.fromName)}» → «${h(t.toName)}»</strong>`
+      + `<p>${t.note ? 'Комментарий склада: ' + h(t.note) + '. ' : ''}${mine ? 'Вы отключили складу переносы без согласия — решите сами.' : 'Ждёт согласия продавца.'} Товар останется в тех же ячейках.</p>`
+      + (mine ? `<div class="vw-ask-form"><label class="field"><span>Причина отказа — не обязательно, склад её увидит</span><input id="vwReason-${h(t.id)}" maxlength="300"></label>`
+        + `<div class="drawer-actions"><button class="button primary" type="button" data-vw-yes="${h(t.id)}">Согласен</button><button class="button" type="button" data-vw-no="${h(t.id)}">Отказать</button></div></div>` : '')
+      + '</div></div>').join('');
+    const open = (v.transfers || []).filter((t) => t.status === 'requested');
+    const asked = open.length ? notice(mine ? 'Ваши заявки на перенос ждут склада' : 'Заявки продавца на перенос ждут склада',
+      open.map((t) => `${t.number}: «${t.name || t.sku}», ${n(t.qty)} шт., «${t.fromName}» → «${t.toName}»`).join('; ')) : '';
+    // Просьбы склада о согласии — не здесь: ждущие стоят сверху с кнопками,
+    // а на решённые продавец уже ответил сам.
+    const unseen = (v.notes || []).filter((x) => x.unseen && x.kind !== 'vw_transfer_consent');
+    const notes = unseen.length ? `<div class="notice vw-notes">${icon('info')}<div><strong>От склада · ${n(unseen.length)}</strong>`
+      + unseen.slice(0, 5).map((x) => `<p>${h(when(x.at))} — ${h(x.text)}</p>`).join('')
+      + (unseen.length > 5 ? `<p>и ещё ${n(unseen.length - 5)}</p>` : '')
+      + (mine ? '<div class="drawer-actions"><button class="button" type="button" data-vw-seen>Понятно</button></div>' : '') + '</div></div>' : '';
+    return ask + asked + notes;
+  }
+  function wireVwNotices() {
+    const host = $('view');
+    const seen = host.querySelector('[data-vw-seen]');
+    if (seen) seen.onclick = async () => {
+      seen.disabled = true;
+      try { await api('/api/vwarehouses/notifications/seen', { method: 'POST' }); state.vw.notes.forEach((x) => { x.unseen = false; }); renderProducts(); }
+      catch (e) { seen.disabled = false; toast(e.message); }
+    };
+    host.querySelectorAll('[data-vw-yes], [data-vw-no]').forEach((b) => {
+      b.onclick = async () => {
+        const id = b.dataset.vwYes || b.dataset.vwNo; const approve = !!b.dataset.vwYes;
+        b.disabled = true;
+        try {
+          const t = await api('/api/vwarehouses/transfers/' + encodeURIComponent(id) + '/decide', { method: 'POST',
+            body: { approve, reason: approve ? undefined : ($('vwReason-' + id)?.value.trim() || undefined) } });
+          toast(approve ? `Перенос ${t.number} выполнен: «${t.fromName}» → «${t.toName}», ${n(t.qty)} шт.` : `Отказано: перенос ${t.number} не сделан.`);
+          navigate(true);
+        } catch (e) { b.disabled = false; toast(e.message); }
+      };
+    });
+  }
+  // Карточка товара: сколько на каждом складе и заявка складу на перенос.
+  function productVwHtml(r) {
+    if (!hasVw() || !r.warehouses) return '';
+    const cols = [{ title: 'Склад', cell: (w) => h(w.name) }, { title: 'На складе', cls: 'n', cell: (w) => num(w.onHand) },
+      { title: 'В сборке', cls: 'n', cell: (w) => num(w.inAssembly) }, { title: 'Доступно', cls: 'n', cell: (w) => num(w.available, true) },
+      { title: 'Брак', cls: 'n', cell: (w) => num(w.defect) }];
+    return `<section class="detail-section" style="margin-top:0"><h3>По вашим складам</h3>${table(cols, r.warehouses)}`
+      + (state.owner ? '' : `<div id="vwMoveForm"></div><div class="drawer-actions" id="vwMoveRow"><button class="button" type="button" id="vwMove">Попросить склад перенести</button></div>`)
+      + '<p class="help" style="margin-top:8px">Товар разных складов лежит в одних ячейках — склад делит его по учёту.</p></section>';
+  }
+  function wireProductVw(r) {
+    if (!$('vwMove')) return;
+    const m = { from: vwKey((r.warehouses.find((w) => w.onHand > 0) || r.warehouses[0]).id), to: '', busy: false, error: '' };
+    m.to = vwKey((r.warehouses.find((w) => vwKey(w.id) !== m.from) || r.warehouses[0]).id);
+    const opts = () => r.warehouses.map((w) => ({ value: vwKey(w.id), text: w.name + ' — ' + (w.onHand == null ? '—' : n(w.onHand)) + ' шт.' }));
+    const draw = () => {
+      $('vwMoveRow').hidden = true;
+      $('vwMoveForm').innerHTML = `<div class="vw-move"><div class="two"><div class="field"><span>Откуда</span>${dropdown('vw-from', { value: m.from, neutral: true, options: opts(), onPick: (v) => { m.from = v; keep(); draw(); } })}</div>`
+        + `<div class="field"><span>Куда</span>${dropdown('vw-to', { value: m.to, neutral: true, options: opts(), onPick: (v) => { m.to = v; keep(); draw(); } })}</div></div>`
+        + `<div class="two"><label class="field"><span>Сколько штук</span><input id="vwQty" inputmode="numeric" maxlength="7" value="${h(m.qty || '')}"></label>`
+        + `<label class="field"><span>Комментарий складу — не обязательно</span><input id="vwNote" maxlength="300" value="${h(m.note || '')}" placeholder="Например: под поставку на Озон"></label></div>`
+        + (m.error ? `<p class="error-text">${h(m.error)}</p>` : '')
+        + `<p class="help">Заявка уйдёт складу как важная. Перенесёт склад — вам придёт уведомление.</p>`
+        + `<div class="drawer-actions"><button class="button primary" type="button" id="vwSend" ${m.busy ? 'disabled' : ''}>Отправить заявку</button><button class="button ghost" type="button" id="vwCancel">Отмена</button></div></div>`;
+      $('vwCancel').onclick = () => { $('vwMoveForm').innerHTML = ''; $('vwMoveRow').hidden = false; };
+      $('vwSend').onclick = send;
+    };
+    const keep = () => { m.qty = $('vwQty')?.value; m.note = $('vwNote')?.value; };
+    async function send() {
+      keep();
+      const qty = Number(String(m.qty || '').replace(/\s/g, ''));
+      m.error = m.from === m.to ? 'Склад «откуда» и «куда» — один и тот же.' : !Number.isInteger(qty) || qty < 1 ? 'Сколько штук перенести?' : '';
+      if (m.error) { draw(); return; }
+      m.busy = true; draw();
+      try {
+        const t = await api('/api/vwarehouses/transfers', { method: 'POST', body: { sku: r.sku, qty,
+          fromVw: m.from === 'main' ? null : m.from, toVw: m.to === 'main' ? null : m.to, note: (m.note || '').trim() || undefined } });
+        toast(`Заявка ${t.number} отправлена складу: «${t.fromName}» → «${t.toName}», ${n(t.qty)} шт.`);
+        $('vwMoveForm').innerHTML = ''; $('vwMoveRow').hidden = false;
+        try { state.vw = await loadVw(); } catch { /* заявка ушла, список обновится с «Обновить» */ }
+      } catch (e) { m.busy = false; m.error = e.message; draw(); }
+    }
+    $('vwMove').onclick = draw;
+  }
 
   // ---------- Склады WB ----------
   // Склады продавца на WB у этого фулфилмента и сколько он выставил на WB по
@@ -699,7 +848,7 @@
     return ids.some((id) => s[id] != null) ? ids.reduce((a, id) => a + (s[id] || 0), 0) : null;
   }
   // Всегда по всем нашим складам: WB продаёт с любого из них один и тот же товар.
-  const wbOver = (r) => { const v = wbStockOf(r.sku, 'all'); const a = availableQty(r); return v != null && a != null && v > a; };
+  const wbOver = (r) => { const v = wbStockOf(r.sku, 'all'); const a = wbAvailable(r); return v != null && a != null && v > a; };
   function wbStockCell(r) {
     const v = wbStockOf(r.sku);
     if (v == null) return num(null);
@@ -781,7 +930,7 @@
   async function exportWbStock() {
     const lines = []; const noCode = []; const manyCodes = []; const noQty = [];
     for (const r of state.data.stock) {
-      const codes = meta(r.sku).wbBarcodes || []; const qty = availableQty(r);
+      const codes = meta(r.sku).wbBarcodes || []; const qty = wbAvailable(r);
       if (!codes.length) noCode.push(productName(r));
       else if (codes.length > 1) manyCodes.push(productName(r));
       else if (qty == null) noQty.push(productName(r));
@@ -1235,12 +1384,14 @@
     const run = openDrawer(productName(r), 'Карточка товара');
     const ids = wbIds(sku);
     $('drawerBody').innerHTML = `<div class="drawer-meta"><span>Артикул WB <b>${h(ids.join(', ') || 'не передан')}</b></span><span>Штрихкод <b>${h(r.barcode || 'не указан')}</b></span>${vendorCodes(sku).length ? `<span>Артикул продавца <b>${h(vendorCodes(sku).join(', '))}</b></span>` : ''}</div>`
-      + `<div class="mini-stats">${mini('Всего', total(r))}${miniBucket('ordered', orderedQty(r))}${miniBucket('assembly', assemblyQty(r))}${miniBucket('transit', transitQty(r))}${mini('Доступно', availableQty(r))}${mini('Брак', r.defective || 0)}</div>`
+      + `<div class="mini-stats">${mini('Всего', r.total ?? null)}${miniBucket('ordered', Number(r.ordered || 0))}${miniBucket('assembly', Number(r.inAssembly || 0))}${miniBucket('transit', Number(r.inTransit || 0))}${mini('Доступно', r.available ?? null)}${mini('Брак', r.defective || 0)}</div>`
+      + productVwHtml(r)
       + `<section class="detail-section" id="bucketSection"><h3>Какие заказы за этими числами</h3><div id="bucketOrders">${loading}</div></section>`
       + `<div class="drawer-actions"><button class="button" id="productOrders">Все заказы с этим товаром</button>${ids[0] ? `<a class="button ghost" href="${h(wbLink(ids[0]))}" target="_blank" rel="noopener">Карточка на WB</a>` : ''}</div>`
       + `<section class="detail-section"><h3>Движение товара</h3><div id="productHistory">${loading}</div></section>`
       + (r.updatedAt ? `<p class="help" style="margin-top:20px">Учёт на ${h(when(r.updatedAt))}</p>` : '');
     $('productOrders').onclick = () => { Object.assign(state.ui.orders, state.defaults.orders(), { q: ids[0] || productName(r), shown: state.prefs.rows }); $('drawer').close(); location.hash = 'orders'; };
+    wireProductVw(r);
     showBucketOrders(r, bucket, run);
     const events = []; let cursor = null; let busy = false;
     async function more() {
@@ -1281,7 +1432,8 @@
       const list = by[current].slice().sort((a, b) => new Date(orderAt(b)) - new Date(orderAt(a)));
       // Список свежее таблицы (пришли новые заказы) — говорим прямо, а не
       // показываем под числом «3» четыре заказа молча.
-      const stale = Object.keys(BUCKETS).filter((k) => qty(by[k]) !== BUCKETS[k].get(r));
+      const all = { ordered: Number(r.ordered || 0), assembly: Number(r.inAssembly || 0), transit: Number(r.inTransit || 0) };
+      const stale = Object.keys(BUCKETS).filter((k) => qty(by[k]) !== all[k]);
       box.innerHTML = `<div class="segmented bucket-tabs" role="tablist" aria-label="Заказы за числами">${Object.keys(BUCKETS).map((k) => `<button type="button" role="tab" aria-selected="${k === current}" data-bucket-tab="${k}">${h(BUCKETS[k].title)} · ${n(qty(by[k]))} шт.</button>`).join('')}</div>`
         + `<p class="help bucket-note">${h(BUCKETS[current].title)} — ${h(BUCKETS[current].note)}.${list.length ? ' ' + h(counted(orders(list), 'заказ', 'заказа', 'заказов')) + ', ' + h(n(qty(list))) + ' шт.' : ''}</p>`
         + (stale.length ? `<p class="help bucket-note warn">Пока открыта страница, заказы изменились — числа в таблице обновятся по кнопке «Обновить».</p>` : '')
@@ -1296,7 +1448,7 @@
   }
 
   function historyEvent(e) {
-    const labels = { received: 'Принято на склад', picked: 'Собрано для заказа', shipped: 'Отгружено со склада', returned: 'Возврат', add: 'Добавлено', remove: 'Списано', move: 'Перемещение', adjust: 'Корректировка', set: 'Пересчёт', inventory_adjust: 'Пересчёт', inventory: 'Пересчёт', kit_assemble: 'Собран набор', repack: 'Перепаковка', canceled_pick_return: 'Возвращено после отмены WB', initial_load: 'Начальный остаток на складе', initial_load_undo: 'Отмена начального остатка', defect_in: 'Отмечено браком — на складе брака', defect_return_to_seller: 'Брак выдан вам', defect_dispose: 'Брак утилизирован', defect_repack: 'Брак перепакован — снова в продаже', defect_markdown: 'Брак переклеен на уценку' };
+    const labels = { received: 'Принято на склад', picked: 'Собрано для заказа', shipped: 'Отгружено со склада', returned: 'Возврат', add: 'Добавлено', remove: 'Списано', move: 'Перемещение', adjust: 'Корректировка', set: 'Пересчёт', inventory_adjust: 'Пересчёт', inventory: 'Пересчёт', kit_assemble: 'Собран набор', repack: 'Перепаковка', canceled_pick_return: 'Возвращено после отмены WB', initial_load: 'Начальный остаток на складе', initial_load_undo: 'Отмена начального остатка', defect_in: 'Отмечено браком — на складе брака', defect_return_to_seller: 'Брак выдан вам', defect_dispose: 'Брак утилизирован', defect_repack: 'Брак перепакован — снова в продаже', defect_markdown: 'Брак переклеен на уценку', vw_transfer: 'Перенос между вашими складами' };
     const sign = ['received', 'returned', 'initial_load'].includes(e.kind) ? '+' : ['shipped', 'initial_load_undo'].includes(e.kind) ? '−' : '';
     return `<li><div class="timeline-line"><strong>${h(labels[e.kind] || 'Операция склада')}</strong><span>${sign}${n(e.qty)} шт.</span></div><time>${e.at ? h(when(e.at)) : 'время не сохранено'}</time>${e.document ? `<p>${h(e.document)}</p>` : ''}${e.supplyNumber ? `<p>Поставка ${h(e.supplyNumber)}</p>` : ''}${e.quality ? `<p>${h(BUCKET[e.quality] || e.quality)}</p>` : ''}${e.note ? `<p>${h(e.note)}</p>` : ''}</li>`;
   }
@@ -1469,7 +1621,7 @@
       + (!complete ? '<p class="help" style="margin-bottom:16px">Приёмка ещё не закончена: расхождение появится в конце.</p>' : '')
       + `<section class="detail-section" style="margin-top:0"><h3>Позиции · ${items.length}</h3><div class="receipt-lines">${items.map((r) => {
         const dec = Number(r.declared_qty); const diff = r.finalized && r.accepted !== dec; const scale = Math.max(1, dec, r.accepted || 0);
-        return `<article class="receipt-item ${diff ? 'issue' : ''}"><h3>${h(productName(r))}</h3><span class="cell-sub">Артикул WB: ${h(wbIds(r.sku).join(', ') || 'не передан')}</span>${diff ? `<span class="row-note bad">Расхождение: ${n(r.accepted - dec)} шт.</span>` : ''}`
+        return `<article class="receipt-item ${diff ? 'issue' : ''}"><h3>${h(productName(r))}</h3><span class="cell-sub">Артикул WB: ${h(wbIds(r.sku).join(', ') || 'не передан')}${hasVw() ? ' · склад «' + h(vwName(r.virtual_warehouse_id)) + '»' : ''}</span>${diff ? `<span class="row-note bad">Расхождение: ${n(r.accepted - dec)} шт.</span>` : ''}`
           + `<div class="receipt-bars"><div class="receipt-bar"><span>Заявлено</span><div class="track"><i style="width:${dec / scale * 100}%"></i></div><span class="num">${n(dec)}</span></div><div class="receipt-bar"><span>Принято</span><div class="track accepted"><i style="width:${(r.accepted || 0) / scale * 100}%"></i></div><span class="num">${r.accepted == null ? '—' : n(r.accepted)}</span></div></div></article>`;
       }).join('')}</div></section>`;
 
@@ -1565,7 +1717,7 @@
   // edit — карточка привоза (GET /api/inbound/:id): правка до приезда машины.
   function openInbound(edit = null) {
     const run = openDrawer(edit ? 'Изменить привоз ' + edit.number : 'Привезти товар на склад', edit ? 'Привоз' : 'Новый приход');
-    const f = { grid: null, name: '', preview: null, busy: false, error: '', errorTitle: '', createNew: true };
+    const f = { grid: null, name: '', preview: null, busy: false, error: '', errorTitle: '', createNew: true, byRow: {} };
     const tomorrow = new Date(Date.now() + 864e5).toLocaleDateString('sv-SE');
     const v = (x) => h(x ?? '');
     $('drawerBody').innerHTML = `<form class="inbound-form" id="inboundForm"><p class="help">${edit ? 'Поменяйте, что изменилось. Список товаров меняется новым файлом — без файла останется прежний.' : 'Загрузите таблицу, по которой собираете товар: шаблон поставки WB, свою таблицу или выгрузку из 1С. Нужны количество и штрихкод, артикул или название.'}</p>
@@ -1584,6 +1736,8 @@
       weightKg: $('inboundWeight').value.trim().replace(',', '.') || null,
       carrier: $('inboundCarrier').value, vehicle: $('inboundVehicle').value, comment: $('inboundComment').value,
     });
+    // Строка со складом, которого у продавца нет (опечатка в файле).
+    const noVw = (l) => /^склада «/.test(l.error || '');
     function draw() {
       if (run !== state.drawerRun) return; const p = f.preview;
       $('inboundFileName').textContent = f.name || 'Файл не выбран';
@@ -1596,19 +1750,27 @@
       $('inboundPreview').innerHTML = err
         + `<div class="mini-stats">${mini('Товаров', products)}${mini('Штук', units)}${mini('Не попадут строк', lost)}</div>`
         + (s.newProducts ? `<label class="check-line"><input type="checkbox" id="createNew" ${f.createNew ? 'checked' : ''}><span>Завести новые товары в каталог — ${counted(s.newProducts, 'товар', 'товара', 'товаров')}, ${n(s.newUnits)} шт.<small>Название, артикул и штрихкод возьмём из файла. Склад проверит карточки при приёмке.</small></span></label>` : '')
-        + (lost ? notice('Часть строк не попадёт в приход', 'Товара нет в вашем каталоге на складе, а для нового не хватает названия и артикула или штрихкода, или количество не целое.', true) : '')
+        + (lost ? notice('Часть строк не попадёт в приход', 'Товара нет в вашем каталоге на складе, а для нового не хватает названия и артикула или штрихкода, или количество не целое.'
+          + (p.lines.some(noVw) ? ' Или склада из столбца «Склад» у вас нет — выберите склад у строки.' : ''), true) : '')
         + table([{ title: 'Строка файла', cell: (l) => `<span class="cell-main" style="font-weight:400">${h([l.barcode, l.article, l.name].filter(Boolean).join(' · '))}</span><span class="cell-sub">строка ${l.row}</span>` },
           { title: 'Товар на складе', cell: (l) => (l.sku ? `<span class="cell-main" style="font-weight:400">${h(l.productName)}</span><span class="cell-sub">узнали по: ${h(l.by)}</span>`
             : l.isNew ? `<span class="row-note ${f.createNew ? 'warn' : 'bad'}" style="margin:0">${f.createNew ? 'Новый товар — заведём в каталог' : 'Нет в каталоге — не попадёт'}</span>`
               : `<span class="row-note bad" style="margin:0">${h(l.error || 'Не узнали')}</span>`) },
-          { title: 'Шт.', cls: 'n', cell: (l) => (l.error ? '—' : n(l.qty)) }], p.lines)
+          { title: 'Шт.', cls: 'n', cell: (l) => (l.error ? '—' : n(l.qty)) },
+          // Склады продавца: строка ложится на выбранный склад (02.10.2026).
+          ...(p.lines.some((l) => l.vwName) ? [{ title: 'Склад', cell: (l) => dropdown('inb-vw-' + l.row, {
+            value: f.byRow[l.row] || (noVw(l) ? '' : l.vwName || 'Основной'), neutral: true,
+            options: [...(noVw(l) && !f.byRow[l.row] ? [{ value: '', text: 'Выберите склад' }] : []),
+              ...['Основной', ...(state.vw?.warehouses || []).map((w) => w.name)].map((x) => ({ value: x, text: x }))],
+            onPick: (x) => { f.byRow[l.row] = x; send(false); } }) }] : [])], p.lines).replace('class="table-wrap"', 'class="table-wrap open-menus"')
+        + (p.lines.some((l) => l.vwName) ? '<p class="help" style="margin-top:8px">Разделить товар между складами — например, 500 на Озон и 300 на WB — можно в файле: столбец «Склад» и по строке на каждый склад.</p>' : '')
         + `<button class="button primary" type="submit" style="margin-top:16px;width:100%" ${f.busy || !products ? 'disabled' : ''}>${f.busy ? 'Отправляем…' : edit ? 'Сохранить с новым списком' : 'Отправить на склад'}</button>`;
       if ($('createNew')) $('createNew').onchange = (e) => { f.createNew = e.target.checked; draw(); };
     }
     async function send(apply) {
       f.busy = true; f.error = ''; draw();
       try {
-        const r = await api('/api/sellers/inbound', { method: 'POST', body: { grid: f.grid, apply, createNew: f.createNew, ...(edit ? { invoiceId: edit.id } : {}), ...details() } });
+        const r = await api('/api/sellers/inbound', { method: 'POST', body: { grid: f.grid, apply, createNew: f.createNew, warehouseByRow: f.byRow, ...(edit ? { invoiceId: edit.id } : {}), ...details() } });
         if (run !== state.drawerRun) return;
         if (apply) {
           let docNote = '';
@@ -1624,7 +1786,7 @@
       f.busy = false; draw();
     }
     $('inboundFile').onchange = (e) => {
-      const file = e.target.files[0]; e.target.value = ''; if (!file) return; f.preview = null; f.error = ''; f.name = file.name;
+      const file = e.target.files[0]; e.target.value = ''; if (!file) return; f.preview = null; f.error = ''; f.name = file.name; f.byRow = {};
       if (typeof XLSX === 'undefined') { f.error = 'Не загрузился модуль чтения Excel. Обновите страницу.'; f.errorTitle = 'Файл не принят'; draw(); return; }
       const reader = new FileReader();
       reader.onload = () => {
