@@ -1072,9 +1072,11 @@
   .rc-reply .wh-onboarding-btn{justify-self:start;}
   .rc-bottom{display:flex; gap:18px; margin-top:20px; flex-wrap:wrap;}
   /* Товары */
-  .pr-bar{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+  /* Панели над таблицей — с отступом снизу: поиск и «Выгрузить в Excel» не
+     липнут к шапке таблицы (владелец 03.10.2026). */
+  .pr-bar{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px;}
   .pr-bar .grow{flex:1;}
-  .pr-filters{display:flex; gap:8px; flex-wrap:wrap; margin:0 0 12px;}
+  .pr-filters{display:flex; gap:8px; flex-wrap:wrap; margin:0 0 16px;}
   .pr-back{background:none; border:none; color:var(--accent); font:inherit; font-size:14px; cursor:pointer; padding:0;}
   .pr-seller{font-size:16px;}
   .pr-scroll{overflow-x:auto;}
@@ -1089,7 +1091,7 @@
   .pr-vw select{max-width:240px;}
   .pr-split{margin-top:2px;}
   .pr-move{display:inline-block; margin-top:4px; font-size:12.5px;}
-  .pr-transfers{margin-bottom:12px;}
+  .pr-transfers{margin-bottom:16px;}
   .tr-grid{display:flex; flex-direction:column; gap:10px; margin:12px 0 4px;}
   .tr-grid label{display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--muted);}
   .pr-bar input{max-width:360px; flex:1; min-width:200px;}
@@ -1098,6 +1100,8 @@
     text-transform:uppercase; padding:0 12px 8px 0; border-bottom:1px solid var(--line);}
   .pr-table td{padding:10px 12px 10px 0; border-bottom:1px solid var(--line); vertical-align:top;}
   .pr-table td.num, .pr-table th.num{text-align:right; white-space:nowrap;}
+  /* Последний столбец — вровень с правым краем панели (кнопка Excel). */
+  .pr-table th:last-child, .pr-table td:last-child{padding-right:0;}
   .pr-table td.num{font-family:var(--mono);}
   .pr-table .sub{font-family:var(--mono); font-size:12px; color:var(--muted);}
   .pr-table .warn{color:var(--terracotta);}
