@@ -1265,13 +1265,13 @@
   // меняется; принятую — уже нет (товар в ячейках числится за складом).
   function receiptVwHtml(c, vws){
     if(!vws || !vws.length) return '';
-    const name = (vw) => vw ? ((vws.find(w => w.id === vw) || {}).name || 'убранный склад') : 'Основной';
+    const name = (vw) => vw ? ((vws.find(w => w.id === vw) || {}).name || 'убранный склад') : 'Остальной товар';
     const open = c.status !== 'completed';
     return '<div class="rc-section">Склады продавца</div>'
       + c.lines.map(l => '<div class="rc-vw-line"><span>' + escapeHTML(l.name || l.sku) + '<span class="rc-src"> · ' + nfmt(l.declared) + ' шт.</span></span>'
         + (open && l.accepted == null
           ? '<select class="mp-field" aria-label="Склад строки" onchange="setReceiptLineVw(\'' + l.id + '\', this.value, this)">'
-            + [{ id: null, name: 'Основной' }].concat(vws).map(w => '<option value="' + (w.id || 'main') + '"' + ((w.id || null) === (l.vw || null) ? ' selected' : '') + '>'
+            + vws.concat([{ id: null, name: 'Остальной товар' }]).map(w => '<option value="' + (w.id || 'main') + '"' + ((w.id || null) === (l.vw || null) ? ' selected' : '') + '>'
               + escapeHTML(w.name) + '</option>').join('') + '</select>'
           : '<b>' + escapeHTML(name(l.vw)) + '</b>')
         + '</div>').join('');
@@ -1666,9 +1666,9 @@
     // Склады продавца: выбор склада и заявки на перенос, ждущие решения.
     const vwBox = document.getElementById('productsVwBar');
     vwBox.innerHTML = !hasVw ? '' : '<label class="pr-vw">Склад <select class="mp-field" onchange="setProductsVw(this.value)">'
-      + '<option value="all"' + (productsVw === 'all' ? ' selected' : '') + '>Все склады</option>'
-      + '<option value="main"' + (productsVw === 'main' ? ' selected' : '') + '>Основной</option>'
+      + '<option value="all"' + (productsVw === 'all' ? ' selected' : '') + '>Основной — весь товар</option>'
       + productVws.map(w => '<option value="' + w.id + '"' + (productsVw === w.id ? ' selected' : '') + '>' + escapeHTML(w.name) + '</option>').join('')
+      + '<option value="main"' + (productsVw === 'main' ? ' selected' : '') + '>Остальной товар</option>'
       + '</select></label>'
       + (productsVw !== 'all' ? '<span class="ord-meta">По складу: на складе, в сборке (поставки с него), доступно, брак. «Заказано» — заказы WB вне поставки, склада у них ещё нет.</span>' : '');
     document.getElementById('productsTransfers').innerHTML = productTransfers.length
@@ -1741,7 +1741,7 @@
     const company = companies.find(c => c.id === productsFor);
     // Выбран склад продавца — числа по нему, как на экране; «Все склады» —
     // общие числа и раскладка по складам.
-    const vwLabel = productsVw === 'all' ? '' : productsVw === 'main' ? 'Основной'
+    const vwLabel = productsVw === 'all' ? '' : productsVw === 'main' ? 'Остальной товар'
       : ((productVws.find(w => w.id === productsVw) || {}).name || 'склад');
     const hasVw = productRows.some(r => r.byWarehouse);
     saveXlsx('Остатки ' + (company ? company.name : 'продавца') + (vwLabel ? ' — ' + vwLabel : ''), 'Товары', productsShown().map(r => {
@@ -5324,7 +5324,8 @@
 
   /* ---------- Склады продавца (виртуальные склады, владелец 02.10.2026) ----------
      Часть товара продавца под своё назначение: площадка, юрлицо, «иное».
-     Заводит склад; продавец их видит и выбирает в привозе. «Основной» — всё,
+     Заводит склад; продавец их видит и выбирает в привозе. «Основной» — весь
+     товар продавца (владелец 03.10.2026), «Остальной товар» — всё,
      что не разнесено по заведённым складам. */
   const VW_MP = { wb: 'WB', ozon: 'Озон', yandex: 'Яндекс Маркет', other: 'иное' };
   const vwCache = {};   // companyId → { warehouses, wbChoices, at }
@@ -5352,10 +5353,10 @@
       + (v && !v.error && !sp.vwForm ? '<button class="wh-onboarding-btn" type="button" onclick="openVwForm()">+ Склад</button>' : '') + '</div>'
       + '<div class="mp-card-sub" style="margin-bottom:6px;">Часть товара продавца под своё назначение — площадку, юрлицо, опт. '
       + 'По умолчанию товар лежит в тех же ячейках, меняется только учёт; «хранить отдельно» — у склада свои ячейки, можно закрепить зону. '
-      + 'Продавец видит склады и выбирает их в привозе. «Основной» — всё, что не разнесено по складам.</div>';
+      + 'Продавец видит склады и выбирает их в привозе. «Основной» — весь товар продавца; что ни к одному складу не отнесено, — «Остальной товар».</div>';
     if(!v) return html + '<div class="mp-card-sub">Загружаю…</div></div>';
     if(v.error) return html + '<div class="mp-card-sub wbo-warn">Не загрузилось: ' + escapeHTML(v.error) + '</div></div>';
-    html += '<div class="sp-key"><span><b>Основной</b> <span class="mp-card-sub">любая площадка</span></span></div>';
+    html += '<div class="sp-key"><span><b>Основной</b> <span class="mp-card-sub">весь товар продавца, без брака</span></span></div>';
     for(const w of v.warehouses){
       if(sp.vwForm && sp.vwForm.id === w.id){ html += vwFormHtml(); continue; }
       const tags = [VW_MP[w.marketplace]];
@@ -5367,6 +5368,7 @@
         + '<span class="mp-act warn" onclick="archiveVw(\'' + w.id + '\')">Убрать</span></span></div>';
     }
     if(sp.vwForm && !sp.vwForm.id) html += vwFormHtml();
+    html += '<div class="sp-key"><span><b>Остальной товар</b> <span class="mp-card-sub">не отнесён ни к одному складу · любая площадка</span></span></div>';
     // Задания грузчику «переложить» по складам этого продавца.
     const tasks = (sp.vwTasks || []);
     if(tasks.length){
@@ -5385,7 +5387,7 @@
       + '<select class="mp-field" id="vwMp" aria-label="Площадка склада">'
       + Object.entries(VW_MP).map(([k, t]) => '<option value="' + k + '"' + (f.marketplace === k ? ' selected' : '') + '>' + (k === 'other' ? 'Иное — вне площадок' : t) + '</option>').join('')
       + '</select>'
-      + '<div class="mp-card-sub">С какого склада можно собрать поставку на WB: с «Основного» и со складов WB. Склад «иное» — отгрузка вне площадок.</div>'
+      + '<div class="mp-card-sub">Поставку на WB собирают со склада WB или из «Остального товара». Склад «иное» — отгрузка вне площадок.</div>'
       + '<label class="sp-check"><input type="checkbox" id="vwSep"' + (f.keepSeparate ? ' checked' : '') + ' onchange="document.getElementById(\'vwSepMore\').hidden = !this.checked">'
       + '<span>Хранить отдельно<small>Товар этого склада не лежит в одной ячейке с товаром других складов продавца. Грузчику подсказываются отдельные ячейки.</small></span></label>'
       + '<div id="vwSepMore"' + (f.keepSeparate ? '' : ' hidden') + '>'
@@ -6822,7 +6824,7 @@
       // Склады продавца: куда идут строки без столбца «Склад».
       + (stockLoad.vws.length ? '<div class="sl-field"><label for="stockLoadVw">Склад продавца по умолчанию</label>'
         + '<select class="mp-field" id="stockLoadVw" onchange="setStockLoadVw(this.value)"' + (stockLoad.busy ? ' disabled' : '') + '>'
-        + '<option value="">Основной</option>'
+        + '<option value="">Остальной товар</option>'
         + stockLoad.vws.map(w => '<option value="' + escapeHTML(w.id) + '"' + (w.id === stockLoad.defaultVw ? ' selected' : '') + '>' + escapeHTML(w.name) + '</option>').join('')
         + '</select><div class="ord-meta">Для строк без столбца «Склад». В файле можно указать склад у каждой строки — столбец «Склад».</div></div>' : '')
       + '<div class="sl-row">'
@@ -7034,7 +7036,7 @@
   function supplyVwChoices(companyId, isWb){
     const c = vwCache[companyId];
     if(!c){ vwOf(companyId).then(() => renderPartnerOrders(companyId)).catch(() => {}); return null; }
-    return isWb ? c.wbChoices : [{ id: null, name: 'Основной' }].concat(c.warehouses);
+    return isWb ? c.wbChoices : c.warehouses.concat([{ id: null, name: 'Остальной товар' }]);
   }
   let pointsSearchTimer = null;
   const pointLabel = (p) => (p.officeType === 'sc' ? 'Сортировочный центр WB — ' : '')
@@ -7267,7 +7269,7 @@
     // Заказ из 1С собирают с того склада продавца, который выбрал менеджер
     // (владелец 02.10.2026); по умолчанию «Основной».
     const allVw = vwCache[companyId] && vwCache[companyId].warehouses.length
-      ? [{ id: null, name: 'Основной' }].concat(vwCache[companyId].warehouses) : [];
+      ? vwCache[companyId].warehouses.concat([{ id: null, name: 'Остальной товар' }]) : [];
     const lineVw = (o) => (o.marketplace === '1c' && o.itemId && allVw.length
       ? `<div class="ord-sub">склад: <select class="ord-vw-line" aria-label="Склад продавца" onchange="setOrderLineVw('${companyId}', '${o.itemId}', this.value, this)">`
         + allVw.map(w => `<option value="${w.id || ''}"${(w.id || null) === (o.vw || null) ? ' selected' : ''}>${escapeHTML(w.name)}</option>`).join('')

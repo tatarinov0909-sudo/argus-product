@@ -6332,7 +6332,7 @@
     document.getElementById('manualReturnBody').innerHTML =
       '<div class="def-task-sub mret-who">' + (mret.companyName ? 'Продавец: <b>' + escapeHTML(mret.companyName) + '</b>' : 'Найдите первый товар — продавец определится по нему.') + '</div>'
       + (mret.vws.length ? '<div class="def-task-sub">Склад продавца, на который ляжет возврат:</div><div class="def-kinds mret-vws">'
-        + [{ id: '', name: 'Основной' }].concat(mret.vws).map(w => '<button type="button" class="def-kind' + (mret.vw === w.id ? ' selected' : '') + '" onclick="mretVw(\'' + escapeHTML(w.id) + '\')"><b>'
+        + mret.vws.concat([{ id: '', name: 'Остальной товар' }]).map(w => '<button type="button" class="def-kind' + (mret.vw === w.id ? ' selected' : '') + '" onclick="mretVw(\'' + escapeHTML(w.id) + '\')"><b>'
           + escapeHTML(w.name) + '</b><span>' + (w.id ? 'продавцу придёт уведомление' : 'по умолчанию') + '</span></button>').join('') + '</div>' : '')
       + mret.lines.map((l, i) => '<div class="mret-line"><div class="mret-line-name"><div class="def-task-name">' + escapeHTML(l.name) + '</div>'
         + '<div class="def-task-sub">' + escapeHTML(l.sku) + '</div></div>'

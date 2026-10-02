@@ -560,7 +560,7 @@
   const transitQty = (r) => (vwPart(r) ? null : Number(r.inTransit || 0));
   const availableQty = (r) => { const w = vwPart(r); if (w) return w.available; return r.available == null ? null : Number(r.available); };
   const defectQty = (r) => { const w = vwPart(r); return w ? w.defect : Number(r.defective || 0); };
-  const vwName = (id) => (id ? (state.vw?.warehouses || []).find((w) => w.id === id)?.name || 'убранный склад' : 'Основной');
+  const vwName = (id) => (id ? (state.vw?.warehouses || []).find((w) => w.id === id)?.name || 'убранный склад' : 'Остальной товар');
   const splitText = (r) => (r.warehouses || []).filter((w) => w.onHand).map((w) => w.name + ' ' + n(w.onHand)).join(' · ');
   // Доступно для WB: только «Основной» и склады WB — товар склада Озон на WB
   // не продаётся. Заказы WB без поставки ждут как раз этого товара.
@@ -692,7 +692,7 @@
         + dropdown('p-sort', { label: 'Сортировка', value: ui.sort, options: SORTS, onPick: (v) => { ui.sort = v; renderProducts(); } })
         + dropdown('p-extra', { label: 'Ещё фильтры', multi: true, value: ui.extra, options: EXTRA, onPick: (v) => { if (ui.extra.has(v)) ui.extra.delete(v); else ui.extra.add(v); ui.shown = state.prefs.rows; renderProducts(); } })
         + (ours.length > 1 ? dropdown('p-wbwh', { label: 'Склад WB', value: ui.wbwh || 'all', options: [{ value: 'all', text: 'Все ваши склады' }, ...ours.map((w) => ({ value: w.id, text: w.name }))], onPick: (v) => { ui.wbwh = v; renderProducts(); } }) : '')
-        + (hasVw() ? dropdown('p-vw', { label: 'Ваш склад', value: ui.vw, options: [{ value: 'all', text: 'Все склады' }, { value: 'main', text: 'Основной' }, ...state.vw.warehouses.map((w) => ({ value: w.id, text: w.name }))], onPick: (v) => { ui.vw = v; ui.shown = state.prefs.rows; renderProducts(); } }) : '')
+        + (hasVw() ? dropdown('p-vw', { label: 'Ваш склад', value: ui.vw, options: [{ value: 'all', text: 'Основной — весь товар' }, ...state.vw.warehouses.map((w) => ({ value: w.id, text: w.name })), { value: 'main', text: 'Остальной товар' }], onPick: (v) => { ui.vw = v; ui.shown = state.prefs.rows; renderProducts(); } }) : '')
         + (categories.length > 1 ? dropdown('p-cat', { label: 'Категория', value: ui.category, options: [{ value: 'all', text: 'Все' }, ...categories.map((c) => ({ value: c, text: c }))], onPick: (v) => { ui.category = v; ui.shown = state.prefs.rows; renderProducts(); } }) : '')
         + resetLink('products'),
         columnChooser('products', productColumns(), renderProducts) + excelButton
@@ -755,7 +755,7 @@
     const mine = !state.owner;
     const ask = (v.transfers || []).filter((t) => t.status === 'waiting_seller').map((t) => `<div class="notice warning vw-ask">${icon('alert')}<div>`
       + `<strong>Склад просит перенести «${h(t.name || t.sku)}», ${n(t.qty)} шт.: «${h(t.fromName)}» → «${h(t.toName)}»</strong>`
-      + `<p>${t.note ? 'Комментарий склада: ' + h(t.note) + '. ' : ''}${mine ? 'Вы запретили складу решать такое без вас — решите сами.' : 'Ждёт согласия продавца.'} Товар останется в тех же ячейках.</p>`
+      + `<p>${t.note ? 'Комментарий склада: ' + h(t.note) + '. ' : ''}${mine ? 'Вы запретили складу решать такое без вас — решите сами.' : 'Ждёт согласия продавца.'}</p>`
       + (mine ? `<div class="vw-ask-form"><label class="field"><span>Причина отказа — не обязательно, склад её увидит</span><input id="vwReason-${h(t.id)}" maxlength="300"></label>`
         + `<div class="drawer-actions"><button class="button primary" type="button" data-vw-yes="${h(t.id)}">Согласен</button><button class="button" type="button" data-vw-no="${h(t.id)}">Отказать</button></div></div>` : '')
       + '</div></div>').join('');
@@ -836,14 +836,16 @@
   // Карточка товара: сколько на каждом складе и заявка складу на перенос.
   function productVwHtml(r) {
     if (!hasVw() || !r.warehouses) return '';
-    // «Хранится отдельно» включает склад (владелец 02.10.2026): продавец видит пометку.
-    const apart = (w) => (state.vw.warehouses.find((x) => x.id === w.id) || {}).keepSeparate;
-    const cols = [{ title: 'Склад', cell: (w) => h(w.name) + (apart(w) ? '<span class="cell-sub">хранится отдельно</span>' : '') },{ title: 'На складе', cls: 'n', cell: (w) => num(w.onHand) },
+    // Как товар хранится, продавцу не показываем (владелец 03.10.2026) — только остатки.
+    const cols = [{ title: 'Склад', cell: (w) => h(w.name) },{ title: 'На складе', cls: 'n', cell: (w) => num(w.onHand) },
       { title: 'В сборке', cls: 'n', cell: (w) => num(w.inAssembly) }, { title: 'Доступно', cls: 'n', cell: (w) => num(w.available, true) },
       { title: 'Брак', cls: 'n', cell: (w) => num(w.defect) }];
-    return `<section class="detail-section" style="margin-top:0"><h3>По вашим складам</h3>${table(cols, r.warehouses)}`
+    // «Основной» — весь товар вместе, склады — его части (владелец 03.10.2026).
+    const sum = (k) => (r.warehouses.some((w) => w[k] == null) ? null : r.warehouses.reduce((a, w) => a + Number(w[k] || 0), 0));
+    const all = { id: 'all', name: 'Основной — весь товар', onHand: sum('onHand'), inAssembly: sum('inAssembly'), available: sum('available'), defect: sum('defect') };
+    return `<section class="detail-section" style="margin-top:0"><h3>По вашим складам</h3>${table(cols, [all, ...r.warehouses])}`
       + (state.owner ? '' : `<div id="vwMoveForm"></div><div class="drawer-actions" id="vwMoveRow"><button class="button" type="button" id="vwMove">Попросить склад перенести</button></div>`)
-      + '<p class="help" style="margin-top:8px">Товар разных складов лежит в одних ячейках — склад делит его по учёту.</p></section>';
+      + '</section>';
   }
   function wireProductVw(r) {
     if (!$('vwMove')) return;
@@ -1804,9 +1806,9 @@
           { title: 'Шт.', cls: 'n', cell: (l) => (l.error ? '—' : n(l.qty)) },
           // Склады продавца: строка ложится на выбранный склад (02.10.2026).
           ...(p.lines.some((l) => l.vwName) ? [{ title: 'Склад', cell: (l) => dropdown('inb-vw-' + l.row, {
-            value: f.byRow[l.row] || (noVw(l) ? '' : l.vwName || 'Основной'), neutral: true,
+            value: f.byRow[l.row] || (noVw(l) ? '' : l.vwName || 'Остальной товар'), neutral: true,
             options: [...(noVw(l) && !f.byRow[l.row] ? [{ value: '', text: 'Выберите склад' }] : []),
-              ...['Основной', ...(state.vw?.warehouses || []).map((w) => w.name)].map((x) => ({ value: x, text: x }))],
+              ...[...(state.vw?.warehouses || []).map((w) => w.name), 'Остальной товар'].map((x) => ({ value: x, text: x }))],
             onPick: (x) => { f.byRow[l.row] = x; send(false); } }) }] : [])], p.lines).replace('class="table-wrap"', 'class="table-wrap open-menus"')
         + (p.lines.some((l) => l.vwName) ? '<p class="help" style="margin-top:8px">Разделить товар между складами — например, 500 на Озон и 300 на WB — можно в файле: столбец «Склад» и по строке на каждый склад.</p>' : '')
         + `<button class="button primary" type="submit" style="margin-top:16px;width:100%" ${f.busy || !products ? 'disabled' : ''}>${f.busy ? 'Отправляем…' : edit ? 'Сохранить с новым списком' : 'Отправить на склад'}</button>`;
