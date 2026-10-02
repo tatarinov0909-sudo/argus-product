@@ -158,6 +158,14 @@
   }
   .view{display:none; height:100vh;}
   .view.active{display:flex;}
+  /* Телефон: раздел — под полосой меню, а не во всю высоту окна. Иначе низ
+     любого списка (высота полосы, ~65 px) уходил за край экрана и последнюю
+     строку было не докрутить (проверка 02.10.2026). Стоит после .view, чтобы
+     перекрыть его 100vh. */
+  @media(max-width:760px){
+    .main{display:flex; flex-direction:column;}
+    .view{height:auto; flex:1; min-height:0;}
+  }
 
   /* CHAT */
   .chat{flex:1; min-width:0; display:flex; flex-direction:column; border-right:1px solid var(--line);}
@@ -1063,7 +1071,16 @@
   .rc-bottom{display:flex; gap:18px; margin-top:20px; flex-wrap:wrap;}
   /* Товары */
   .pr-bar{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
-  .pr-bar select{max-width:280px;}
+  .pr-bar .grow{flex:1;}
+  .pr-filters{display:flex; gap:8px; flex-wrap:wrap; margin:0 0 12px;}
+  .pr-back{background:none; border:none; color:var(--accent); font:inherit; font-size:14px; cursor:pointer; padding:0;}
+  .pr-seller{font-size:16px;}
+  .pr-scroll{overflow-x:auto;}
+  .pr-click{cursor:pointer;}
+  .pr-click:hover td{background:var(--panel-2);}
+  .pr-name{font-weight:600; color:var(--accent);}
+  .pr-table td.strong{font-weight:700;}
+  .pr-total td{font-weight:700; border-bottom:none;}
   .pr-bar input{max-width:360px; flex:1; min-width:200px;}
   .pr-table{width:100%; border-collapse:collapse; font-size:14px;}
   .pr-table th{text-align:left; font-size:12px; color:var(--muted); font-weight:600; letter-spacing:.04em;
@@ -2230,7 +2247,7 @@
     <div class="nav-sep"></div>
     <div class="nav-label">Склад</div>
     <div class="nav-item" id="nav-receipts" onclick="switchView('receipts')"><span class="nav-dot"></span>Приход товара</div>
-    <div class="nav-item" id="nav-products" onclick="switchView('products')"><span class="nav-dot"></span>Товары</div>
+    <div class="nav-item" id="nav-products" onclick="switchView('products')"><span class="nav-dot"></span>Остатки продавцов</div>
     <div class="nav-item" id="nav-warehouse" onclick="switchView('warehouse')"><span class="nav-dot"></span>Склад и ячейки</div>
     <div class="nav-item" id="nav-inv" onclick="switchView('inv')"><span class="nav-dot"></span>Инвентаризация<span class="nav-badge" id="invBadge"></span></div>
     <div class="nav-item" id="nav-acts" onclick="switchView('acts')"><span class="nav-dot"></span>Акты</div>
@@ -2729,8 +2746,8 @@
       <div class="staff-wrap">
         <div class="staff-head">
           <div>
-            <div class="staff-title">Товары</div>
-            <div class="staff-sub">Каталог продавцов: сколько товара лежит в ячейках Аргуса, где и сколько по учёту 1С. Новый товар можно завести здесь, не дожидаясь 1С. Когда такой же артикул того же продавца придёт из 1С, карточки свяжутся сами.</div>
+            <div class="staff-title">Остатки продавцов</div>
+            <div class="staff-sub">Те же числа, что продавец видит в своём кабинете: всего, заказано, в сборке, в пути, доступно, брак. И то, что видит только склад: сколько лежит в ячейках и где. Нажмите на продавца — откроются его товары. Новый товар можно завести здесь, не дожидаясь 1С.</div>
           </div>
           <button class="wh-onboarding-btn primary" type="button" onclick="toggleProductForm(true)">+ Добавить товар</button>
         </div>
@@ -2754,12 +2771,31 @@
             <button type="button" class="wh-onboarding-btn primary" id="productFormSave" onclick="saveProduct()">Завести товар</button>
           </div>
         </div>
-        <div class="pr-bar">
-          <select id="productsCompany" class="mp-field" onchange="loadProducts()"></select>
-          <input type="search" id="productsSearch" class="mp-field" placeholder="Название, артикул или штрихкод" oninput="renderProducts()">
-          <span class="ord-meta" id="productsMeta"></span>
+        <!-- Сводка по всем продавцам → товары продавца (владелец 02.10.2026). -->
+        <div id="productsLevel1">
+          <div class="pr-bar">
+            <input type="search" id="sellersSearch" class="mp-field" placeholder="Продавец" oninput="renderSellerStock()">
+            <span class="ord-meta" id="sellersMeta"></span>
+            <span class="grow"></span>
+            <button type="button" class="wh-onboarding-btn" onclick="exportSellerStock()">Выгрузить в Excel</button>
+          </div>
+          <div id="sellersList"><div class="staff-empty">Загружаем…</div></div>
         </div>
-        <div id="productsList"><div class="staff-empty">Выберите продавца.</div></div>
+        <div id="productsLevel2" hidden>
+          <div class="pr-bar">
+            <button type="button" class="pr-back" onclick="showSellerStock()">← Все продавцы</button>
+            <b class="pr-seller" id="productsSellerName"></b>
+            <a class="mp-act" id="productsSellerCabinet" href="client_access.html">Открыть кабинет продавца</a>
+          </div>
+          <div class="pr-bar">
+            <input type="search" id="productsSearch" class="mp-field" placeholder="Название, артикул или штрихкод" oninput="renderProducts()">
+            <span class="ord-meta" id="productsMeta"></span>
+            <span class="grow"></span>
+            <button type="button" class="wh-onboarding-btn" onclick="exportProducts()">Выгрузить в Excel</button>
+          </div>
+          <div class="pr-filters" id="productsFilters"></div>
+          <div id="productsList"></div>
+        </div>
       </div>
     </div>
 
@@ -2991,7 +3027,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <script src="back.js?v=4901b838" defer></script>
 <script src="form-keys.js?v=02a92e0e" defer></script>
-<script src="cabinet_main.js?v=994a80a4" defer></script>
+<script src="cabinet_main.js?v=9fcd41d4" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->

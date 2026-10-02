@@ -239,7 +239,7 @@
     if(view==='orders'){ loadMpOrders(); }
     if(view==='supplies'){ loadSupplies(); }
     if(view==='acts'){ loadActs(); }
-    if(view==='products'){ loadProducts(); }
+    if(view==='products'){ openProductsView(); }
     if(view==='chat'){
       loadChatHistory();
       const badge = document.getElementById('chatBadge');
@@ -1331,30 +1331,126 @@
   }
   window.removeReceiptDoc = removeReceiptDoc;
 
-  /* ===================== Товары ===================== */
+  /* ===================== Остатки продавцов ===================== */
 
-  // Каталог продавца: что есть, сколько в ячейках Аргуса, где и сколько по
-  // учёту 1С. Новый товар заводится здесь, не дожидаясь 1С.
+  // Владелец 02.10.2026: сначала сводка по всем продавцам — те же числа, что
+  // продавец видит у себя (всего, заказано, в сборке, в пути, доступно, брак),
+  // и сколько лежит в ячейках; нажал на продавца — его товары с теми же
+  // числами плюс то, что видит только склад: ячейки и что не разложено.
+  // Считает сервер одним правилом с кабинетом продавца и чатом Кладовщика.
+  let sellerStock = null;     // { sellers: [...] } из /api/sellers/stock-summary
   let productRows = [];
-  let productsFor = '';
+  let productsFor = '';       // открытый продавец; пусто — сводка
+  let productsFilter = 'all';
+
+  const nfmt = (v) => (v === null || v === undefined ? '—' : Number(v).toLocaleString('ru-RU'));
 
   function renderProductsCompanySelects(){
     const opts = companies.map(c => '<option value="' + escapeHTML(c.id) + '">' + escapeHTML(c.name) + '</option>').join('');
-    ['productsCompany', 'productFormCompany'].forEach(id => {
-      const el = document.getElementById(id);
-      if(!el) return;
+    const el = document.getElementById('productFormCompany');
+    if(el){
       const keep = el.value;
       el.innerHTML = companies.length ? opts : '<option value="">Сначала добавьте продавца</option>';
       if(keep && companies.some(c => c.id === keep)) el.value = keep;
-    });
-    if(document.getElementById('view-products')?.classList.contains('active')) loadProducts();
+    }
+    if(document.getElementById('view-products')?.classList.contains('active')) openProductsView();
   }
 
-  async function loadProducts(){
-    const companyId = document.getElementById('productsCompany').value;
-    const box = document.getElementById('productsList');
-    if(!companyId){ box.innerHTML = '<div class="staff-empty">Выберите продавца.</div>'; return; }
+  // Вход в раздел: открыт продавец — его товары, иначе сводка.
+  function openProductsView(){
+    if(productsFor) return loadProducts();
+    return loadSellerStock();
+  }
+
+  async function loadSellerStock(){
+    productsFor = '';
+    document.getElementById('productsLevel1').hidden = false;
+    document.getElementById('productsLevel2').hidden = true;
+    const box = document.getElementById('sellersList');
+    if(!sellerStock) box.innerHTML = '<div class="staff-empty">Загружаем…</div>';
+    try{
+      sellerStock = await apiFetch('/api/sellers/stock-summary');
+    } catch(e){
+      box.innerHTML = '<div class="staff-empty">Не удалось загрузить остатки: ' + escapeHTML(e.message) + '</div>';
+      return;
+    }
+    if(!productsFor) renderSellerStock();
+  }
+  window.loadSellerStock = loadSellerStock;
+
+  function sellerStockRows(){
+    const q = String(document.getElementById('sellersSearch').value || '').trim().toLowerCase();
+    return (sellerStock ? sellerStock.sellers : []).filter(s => !q || s.name.toLowerCase().includes(q));
+  }
+
+  function renderSellerStock(){
+    const box = document.getElementById('sellersList');
+    const all = sellerStock ? sellerStock.sellers : [];
+    const rows = sellerStockRows();
+    document.getElementById('sellersMeta').textContent = all.length
+      ? all.length + ' ' + pluralRu(all.length, 'продавец', 'продавца', 'продавцов') : '';
+    if(all.length === 0){ box.innerHTML = '<div class="staff-empty">Продавцов пока нет — заведите их в «Продавцы и площадки».</div>'; return; }
+    if(rows.length === 0){ box.innerHTML = '<div class="staff-empty">Такого продавца нет.</div>'; return; }
+    const sum = (f) => rows.reduce((t, s) => t + Number(s[f] || 0), 0);
+    const known = (f) => (rows.some(s => s[f] !== null) ? sum(f) : null);
+    const updated = (s) => (s.updatedAt ? (sellerStock.source === 'argus' ? 'пересчёт ' : '1С: ')
+      + new Date(s.updatedAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
+    box.innerHTML = '<div class="pr-scroll"><table class="pr-table pr-sellers"><thead><tr><th>Продавец</th>'
+      + '<th class="num">Всего</th><th class="num">Заказано</th><th class="num">В сборке</th><th class="num">В пути</th>'
+      + '<th class="num">Доступно</th><th class="num">Брак</th><th class="num">Не хватает</th><th class="num">В ячейках</th></tr></thead><tbody>'
+      + rows.map(s => '<tr class="pr-click" onclick="openSellerProducts(\'' + escapeHTML(s.companyId) + '\')">'
+        + '<td><span class="pr-name">' + escapeHTML(s.name) + '</span><div class="sub">'
+        + escapeHTML([nfmt(s.productCount) + ' ' + pluralRu(s.productCount, 'товар', 'товара', 'товаров'), updated(s)].filter(Boolean).join(' · '))
+        + (s.unknownCount ? '<br>без числа учёта: ' + nfmt(s.unknownCount) : '') + '</div></td>'
+        + '<td class="num">' + nfmt(s.total) + '</td>'
+        + '<td class="num">' + nfmt(s.ordered) + '</td>'
+        + '<td class="num">' + nfmt(s.inAssembly) + '</td>'
+        + '<td class="num">' + nfmt(s.inTransit) + '</td>'
+        + '<td class="num strong">' + nfmt(s.available) + '</td>'
+        + '<td class="num' + (s.defect ? ' warn' : '') + '">' + nfmt(s.defect) + '</td>'
+        + '<td class="num' + (s.shortageCount ? ' warn' : '') + '">' + (s.shortageCount ? nfmt(s.shortageCount) + ' ' + pluralRu(s.shortageCount, 'товар', 'товара', 'товаров') : '—') + '</td>'
+        + '<td class="num">' + nfmt(s.inCells) + '</td>'
+        + '</tr>').join('')
+      + (rows.length > 1 ? '<tr class="pr-total"><td>Итого</td><td class="num">' + nfmt(known('total')) + '</td><td class="num">' + nfmt(sum('ordered'))
+        + '</td><td class="num">' + nfmt(sum('inAssembly')) + '</td><td class="num">' + nfmt(sum('inTransit')) + '</td><td class="num">' + nfmt(known('available'))
+        + '</td><td class="num">' + nfmt(sum('defect')) + '</td><td class="num">' + (sum('shortageCount') ? nfmt(sum('shortageCount')) : '—') + '</td><td class="num">' + nfmt(sum('inCells')) + '</td></tr>' : '')
+      + '</tbody></table></div>';
+  }
+  window.renderSellerStock = renderSellerStock;
+
+  function exportSellerStock(){
+    saveXlsx('Остатки продавцов', 'Продавцы', sellerStockRows().map(s => ({
+      'Продавец': s.name, 'Товаров': s.productCount, 'Всего': s.total, 'Заказано': s.ordered,
+      'В сборке': s.inAssembly, 'В пути': s.inTransit, 'Доступно': s.available, 'Брак': s.defect,
+      'Товаров, где заказов больше остатка': s.shortageCount, 'В ячейках': s.inCells,
+      'Товаров без числа учёта': s.unknownCount,
+    })), [28, 9, 11, 11, 10, 9, 11, 8, 18, 11, 14]);
+  }
+  window.exportSellerStock = exportSellerStock;
+
+  function openSellerProducts(companyId){
     productsFor = companyId;
+    productsFilter = 'all';
+    document.getElementById('productsSearch').value = '';
+    loadProducts();
+  }
+  window.openSellerProducts = openSellerProducts;
+
+  function showSellerStock(){
+    productsFor = '';
+    loadSellerStock();
+  }
+  window.showSellerStock = showSellerStock;
+
+  async function loadProducts(){
+    const companyId = productsFor;
+    if(!companyId) return loadSellerStock();
+    document.getElementById('productsLevel1').hidden = true;
+    document.getElementById('productsLevel2').hidden = false;
+    const company = companies.find(c => c.id === companyId);
+    document.getElementById('productsSellerName').textContent = company ? company.name : '';
+    document.getElementById('productsSellerCabinet').href = 'client_access.html?companyId=' + encodeURIComponent(companyId) + '#products';
+    const box = document.getElementById('productsList');
     box.innerHTML = '<div class="staff-empty">Загружаем…</div>';
     let rows;
     try{
@@ -1363,8 +1459,8 @@
       if(productsFor === companyId) box.innerHTML = '<div class="staff-empty">Не удалось загрузить товары: ' + escapeHTML(e.message) + '</div>';
       return;
     }
-    if(productsFor !== companyId) return;   // пока ждали, выбрали другого продавца
-    productRows = rows;
+    if(productsFor !== companyId) return;   // пока ждали, открыли другого продавца
+    productRows = rows.filter(r => r.listed);
     renderProducts();
   }
   window.loadProducts = loadProducts;
@@ -1383,47 +1479,86 @@
     return out;
   }
 
+  // Что видит только склад: сколько в ячейках (годное и брак) и сколько по
+  // учёту не разложено — числится, а в ячейках Аргуса его нет.
+  const prDefect = (r) => Number(r.defective || 0) + Number(r.packagingDefect || 0);
+  const prInCells = (r) => Number(r.qty || 0) + Number(r.notForSale || 0);
+  const prNotPlaced = (r) => (r.totalKnown ? Math.max(0, Number(r.total) - prInCells(r) - Number(r.staged || 0)) : 0);
+  const PR_FILTERS = [
+    ['all', 'Все', () => true],
+    ['short', 'Заказов больше, чем товара', (r) => r.shortage],
+    ['defect', 'Есть брак', (r) => prDefect(r) > 0],
+    ['notPlaced', 'Не разложено по ячейкам', (r) => prNotPlaced(r) > 0],
+  ];
+
+  function productsShown(){
+    const q = String(document.getElementById('productsSearch').value || '').trim().toLowerCase();
+    const test = (PR_FILTERS.find(f => f[0] === productsFilter) || PR_FILTERS[0])[2];
+    return productRows.filter(r => test(r) && (!q || [r.name, r.sku, r.barcode].some(v => String(v || '').toLowerCase().includes(q))))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ru'));
+  }
+
+  function setProductsFilter(key){ productsFilter = key; renderProducts(); }
+  window.setProductsFilter = setProductsFilter;
+
   function renderProducts(){
     const box = document.getElementById('productsList');
     const companyId = productsFor;
-    const q = String(document.getElementById('productsSearch').value || '').trim().toLowerCase();
-    const rows = productRows.filter(r => !q || [r.name, r.sku, r.barcode].some(v => String(v || '').toLowerCase().includes(q)))
-      .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ru'));
-    const inCells = productRows.filter(r => Number(r.qty) + Number(r.notForSale || 0) > 0).length;
+    document.getElementById('productsFilters').innerHTML = PR_FILTERS.map(([key, label, test]) => {
+      const n = key === 'all' ? productRows.length : productRows.filter(test).length;
+      return '<button type="button" class="jf-chip' + (productsFilter === key ? ' active' : '') + '" onclick="setProductsFilter(\'' + key + '\')">'
+        + escapeHTML(label) + (key === 'all' ? '' : ' · ' + nfmt(n)) + '</button>';
+    }).join('');
+    const rows = productsShown();
     document.getElementById('productsMeta').textContent = productRows.length
-      ? productRows.length + ' ' + pluralRu(productRows.length, 'товар', 'товара', 'товаров') + ' · в ячейках — ' + inCells
-      : '';
+      ? nfmt(productRows.length) + ' ' + pluralRu(productRows.length, 'товар', 'товара', 'товаров') : '';
     if(productRows.length === 0){ box.innerHTML = '<div class="staff-empty">У продавца пока нет товаров. Заведите первый кнопкой «+ Добавить товар».</div>'; return; }
-    if(rows.length === 0){ box.innerHTML = '<div class="staff-empty">По этому поиску ничего нет.</div>'; return; }
-    box.innerHTML = '<table class="pr-table"><thead><tr><th>Товар</th><th>Штрихкод</th>'
-      + '<th class="num">В ячейках</th><th class="num">По 1С</th><th>Где лежит</th></tr></thead><tbody>'
+    if(rows.length === 0){ box.innerHTML = '<div class="staff-empty">Под этот поиск и фильтр товаров нет.</div>'; return; }
+    box.innerHTML = '<div class="pr-scroll"><table class="pr-table"><thead><tr><th>Товар</th>'
+      + '<th class="num">Всего</th><th class="num">Заказано</th><th class="num">В сборке</th><th class="num">В пути</th>'
+      + '<th class="num">Доступно</th><th class="num">Брак</th><th class="num">В ячейках</th><th>Где лежит</th></tr></thead><tbody>'
       + rows.map(r => {
         const cells = productCells(companyId, r.sku);
-        const bad = Number(r.notForSale || 0);
         const where = cells.length
-          ? cells.slice(0, 3).map(c => escapeHTML(c.label) + ' — ' + c.qty).join('<br>')
+          ? cells.slice(0, 3).map(c => escapeHTML(c.label) + ' — ' + nfmt(c.qty)).join('<br>')
             + (cells.length > 3 ? '<div class="sub">и ещё ' + (cells.length - 3) + '</div>' : '')
           : Number(r.cells) > 0 ? 'в ' + r.cells + ' ' + pluralRu(Number(r.cells), 'ячейке', 'ячейках', 'ячейках')
           : '<span class="sub">не в ячейках</span>';
+        const notPlaced = prNotPlaced(r);
+        const short = r.shortage ? Number(r.orderedNotInSupply || 0) + Number(r.inAssembly || 0) - Number(r.total || 0) : 0;
         return '<tr>'
-          + '<td>' + escapeHTML(r.name || '—') + '<div class="sub">' + escapeHTML(r.sku) + '</div></td>'
-          + '<td class="sub">' + escapeHTML(r.barcode || '—') + '</td>'
-          + '<td class="num">' + (Number(r.qty) || 0) + (bad ? '<div class="sub warn">брак ' + bad + '</div>' : '') + '</td>'
-          + '<td class="num">' + (r.totalKnown ? escapeHTML(String(r.total)) : '—') + '</td>'
+          + '<td>' + escapeHTML(r.name || '—') + '<div class="sub">' + escapeHTML([r.sku, r.barcode].filter(Boolean).join(' · ')) + '</div></td>'
+          + '<td class="num">' + (r.totalKnown ? nfmt(r.total) : '<span class="sub" title="Из учёта числа ещё не пришло">—</span>') + '</td>'
+          + '<td class="num">' + nfmt(r.orderedNotInSupply) + '</td>'
+          + '<td class="num">' + nfmt(r.inAssembly) + '</td>'
+          + '<td class="num">' + nfmt(r.inTransit) + '</td>'
+          + '<td class="num strong">' + nfmt(r.sellerAvailable) + (short > 0 ? '<div class="sub warn">не хватает ' + nfmt(short) + '</div>' : '') + '</td>'
+          + '<td class="num' + (prDefect(r) ? ' warn' : '') + '">' + nfmt(prDefect(r)) + '</td>'
+          + '<td class="num">' + nfmt(prInCells(r)) + (notPlaced ? '<div class="sub warn">не разложено ' + nfmt(notPlaced) + '</div>' : '') + '</td>'
           + '<td class="cells">' + where + '</td>'
           + '</tr>';
       }).join('')
-      + '</tbody></table>';
+      + '</tbody></table></div>';
   }
   window.renderProducts = renderProducts;
+
+  function exportProducts(){
+    const company = companies.find(c => c.id === productsFor);
+    saveXlsx('Остатки ' + (company ? company.name : 'продавца'), 'Товары', productsShown().map(r => ({
+      'Товар': r.name, 'Артикул': r.sku, 'Штрихкод': r.barcode || '', 'Всего': r.totalKnown ? r.total : null,
+      'Заказано': r.orderedNotInSupply, 'В сборке': r.inAssembly, 'В пути': r.inTransit, 'Доступно': r.sellerAvailable,
+      'Брак': prDefect(r), 'В ячейках': prInCells(r), 'Не разложено': prNotPlaced(r),
+      'Где лежит': productCells(productsFor, r.sku).map(c => c.label + ' — ' + c.qty).join(', '),
+    })), [40, 16, 16, 9, 10, 10, 9, 10, 8, 11, 12, 30]);
+  }
+  window.exportProducts = exportProducts;
 
   function toggleProductForm(open){
     const form = document.getElementById('productForm');
     form.hidden = !open;
     if(open){
       const sel = document.getElementById('productFormCompany');
-      const current = document.getElementById('productsCompany').value;
-      if(current) sel.value = current;
+      if(productsFor) sel.value = productsFor;
       document.getElementById('productFormSku').focus();
     }
   }
@@ -1450,8 +1585,8 @@
       // Новый товар сразу доступен в приходе: каталог продавца перечитается.
       delete receiptCatalog[companyId];
       if(document.getElementById('invoiceCompanySelect').value === companyId) loadReceiptCatalog(companyId);
-      document.getElementById('productsCompany').value = companyId;
-      await loadProducts();
+      sellerStock = null;
+      openSellerProducts(companyId);
       showWhToast('Товар «' + name + '» заведён. Его можно выбирать в приходе.');
     } catch(e){
       showWhToast('Товар не заведён: ' + e.message);
