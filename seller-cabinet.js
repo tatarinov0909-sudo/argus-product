@@ -679,7 +679,7 @@
       ['Доступно к продаже', s.available ?? (unknown ? null : sum(availableQty)), 'всего − заказано − в сборке' + (s.unknownCount ? ', по товарам с учётом' : ''), 'main'],
     ];
     const short = rows.filter(isShort).length;
-    const over = rows.filter(wbOver).length;
+    const over = wbView() ? rows.filter(wbOver).length : 0;
     const ours = ourWb();
     const categories = [...new Set(rows.map((r) => meta(r.sku).category || 'Без категории'))].sort((a, b) => a.localeCompare(b, 'ru'));
     $('view').innerHTML = segment('products') + vwNoticeHtml()
@@ -782,12 +782,12 @@
     const block = (list, cls, ico, title, seenBtn) => (list.length ? `<div class="notice ${cls}">${icon(ico)}<div><strong>${title} · ${n(list.length)}</strong>`
       + list.slice(0, 5).map((x) => `<p>${h(when(x.at))} — ${h(x.text)}</p>`).join('')
       + (list.length > 5 ? `<p>и ещё ${n(list.length - 5)}</p>` : '')
-      + (mine && seenBtn ? '<div class="drawer-actions"><button class="button" type="button" data-vw-seen>Понятно</button></div>' : '') + '</div></div>' : '');
+      + (mine ? `<div class="drawer-actions"><button class="button" type="button" data-vw-seen="${seenBtn}">Понятно</button></div>` : '') + '</div></div>' : '');
     const self = unseen.filter((x) => x.kind === 'ff_decided');
     const rest = unseen.filter((x) => x.kind !== 'ff_decided');
     return decide + ask + asked
-      + block(self, 'warning vw-notes', 'alert', 'Склад решил сам — обратите внимание', !rest.length)
-      + block(rest, 'vw-notes', 'info', 'От склада', true);
+      + block(self, 'warning vw-notes', 'alert', 'Склад решил сам — обратите внимание', 'self')
+      + block(rest, 'vw-notes', 'info', 'От склада', 'rest');
   }
   function wireVwNotices() {
     const host = $('view');
@@ -814,12 +814,13 @@
         sum.textContent = need + ' Сейчас: ' + n(got) + ' шт.';
       }; });
     });
-    const seen = host.querySelector('[data-vw-seen]');
-    if (seen) seen.onclick = async () => {
+    host.querySelectorAll('[data-vw-seen]').forEach((seen) => { seen.onclick = async () => {
+      const self = seen.dataset.vwSeen === 'self';
+      const list = state.vw.notes.filter((x) => x.unseen && !['vw_transfer_consent', 'vw_decision'].includes(x.kind) && (x.kind === 'ff_decided') === self);
       seen.disabled = true;
-      try { await api('/api/vwarehouses/notifications/seen', { method: 'POST' }); state.vw.notes.forEach((x) => { x.unseen = false; }); renderProducts(); }
+      try { await api('/api/vwarehouses/notifications/seen', { method: 'POST', body: { ids: list.map((x) => x.id) } }); list.forEach((x) => { x.unseen = false; }); renderProducts(); }
       catch (e) { seen.disabled = false; toast(e.message); }
-    };
+    }; });
     host.querySelectorAll('[data-vw-yes], [data-vw-no]').forEach((b) => {
       b.onclick = async () => {
         const id = b.dataset.vwYes || b.dataset.vwNo; const approve = !!b.dataset.vwYes;
@@ -841,9 +842,11 @@
       { title: 'В сборке', cls: 'n', cell: (w) => num(w.inAssembly) }, { title: 'Доступно', cls: 'n', cell: (w) => num(w.available, true) },
       { title: 'Брак', cls: 'n', cell: (w) => num(w.defect) }];
     // «Основной» — весь товар вместе, склады — его части (владелец 03.10.2026).
-    const sum = (k) => (r.warehouses.some((w) => w[k] == null) ? null : r.warehouses.reduce((a, w) => a + Number(w[k] || 0), 0));
-    const all = { id: 'all', name: 'Основной — весь товар', onHand: sum('onHand'), inAssembly: sum('inAssembly'), available: sum('available'), defect: sum('defect') };
+    // Строка «Основной» — те же числа, что в плитках выше (проверка 03.10.2026).
+    const all = { id: 'all', name: 'Основной — весь товар', onHand: r.total ?? null, inAssembly: Number(r.inAssembly || 0), available: r.available ?? null, defect: Number(r.defective || 0) };
+    const ordered = Number(r.ordered || 0);
     return `<section class="detail-section" style="margin-top:0"><h3>По вашим складам</h3>${table(cols, [all, ...r.warehouses])}`
+      + (ordered > 0 ? `<p class="help">По складам «Доступно» — без заказанного (${n(ordered)} шт.): у заказов, которые ещё не в поставке, склада пока нет.</p>` : '')
       + (state.owner ? '' : `<div id="vwMoveForm"></div><div class="drawer-actions" id="vwMoveRow"><button class="button" type="button" id="vwMove">Попросить склад перенести</button></div>`)
       + '</section>';
   }
@@ -896,10 +899,12 @@
   }
   // Всегда по всем нашим складам: WB продаёт с любого из них один и тот же товар.
   const wbOver = (r) => { const v = wbStockOf(r.sku, 'all'); const a = wbAvailable(r); return v != null && a != null && v > a; };
+  // Выбран склад не для WB (Озон) — про остатки WB не пугаем (проверка 03.10.2026).
+  const wbView = () => !vwOn() || (state.vw?.wbChoices || []).some((c) => vwKey(c.id) === state.ui.products.vw);
   function wbStockCell(r) {
     const v = wbStockOf(r.sku);
     if (v == null) return num(null);
-    return wbOver(r) ? `<span class="warn-num" title="На WB выставлено больше, чем доступно на складе">${n(v)}</span>` : num(v);
+    return wbOver(r) && wbView() ? `<span class="warn-num" title="На WB выставлено больше, чем доступно на складе">${n(v)}</span>` : num(v);
   }
   async function markWb(id, ours) {
     const path = state.owner ? `/api/marketplaces/${encodeURIComponent(state.companyId)}/wb/warehouses/${encodeURIComponent(id)}`
@@ -1294,7 +1299,11 @@
     return state.data.defects.moves.filter((e) => matches(ui.q, [e.name, e.sku, e.note, e.document, e.number, ...wbIds(e.sku)])
       && (ui.source === 'all' || e.source === ui.source) && (ui.kind === 'all' || e.bucket === ui.kind) && inPeriod(e.at, ui.period));
   }
-  const whoDecided = (x) => (x.decidedRole === 'seller' ? (state.owner ? 'Продавец' : 'Вы') : `${x.decidedName || 'Склад'}, по просьбе продавца`);
+  const whoDecided = (x) => (x.decidedRole === 'seller' ? (state.owner ? 'Продавец' : 'Вы') : x.decidedName || 'Склад');
+  // Решение выполнено частями или на найденное (проверка 03.10.2026).
+  const doneOf = (x) => (Number(x.doneQty) > 0 && Number(x.doneQty) < Number(x.qty)
+    ? `<span class="cell-sub">${x.status === 'done' ? 'выполнено' : 'сделано'} ${n(x.doneQty)} из ${n(x.qty)} шт.${x.status === 'done' ? ' — брака оказалось меньше' : ''}</span>`
+    : x.status === 'done' && Number(x.doneQty) === 0 && x.doneQty != null ? '<span class="cell-sub">брака на складе не оказалось</span>' : '');
   const actLink = (x) => (x.status === 'done' && (x.action === 'return_to_seller' || x.action === 'dispose')
     ? `<a class="link-button" href="act_print.html?kind=defect&id=${encodeURIComponent(x.id)}" target="_blank" rel="noopener">${x.action === 'dispose' ? 'Акт утилизации' : 'Акт выдачи'}</a>` : '');
   function renderDefects() {
@@ -1325,7 +1334,7 @@
         { title: 'Решение', cell: (x) => `<span class="cell-main">${h(ACTIONS[x.action].title)}</span>${x.markdownBarcode ? `<span class="cell-sub">Штрихкод уценки: ${h(x.markdownBarcode)}</span>` : ''}${x.note ? `<span class="cell-sub">${h(x.note)}</span>` : ''}` },
         { title: 'Кол-во', cls: 'n', cell: (x) => num(x.qty) },
         { title: 'Кто решил', cell: (x) => `<span class="cell-main">${h(whoDecided(x))}</span><span class="cell-sub">${h(when(x.decidedAt))}</span>` },
-        { title: 'Склад', cell: (x) => (x.status === 'done' ? `${badge('Готово: ' + DONE[x.action], 'ready')}<span class="cell-sub">${h(when(x.doneAt))}</span>${actLink(x)}` : badge('Ждёт склада', 'waiting')) },
+        { title: 'Склад', cell: (x) => (x.status === 'done' ? `${badge('Готово: ' + DONE[x.action], 'ready')}<span class="cell-sub">${h(when(x.doneAt))}</span>${doneOf(x)}${actLink(x)}` : badge('Ждёт склада', 'waiting') + doneOf(x)) },
       ], d.decisions) : '<div class="table-wrap">' + empty('Решений пока нет', 'Здесь будет видно, что вы решили по браку и когда склад это выполнил.', 'document') + '</div>')
       + (d.hasMore ? notice('Показана часть документов', 'Загружены последние 1 000 перемещений на склад брака.', true) : '')
       + `<div class="section-title"><h2>Как брак попал на склад</h2><span>${counted(d.moves.length, 'документ', 'документа', 'документов')}</span></div>`

@@ -1541,7 +1541,7 @@
     overlay.className = 'ask-overlay';
     overlay.innerHTML = '<div class="ask-box" role="dialog" aria-modal="true" data-form>'
       + '<div class="ask-title">Перенести между складами</div>'
-      + '<div class="ask-text">' + escapeHTML(r.name || r.sku) + '. Товар остаётся в тех же ячейках — меняется только, за каким складом он числится. Продавцу придёт уведомление.</div>'
+      + '<div class="ask-text">' + escapeHTML(r.name || r.sku) + '. Остатки складов поменяются, продавцу придёт уведомление. Если один из складов хранится отдельно, грузчику придёт задание переложить товар.</div>'
       + '<div class="tr-grid"><label>Откуда<select class="mp-field" id="trFrom">' + opts(from) + '</select></label>'
       + '<label>Куда<select class="mp-field" id="trTo">' + opts(to) + '</select></label>'
       + '<label>Сколько штук<input class="mp-field" id="trQty" type="number" min="1" inputmode="numeric" value="' + escapeHTML(pre.qty || '') + '"></label>'
@@ -1564,6 +1564,8 @@
         close();
         showWhToast(res.status === 'waiting_seller'
           ? 'Продавец запретил складу решать такое без него — просьба отправлена ему, перенос сделается после «Согласен».'
+          : res.status === 'to_move'
+          ? 'Грузчику создано задание переложить: ' + res.fromName + ' → ' + res.toName + ', ' + nfmt(res.qty) + ' шт. Остатки складов поменяются по мере перекладки.'
           : 'Перенесено: ' + res.fromName + ' → ' + res.toName + ', ' + nfmt(res.qty) + ' шт. Продавцу пришло уведомление «обратите внимание».');
         if(pre.after) pre.after(); else loadProducts();
       } catch(e){ showWhToast(e.message); btn.disabled = false; }
@@ -1580,10 +1582,12 @@
     if(!approve){
       reason = await askText('Отказать в переносе ' + t.number + '?', 'Причина — продавец её увидит', 'Например: на складе Озон под этот товар нет места');
       if(reason === null) return;
-    } else if(!await askConfirm('Выполнить перенос ' + t.number + '?\n\n«' + (t.name || t.sku) + '», ' + t.qty + ' шт.: «' + t.fromName + '» → «' + t.toName + '». Товар остаётся в тех же ячейках.')) return;
+    } else if(!await askConfirm('Выполнить перенос ' + t.number + '?\n\n«' + (t.name || t.sku) + '», ' + t.qty + ' шт.: «' + t.fromName + '» → «' + t.toName + '».')) return;
     try{
-      await apiFetch('/api/vwarehouses/transfers/' + id + '/decide', { method: 'POST', body: { approve, reason: reason || undefined } });
-      showWhToast(approve ? 'Перенос выполнен — продавцу пришло уведомление.' : 'Отказано — продавцу пришло уведомление.');
+      const res = await apiFetch('/api/vwarehouses/transfers/' + id + '/decide', { method: 'POST', body: { approve, reason: reason || undefined } });
+      showWhToast(!approve ? 'Отказано — продавцу пришло уведомление.'
+        : res && res.status === 'to_move' ? 'Грузчику создано задание переложить — продавцу пришло уведомление.'
+        : 'Перенос выполнен — продавцу пришло уведомление.');
       loadProducts();
       if(typeof loadJournal === 'function') loadJournal(true);
     } catch(e){ showWhToast(e.message); }
@@ -1675,7 +1679,9 @@
       ? '<div class="rc-card pr-transfers"><div class="staff-title" style="font-size:15px;">Переносы ждут решения · ' + productTransfers.length + '</div>'
         + productTransfers.map(t => '<div class="sp-key"><span><b>' + escapeHTML(t.number) + '</b> «' + escapeHTML(t.name || t.sku) + '», ' + nfmt(t.qty) + ' шт.: '
           + escapeHTML(t.fromName) + ' → ' + escapeHTML(t.toName)
-          + '<span class="mp-card-sub">' + (t.status === 'requested' ? 'просит продавец' : 'ждёт согласия продавца — он запретил складу решать такое без него')
+          + '<span class="mp-card-sub">' + (t.status === 'requested' ? 'просит продавец'
+            : t.status === 'to_move' ? 'грузчик перекладывает — остатки меняются по мере перекладки'
+            : 'ждёт согласия продавца — он запретил складу решать такое без него')
           + (t.note ? ' · ' + escapeHTML(t.note) : '') + '</span></span>'
           + (t.status === 'requested' ? '<span class="mp-card-acts" style="margin:0;"><span class="mp-act" onclick="decideTransfer(\'' + t.id + '\', true)">Выполнить</span>'
             + '<span class="mp-act warn" onclick="decideTransfer(\'' + t.id + '\', false)">Отказать</span></span>' : '')
@@ -4536,6 +4542,8 @@
           ? 'Проверьте записанный отбор и фактическое движение товара в сверке. Данные 1С автоматически не изменяются.'
           : e.urgent && e.invoice_supply_id
             ? 'Убранный заказ вернётся в очередь, поставка уедет без него. Данные 1С не изменяются.'
+          : e.entity_type === 'vw_transfer'
+            ? 'Просьба продавца. О решении ему придёт уведомление. Данные 1С не изменяются.'
           : isNote(e)
             ? (e.entity_type === 'vw_zone' ? 'Зона склада продавца заполнена. Расширьте зону в окне продавца — иначе товар положат рядом.'
               : 'Грузчик написал о товаре.') + ' Отметка «Принял к сведению» сохранится в журнале с вашим именем.'
@@ -4552,6 +4560,11 @@
       ? '<div class="ctx-btn ' + (primary ? 'confirm' : 'reject') + '" onclick="' + onclick + '">' + label + '</div>'
       : '<span class="staff-action" style="display:inline-block; margin-left:8px;" onclick="' + onclick + '">' + label + '</span>';
     const id = escapeHTML(e.id);
+    // Заявка продавца на перенос между его складами (проверка 03.10.2026).
+    if(e.entity_type === 'vw_transfer'){
+      return act(true, "resolveTransferEntry('" + id + "', true)", 'Выполнить')
+        + act(false, "resolveTransferEntry('" + id + "', false)", 'Отказать');
+    }
     const order = escapeHTML(String(e.invoice_number || '').replace(/['\\]/g, ''));
     return (e.invoice_supply_id
         ? act(true, "removeSupplyOrder('" + escapeHTML(e.invoice_id) + "', '" + order + "')", 'Убрать заказ из поставки')
@@ -4576,6 +4589,26 @@
     }
   }
   window.resolveUrgent = resolveUrgent;
+
+  async function resolveTransferEntry(id, approve){
+    const entry = journalEntries.find(x => x.id === id);
+    const text = entry ? urgentText(entry.action_text) : '';
+    let reason;
+    if(!approve){
+      reason = await askText('Отказать в переносе?', 'Причина — продавец её увидит', 'Например: на складе Озон под этот товар нет места');
+      if(reason === null) return;
+    } else if(!await askConfirm('Выполнить перенос?\n\n' + text)) return;
+    try{
+      await apiFetch('/api/journal/' + id + '/resolve', {method:'POST', body:{
+        resolution: approve ? 'confirm' : 'rollback', note: reason || undefined,
+      }});
+      showWhToast(approve ? 'Готово — продавцу пришло уведомление.' : 'Отказано — продавцу пришло уведомление.');
+      await loadJournal();
+    } catch(e){
+      showWhToast('Не удалось выполнить действие: ' + e.message);
+    }
+  }
+  window.resolveTransferEntry = resolveTransferEntry;
 
   async function resolveJournalEntry(id, resolution){
     // 'ack' — «Принял к сведению» записку грузчика: одно нажатие, без вопроса.
@@ -5383,16 +5416,16 @@
   function vwFormHtml(){
     const f = sp.vwForm;
     return '<div class="sp-vw-form" data-form>'
-      + '<input class="mp-field" id="vwName" maxlength="100" placeholder="Название: Озон, ООО Ромашка, Опт" value="' + escapeHTML(f.name || '') + '">'
-      + '<select class="mp-field" id="vwMp" aria-label="Площадка склада">'
+      + '<label class="sp-vw-field">Название<input class="mp-field" id="vwName" maxlength="100" placeholder="Например: Озон, ООО Ромашка, Опт" value="' + escapeHTML(f.name || '') + '"></label>'
+      + '<label class="sp-vw-field">Площадка<select class="mp-field" id="vwMp">'
       + Object.entries(VW_MP).map(([k, t]) => '<option value="' + k + '"' + (f.marketplace === k ? ' selected' : '') + '>' + (k === 'other' ? 'Иное — вне площадок' : t) + '</option>').join('')
-      + '</select>'
+      + '</select></label>'
       + '<div class="mp-card-sub">Поставку на WB собирают со склада WB или из «Остального товара». Склад «иное» — отгрузка вне площадок.</div>'
       + '<label class="sp-check"><input type="checkbox" id="vwSep"' + (f.keepSeparate ? ' checked' : '') + ' onchange="document.getElementById(\'vwSepMore\').hidden = !this.checked">'
       + '<span>Хранить отдельно<small>Товар этого склада не лежит в одной ячейке с товаром других складов продавца. Грузчику подсказываются отдельные ячейки.</small></span></label>'
       + '<div id="vwSepMore"' + (f.keepSeparate ? '' : ' hidden') + '>'
       +   '<label class="sp-check"><input type="checkbox" id="vwSepDefect"' + (f.defectSeparate ? ' checked' : '') + '><span>И брак тоже отдельно<small>Иначе брак этого склада лежит в общих ячейках брака.</small></span></label>'
-      +   '<input class="mp-field" id="vwZone" maxlength="2000" placeholder="Зона — не обязательно: «ряд 3» или ячейки «4.1.2, 4.1.3»" value="' + escapeHTML(f.zoneText || '') + '">'
+      +   '<label class="sp-vw-field">Зона — не обязательно<input class="mp-field" id="vwZone" maxlength="2000" placeholder="Например: ряд 3 или ячейки 4.1.2, 4.1.3" value="' + escapeHTML(f.zoneText || '') + '"></label>'
       +   '<div class="mp-card-sub">Зона — закреплённые ячейки: ничего другого туда не кладут. Заполнится — товар положат рядом, а вам придёт предупреждение.</div>'
       + '</div>'
       + '<div class="rc-actions"><span class="grow"></span><button type="button" class="wh-onboarding-btn" onclick="closeVwForm()">Отмена</button>'

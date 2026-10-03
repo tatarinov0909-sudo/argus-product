@@ -1095,6 +1095,7 @@
   .tr-grid{display:flex; flex-direction:column; gap:10px; margin:12px 0 4px;}
   .tr-grid label{display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--muted);}
   .pr-bar input{max-width:360px; flex:1; min-width:200px;}
+  @media(max-width:760px){ .pr-bar input{max-width:none; flex:1 1 100%; min-width:0;} }
   .pr-table{width:100%; border-collapse:collapse; font-size:14px;}
   .pr-table th{text-align:left; font-size:12px; color:var(--muted); font-weight:600; letter-spacing:.04em;
     text-transform:uppercase; padding:0 12px 8px 0; border-bottom:1px solid var(--line);}
@@ -1894,6 +1895,8 @@
   #vwSepMore{display:flex; flex-direction:column; gap:8px; padding-left:28px;}
   #vwSepMore[hidden]{display:none;}
   .sp-vw-form{display:flex; flex-direction:column; gap:8px; padding:10px 0; border-top:1px solid var(--line-soft);}
+  .sp-vw-field{display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--muted);}
+  #vwSepMore:not([hidden]){display:flex; flex-direction:column; gap:8px;}
   .sp-head{display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px; font-size:15px;}
   .sp-count{font-size:14px; font-weight:600; margin:6px 0 2px;}
   .wbw-row.on b{color:var(--accent-2);}
@@ -3057,7 +3060,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <script src="back.js?v=4901b838" defer></script>
 <script src="form-keys.js?v=02a92e0e" defer></script>
-<script src="cabinet_main.js?v=04df7a69" defer></script>
+<script src="cabinet_main.js?v=fd92bfa5" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->

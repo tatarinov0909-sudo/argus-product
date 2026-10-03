@@ -393,7 +393,8 @@
   .mret-go{margin-top:12px;}
   .mret-new{margin-bottom:12px;}
   .mret-vws{margin:6px 0 10px;}
-  .vwm-cell{display:inline-block; margin:4px 6px 0 0; padding:8px 10px; border-radius:10px; border:1px solid var(--line); background:var(--panel-2); color:var(--text); font-size:14px; cursor:pointer;}
+  .vwm-cells{display:flex; flex-wrap:wrap; gap:6px; margin-top:4px;}
+  .vwm-cell{display:inline-block; margin:0; padding:8px 10px; border-radius:10px; border:1px solid var(--line); background:var(--panel-2); color:var(--text); font-size:14px; cursor:pointer;}
   .vwm-cell span{color:var(--muted); font-size:12px;}
   .vwm-qty{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:10px; font-size:14px; color:var(--muted);}
   .vwm-qty input{width:90px; padding:10px; border-radius:10px; border:1px solid var(--line); background:var(--panel-2); color:var(--text); font-size:16px; text-align:center;}
@@ -6057,9 +6058,19 @@
     renderDefect();
     document.getElementById('sheetOverlay').classList.add('show');
     goSheetStep('defect');
-    try{ def.cells = await apiFetch('/api/defects/cells?companyId=' + encodeURIComponent(def.companyId)); }
+    try{ def.cells = await apiFetch('/api/defects/cells?companyId=' + encodeURIComponent(def.companyId) + defVwArg(def)); }
     catch(e){ if(run === defRun) showToast('Не удалось подобрать ячейку брака — введите её вручную'); }
     if(run === defRun) renderDefect();
+  }
+
+  // Склад продавца, чей это брак (проверка 03.10.2026): подсказка не
+  // предложит ячейку, куда брак этого склада класть нельзя. Не знаем —
+  // сервер подсказывает только ячейки без брака продавца.
+  function defVwArg(d){
+    let vw;
+    if(d.mode === 'move') vw = moveState.stock && 'vw' in moveState.stock ? moveState.stock.vw : undefined;
+    else if(!(d.mode === 'picking' && currentSupplyId()) && d.item && 'virtual_warehouse_id' in d.item) vw = d.item.virtual_warehouse_id;
+    return vw === undefined ? '' : '&vw=' + encodeURIComponent(vw || 'main');
   }
 
   function defMax(){
@@ -6174,7 +6185,9 @@
     const request = ++cellOptionsRequest;
     wrap.innerHTML = '<div style="font-size:13px; color:var(--muted); text-align:center; padding:8px;">Подбираю ячейку брака…</div>';
     let cells = [];
-    try{ cells = await apiFetch('/api/defects/cells?companyId=' + encodeURIComponent(currentInvoice.company_id)); } catch(e){ cells = []; }
+    const it = currentInvoice.items && currentInvoice.items[currentItemIndex];
+    const vwArg = it && 'virtual_warehouse_id' in it ? '&vw=' + encodeURIComponent(it.virtual_warehouse_id || 'main') : '';
+    try{ cells = await apiFetch('/api/defects/cells?companyId=' + encodeURIComponent(currentInvoice.company_id) + vwArg); } catch(e){ cells = []; }
     if(request !== cellOptionsRequest) return;
     retDefectCells = cells;
     wrap.innerHTML = cells.length
@@ -6219,25 +6232,32 @@
     document.getElementById('defectBody').innerHTML = n ? defectTasks.map((t, i) => {
       const toSale = t.action === 'repack' || t.action === 'markdown';
       const have = t.cells.reduce((s, c) => s + Number(c.qty), 0);
+      const can = Math.min(have, t.qty);
       return '<div class="def-task">'
-        + '<div class="def-task-act">' + escapeHTML(DEF_ACTION[t.action]) + ' · ' + t.qty + ' шт</div>'
+        + '<div class="def-task-act">' + escapeHTML(DEF_ACTION[t.action]) + ' · ' + t.qty + ' шт'
+        + (t.doneQty > 0 ? ' <span class="def-task-sub">(сделано ' + t.doneQty + ' из ' + t.total + ')</span>' : '') + '</div>'
         + '<div class="def-task-name">' + escapeHTML(t.name || t.sku) + '</div>'
         + '<div class="def-task-sub">' + escapeHTML([t.company, DEF_KIND[t.bucket], t.number].filter(Boolean).join(' · ')) + '</div>'
         + '<div class="def-task-sub">Взять из: ' + (t.cells.length ? escapeHTML(t.cells.map(c => c.label + ' — ' + c.qty + ' шт').join(', ')) : 'в ячейках этого брака нет') + '</div>'
         + (t.action === 'markdown' ? '<div class="def-task-code">Наклейте штрихкод уценки: <b>' + escapeHTML(t.markdownBarcode) + '</b></div>' : '')
         + (t.note ? '<div class="def-task-sub">Комментарий: ' + escapeHTML(t.note) + '</div>' : '')
-        + '<div class="def-task-sub">Решил: ' + escapeHTML(t.decidedRole === 'seller' ? 'продавец' : (t.decidedName || 'склад') + ' по просьбе продавца') + '</div>'
-        + (have < t.qty ? '<div class="def-task-warn">В ячейках брака ' + have + ' шт из ' + t.qty + ' — скажите руководителю, пусть пересчитают.</div>' : '')
-        + (toSale ? '<input type="text" class="cell-manual-input def-task-cell" id="defTaskCell-' + i + '" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Куда кладёте для продажи: 1.7.3">' : '')
-        + '<button type="button" class="confirm-btn def-task-go" id="defTaskGo-' + i + '" onclick="doDefectTask(' + i + ')"' + (have < t.qty ? ' disabled' : '') + '>'
-        + escapeHTML(DEF_DONE[t.action]) + ' — ' + t.qty + ' шт</button></div>';
+        + '<div class="def-task-sub">Решил: ' + escapeHTML(t.decidedRole === 'seller' ? 'продавец' : (t.decidedName || 'склад')) + '</div>'
+        + (have === 0 ? '<div class="def-task-warn">В ячейках этого брака нет. Закройте задание — продавцу придёт уведомление о разнице.</div>'
+          : have < t.qty ? '<div class="def-task-warn">В ячейках брака ' + have + ' шт из ' + t.qty + ' — сделайте найденное, продавцу придёт уведомление о разнице.</div>' : '')
+        + (toSale && have > 0 ? '<input type="text" class="cell-manual-input def-task-cell" id="defTaskCell-' + i + '" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Куда кладёте для продажи: 1.7.3">' : '')
+        + '<button type="button" class="confirm-btn def-task-go" id="defTaskGo-' + i + '" onclick="doDefectTask(' + i + ')">'
+        + defTaskLabel(t, can) + '</button></div>';
     }).join('') : '<div class="job-empty">Продавцы пока ничего не решили по браку. Когда решат — задание появится здесь.</div>';
+  }
+  function defTaskLabel(t, can){
+    return can > 0 ? escapeHTML(DEF_DONE[t.action]) + ' — ' + can + ' шт' : 'Брака нет — закрыть задание';
   }
   async function doDefectTask(i){
     const t = defectTasks[i];
     if(!t) return;
     const body = {};
-    if(t.action === 'repack' || t.action === 'markdown'){
+    const can = Math.min(t.cells.reduce((s, c) => s + Number(c.qty), 0), t.qty);
+    if((t.action === 'repack' || t.action === 'markdown') && can > 0){
       const val = document.getElementById('defTaskCell-' + i).value.trim();
       const found = val && findCellByLabel(val);
       if(!found){ showToast(val ? 'Ячейки ' + val + ' на складе нет. Адрес — ряд.стеллаж.ярус, например 1.7.3' : 'Укажите ячейку, куда кладёте товар для продажи'); return; }
@@ -6246,14 +6266,22 @@
     const btn = document.getElementById('defTaskGo-' + i);
     btn.disabled = true;
     btn.textContent = 'Сохраняю…';
-    try{ await apiFetch('/api/defects/tasks/' + encodeURIComponent(t.id) + '/done', { method: 'POST', body }); }
+    let r;
+    try{ r = await apiFetch('/api/defects/tasks/' + encodeURIComponent(t.id) + '/done', { method: 'POST', body }); }
     catch(e){
       showToast('Не удалось: ' + e.message);
       btn.disabled = false;
-      btn.textContent = DEF_DONE[t.action] + ' — ' + t.qty + ' шт';
+      btn.innerHTML = defTaskLabel(t, can);
       return;
     }
-    showToast('Готово: ' + DEF_DONE[t.action].toLowerCase() + ' ' + t.qty + ' шт');
+    // Частями: товар другого склада продавца — в другую ячейку; брака
+    // меньше, чем решили, — сделано найденное, продавцу сообщено.
+    showToast(r && r.left > 0
+      ? 'Сделано ' + r.qty + ' шт. Ещё ' + r.left + ' шт — товар другого склада продавца: положите его в другую ячейку.'
+      : r && r.short > 0
+        ? (r.qty > 0 ? 'Готово: ' + DEF_DONE[t.action].toLowerCase() + ' ' + r.qty + ' шт. ' : 'Задание закрыто. ')
+          + 'Брака оказалось меньше — продавцу пришло уведомление.'
+        : 'Готово: ' + DEF_DONE[t.action].toLowerCase() + ' ' + (r ? r.qty : t.qty) + ' шт');
     try{ cellRows = await apiFetch('/api/cells/rows'); } catch(e){ /* обновим при следующем входе */ }
     openDefectTasks();
   }
@@ -6284,7 +6312,7 @@
       + '<div class="def-task-sub">' + escapeHTML(t.seller) + ' · ' + (t.kind === 'transfer'
         ? 'перенос на склад «' + escapeHTML(t.toName) + '»' : 'склад «' + escapeHTML(t.toName) + '» хранится отдельно') + '</div>'
       + '<div class="def-task-sub">Взять из: <b>' + escapeHTML(t.fromLabel) + '</b>' + (t.fromName !== t.toName ? ' (товар склада «' + escapeHTML(t.fromName) + '»)' : '') + '</div>'
-      + (t.suggest && t.suggest.length ? '<div class="def-task-sub">Куда: ' + t.suggest.map(o => '<button type="button" class="vwm-cell" onclick="vwMovePick(' + i + ', \'' + escapeHTML(o.label) + '\')">'
+      + (t.suggest && t.suggest.length ? '<div class="def-task-sub">Куда:</div><div class="vwm-cells">' + t.suggest.map(o => '<button type="button" class="vwm-cell" onclick="vwMovePick(' + i + ', \'' + escapeHTML(o.label) + '\')">'
         + escapeHTML(o.label) + ' <span>' + escapeHTML(VW_REASON[o.reason] || '') + '</span></button>').join('') + '</div>' : '')
       + '<input type="text" class="cell-manual-input def-task-cell" id="vwmCell-' + i + '" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Куда положили: 1.7.3">'
       + '<div class="vwm-qty"><span>Сколько переложили</span><input type="number" inputmode="numeric" min="1" max="' + t.left + '" id="vwmQty-' + i + '" value="' + t.left + '"></div>'
