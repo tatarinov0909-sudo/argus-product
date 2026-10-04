@@ -209,7 +209,8 @@
      штук кнопкой «+» — это 240 нажатий, работник в это время стоит у полки. */
   input.qty-value{
     background:none; border:0; padding:0; color:var(--text);
-    text-align:center; width:130px; min-width:0;
+    /* Семь цифр целиком (проверка 03.10.2026: 100000 обрезалось). */
+    text-align:center; width:7ch; max-width:100%; min-width:0;
     appearance:textfield; -moz-appearance:textfield;
   }
   input.qty-value:focus{outline:none; box-shadow:0 3px 0 var(--accent);}
@@ -2932,9 +2933,9 @@
       btn.textContent = 'Выберите состояние товара';
       return;
     }
-    if(selectedBucket !== 'good' && !selectedCellBlockId){
+    if(!selectedCellBlockId){
       btn.disabled = true;
-      btn.textContent = 'Выберите ячейку брака';
+      btn.textContent = selectedBucket === 'good' ? 'Выберите ячейку' : 'Выберите ячейку брака';
       return;
     }
     btn.disabled = false;
@@ -2956,6 +2957,9 @@
           qty: currentQty,
           qualityBucket: selectedBucket,
           cellBlockId: selectedCellBlockId || null,
+          // Сколько уже разобрано, как видит экран: разобрали в другой
+          // вкладке — сервер не запишет второй раз.
+          seenQty: Number(item.returned_qty || 0),
           defectNote: selectedBucket === 'good' ? null : document.getElementById('defectNote').value.trim(),
           pausedMs: totalPausedMs,
           pauseReasons: pauseLog.map(p => p.reason),

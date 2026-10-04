@@ -332,6 +332,24 @@
         <span>${escapeHTML(GRANT_LABELS[g][0])}${GRANT_LABELS[g][1] ? `<i>${escapeHTML(GRANT_LABELS[g][1])}</i>` : ''}</span>
       </label>`).join('');
   }
+  // Права, через которые менеджер получает чужие данные или ключи входа:
+  // включая такое право, руководитель видит крупное предупреждение
+  // (владелец 04.10.2026).
+  const GRANT_RISK = {
+    clients: 'Менеджер сможет заводить продавцов и выдавать им ключи входа. По ключу продавца открывается его кабинет: остатки, заказы, документы.',
+    staff: 'Менеджер сможет выдавать и отзывать ключи работников склада — то есть впускать людей на склад в Аргусе.',
+    marketplaces: 'Менеджер сможет подключать ключи WB продавцов и разрешать Аргусу менять статусы их заказов на WB.',
+    integration: 'Менеджер сможет выдавать ключи обмена с 1С. По такому ключу читаются товары и документы склада.',
+    billing: 'Менеджер увидит тарифы и расчёты с продавцами.',
+  };
+  document.addEventListener('change', async (e) => {
+    const box = e.target;
+    if(!box.matches || !box.matches('input[data-grant]') || !box.checked || !GRANT_RISK[box.dataset.grant]) return;
+    const ok = await askConfirm('Внимание! Вы даёте доступ к разделу «' + grantTitle(box.dataset.grant) + '»\n\n'
+      + GRANT_RISK[box.dataset.grant] + '\n\nЭто может привести к утечке данных. Давайте такое право только тому, кому доверяете.');
+    if(!ok) box.checked = false;
+  });
+
   function grantsChecked(prefix){
     return [...document.querySelectorAll(`input[data-grant][data-for="${prefix}"]:checked`)].map(i => i.dataset.grant);
   }
@@ -2070,8 +2088,12 @@
     // серый экран. Именно так и происходило после удаления схемы. Поэтому
     // сначала возвращаем его на место.
     const ctor = document.getElementById('whConstructor');
-    const home = document.getElementById('view-warehouse');
-    if(ctor.parentElement !== home) home.insertBefore(ctor, document.getElementById('whMapWrap'));
+    // Дом — там, где карта: вкладки «Карта склада / Инвентаризация» переносят
+    // содержимое раздела во вложенный блок (проверка 03.10.2026: вставка в сам
+    // раздел падала, и у нового склада конструктор не открывался).
+    const map = document.getElementById('whMapWrap');
+    const home = map.parentElement;
+    if(ctor.parentElement !== home) home.insertBefore(ctor, map);
 
     // Склада ещё нет: пересобирать нечего и объединений ячеек не существует,
     // так что предупреждение о потере здесь только пугает.
@@ -3422,7 +3444,7 @@
   // argus-ai.online»: то выглядит как чужое предупреждение, пугает и ничего
   // не выделяет. Первый абзац вопроса — заголовок, остальное — пояснение.
   // Enter — «Да», Escape и клик мимо — «Отмена».
-  const DANGER_WORDS = /^(Удалить|Разобрать|Отключить|Отменить|Отклонить|Убрать)/;
+  const DANGER_WORDS = /^(Удалить|Разобрать|Отключить|Отменить|Отклонить|Убрать|Внимание)/;
   function askConfirm(message){
     return new Promise(function(resolve){
       const parts = String(message || '').split('\n\n');
@@ -7411,7 +7433,7 @@
         <span class="ord-sub">по годному остатку в ячейках Аргуса</span>
       </div>
       <div class="ord-scroll">
-        <table class="ord-table">${head(true)}<tbody>${fresh.map(o => row(o, o.ready)).join('')
+        <table class="ord-table ord-cards">${head(true)}<tbody>${fresh.map(o => row(o, o.ready)).join('')
           || emptyRow(ordersShortOnly ? 'Заказов с нехваткой нет.' : 'Под поиск ничего не подходит.')}</tbody></table>
       </div>
       ${confirmed.length ? `
@@ -7420,7 +7442,7 @@
           которую сделали без Аргуса; в поставку Аргуса они не попадут, чтобы не собрать заказ дважды.
         </div>
         <div class="ord-scroll">
-          <table class="ord-table">${head(false)}<tbody>${confirmed.map(o => row(o, false)).join('')}</tbody></table>
+          <table class="ord-table ord-cards">${head(false)}<tbody>${confirmed.map(o => row(o, false)).join('')}</tbody></table>
         </div>` : ''}
       ${otherOrdersHtml(companyId)}
       <div class="ord-meta" style="margin-top:14px;">
@@ -8022,7 +8044,13 @@
   // дверь и не сыпал отказами.
   const CAN_WAREHOUSE = !IS_MANAGER || (authPayload.grants || []).includes('warehouse');
   if(IS_MANAGER){
-    const hidden = ['nav-chat', 'nav-staff', 'nav-1c', 'nav-mp', 'nav-settings'];
+    // Разделы по выданным правам (владелец 04.10.2026): галочка открывает
+    // раздел, а не только разрешает действие на сервере.
+    const grants = authPayload.grants || [];
+    const hidden = ['nav-chat', 'nav-settings'];
+    if(!grants.includes('staff')) hidden.push('nav-staff');
+    if(!grants.includes('clients') && !grants.includes('marketplaces')) hidden.push('nav-mp');
+    if(!grants.includes('integration')) hidden.push('nav-1c');
     if(!CAN_WAREHOUSE) hidden.push('nav-warehouse', 'nav-inv');
     // Расчёты — право «Тариф и деньги».
     if(!(authPayload.grants || []).includes('billing')) hidden.push('nav-billing');

@@ -854,6 +854,27 @@
   .act-row .ord-sub{margin-top:2px;}
   .ord-when, .ord-no, .ord-table th{white-space:nowrap;}
   .ord-scroll{max-height:52vh; overflow:auto; border:1px solid var(--line); border-radius:10px;}
+  /* Заказы на телефоне — карточками, без прокрутки вбок (rules/formatting.md;
+     проверка 03.10.2026). Подписи — из заголовков столбцов. */
+  @media(max-width:640px){
+    .ord-cards thead{display:none;}
+    .ord-cards, .ord-cards tbody{display:block; width:100%;}
+    .ord-cards tr{display:grid; grid-template-columns:28px minmax(0,1fr) minmax(0,1fr); gap:6px 12px; padding:12px; border-bottom:1px solid var(--line);}
+    .ord-cards td{display:block; padding:0; border:0; min-width:0; overflow-wrap:anywhere; text-align:left; white-space:normal;}
+    .ord-cards td:first-child{grid-row:span 4;}
+    .ord-cards td:nth-child(4){grid-column:2 / -1;}
+    .ord-cards td:nth-child(n+2)::before{display:block; font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em;}
+    .ord-cards td:nth-child(2)::before{content:'Заказ';}
+    .ord-cards td:nth-child(3)::before{content:'Оформлен';}
+    .ord-cards td:nth-child(4)::before{content:'Товар';}
+    .ord-cards td:nth-child(5)::before{content:'Артикул МП';}
+    .ord-cards td:nth-child(6)::before{content:'Штрихкод';}
+    .ord-cards td:nth-child(7)::before{content:'Куда';}
+    .ord-cards td:nth-child(8)::before{content:'Кол-во';}
+    .ord-cards td:nth-child(9)::before{content:'На складе, шт.';}
+    .ord-cards td:only-child{grid-column:1 / -1;}
+    .ord-cards td:only-child::before{content:none;}
+  }
 
   .wh-beam{
     position:absolute; left:3px; right:3px; height:2px; margin-bottom:-1px;
@@ -1067,8 +1088,8 @@
   .rc-msg{padding:10px 12px; border:1px solid var(--line); border-radius:10px; margin:0 40px 8px 0; font-size:14px; white-space:pre-wrap; overflow-wrap:anywhere;}
   .rc-msg.mine{margin:0 0 8px 40px; background:var(--accent-soft); border-color:transparent;}
   .rc-msg .rc-src{white-space:normal; margin-bottom:4px;}
-  .rc-reply{display:grid; gap:8px; margin-top:10px;}
-  .rc-reply select, .rc-reply textarea{background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:inherit;}
+  .rc-reply{display:grid; grid-template-columns:minmax(0,1fr); gap:8px; margin-top:10px;}
+  .rc-reply select, .rc-reply textarea{min-width:0; max-width:100%; width:100%; box-sizing:border-box; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:inherit;}
   .rc-reply .wh-onboarding-btn{justify-self:start;}
   .rc-bottom{display:flex; gap:18px; margin-top:20px; flex-wrap:wrap;}
   /* Товары */
@@ -1796,6 +1817,8 @@
   .inv-diff-row{display:flex; justify-content:space-between; align-items:baseline; gap:14px; padding:9px 0; border-top:1px solid var(--line); font-size:14px;}
   .inv-diff-sku{display:block; font-family:var(--mono); font-size:12px; color:var(--muted); margin-top:2px;}
   .inv-diff-nums{font-size:14px; color:var(--muted); white-space:nowrap;}
+  /* На телефоне числа расхождения — строкой ниже, целиком (проверка 03.10.2026). */
+  @media(max-width:520px){ .inv-diff-row{flex-wrap:wrap;} .inv-diff-nums{white-space:normal;} }
   .inv-diff-nums .up{color:var(--accent); font-weight:600;}
   .inv-diff-nums .down{color:#D98E6E; font-weight:600;}
   .inv-note{margin-top:10px; padding:9px 11px; border-radius:8px; background:rgba(201,166,107,0.12); color:#C9A66B; font-size:14px;}
@@ -1974,6 +1997,9 @@
   .ask-text:empty{display:none;}
   .ask-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:20px;}
   .ask-box.danger .ask-ok{background:var(--terracotta); border-color:var(--terracotta); color:#fff;}
+  /* «Внимание! Вы даёте доступ…» — заметно, красным (владелец 04.10.2026). */
+  .ask-box.danger{border-color:var(--terracotta); box-shadow:0 0 0 2px var(--terracotta);}
+  .ask-box.danger .ask-title{color:var(--terracotta);}
   .sup-state{font-size:13px; padding:5px 12px; border-radius:20px; border:1px solid var(--line); color:var(--muted); white-space:nowrap;}
   .sup-acts{display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;}
   .sup-acts .mp-act{font-size:14px; padding:8px 14px; border:1px solid var(--line); border-radius:8px;
@@ -3060,7 +3086,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <script src="back.js?v=4901b838" defer></script>
 <script src="form-keys.js?v=02a92e0e" defer></script>
-<script src="cabinet_main.js?v=fd92bfa5" defer></script>
+<script src="cabinet_main.js?v=391353df" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->

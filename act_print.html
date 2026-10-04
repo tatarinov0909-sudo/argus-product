@@ -77,8 +77,15 @@
   const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
   const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ESC[c]);
   const nf = (n) => Number(n || 0).toLocaleString('ru-RU');
-  // Дата без времени («2026-09-27») — местная полночь, иначе западнее Гринвича выйдет на день раньше.
-  const day = (iso) => (iso ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso + 'T00:00' : iso).toLocaleDateString('ru-RU') : '');
+  // Даты — по поясу склада, а не компьютера (проверка 03.10.2026): один акт
+  // у всех с одной датой. Дата без времени («2026-09-27») — как есть.
+  let TZ = 'Europe/Moscow';
+  const day = (iso) => {
+    if(!iso) return '';
+    const plain = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+    if(plain) return plain[3] + '.' + plain[2] + '.' + plain[1];
+    return new Date(iso).toLocaleDateString('ru-RU', { timeZone: TZ });
+  };
   const edit = (placeholder, value) => '<span contenteditable="true" data-placeholder="' + esc(placeholder) + '">'
     + esc(value || '') + '</span>';
 
@@ -130,6 +137,7 @@
   }
 
   function render(a){
+    if(a.warehouse && a.warehouse.timezone) TZ = a.warehouse.timezone;
     if(a.kind === 'defect') return renderDefect(a);
     const receipt = a.kind === 'receipt';
     const title = receipt ? 'Акт приемки на хранение' : 'Акт отгрузки с хранения';
@@ -197,7 +205,7 @@
     const diffs = a.items.filter((i) => i.accepted && i.qty !== i.declared);
     const about = (sku) => (a.comments || []).filter((m) => m.sku === sku);
     const general = (a.comments || []).filter((m) => !m.sku || !a.items.some((i) => i.sku === m.sku && i.accepted && i.qty !== i.declared));
-    const when = (d) => new Date(d).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const when = (d) => new Date(d).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: TZ });
     const line = (m) => esc(m.author || '') + ', ' + esc(when(m.at)) + ': ' + esc(m.body);
     let out = '';
     // Когда привоз ждали у ворот и когда машина приехала (владелец 27.09.2026:

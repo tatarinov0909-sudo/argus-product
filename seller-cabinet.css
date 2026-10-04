@@ -235,7 +235,11 @@ main { padding: 28px var(--page-x) 64px; }
 .vw-split .field small { display: block; font-size: 12px; color: var(--muted); margin-top: 4px; }
 .vw-split b { font-size: 18px; font-variant-numeric: tabular-nums; }
 .notice .vw-split-sum { margin-top: 14px; }
-.vw-move .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.vw-move .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+/* Длинные названия складов не раздвигают форму за край карточки (проверка 03.10.2026). */
+.vw-move .field, .vw-move .dd, .vw-move .dd-btn, .vw-move input { min-width: 0; max-width: 100%; }
+.vw-move .dd-btn { width: 100%; }
+.vw-move .dd-btn .dd-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .grid { width: 100%; border-collapse: collapse; font-size: 18px; }
 .grid th {
   position: sticky; top: 0; z-index: 1; padding: 12px 14px; background: var(--panel-2);
