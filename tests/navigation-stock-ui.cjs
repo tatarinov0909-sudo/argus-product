@@ -32,7 +32,7 @@ const stock = (companyId, extra) => [
   const errors = [];
   const prepare = async (role, grants = []) => {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-    const store = { calls: [], failHome: false, failVw: false, holdVw: false, holdMixed: false, release: null, extraStock: 0,
+    const store = { calls: [], failHome: false, failVw: false, holdVw: false, holdMixed: false, release: null, extraStock: 0, timezone: 'Europe/Moscow',
       warehouses: { [A]: [{ id: VW_A, name: 'WB А', marketplace: 'wb', keepSeparate: false }],
         [B]: [{ id: VW_B, name: 'Озон Б', marketplace: 'ozon', keepSeparate: false }] } };
     page.on('pageerror', error => errors.push(`${role}: ${error.stack}`));
@@ -54,7 +54,10 @@ const stock = (companyId, extra) => [
       if (req.method() !== 'OPTIONS') store.calls.push({ path: p, method: req.method(), body });
       let data = [], status = 200;
       if (p === '/api/leads/manage/access') return route.fulfill({ status: 403, json: { error: 'test' } });
-      if (p === '/api/warehouses/me') data = { name: 'Тестовый склад', timezone: 'Europe/Moscow', stock_source: 'argus', setup_at: '2001-01-01' };
+      if (p === '/api/warehouses/me') {
+        if (req.method() === 'PATCH') store.timezone = body.timezone;
+        data = { name: 'Тестовый склад', timezone: store.timezone, stock_source: 'argus', wb_supplies_by: 'ff', setup_at: '2001-01-01' };
+      }
       if (p === '/api/sellers/companies') data = [{ id: A, name: 'Тестовый продавец А', keys: [] }, { id: B, name: 'Тестовый продавец Б', keys: [] }];
       if (p === '/api/alerts/today') {
         data = { ship: { supplies: 2, ready: 1, onec: 3 }, receive: { arrivals: 4, arrived: 1, returns: 2 },
@@ -96,13 +99,25 @@ const stock = (companyId, extra) => [
   };
   try {
     const { page: owner, store } = await prepare('owner');
-    await owner.locator('.home-table').waitFor();
+    await owner.locator('.home-table').first().waitFor();
     assert.equal(await owner.locator('.sidebar-nav .nav-item').count(), 11);
-    assert.deepEqual(await owner.locator('.home-table .home-num[data-label]').allTextContents(), ['6', '6', '4', '2', '—']);
+    const homeCounts = await owner.locator('.home-table tbody tr').evaluateAll(rows => Object.fromEntries(
+      rows.map(row => [row.querySelector('td b').textContent, row.querySelector('.home-num').textContent]),
+    ));
+    assert.deepEqual(homeCounts, {'Отгрузки':'6','Приёмка':'6','Ждут решения':'4','Проблемы обмена':'2','Переписка с клиентами':'—'});
     assert.equal(await owner.locator('#view-chat #readyCard,#view-chat #todayStrip').count(), 0);
     await owner.locator('#logoLink').click();
     await owner.locator('#view-warehouse.active').waitFor();
     assert.equal(await owner.locator('#view-stock .pane-tab').count(), 3);
+    assert.equal(await owner.locator('#warehouseVwCreate').isVisible(), true);
+    await owner.locator('#warehouseVwCreate').click();
+    assert.equal(await owner.locator('#warehouseVwWorkspace').getAttribute('open'), '');
+    assert.equal(await owner.locator('#vwName').count(), 0, 'choose a client before creating its warehouse');
+    await owner.locator('#warehouseVwPicker summary').click();
+    await owner.locator('#warehouseVwPicker').getByRole('button', {name:'Тестовый продавец А', exact:true}).click();
+    await owner.locator('#vwName').waitFor();
+    assert.equal(await owner.locator('#warehouseVwPicker').isVisible(), false, 'a selected client is not requested twice');
+    await owner.getByRole('button', {name:'Отмена', exact:true}).click();
     await owner.locator('#tab-inv').click();
     await owner.locator('#tab-inv').press('ArrowLeft');
     assert.equal(await owner.locator('#tab-warehouse').getAttribute('aria-selected'), 'true');
@@ -132,7 +147,7 @@ const stock = (companyId, extra) => [
     assert.ok((await owner.locator('#productsVwBar summary').innerText()).includes('WB А'));
     await owner.locator('#productsWarehouseSettings').click();
     await owner.waitForFunction(() => document.querySelector('#warehouseVwBody').textContent.includes('WB А'));
-    await owner.locator('#warehouseVwBody button').filter({ hasText: '+ Склад' }).click();
+    await owner.locator('#warehouseVwCreate').click();
     assert.equal(await owner.locator('#vwName').count(), 1);
     await owner.locator('#vwName').fill('Тестовый новый склад');
     await owner.locator('#vwMarketplaceChoice summary').click();
@@ -175,12 +190,19 @@ const stock = (companyId, extra) => [
     await owner.locator('#row-rect-1').click(); await owner.locator('#whSummary.visible').waitFor();
     await owner.locator('#row-rect-1').click();
     await owner.locator('#fp-row-1 .wh-cell').click(); await owner.locator('#whCellDetail.open').waitFor();
+    const closeControl = owner.locator('#fp-row-1 [aria-label="Убрать все панели карты"]');
+    const closeSize = await closeControl.boundingBox();
+    assert.ok(closeSize.width >= 44 && closeSize.height >= 44, 'the icon close control remains easy to press');
+    assert.ok(!(await closeControl.innerText()).includes('Убрать панели'), 'the close action is a compact icon');
     await owner.locator('#fp-row-1 [aria-label="Убрать все панели карты"]').click();
     assert.equal(await owner.locator('#whContent>.visible,#whCellDetail.open,.selected-row,.wh-cell.selected').count(), 0);
     await owner.evaluate(() => selectZone('test-zone')); await owner.locator('#whZoneDetail.visible').waitFor();
     await owner.locator('#whZoneDetail [aria-label="Убрать все панели карты"]').click();
     assert.equal(await owner.locator('#whContent>.visible').count(), 0);
+    await owner.locator('#nav-mp').click();
+    assert.equal(await owner.locator('#mpStatusBar').count(), 0, 'the redundant connection summary is removed');
 
+    await owner.locator('#nav-products').click();
     await owner.locator('#tab-products').click();
     await owner.evaluate(() => { setProductsVw('all'); setProductsFilter('all'); });
     store.extraStock = 30; await owner.evaluate(() => loadProducts());
@@ -197,13 +219,31 @@ const stock = (companyId, extra) => [
     await owner.waitForFunction(() => document.querySelector('#homeUpdated').textContent.includes('Сводка не загрузилась'));
     assert.equal(await owner.locator('#todayStrip .home-table').count(), 0);
     store.failHome = false; await owner.getByRole('button', { name: 'Обновить сводку', exact: true }).click();
-    await owner.locator('.home-table').waitFor();
+    await owner.locator('.home-table').first().waitFor();
     for (const width of [375, 1440, 2048, 2560]) {
       await owner.setViewportSize({ width, height: 700 });
       assert.ok(await owner.locator('.home-wrap').evaluate(el => el.scrollWidth <= el.clientWidth + 1), `home fits ${width}`);
       if(process.env.ARGUS_SCREENSHOT_DIR){await owner.locator('.home-wrap').evaluate(el=>{el.scrollTop=0;});await owner.screenshot({animations:'disabled',path:path.join(process.env.ARGUS_SCREENSHOT_DIR,'home-'+width+'.png')});}
     }
     assert.ok(!store.calls.some(call => call.path.startsWith('/api/marketplaces/') && call.method !== 'GET'));
+    store.timezone = 'Pacific/Auckland';
+    await owner.locator('#nav-settings').click();
+    await owner.locator('#tab-settings').click();
+    await owner.waitForFunction(() => document.querySelector('#setTz').value === 'Pacific/Auckland');
+    assert.equal(await owner.locator('#setTz').getAttribute('type'), 'hidden');
+    await owner.locator('#setTzChoice summary').click();
+    await owner.locator('#setTzMenu [data-timezone="Asia/Yakutsk"]').click();
+    assert.equal(await owner.locator('#setTz').inputValue(), 'Asia/Yakutsk');
+    assert.equal(await owner.locator('#setTzChoice').evaluate(el => el.open), false);
+    await owner.locator('#setTzChoice summary').click();
+    await owner.locator('#setTzChoice summary').press('Escape');
+    assert.equal(await owner.locator('#setTzChoice').evaluate(el => el.open), false);
+    await owner.locator('#setTzChoice summary').click();
+    await owner.locator('#setTzMenu [data-timezone="Pacific/Auckland"]').click();
+    await owner.getByRole('button', { name: 'Сохранить настройки', exact: true }).click();
+    await owner.waitForFunction(() => document.querySelector('#setResult').textContent === 'Сохранено.');
+    const settingsSaved = store.calls.find(call => call.path === '/api/warehouses/me' && call.method === 'PATCH');
+    assert.equal(settingsSaved.body.timezone, 'Pacific/Auckland', 'an existing timezone outside the menu must survive saving');
     await owner.close();
 
     for (const grants of [[], ['integration'], ['integration', 'warehouse', 'clients', 'staff', 'billing']]) {

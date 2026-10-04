@@ -71,6 +71,12 @@ const history=(id,text)=>({id,created_at:'2001-01-01T10:00:00Z',action_text:text
     assert.ok(calls.some(c=>c.path==='/api/journal'&&c.query.date==='2001-01-01'&&c.query.cursor==='next-test'));
     await page.locator('#nav-billing').click();
     await page.locator('#billCompanyChoice summary').waitFor();
+    const clientStyle = await page.locator('#billCharges [data-bill-company]').first().evaluate(el => {
+      const s = getComputedStyle(el);
+      return {size:parseFloat(s.fontSize),background:s.backgroundColor};
+    });
+    assert.ok(clientStyle.size >= 16, 'client names remain readable');
+    assert.ok(!/^rgb\(255, 255, 255\)$/.test(clientStyle.background), 'client controls use the dark workspace theme');
     await page.locator('#billCompanyChoice summary').click();
     await page.locator('#billCompanyChoice [data-bill-company="'+company+'"]').click();
     await page.locator('#billTariffPanel').waitFor();

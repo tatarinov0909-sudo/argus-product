@@ -1,0 +1,141 @@
+/* Остатки и виртуальные склады: та же палитра, более ясная рабочая композиция. */
+.stock-workspace{gap:22px;padding:28px 32px;}
+.stock-workspace .staff-head{align-items:flex-start;gap:24px;margin-bottom:0;}
+.stock-workspace .staff-title{font:600 24px/1.3 var(--sans);}
+.stock-workspace .staff-sub{max-width:76ch;margin-top:8px;font:16px/1.5 var(--sans);}
+.stock-workspace .wh-onboarding-btn{min-height:44px;padding:10px 16px;font:500 16px/1.4 var(--sans);white-space:normal;}
+.stock-workspace .stock-context{gap:14px;}
+.stock-workspace .stock-choice{min-width:300px;max-width:min(640px,100%);}
+.stock-workspace .stock-choice>summary{padding:12px 16px;}
+.stock-workspace .stock-choice-label{font-size:16px;}
+.stock-workspace .pr-bar{gap:12px;margin-bottom:18px;}
+.stock-workspace .pr-bar .mp-field{min-height:46px;font:16px/1.4 var(--sans);max-width:520px;}
+.stock-workspace .ord-meta{font:16px/1.5 var(--sans);color:var(--muted);}
+.stock-workspace .pr-seller{flex:1 1 280px;min-width:0;font:600 20px/1.4 var(--sans);overflow-wrap:anywhere;}
+.stock-workspace #productsSellerName{display:none;}
+.stock-workspace #productsLevel2>.pr-bar:first-child{align-items:flex-start;}
+.stock-workspace #productsLevel2 #productsCompanyPicker{flex:1 1 260px;min-width:0;}
+.stock-workspace #productsLevel2 #productsCompanyPicker .stock-choice{min-width:0;width:100%;}
+.stock-workspace #productsLevel2 #productsCompanyPicker .stock-choice>summary{min-height:44px;padding:10px 14px;}
+.stock-workspace .pr-filters{gap:10px;margin-bottom:18px;}
+.stock-workspace #productsVwBar:empty,.stock-workspace #productsTransfers:empty{display:none;}
+.stock-workspace .pr-scroll{border:1px solid var(--line);border-radius:10px;background:var(--panel);overflow:auto;}
+.stock-workspace .pr-table{width:100%;table-layout:fixed;min-width:1040px;border-collapse:collapse;font:18px/1.5 var(--sans);}
+.stock-company-col{width:30%;}
+.stock-summary-number-col{width:8.75%;}
+.stock-product-col{width:34%;}
+.stock-product-number-col{width:7.142857%;}
+.stock-location-col{width:16%;}
+.stock-workspace .pr-table th:first-child{width:auto;}
+.stock-workspace .pr-table th{padding:16px 12px;background:var(--panel-2);font:500 16px/1.4 var(--sans);letter-spacing:0;text-transform:none;white-space:normal;vertical-align:middle;}
+.stock-workspace .pr-table td{padding:18px 12px;vertical-align:middle;white-space:normal;overflow-wrap:anywhere;}
+.stock-workspace .pr-table th:first-child,.stock-workspace .pr-table td:first-child{padding-left:20px;padding-right:20px;}
+.stock-workspace .pr-table th:last-child,.stock-workspace .pr-table td:last-child{padding-right:16px;}
+.stock-workspace .pr-table .num{text-align:center;font-family:var(--sans);font-variant-numeric:tabular-nums;white-space:normal;}
+.stock-workspace .pr-table .sub,.stock-workspace .pr-table .cells{font:16px/1.5 var(--sans);}
+.stock-workspace .pr-table .sub{margin-top:5px;}
+.stock-workspace .pr-table tbody tr:last-child td{border-bottom:0;}
+.stock-workspace .pr-table .pr-click:hover{background:var(--panel-2);}
+.stock-workspace .pr-table .pr-name{display:block;font-weight:600;line-height:1.4;overflow-wrap:anywhere;}
+.stock-row-action{display:block;margin-top:10px;color:var(--accent);font:500 16px/1.4 var(--sans);}
+.stock-workspace .pr-table .pr-total td{background:var(--panel-2);font-weight:600;border-top:1px solid var(--line);}
+.stock-workspace .stock-product{gap:16px;align-items:flex-start;min-width:0;}
+.stock-workspace .stock-product .order-product-photo{width:56px;height:68px;flex:0 0 56px;border-radius:8px;}
+.stock-workspace .stock-product-name{font-weight:500;line-height:1.45;overflow-wrap:anywhere;}
+.stock-workspace .stock-product-identifiers{display:flex;flex-wrap:wrap;column-gap:14px;row-gap:4px;}
+.stock-workspace .stock-product-identifiers>span{overflow-wrap:anywhere;}
+.stock-workspace .stock-product-copy{min-width:0;flex:1;}
+.stock-workspace .stock-product-notes{display:flex;flex-direction:column;gap:4px;margin-top:8px;color:var(--terracotta);font:16px/1.5 var(--sans);overflow-wrap:normal;}
+.stock-workspace .stock-move{margin-top:12px;}
+.stock-workspace .pr-transfers .staff-title{font-size:18px!important;}
+.stock-empty{display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding:28px;border:1px solid var(--line);border-radius:10px;background:var(--panel);font:18px/1.5 var(--sans);overflow-wrap:anywhere;}
+.stock-empty>span{font-size:16px;color:var(--muted);}
+.stock-empty>b{font-weight:600;}
+
+/* Единственное закрытие всей области карты — в правом верхнем углу панели. */
+#whContent>.wh-row-group{position:relative;}
+.stock-map-actions{padding-right:56px;}
+#whSummary .wh-summary-stats{padding-right:56px;}
+.stock-map-close{position:absolute;top:10px;right:10px;display:flex;align-items:center;justify-content:center;width:44px;height:44px;padding:0;border:1px solid var(--line);border-radius:8px;background:var(--panel-2);color:var(--muted);cursor:pointer;}
+.stock-map-close:hover{color:var(--text);border-color:var(--accent);}
+.stock-map-close:focus-visible{outline:2px solid var(--accent);outline-offset:3px;}
+
+/* Создание доступно над списком, выбранного клиента форма показывает один раз. */
+.stock-vw-entry{display:flex;align-items:center;justify-content:space-between;gap:20px;margin:20px 24px 14px;min-width:0;}
+.stock-vw-entry>div{min-width:0;}
+.stock-vw-entry b{font:600 20px/1.4 var(--sans);}
+.stock-vw-entry p{margin-top:6px;color:var(--muted);font:16px/1.5 var(--sans);}
+.stock-vw-entry .wh-onboarding-btn{flex-shrink:0;min-height:44px;padding:11px 18px;font:500 16px/1.4 var(--sans);}
+.stock-vw-entry .wh-onboarding-btn[hidden]{display:none;}
+.stock-vw-workspace{margin-top:0;}
+.stock-vw-workspace>summary{font-size:18px;}
+.stock-vw-workspace>summary>span{font-size:16px;}
+.stock-vw-content{max-height:min(64vh,720px);padding:8px 20px 22px;}
+.stock-vw-content #warehouseVwPicker[hidden]{display:none;}
+.stock-vw-content .sp-sec{padding:20px;}
+.stock-vw-content .sp-head{flex-wrap:wrap;gap:12px;margin-bottom:10px;font:600 20px/1.4 var(--sans);}
+.stock-vw-content .sp-head>b{font-weight:600;}
+.stock-vw-content .stock-vw-intro{margin-bottom:18px;max-width:90ch;}
+.stock-vw-content .sp-key{align-items:center;gap:18px;padding:16px 0;font:18px/1.5 var(--sans);}
+.stock-vw-content .sp-key>span:first-child{min-width:0;overflow-wrap:anywhere;}
+.stock-vw-content .mp-card-sub{font:16px/1.5 var(--sans);}
+.stock-vw-content .mp-card-acts{flex-wrap:wrap;gap:10px;flex-shrink:0;}
+.stock-vw-content .mp-act{justify-content:center;min-height:44px;padding:10px 16px;font:500 16px/1.4 var(--sans);}
+.stock-vw-content .sp-vw-form{gap:18px;max-width:850px;padding:18px 0 0;}
+.stock-vw-form-context{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;font:18px/1.5 var(--sans);}
+.stock-vw-form-context>span{font-size:16px;color:var(--muted);}
+.stock-vw-form-context>b{font-weight:500;overflow-wrap:anywhere;}
+.stock-vw-content .sp-vw-field{gap:8px;font:500 16px/1.4 var(--sans);}
+.stock-vw-content .mp-field{min-height:46px;padding:12px 14px;font:18px/1.4 var(--sans);}
+.stock-vw-content .sp-check{gap:12px;align-items:flex-start;min-height:44px;font:18px/1.4 var(--sans);}
+.stock-vw-content .sp-check input{width:20px;height:20px;margin-top:3px;flex-shrink:0;accent-color:var(--accent);}
+.stock-vw-content .sp-check small{display:block;margin-top:5px;font:16px/1.5 var(--sans);}
+.stock-vw-content #vwSepMore:not([hidden]){display:flex;flex-direction:column;gap:16px;padding:18px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;}
+.stock-vw-content .rc-actions{gap:12px;flex-wrap:wrap;}
+.stock-vw-content .wh-onboarding-btn{min-height:44px;padding:10px 16px;font:500 16px/1.4 var(--sans);}
+.stock-form-error{padding:12px 16px;border:1px solid var(--terracotta);border-radius:8px;color:var(--terracotta);font:16px/1.5 var(--sans);}
+
+@media(min-width:1800px){
+  .stock-workspace .pr-table{font-size:19px;}
+  .stock-workspace .pr-table td{padding-top:22px;padding-bottom:22px;}
+  .stock-workspace .stock-product .order-product-photo{width:64px;height:76px;flex-basis:64px;}
+}
+@media(max-width:1100px){
+  .stock-workspace{padding:24px;}
+  .stock-workspace .staff-head{gap:16px;flex-wrap:wrap;}
+  .stock-vw-entry{align-items:flex-start;flex-wrap:wrap;}
+}
+@media(max-width:640px){
+  .stock-workspace{padding:20px 14px;gap:20px;}
+  .stock-workspace .staff-title{font-size:22px;}
+  .stock-workspace .stock-choice{width:100%;min-width:0;max-width:none;}
+  .stock-workspace .pr-seller{flex-basis:100%;font-size:19px;}
+  .stock-workspace .pr-bar .mp-field{max-width:none;width:100%;min-width:0;}
+  .stock-workspace .pr-scroll{overflow:visible;border:0;background:transparent;}
+  .stock-workspace .pr-table{display:block;min-width:0;width:100%;font-size:18px;}
+  .stock-workspace .pr-table colgroup{display:none;}
+  .stock-workspace .pr-table tbody{display:grid;gap:14px;}
+  .stock-workspace .pr-table tr{margin:0;background:var(--panel);}
+  .stock-workspace .pr-table td{padding:12px;vertical-align:top;}
+  .stock-workspace .pr-table td:first-child{padding:16px;}
+  .stock-workspace .pr-table td:last-child{padding-right:12px;}
+  .stock-workspace .pr-table td::before{font-size:16px;}
+  .stock-workspace .pr-table td.num{align-items:center;text-align:center;border-top:1px solid var(--line);}
+  .stock-workspace .pr-table td:nth-child(2n+1){border-left:1px solid var(--line);}
+  .stock-workspace .pr-table td:first-child{border-left:0;}
+  .stock-workspace .pr-table .cells{grid-column:1/-1;border-top:1px solid var(--line);border-left:0;}
+  .stock-workspace .stock-product{gap:12px;}
+  .stock-workspace .stock-product .order-product-photo{width:48px;height:60px;flex-basis:48px;}
+  .stock-workspace .pr-total td:first-child{background:var(--panel-2);}
+  .stock-empty{padding:22px 18px;}
+  .stock-vw-entry{gap:14px;margin:18px 14px 14px;}
+  .stock-vw-entry .wh-onboarding-btn{width:100%;}
+  .stock-vw-workspace{margin:0 14px;}
+  .stock-vw-content{padding:8px 14px 18px;max-height:64vh;}
+  .stock-vw-content .sp-key{align-items:flex-start;flex-direction:column;gap:12px;}
+  .stock-vw-content .mp-card-acts{width:100%;}
+  .stock-vw-content .sp-vw-form{max-width:none;}
+  .stock-vw-content .sp-sec{padding:16px;}
+  .stock-vw-content .rc-actions>.grow{display:none;}
+  .stock-vw-content .rc-actions>button{flex:1 1 100%;}
+}

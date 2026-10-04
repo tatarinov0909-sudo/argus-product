@@ -1,0 +1,157 @@
+/* Расчёты: существующая палитра, ясные действия и рабочие таблицы на всю ширину. */
+#view-billing > .staff-wrap{gap:18px;min-width:0;}
+#view-billing .staff-title{font-size:26px;line-height:1.2;}
+#view-billing .staff-sub,#view-billing .ord-meta{font:16px/1.5 var(--sans);color:var(--muted);max-width:100ch;}
+#view-billing .workspace-button,#view-billing .workspace-back{font:600 16px/1.3 var(--sans);min-height:46px;}
+#view-billing .workspace-button:disabled{opacity:1;color:var(--muted);background:var(--panel-2);border-color:var(--line);}
+#view-billing .workspace-filters{gap:16px;margin:0;}
+#view-billing #billFilters{display:grid;grid-template-columns:minmax(280px,1.5fr) minmax(180px,1fr) minmax(180px,1fr) auto;align-items:end;padding:18px;border:1px solid var(--line);border-radius:10px;background:var(--panel);}
+#view-billing .rc-field{min-width:0;gap:8px;}
+#view-billing .rc-field>span{font:500 15px/1.4 var(--sans);color:var(--muted);}
+#view-billing input.mp-field{width:100%;min-width:0;min-height:46px;padding:10px 12px;font:18px/1.35 var(--sans);font-variant-numeric:tabular-nums;}
+#view-billing input{color-scheme:dark;}
+#view-billing #billCompanyChoice{min-width:0;}
+#view-billing .finance-client-choice{display:flex;gap:10px;align-items:stretch;min-width:0;width:100%;}
+#view-billing .finance-client-choice .workspace-choice{flex:1;min-width:0;width:100%;}
+#view-billing .workspace-choice>summary{display:flex;align-items:center;gap:12px;min-height:46px;padding:10px 14px;font:500 18px/1.35 var(--sans);color:var(--text);background:var(--panel-2);overflow-wrap:anywhere;}
+#view-billing .workspace-choice>summary:after{float:none;margin-left:auto;color:var(--accent-2);}
+#view-billing .workspace-choice>summary>.finance-choice-name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font:inherit;color:inherit;}
+#view-billing .workspace-choice-menu{min-width:100%;max-height:360px;padding:6px;background:var(--panel);}
+#view-billing .workspace-choice-menu button{min-height:46px;padding:12px;font:16px/1.4 var(--sans);overflow-wrap:anywhere;}
+#view-billing .finance-back{flex-shrink:0;white-space:nowrap;background:var(--panel-2);}
+#view-billing .finance-client-context{display:flex;align-items:center;gap:16px;min-width:0;margin-bottom:4px;}
+#view-billing .finance-client-context h2{font:600 22px/1.4 var(--sans);overflow-wrap:anywhere;min-width:0;}
+#view-billing .workspace-notice{font:16px/1.5 var(--sans);padding:12px 16px;border-radius:0 8px 8px 0;}
+#view-billing .finance-guide{background:none;}
+#view-billing .workspace-section{padding:18px 0 0;}
+#view-billing .workspace-section h3{font:600 20px/1.4 var(--sans);margin:0 0 12px;overflow-wrap:anywhere;}
+#view-billing .finance-section-head{margin-bottom:16px;align-items:flex-start;gap:16px;}
+#view-billing .finance-section-head>div{flex:1;min-width:0;}
+#view-billing .finance-section-head h3{margin-bottom:4px;}
+#view-billing .finance-period{font:500 18px/1.4 var(--sans);color:var(--text);margin-bottom:6px;font-variant-numeric:tabular-nums;}
+#view-billing .finance-table{font:18px/1.45 var(--sans);width:100%;}
+#view-billing .finance-table th{font:600 15px/1.4 var(--sans);color:var(--muted);padding:12px 16px;background:var(--panel);}
+#view-billing .finance-table td{padding:14px 16px;vertical-align:middle;color:var(--text);overflow-wrap:anywhere;}
+#view-billing .finance-table .num{font-family:var(--sans);font-variant-numeric:tabular-nums;text-align:center;white-space:normal;}
+#view-billing .finance-amount{font-weight:600;}
+#view-billing .finance-clients th:first-child{width:25%;}
+#view-billing .finance-clients th:last-child{width:15%;}
+#view-billing .finance-client-button{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;min-height:46px;padding:8px 0;text-align:left;border:0;background:transparent;color:var(--text);font:600 19px/1.4 var(--sans);cursor:pointer;}
+#view-billing .finance-client-button>span:first-child{overflow-wrap:anywhere;}
+#view-billing .finance-client-arrow{color:var(--accent-2);font-size:22px;flex-shrink:0;}
+#view-billing .finance-client-button:hover{color:var(--accent-2);}
+#view-billing .finance-price-status{font:500 16px/1.4 var(--sans);}
+#view-billing .finance-price-status.configured{color:var(--green);}
+#view-billing .finance-price-status.missing{color:var(--terracotta);}
+#view-billing .finance-lines th:first-child{width:29%;}
+#view-billing .finance-lines th:nth-child(3){width:22%;}
+#view-billing .finance-source-row>td{padding:0 16px 12px;}
+#view-billing .finance-sources>summary,#view-billing .finance-history>summary{min-height:44px;padding:10px 0;color:var(--accent-2);font:500 16px/1.4 var(--sans);cursor:pointer;}
+#view-billing .finance-source-row .finance-table{font-size:16px;}
+#view-billing .finance-source-row .finance-table td{padding:12px;}
+#view-billing .bill-total{display:flex;justify-content:flex-end;align-items:baseline;gap:20px;padding:18px 0;border-bottom:1px solid var(--line);font:18px/1.4 var(--sans);}
+#view-billing .bill-total b{font-size:26px;font-weight:600;font-variant-numeric:tabular-nums;}
+#view-billing .finance-issue{margin:18px 0 12px;justify-content:flex-end;}
+#view-billing .finance-issue>.rc-field{flex:0 1 280px;}
+#view-billing #billTariff{display:grid;gap:12px;}
+#view-billing .workspace-invoice{margin:0;background:var(--panel);border-radius:10px;}
+#view-billing .workspace-invoice>summary{min-height:70px;padding:16px 18px;list-style:none;font:18px/1.4 var(--sans);gap:16px;}
+#view-billing .workspace-invoice>summary::-webkit-details-marker{display:none;}
+#view-billing .workspace-invoice>summary:before{font-size:18px;}
+#view-billing .finance-panel>summary b{font-weight:600;}
+#view-billing .finance-panel>summary>span{margin-left:auto;color:var(--muted);font-size:16px;}
+#view-billing .workspace-invoice[open]>summary{border-bottom:1px solid var(--line);}
+#view-billing .workspace-invoice-body{padding:18px;min-width:0;}
+#view-billing .finance-panel .workspace-invoice-body{display:flex;flex-direction:column;gap:18px;}
+#view-billing .bill-prices{grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;margin:0;}
+#view-billing .bill-prices small{font:15px/1.4 var(--sans);color:var(--muted);}
+#view-billing #billTariff .bill-opts{display:flex;align-items:center;gap:10px 18px;margin:0;min-width:0;}
+#view-billing #billTariff fieldset.bill-opts{padding:0;flex:2;}
+#view-billing .bill-opts legend{font:500 15px/1.4 var(--sans);color:var(--muted);margin-bottom:8px;}
+#view-billing .bill-opts label,#view-billing .finance-check{display:flex;align-items:center;gap:10px;min-height:44px;font:16px/1.4 var(--sans);cursor:pointer;}
+#view-billing #billTariff .bill-opts input{flex-shrink:0;margin:0;}
+#view-billing #billTariff .finance-check{flex-wrap:nowrap;align-items:flex-start;gap:10px;}
+#view-billing #billTariff .finance-check input{margin-top:3px;}
+#view-billing .finance-panel .workspace-button.primary{align-self:flex-start;}
+#view-billing .finance-history{padding:8px 0 0;}
+#view-billing .finance-invoices{display:grid;gap:12px;}
+#view-billing .finance-invoices>h3{margin-bottom:0;}
+#view-billing .finance-invoice>summary{display:grid;grid-template-columns:16px minmax(160px,1fr) minmax(175px,.75fr) auto minmax(130px,auto);gap:18px;}
+#view-billing .finance-invoice-name{display:flex;flex-direction:column;gap:4px;min-width:0;overflow-wrap:anywhere;}
+#view-billing .finance-invoice-name b{font-weight:600;}
+#view-billing .finance-invoice-name>span,#view-billing .finance-invoice-period{font-size:16px;color:var(--muted);}
+#view-billing .finance-invoice-amount{font-size:22px;font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums;}
+#view-billing .invoice-status{font:500 15px/1.4 var(--sans);padding:7px 10px;justify-self:end;max-width:100%;margin-left:0;background:var(--panel-2);color:var(--text);}
+#view-billing .invoice-status.paid{color:var(--green);}
+#view-billing .invoice-status.overdue{color:var(--terracotta);}
+#view-billing .invoice-status.partial{color:var(--accent-2);}
+#view-billing .finance-invoice-meta{display:flex;align-items:center;gap:20px 32px;flex-wrap:wrap;margin-bottom:20px;}
+#view-billing .finance-invoice-meta>div{display:flex;flex-direction:column;gap:6px;}
+#view-billing .finance-invoice-meta>div>span{font:15px/1.4 var(--sans);color:var(--muted);}
+#view-billing .finance-invoice-meta b{font:600 19px/1.4 var(--sans);font-variant-numeric:tabular-nums;}
+#view-billing .finance-invoice-meta>.workspace-button{margin-left:auto;}
+#view-billing .finance-payments{margin:20px 0 0;padding:18px 0;}
+#view-billing .finance-payment{border-top:1px solid var(--line);}
+#view-billing .finance-payment>summary{font:600 17px/1.4 var(--sans);color:var(--accent-2);padding:14px 0;min-height:48px;cursor:pointer;}
+#view-billing .finance-payment>.workspace-filters{margin:6px 0 12px;}
+#view-billing .finance-payment .finance-payment-note{flex:2;}
+#view-billing .finance-empty{display:flex;align-items:baseline;gap:10px 20px;flex-wrap:wrap;padding:16px 18px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font:16px/1.5 var(--sans);}
+#view-billing .finance-empty b{font-weight:500;color:var(--text);}
+#view-billing .finance-empty>span{color:var(--muted);}
+#view-billing summary:focus-visible{outline:2px solid var(--accent);outline-offset:-3px;}
+@media(max-width:1200px){
+  #view-billing #billFilters{grid-template-columns:minmax(0,1.5fr) minmax(160px,1fr) minmax(160px,1fr) auto;}
+  #view-billing .finance-client-choice{flex-wrap:wrap;}
+  #view-billing .finance-invoice>summary{grid-template-columns:16px minmax(0,1fr) auto;}
+  #view-billing .finance-invoice-period{grid-column:2;}
+  #view-billing .finance-invoice-amount{grid-column:3;grid-row:1;}
+  #view-billing .finance-invoice .invoice-status{grid-column:3;grid-row:2;}
+}
+@media(max-width:900px){
+  #view-billing #billFilters{grid-template-columns:repeat(2,minmax(0,1fr));}
+  #view-billing #billFilters>.rc-field:first-child{grid-column:1/-1;}
+  #view-billing #billFilters>.workspace-button{grid-column:1/-1;}
+  #view-billing .bill-prices{grid-template-columns:repeat(2,minmax(0,1fr));}
+  #view-billing .finance-invoice-meta>.workspace-button{margin-left:0;}
+}
+@media(max-width:640px){
+  #view-billing>.staff-wrap{padding:18px 14px 24px;gap:16px;}
+  #view-billing #billFilters{padding:14px;gap:14px 10px;}
+  #view-billing .finance-client-choice{flex-direction:column;}
+  #view-billing .finance-client-context{flex-direction:column;align-items:stretch;gap:12px;}
+  #view-billing .finance-back{width:100%;}
+  #view-billing .finance-section-head{flex-direction:column;}
+  #view-billing .finance-section-head>.workspace-button{width:100%;}
+  #view-billing .workspace-table-wrap{overflow:visible;}
+  #view-billing .finance-table,#view-billing .finance-table tbody{display:block;}
+  #view-billing .finance-table tr{margin:0 0 12px;background:var(--panel);}
+  #view-billing .finance-table tr>td{padding:12px;font-size:18px;line-height:1.4;}
+  #view-billing .finance-table .num{text-align:left;}
+  #view-billing .finance-table td[data-label]:before{font:500 15px/1.4 var(--sans);color:var(--muted);margin-bottom:6px;}
+  #view-billing .finance-client-button{font-size:19px;padding:0;}
+  #view-billing .finance-clients td:last-child{grid-column:1/-1;border-top:1px solid var(--line);}
+  #view-billing .finance-source-row{display:block;border:0;background:none;}
+  #view-billing .finance-source-row>td:first-child{display:block;background:none;padding:0 0 12px;}
+  #view-billing .finance-source-row .finance-table td{font-size:16px;}
+  #view-billing .bill-total{justify-content:space-between;gap:12px;padding-top:8px;}
+  #view-billing .bill-total b{font-size:24px;}
+  #view-billing .finance-issue>.rc-field{flex-basis:100%;}
+  #view-billing .finance-issue>.workspace-button{width:100%;}
+  #view-billing .workspace-invoice>summary{padding:14px;gap:10px;font-size:18px;}
+  #view-billing .finance-panel>summary{display:grid;grid-template-columns:14px minmax(0,1fr);}
+  #view-billing .finance-panel>summary>span{grid-column:2;margin-left:0;}
+  #view-billing .workspace-invoice-body{padding:14px;}
+  #view-billing .finance-panel .workspace-invoice-body{gap:16px;}
+  #view-billing .bill-prices{gap:16px 12px;}
+  #view-billing .bill-prices input.mp-field{font-size:17px;}
+  #view-billing #billTariff fieldset.bill-opts{flex-basis:100%;flex-direction:column;align-items:flex-start;gap:0;}
+  #view-billing .finance-panel .workspace-button.primary{width:100%;}
+  #view-billing .finance-invoice>summary{grid-template-columns:14px minmax(0,1fr);}
+  #view-billing .finance-invoice-amount{grid-column:2;grid-row:3;font-size:24px;}
+  #view-billing .finance-invoice .invoice-status{grid-column:2;grid-row:4;justify-self:start;}
+  #view-billing .finance-invoice-meta{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 12px;}
+  #view-billing .finance-invoice-meta>.workspace-button{grid-column:1/-1;width:100%;}
+  #view-billing .finance-payment .workspace-button{width:100%;}
+  #view-billing .finance-empty{display:block;padding:14px;}
+  #view-billing .finance-empty>span{display:block;margin-top:6px;}
+}

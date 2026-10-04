@@ -2343,6 +2343,9 @@
   }
 </style>
 <link rel="stylesheet" href="cabinet-workspace.css?v=8ef0874e">
+<link rel="stylesheet" href="cabinet-layout.css?v=d9c1e81d">
+<link rel="stylesheet" href="cabinet-stock-layout.css?v=dd66f1bc">
+<link rel="stylesheet" href="cabinet-finance-layout.css?v=75172d0d">
 <link rel="stylesheet" href="cabinet-order-filters.css?v=89c62720">
 </head>
 <body>
@@ -2430,10 +2433,14 @@
           <div><h1>Главная</h1><p>Текущая работа склада и задачи, которые требуют внимания.</p></div>
           <button type="button" class="home-refresh" onclick="loadHome()">Обновить сводку</button>
         </div>
-        <p class="home-status" id="homeUpdated" role="status">Загружаем сводку…</p>
-        <div id="todayStrip" aria-live="polite"></div>
-        <h2 class="home-actions-title">Перейти к работе</h2>
-        <div class="home-actions" id="homeActions"></div>
+        <section class="layout-home-summary" aria-labelledby="homeWorkTitle">
+          <div class="layout-section-head"><h2 id="homeWorkTitle">Сводка склада</h2><p class="home-status" id="homeUpdated" role="status">Загружаем сводку…</p></div>
+          <div id="todayStrip" aria-live="polite"></div>
+        </section>
+        <section class="layout-home-links" aria-labelledby="homeLinksTitle">
+          <h2 class="home-actions-title" id="homeLinksTitle">Перейти к работе</h2>
+          <div class="home-actions" id="homeActions"></div>
+        </section>
       </div>
     </div>
 
@@ -2594,6 +2601,7 @@
 
     <div class="view" id="view-warehouse">
 
+      <div class="stock-vw-entry"><div><b>Виртуальные склады клиентов</b><p>Товар для отдельных площадок и направлений внутри вашего склада.</p></div><button id="warehouseVwCreate" type="button" class="wh-onboarding-btn primary" onclick="startWarehouseVwCreate()">Создать виртуальный склад</button></div>
       <details class="stock-vw-workspace" id="warehouseVwWorkspace" ontoggle="onWarehouseVwToggle()">
         <summary>Склады продавцов <span>Назначение товара, отдельное хранение и зоны</span></summary>
         <div class="stock-vw-content">
@@ -2687,19 +2695,18 @@
         </div>
         <div class="staff-columns">
         <section class="staff-column staff-workers">
-          <div class="staff-head"><div><div class="staff-title">Кладовщики</div><div class="staff-sub">Приёмка, сборка и пересчёт на телефоне.</div></div>
+          <div class="staff-head"><div><h2 class="staff-toggle open" id="staffToggle"><span id="staffToggleLabel">Кладовщики</span></h2><div class="staff-sub">Приёмка, сборка и пересчёт на телефоне.</div></div>
             <button class="workspace-button" type="button" onclick="toggleStaffForm('worker')" aria-controls="staffWorkerForm" aria-expanded="false" id="staffWorkerFormButton">+ Выдать ключ</button>
           </div>
           <div id="staffWorkerForm" hidden>
             <div class="staff-add" data-form><input type="text" id="staffNameInput" placeholder="Имя кладовщика" aria-label="Имя кладовщика"><button type="button" onclick="addStaffMember()">Создать ключ кладовщика</button></div>
           </div>
-          <div class="staff-toggle open" id="staffToggle"><span id="staffToggleLabel">Кладовщики</span></div>
           <div id="staffRows"></div>
         </section>
         <section class="staff-column staff-managers">
         <div class="staff-head">
           <div>
-            <div class="staff-title">Менеджеры</div>
+            <h2 class="staff-toggle open" id="managersToggle"><span id="managersToggleLabel">Менеджеры</span></h2>
             <div class="staff-sub">Заказы, поставки и журнал. Дополнительные права задаются отдельно.</div>
           </div>
           <button class="workspace-button" type="button" onclick="toggleStaffForm('manager')" aria-controls="staffManagerForm" aria-expanded="false" id="staffManagerFormButton">+ Выдать ключ</button>
@@ -2708,8 +2715,8 @@
         <!-- Ключ выдаёт только кнопка: Enter форму не отправляет (владелец 27.09.2026). -->
         <div id="staffManagerForm" hidden>
         <div class="staff-add" data-form>
-          <input type="text" id="managerNameInput" placeholder="Имя менеджера">
-          <button onclick="addManager()">+ Выдать ключ менеджера</button>
+          <input type="text" id="managerNameInput" placeholder="Имя менеджера" aria-label="Имя менеджера">
+          <button type="button" onclick="addManager()">+ Выдать ключ менеджера</button>
         </div>
         <div class="staff-grants">
           <div class="staff-grants-title">Что открыть менеджеру, кроме заказов, поставок и журнала</div>
@@ -2717,9 +2724,6 @@
         </div>
         </div>
 
-        <div class="staff-toggle open" id="managersToggle">
-          <span id="managersToggleLabel">Менеджеры</span>
-        </div>
         <div id="managerRows"></div>
         </section>
         </div>
@@ -2977,17 +2981,10 @@
         </div>
 
         <div class="sl-tools" data-form>
-          <input type="search" id="sellerSearch" class="mp-field sl-search" placeholder="Найти клиента" oninput="renderMpCards()" autocomplete="off">
+          <input type="search" id="sellerSearch" class="mp-field sl-search" placeholder="Найти клиента" aria-label="Найти клиента" oninput="renderMpCards()" autocomplete="off">
           <div class="sl-add">
-            <input type="text" id="companyNameInput" class="mp-field" placeholder="Название нового клиента" onkeydown="if(event.key==='Enter') addCompany()">
+            <input type="text" id="companyNameInput" class="mp-field" placeholder="Название нового клиента" aria-label="Название нового клиента" onkeydown="if(event.key==='Enter') addCompany()">
             <button class="wh-onboarding-btn primary" type="button" onclick="addCompany()">+ Добавить клиента</button>
-          </div>
-        </div>
-        <div class="oc-status-bar" id="mpStatusBar">
-          <div class="oc-status-dot" id="mpStatusDot"></div>
-          <div>
-            <div class="oc-status-title" id="mpStatusTitle">Загрузка…</div>
-            <div class="oc-status-sub" id="mpStatusSub">—</div>
           </div>
         </div>
 
@@ -3010,18 +3007,27 @@
     </div>
 
     <div class="view" id="view-settings">
-      <div class="oc-wrap">
-        <div class="ready nav-launch" id="readyCard" hidden></div>
-        <div class="staff-head">
+      <div class="oc-wrap layout-settings-wrap">
+        <div class="staff-head layout-page-head">
           <div>
             <div class="staff-title">Настройки склада</div>
             <div class="staff-sub">Как работает ваш склад. Аргус подстраивается под эти ответы — под вас ничего не переделывают. Любой ответ можно поменять позже.</div>
           </div>
         </div>
-        <div class="set-form" data-form>
-          <label class="set-field"><span>Название склада</span><input id="setName" class="mp-field" maxlength="120"></label>
-          <label class="set-field"><span>Город</span><input id="setCity" class="mp-field" maxlength="120"></label>
-          <label class="set-field"><span>Юрлицо склада — «Хранитель» в актах</span><input id="setLegal" class="mp-field" maxlength="200"></label>
+        <div class="ready nav-launch" id="readyCard" hidden></div>
+        <div class="set-form layout-settings-form" data-form>
+          <div class="layout-settings-grid">
+          <section class="layout-settings-section" aria-labelledby="settingsDetailsTitle">
+            <h2 id="settingsDetailsTitle">Склад и реквизиты</h2>
+            <div class="layout-settings-fields">
+              <label class="set-field"><span>Название склада</span><input id="setName" class="mp-field" maxlength="120"></label>
+              <label class="set-field"><span>Город</span><input id="setCity" class="mp-field" maxlength="120"></label>
+              <label class="set-field layout-field-wide"><span>Юрлицо склада — «Хранитель» в актах</span><input id="setLegal" class="mp-field" maxlength="200"></label>
+              <div class="set-field layout-field-wide"><span id="setTzTitle">Часовой пояс склада</span><input type="hidden" id="setTz"><details id="setTzChoice" class="layout-settings-choice"><summary aria-labelledby="setTzTitle setTzLabel"><b id="setTzLabel">Загружаем…</b></summary><div id="setTzMenu" class="layout-settings-choice-menu"></div></details><small class="set-help">По нему «сегодня», номера поставок и утренняя сводка.</small></div>
+            </div>
+          </section>
+          <section class="layout-settings-section" aria-labelledby="settingsWorkTitle">
+          <h2 id="settingsWorkTitle">Учёт и поставки</h2>
           <div class="set-q">
             <div class="set-q-title">Где вы ведёте учёт остатков товара продавцов?</div>
             <label class="set-opt"><input type="radio" name="setStock" value="1c"><span><b>В 1С</b><small>«Всего товара» у продавца — число из 1С. Подключение — в разделе «Подключение 1С».</small></span></label>
@@ -3032,9 +3038,11 @@
             <label class="set-opt"><input type="radio" name="setSupplies" value="ff"><span><b>Мы, ключом продавца</b><small>Аргус подскажет у каждого продавца включить «Разрешить менять статусы» — с его согласия.</small></span></label>
             <label class="set-opt"><input type="radio" name="setSupplies" value="seller"><span><b>Продавец сам</b><small>Аргус только читает заказы, поставку на WB продавец делает у себя.</small></span></label>
           </div>
-          <label class="set-field"><span>Часовой пояс склада — по нему «сегодня», номера поставок и утренняя сводка</span><select id="setTz" class="mp-field"></select></label>
+          </section>
+          <section class="layout-settings-section layout-settings-market" aria-labelledby="settingsClientTitle">
+          <h2 id="settingsClientTitle">Работа с клиентами</h2>
           <div class="set-q">
-            <div class="set-q-title">Как вас называют продавцы на WB</div>
+            <label class="set-q-title" for="setWbNames">Как вас называют продавцы на WB</label>
             <div class="set-help" style="margin-bottom:8px;">Продавец сам называет склад на WB, который завёл под вас, — например «ФФ Восход СПБ». Склады со словом из названия вашего склада Аргус отмечает вашими сам. Если продавцы пишут вас иначе, впишите эти слова через запятую.</div>
             <input id="setWbNames" class="mp-field" maxlength="300" placeholder="например: Восток, VSKHD">
           </div>
@@ -3042,16 +3050,18 @@
             <div class="set-q-title">Напоминания о складах продавцов</div>
             <label class="sp-check"><input type="checkbox" id="setVwReminders"><span>Кладовщик напоминает о складах продавцов<small>В утренней сводке и в ответе «что сейчас на складе»: заявки продавцов на перенос, переносы и решения, которые ждут продавца, заполненные зоны складов, задания «переложить».</small></span></label>
           </div>
-          <div class="set-actions"><button class="wh-onboarding-btn primary" type="button" onclick="saveSettings()">Сохранить</button><span id="setResult" class="set-help"></span></div>
-        </div>
-        <div class="set-form" data-form style="margin-top:28px;">
-          <div class="set-q">
-            <div class="set-q-title">Пароль владельца</div>
-            <label class="set-field"><span>Нынешний пароль</span><input id="pwdOld" class="mp-field" type="password" autocomplete="current-password"></label>
-            <label class="set-field" style="margin-top:10px;"><span>Новый пароль — не меньше 8 символов</span><input id="pwdNew" class="mp-field" type="password" autocomplete="new-password"></label>
-            <div class="set-actions" style="margin-top:12px;"><button class="wh-onboarding-btn" type="button" onclick="changePassword()">Сменить пароль</button></div>
+          </section>
           </div>
+          <div class="set-actions layout-settings-actions"><button class="wh-onboarding-btn primary" type="button" onclick="saveSettings()">Сохранить настройки</button><span id="setResult" class="set-help" role="status"></span></div>
         </div>
+        <details class="layout-settings-security">
+          <summary>Пароль владельца</summary>
+          <div class="set-form layout-password-form" data-form>
+            <label class="set-field"><span>Нынешний пароль</span><input id="pwdOld" class="mp-field" type="password" autocomplete="current-password"></label>
+            <label class="set-field"><span>Новый пароль — не меньше 8 символов</span><input id="pwdNew" class="mp-field" type="password" autocomplete="new-password"></label>
+            <div class="set-actions layout-field-wide"><button class="wh-onboarding-btn" type="button" onclick="changePassword()">Сменить пароль</button></div>
+          </div>
+        </details>
       </div>
     </div>
 
@@ -3192,8 +3202,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <script src="back.js?v=4901b838" defer></script>
 <script src="form-keys.js?v=cd462175" defer></script>
-<script src="billing-owner.js?v=efc632a4" defer></script>
-<script src="cabinet_main.js?v=cdced5f3" defer></script>
+<script src="billing-owner.js?v=c3294181" defer></script>
+<script src="cabinet_main.js?v=2b327678" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->

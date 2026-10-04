@@ -486,7 +486,7 @@
       if(label){
         label.innerHTML = staffError
           ? 'Менеджеры <span class="staff-toggle-count">— не загрузились</span>'
-          : 'Менеджеры <span class="staff-toggle-count">· ' + staffCountText(managers) + '</span>';
+          : 'Менеджеры <span class="staff-toggle-count">' + staffCountText(managers) + '</span>';
       }
       managerWrap.innerHTML = staffError
         ? '<div class="staff-empty">Не удалось загрузить: ' + escapeHTML(staffError) + '</div>'
@@ -512,7 +512,7 @@
     if(label){
       label.innerHTML = staffError
         ? 'Кладовщики <span class="staff-toggle-count">— не загрузились</span>'
-        : 'Кладовщики <span class="staff-toggle-count">· ' + staffCountText(workers) + '</span>';
+        : 'Кладовщики <span class="staff-toggle-count">' + staffCountText(workers) + '</span>';
     }
 
     if(staffError){
@@ -534,7 +534,7 @@
   function staffCountText(rows){
     const active = rows.filter(s => s.active).length;
     const revoked = rows.length - active;
-    return active + (revoked ? ', отозвано ' + revoked : '');
+    return 'Активных: ' + active + (revoked ? ' · Отозвано: ' + revoked : '');
   }
 
   // Один сворачиватель на оба списка: работников и продавцов. Второй такой же
@@ -1495,7 +1495,13 @@
   }
   function renderProductsCompanyPicker(){
     const host = document.getElementById('productsCompanyPicker');
-    if(host) host.innerHTML = stockCompanyChoiceHtml(productsFor, 'selectProductsCompany', 'Все продавцы');
+    if(host){
+      host.innerHTML = stockCompanyChoiceHtml(productsFor, 'selectProductsCompany', 'Все продавцы');
+      const toolbar = document.querySelector('#productsLevel2 > .pr-bar');
+      const summary = document.getElementById('productsLevel1');
+      if(productsFor && toolbar) toolbar.insertBefore(host, document.getElementById('productsSellerName'));
+      else if(summary) summary.before(host);
+    }
     document.getElementById('productsWarehouseSettings').hidden = !canOpenView('warehouse');
   }
   function openProductsWarehouses(){
@@ -1542,16 +1548,20 @@
 
   async function loadSellerStock(){
     productsFor = '';
-    productsLoadRun++;
+    const run = ++productsLoadRun;
     renderProductsCompanyPicker();
     document.getElementById('productsLevel1').hidden = false;
     document.getElementById('productsLevel2').hidden = true;
     const box = document.getElementById('sellersList');
-    if(!sellerStock) box.innerHTML = '<div class="staff-empty">Загружаем…</div>';
+    if(!sellerStock) box.innerHTML = '<div class="stock-empty" role="status">Загружаем остатки клиентов…</div>';
     try{
-      sellerStock = await apiFetch('/api/sellers/stock-summary');
+      const summary = await apiFetch('/api/sellers/stock-summary');
+      if(productsFor || run !== productsLoadRun) return;
+      sellerStock = summary;
     } catch(e){
-      box.innerHTML = '<div class="staff-empty">Не удалось загрузить остатки: ' + escapeHTML(e.message) + '</div>';
+      if(productsFor || run !== productsLoadRun) return;
+      box.innerHTML = '<div class="stock-empty" role="alert"><b>Остатки не загрузились</b><span>' + escapeHTML(e.message)
+        + '</span><button type="button" class="wh-onboarding-btn" onclick="loadSellerStock()">Повторить загрузку</button></div>';
       return;
     }
     if(!productsFor) renderSellerStock();
@@ -1569,19 +1579,19 @@
     const rows = sellerStockRows();
     document.getElementById('sellersMeta').textContent = all.length
       ? all.length + ' ' + pluralRu(all.length, 'продавец', 'продавца', 'продавцов') : '';
-    if(all.length === 0){ box.innerHTML = '<div class="staff-empty">Продавцов пока нет — заведите их в «Клиентах».</div>'; return; }
-    if(rows.length === 0){ box.innerHTML = '<div class="staff-empty">Такого продавца нет.</div>'; return; }
+    if(all.length === 0){ box.innerHTML = '<div class="stock-empty"><b>Клиентов пока нет</b><span>Добавьте первого клиента в разделе «Клиенты». Здесь появятся его остатки и товары.</span></div>'; return; }
+    if(rows.length === 0){ box.innerHTML = '<div class="stock-empty"><b>Клиент не найден</b><span>Попробуйте другое название или очистите поиск.</span></div>'; return; }
     const sum = (f) => rows.reduce((t, s) => t + Number(s[f] || 0), 0);
     const known = (f) => (rows.some(s => s[f] !== null) ? sum(f) : null);
     const updated = (s) => (s.updatedAt ? (sellerStock.source === 'argus' ? 'пересчёт ' : '1С: ')
       + new Date(s.updatedAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
-    box.innerHTML = '<div class="pr-scroll"><table class="pr-table pr-sellers"><thead><tr><th>Продавец</th>'
+    box.innerHTML = '<div class="pr-scroll"><table class="pr-table pr-sellers"><colgroup><col class="stock-company-col"><col span="8" class="stock-summary-number-col"></colgroup><thead><tr><th>Клиент</th>'
       + '<th class="num">Всего</th><th class="num">Заказано</th><th class="num">В сборке</th><th class="num">В пути</th>'
       + '<th class="num">Доступно</th><th class="num">Брак</th><th class="num">Не хватает</th><th class="num">В ячейках</th></tr></thead><tbody>'
       + rows.map(s => '<tr class="pr-click" tabindex="0" onclick="openSellerProducts(\'' + escapeHTML(s.companyId) + '\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();this.click()}">'
         + '<td><span class="pr-name">' + escapeHTML(s.name) + '</span><div class="sub">'
         + escapeHTML([nfmt(s.productCount) + ' ' + pluralRu(s.productCount, 'товар', 'товара', 'товаров'), updated(s)].filter(Boolean).join(' · '))
-        + (s.unknownCount ? '<br>без числа учёта: ' + nfmt(s.unknownCount) : '') + '</div></td>'
+        + (s.unknownCount ? '<br>без числа учёта: ' + nfmt(s.unknownCount) : '') + '</div><span class="stock-row-action" aria-hidden="true">Открыть товары →</span></td>'
         + '<td class="num">' + nfmt(s.total) + '</td>'
         + '<td class="num">' + nfmt(s.ordered) + '</td>'
         + '<td class="num">' + nfmt(s.inAssembly) + '</td>'
@@ -1645,13 +1655,14 @@
     const scroller = document.querySelector('#view-products > .stock-workspace');
     const sameCompany = box.dataset.companyId === companyId;
     const scrollTop = sameCompany ? scroller?.scrollTop || 0 : 0;
-    if(!sameCompany) box.innerHTML = '<div class="staff-empty">Загружаем…</div>';
+    if(!sameCompany) box.innerHTML = '<div class="stock-empty" role="status">Загружаем товары клиента…</div>';
     box.dataset.companyId = companyId;
     let rows;
     try{
       rows = await apiFetch('/api/sellers/stock?companyId=' + encodeURIComponent(companyId));
     } catch(e){
-      if(productsFor === companyId && run === productsLoadRun) box.innerHTML = '<div class="staff-empty">Не удалось загрузить товары: ' + escapeHTML(e.message) + '</div>';
+      if(productsFor === companyId && run === productsLoadRun) box.innerHTML = '<div class="stock-empty" role="alert"><b>Товары не загрузились</b><span>' + escapeHTML(e.message)
+        + '</span><button type="button" class="wh-onboarding-btn" onclick="loadProducts()">Повторить загрузку</button></div>';
       return;
     }
     if(productsFor !== companyId || run !== productsLoadRun) return;   // пока ждали, сменили продавца или обновили
@@ -1862,9 +1873,9 @@
         + ' · продавец запретил складу решать такое без него</span></span></div>').join('') + '</div>';
     document.getElementById('productsMeta').textContent = productRows.length
       ? nfmt(productRows.length) + ' ' + pluralRu(productRows.length, 'товар', 'товара', 'товаров') : '';
-    if(productRows.length === 0){ box.innerHTML = '<div class="staff-empty">У продавца пока нет товаров. Заведите первый кнопкой «+ Добавить товар».</div>'; return; }
-    if(rows.length === 0){ box.innerHTML = '<div class="staff-empty">Под этот поиск и фильтр товаров нет.</div>'; return; }
-    box.innerHTML = '<div class="pr-scroll"><table class="pr-table"><thead><tr><th>Товар</th>'
+    if(productRows.length === 0){ box.innerHTML = '<div class="stock-empty"><b>У клиента пока нет товаров</b><span>Добавьте первый товар кнопкой «+ Добавить товар».</span></div>'; return; }
+    if(rows.length === 0){ box.innerHTML = '<div class="stock-empty"><b>Товары не найдены</b><span>Измените поиск или выберите другой фильтр.</span></div>'; return; }
+    box.innerHTML = '<div class="pr-scroll"><table class="pr-table pr-products"><colgroup><col class="stock-product-col"><col span="7" class="stock-product-number-col"><col class="stock-location-col"></colgroup><thead><tr><th>Товар</th>'
       + '<th class="num">Всего</th><th class="num">Заказано</th><th class="num">В сборке</th><th class="num">В пути</th>'
       + '<th class="num">Доступно</th><th class="num">Брак</th><th class="num">В ячейках</th><th>Где лежит</th></tr></thead><tbody>'
       + rows.map(r => {
@@ -1880,8 +1891,12 @@
         // Раскладка по складам — под названием, только ненулевые склады.
         const split = hasVw && !w && r.byWarehouse
           ? r.byWarehouse.filter(x => x.onHand).map(x => escapeHTML(x.name) + ' ' + nfmt(x.onHand)).join(' · ') : '';
-        const name = '<td><div class="stock-product">' + productPhotoHtml(companyId, r.sku) + '<div>' + escapeHTML(r.name || '—') + '<div class="sub">' + escapeHTML([r.sku, r.barcode].filter(Boolean).join(' · ')) + '</div>'
+        const name = '<td><div class="stock-product">' + productPhotoHtml(companyId, r.sku) + '<div class="stock-product-copy"><div class="stock-product-name">' + escapeHTML(r.name || '—') + '</div><div class="sub stock-product-identifiers">'
+          + (r.sku ? '<span>Артикул: ' + escapeHTML(r.sku) + '</span>' : '') + (r.barcode ? '<span>Штрихкод: ' + escapeHTML(r.barcode) + '</span>' : '') + '</div>'
           + (split ? '<div class="sub pr-split">' + split + '</div>' : '')
+          + (!w && (short > 0 || notPlaced) ? '<div class="stock-product-notes">'
+            + (short > 0 ? '<span>Не хватает: ' + nfmt(short) + ' шт.</span>' : '')
+            + (notPlaced ? '<span>Не разложено по ячейкам: ' + nfmt(notPlaced) + ' шт.</span>' : '') + '</div>' : '')
           + (hasVw && r.byWarehouse && r.byWarehouse.some(x => x.onHand > 0) ? '<button type="button" class="stock-move" onclick="openTransfer('
             + escapeHTML(JSON.stringify(r.sku)) + ')">Перенести</button>' : '') + '</div></div></td>';
         if(w){
@@ -1901,9 +1916,9 @@
           + '<td class="num">' + nfmt(r.orderedNotInSupply) + '</td>'
           + '<td class="num">' + nfmt(r.inAssembly) + '</td>'
           + '<td class="num">' + nfmt(r.inTransit) + '</td>'
-          + '<td class="num strong">' + nfmt(r.sellerAvailable) + (short > 0 ? '<div class="sub warn">не хватает ' + nfmt(short) + '</div>' : '') + '</td>'
+          + '<td class="num strong">' + nfmt(r.sellerAvailable) + '</td>'
           + '<td class="num' + (prDefect(r) ? ' warn' : '') + '">' + nfmt(prDefect(r)) + '</td>'
-          + '<td class="num">' + nfmt(prInCells(r)) + (notPlaced ? '<div class="sub warn">не разложено ' + nfmt(notPlaced) + '</div>' : '') + '</td>'
+          + '<td class="num">' + nfmt(prInCells(r)) + '</td>'
           + '<td class="cells">' + where + '</td>'
           + '</tr>';
       }).join('')
@@ -3576,7 +3591,11 @@
   }
   function whPanelActionsHtml(){
     return '<div class="stock-map-actions"><button class="wh-panel-back" type="button" onclick="showWhSummary()">← Назад к сводке</button>'
-      + '<button class="stock-context-button" type="button" onclick="closeWhPanels()" aria-label="Убрать все панели карты">✕ Убрать панели</button></div>';
+      + whPanelCloseHtml() + '</div>';
+  }
+  function whPanelCloseHtml(){
+    return '<button class="stock-map-close" type="button" onclick="closeWhPanels()" aria-label="Убрать все панели карты" title="Закрыть панели">'
+      + '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>';
   }
   function closeWhPanels(){
     closeWhDetailPanel();
@@ -3664,6 +3683,7 @@
       : '<div class="wh-summary-attn-empty">Расхождений нет — всё сходится.</div>';
 
     panel.innerHTML = `
+      ${whPanelCloseHtml()}
       <div class="wh-summary-stats">
         <div class="wh-summary-stat"><div class="num">${s.cellTotal}</div><div class="lbl">всего мест</div></div>
         <div class="wh-summary-stat"><div class="num">${s.occupiedUnits}</div><div class="lbl">занято</div></div>
@@ -5276,8 +5296,13 @@
       + '<td class="home-num' + (r.warn ? ' home-warn' : '') + '" data-label="Количество">' + escapeHTML(String(r.value)) + '</td>'
       + '<td class="home-detail">' + escapeHTML(r.detail) + '</td>'
       + '<td><button type="button" class="home-link" onclick="switchView(\'' + r.view + '\')">' + escapeHTML(r.action || 'Открыть') + '</button></td></tr>';
-    document.getElementById('todayStrip').innerHTML = '<table class="home-table"><thead><tr><th>Работа</th><th class="home-num">Количество</th><th>Состояние</th><th>Перейти</th></tr></thead><tbody>'
-      + rows.filter(r => canOpenView(r.view)).map(row).join('') + '</tbody></table>';
+    const visible = rows.filter(r => canOpenView(r.view));
+    const group = (key, title, items) => items.length ? '<section class="home-work-group" data-home-group="' + key + '"><h2 class="home-group-heading">'
+      + title + '</h2><table class="home-table"><thead><tr><th>Работа</th><th class="home-num">Количество</th><th>Состояние</th><th>Перейти</th></tr></thead><tbody>'
+      + items.map(row).join('') + '</tbody></table></section>' : '';
+    const attention = visible.filter(r => r.category === 'attention');
+    document.getElementById('todayStrip').innerHTML = group('attention', attention.some(r => r.warn) ? 'Требуют внимания' : 'Решения и обмен', attention)
+      + group('work', 'Текущая работа', visible.filter(r => r.category !== 'attention'));
   }
   async function loadHome(){
     const run = ++homeRun;
@@ -5326,10 +5351,10 @@
         n(s.ready, 'готова к отгрузке', 'готовы к отгрузке', 'готовы к отгрузке'), n(s.onec, 'отгрузка из 1С', 'отгрузки из 1С', 'отгрузок из 1С')]), view: 'supplies', action: 'Открыть поставки' },
       { title: 'Приёмка', value: nfmt(rec), detail: detail([r.arrived ? n(r.arrived, 'машина приехала', 'машины приехали', 'машин приехали')
         : n(r.arrivals, 'привоз ожидается', 'привоза ожидаются', 'привозов ожидаются'), n(r.returns, 'возврат разобрать', 'возврата разобрать', 'возвратов разобрать')]), view: 'receipts', action: 'Открыть приходы' },
-      { title: 'Ждут решения', value: nfmt(dec), warn: dec > 0, detail: detail([n(d.discrepancies, 'расхождение', 'расхождения', 'расхождений'),
+      { category: 'attention', title: 'Ждут решения', value: nfmt(dec), warn: dec > 0, detail: detail([n(d.discrepancies, 'расхождение', 'расхождения', 'расхождений'),
         n(d.sellerRequests, 'заявка клиента на перенос', 'заявки клиентов на перенос', 'заявок клиентов на перенос'), n(d.recounts, 'пересчёт', 'пересчёта', 'пересчётов')]),
         view: d.discrepancies ? 'journal' : d.recounts ? 'inv' : d.sellerRequests ? 'products' : 'journal', action: 'Посмотреть решения' },
-      { title: 'Проблемы обмена', value: nfmt(exch), warn: exch > 0, detail: detail([x.sync.length ? '1С: ' + n(x.sync.length, 'неполадка', 'неполадки', 'неполадок') : '',
+      { category: 'attention', title: 'Проблемы обмена', value: nfmt(exch), warn: exch > 0, detail: detail([x.sync.length ? '1С: ' + n(x.sync.length, 'неполадка', 'неполадки', 'неполадок') : '',
         x.wbUnmapped ? n(x.wbUnmapped, 'заказ WB не сопоставлен', 'заказа WB не сопоставлены', 'заказов WB не сопоставлены') : '', exch ? '' : 'Неполадок не видно']),
         view: x.sync.length ? '1c' : 'mp', action: 'Проверить обмен' },
       { title: 'Переписка с клиентами', value: '—', detail: 'Комментарии и документы по каждому приходу', view: 'receipts', action: 'Открыть приходы' },
@@ -5622,6 +5647,34 @@
     ['Asia/Vladivostok', 'Владивосток, UTC+10'], ['Asia/Magadan', 'Магадан, UTC+11'], ['Asia/Kamchatka', 'Камчатка, UTC+12'],
     ['Europe/Minsk', 'Минск, UTC+3'], ['Asia/Almaty', 'Алматы, UTC+5'], ['Asia/Tashkent', 'Ташкент, UTC+5'],
   ];
+  function renderSettingsTimezone(current){
+    const input = document.getElementById('setTz'), menu = document.getElementById('setTzMenu'), label = document.getElementById('setTzLabel');
+    if(!input || !menu || !label) return;
+    input.value = current;
+    const zones = TIMEZONES.some(z => z[0] === current) ? TIMEZONES : [[current, current], ...TIMEZONES];
+    label.textContent = zones.find(z => z[0] === current)[1];
+    menu.innerHTML = zones.map(([value, title]) => '<button type="button" data-timezone="' + escapeHTML(value)
+      + '" aria-pressed="' + (value === current) + '" onclick="selectSettingsTimezone(' + escapeHTML(JSON.stringify(value)) + ')">'
+      + escapeHTML(title) + '</button>').join('');
+  }
+  function selectSettingsTimezone(value){
+    if(!TIMEZONES.some(z => z[0] === value) && value !== whSettings?.timezone) return;
+    document.getElementById('setTz').value = value;
+    document.getElementById('setTzLabel').textContent = TIMEZONES.find(z => z[0] === value)?.[1] || value;
+    const choice = document.getElementById('setTzChoice');
+    choice.querySelectorAll('[data-timezone]').forEach(button => button.setAttribute('aria-pressed', button.dataset.timezone === value));
+    choice.open = false; choice.querySelector('summary').focus();
+  }
+  window.selectSettingsTimezone = selectSettingsTimezone;
+  document.addEventListener('keydown', event => {
+    const choice = event.target.closest?.('#setTzChoice[open]');
+    if(choice && event.key === 'Escape'){ event.preventDefault(); choice.open = false; choice.querySelector('summary').focus(); }
+  });
+  document.addEventListener('click', event => {
+    if(event.target.closest?.('#setTzChoice')) return;
+    const choice = document.getElementById('setTzChoice');
+    if(choice) choice.open = false;
+  });
   async function loadSettings(){
     try{ whSettings = await apiFetch('/api/warehouses/me'); }
     catch(e){ showWhToast('Настройки не загрузились: ' + e.message); return; }
@@ -5631,9 +5684,7 @@
     document.getElementById('setLegal').value = s.legal_name || '';
     document.querySelectorAll('input[name="setStock"]').forEach(r => { r.checked = r.value === s.stock_source; });
     document.querySelectorAll('input[name="setSupplies"]').forEach(r => { r.checked = r.value === s.wb_supplies_by; });
-    const tz = document.getElementById('setTz');
-    const zones = TIMEZONES.some(z => z[0] === s.timezone) ? TIMEZONES : [[s.timezone, s.timezone], ...TIMEZONES];
-    tz.innerHTML = zones.map(z => '<option value="' + escapeHTML(z[0]) + '"' + (z[0] === s.timezone ? ' selected' : '') + '>' + escapeHTML(z[1]) + '</option>').join('');
+    renderSettingsTimezone(s.timezone || 'Europe/Moscow');
     document.getElementById('setWbNames').value = (s.wb_names || []).join(', ');
     document.getElementById('setVwReminders').checked = s.vw_reminders !== false;
     document.getElementById('setResult').textContent = s.setup_at ? '' : 'Ответьте на вопросы и нажмите «Сохранить».';
@@ -5706,8 +5757,10 @@
 
   let sp = { companyId: null, data: null, error: '', origin: 'seller' };
   let warehouseVwCompanyId = '';
+  let warehouseVwCreateRequested = false;
   const spOpen = () => document.getElementById('wbWhModal').classList.contains('open');
   async function openSellerPanel(companyId){
+    warehouseVwCreateRequested = false;
     document.getElementById('warehouseVwWorkspace').open = false;
     document.getElementById('warehouseVwBody').innerHTML = '';
     sp = { companyId, data: null, error: '', vw: null, vwForm: null, origin: 'seller' };
@@ -5724,14 +5777,22 @@
   // доступно рядом с ячейками. Один контекст формы не дублирует id полей.
   function renderWarehouseVwPicker(){
     const host = document.getElementById('warehouseVwPicker');
-    if(host) host.innerHTML = stockCompanyChoiceHtml(warehouseVwCompanyId, 'setWarehouseVwCompany', 'Выберите продавца');
+    const editing = sp.origin === 'warehouse' && !!sp.vwForm;
+    if(host){
+      host.hidden = editing;
+      host.innerHTML = editing ? '' : stockCompanyChoiceHtml(warehouseVwCompanyId, 'setWarehouseVwCompany', 'Выберите клиента');
+    }
+    const create = document.getElementById('warehouseVwCreate');
+    if(create){ create.hidden = editing; create.disabled = !companies.length; }
   }
   function renderWarehouseVw(){
     renderWarehouseVwPicker();
     const body = document.getElementById('warehouseVwBody');
     if(!body) return;
     body.innerHTML = sp.origin === 'warehouse' && sp.companyId
-      ? vwSectionHtml() : '<div class="stock-hint">Выберите продавца, чтобы увидеть и настроить его склады.</div>';
+      ? vwSectionHtml() : '<div class="stock-hint">' + (warehouseVwCreateRequested
+        ? 'Выберите клиента — затем укажите название и назначение виртуального склада.'
+        : 'Выберите клиента, чтобы увидеть и настроить его виртуальные склады.') + '</div>';
   }
   function setWarehouseVwCompany(companyId){
     if(!canOpenView('warehouse') || companyId && !companies.some(c => c.id === companyId)) return;
@@ -5747,12 +5808,27 @@
     renderWarehouseVw();
     if(companyId) loadSellerVw();
   }
+  function startWarehouseVwCreate(companyId){
+    if(!canOpenView('warehouse')) return;
+    if(!companies.length){ showWhToast('Сначала добавьте клиента в разделе «Клиенты».'); return; }
+    const selected = [companyId, warehouseVwCompanyId, productsFor, companies.length === 1 ? companies[0].id : '']
+      .find(id => id && companies.some(c => c.id === id)) || '';
+    warehouseVwCreateRequested = true;
+    switchView('warehouse');
+    document.getElementById('warehouseVwWorkspace').open = true;
+    setWarehouseVwCompany(selected);
+    if(sp.origin === 'warehouse' && sp.companyId && sp.vw && !sp.vw.error){
+      warehouseVwCreateRequested = false;
+      openVwForm();
+    }
+    if(!selected){ renderWarehouseVw(); document.querySelector('#warehouseVwPicker summary')?.focus(); }
+  }
   function onWarehouseVwToggle(){
     if(!document.getElementById('warehouseVwWorkspace').open) return;
     renderWarehouseVwPicker();
     setWarehouseVwCompany(warehouseVwCompanyId);
   }
-  Object.assign(window, { setWarehouseVwCompany, onWarehouseVwToggle });
+  Object.assign(window, { setWarehouseVwCompany, onWarehouseVwToggle, startWarehouseVwCreate });
 
   /* ---------- Склады продавца (виртуальные склады, владелец 02.10.2026) ----------
      Часть товара продавца под своё назначение: площадка, юрлицо, «иное».
@@ -5776,20 +5852,26 @@
       const d = await vwOf(id, true);
       let tasks = [];
       if(d.warehouses.length){ try{ tasks = (await apiFetch('/api/vwarehouses/move-tasks')).filter(t => t.companyId === id); } catch(_){} }
-      if(sp === context){ sp.vw = d; sp.vwTasks = tasks; renderSellerPanel(); }
+      if(sp === context){
+        sp.vw = d; sp.vwTasks = tasks;
+        if(sp.origin === 'warehouse' && warehouseVwCreateRequested){ warehouseVwCreateRequested = false; openVwForm(); }
+        else renderSellerPanel();
+      }
     }
     catch(e){ if(sp === context){ sp.vw = { error: e.message }; renderSellerPanel(); } }
   }
   function vwSectionHtml(){
     const v = sp.vw;
-    let html = '<div class="sp-sec"><div class="sp-head"><b>Склады продавца</b>'
-      + (v && !v.error && !sp.vwForm ? '<button class="wh-onboarding-btn" type="button" onclick="openVwForm()">+ Склад</button>' : '') + '</div>'
-      + '<div class="mp-card-sub" style="margin-bottom:6px;">Часть товара продавца под своё назначение — площадку, юрлицо, опт. '
-      + 'По умолчанию товар лежит в тех же ячейках, меняется только учёт; «хранить отдельно» — у склада свои ячейки, можно закрепить зону. '
-      + 'Продавец видит склады и выбирает их в привозе. «Основной» — весь товар продавца; что ни к одному складу не отнесено, — «Остальной товар».</div>';
+    const creating = sp.vwForm && !sp.vwForm.id;
+    let html = '<div class="sp-sec"><div class="sp-head"><b>' + (creating ? 'Новый виртуальный склад' : 'Виртуальные склады клиента') + '</b>'
+      + (sp.origin !== 'warehouse' && v && !v.error && !sp.vwForm ? '<button class="wh-onboarding-btn" type="button" onclick="openVwForm()">Создать виртуальный склад</button>' : '') + '</div>'
+      + '<div class="mp-card-sub stock-vw-intro">' + (creating
+        ? 'Укажите название и назначение. Отдельное хранение можно включить при необходимости.'
+        : 'Разделите товар по площадкам, юрлицам или другим направлениям. По умолчанию меняется только учёт, товар остаётся в тех же ячейках.') + '</div>';
     if(!v) return html + '<div class="mp-card-sub">Загружаю…</div></div>';
     if(v.error) return html + '<div class="mp-card-sub wbo-warn">Не загрузилось: ' + escapeHTML(v.error) + '</div>'
       + '<button type="button" class="wh-onboarding-btn" onclick="loadSellerVw()">Повторить загрузку</button></div>';
+    if(creating) return html + vwFormHtml() + '</div>';
     html += '<div class="sp-key"><span><b>Основной</b> <span class="mp-card-sub">весь товар продавца, без брака</span></span></div>';
     for(const w of v.warehouses){
       if(sp.vwForm && sp.vwForm.id === w.id){ html += vwFormHtml(); continue; }
@@ -5798,8 +5880,8 @@
       if(w.zone && w.zone.cells) tags.push('зона: ' + w.zone.text + ' (пустых ' + w.zone.empty + ' из ' + w.zone.cells + ')');
       html += '<div class="sp-key"><span><b>' + escapeHTML(w.name) + '</b> <span class="mp-card-sub">' + escapeHTML(tags.join(' · ')) + '</span>'
         + (w.zone && w.zone.cells && !w.zone.empty ? '<span class="mp-card-sub wbo-warn">в зоне нет пустых ячеек — новый товар положат рядом</span>' : '') + '</span>'
-        + '<span class="mp-card-acts" style="margin:0;"><span class="mp-act" onclick="openVwForm(\'' + w.id + '\')">Изменить</span>'
-        + '<span class="mp-act warn" onclick="archiveVw(\'' + w.id + '\')">Убрать</span></span></div>';
+        + '<span class="mp-card-acts" style="margin:0;"><button type="button" class="mp-act" onclick="openVwForm(\'' + w.id + '\')">Изменить</button>'
+        + '<button type="button" class="mp-act warn" onclick="archiveVw(\'' + w.id + '\')">Убрать</button></span></div>';
     }
     if(sp.vwForm && !sp.vwForm.id) html += vwFormHtml();
     html += '<div class="sp-key"><span><b>Остальной товар</b> <span class="mp-card-sub">не отнесён ни к одному складу · любая площадка</span></span></div>';
@@ -5816,13 +5898,15 @@
   }
   function vwFormHtml(){
     const f = sp.vwForm;
+    const company = companies.find(c => c.id === sp.companyId);
     return '<div class="sp-vw-form" data-form>'
-      + '<label class="sp-vw-field">Название<input class="mp-field" id="vwName" maxlength="100" placeholder="Например: Озон, ООО Ромашка, Опт" value="' + escapeHTML(f.name || '') + '"></label>'
+      + '<div class="stock-vw-form-context"><span>Клиент</span><b>' + escapeHTML(company?.name || '') + '</b></div>'
+      + '<label class="sp-vw-field">Название виртуального склада<input class="mp-field" id="vwName" maxlength="100" placeholder="Например: WB, Опт или название юрлица" value="' + escapeHTML(f.name || '') + '"></label>'
       + '<input type="hidden" id="vwMp" value="' + escapeHTML(f.marketplace) + '"><details class="stock-choice" id="vwMarketplaceChoice">'
-      + '<summary><span class="stock-choice-label">Площадка</span><b>' + escapeHTML(VW_MP[f.marketplace]) + '</b></summary><div class="stock-choice-menu">'
+      + '<summary><span class="stock-choice-label">Назначение</span><b>' + escapeHTML(VW_MP[f.marketplace]) + '</b></summary><div class="stock-choice-menu">'
       + Object.entries(VW_MP).map(([k, t]) => '<button type="button" aria-pressed="' + (f.marketplace === k) + '" onclick="setVwMarketplace(\'' + k + '\')">' + (k === 'other' ? 'Иное — вне площадок' : t) + '</button>').join('')
       + '</div></details>'
-      + '<div class="mp-card-sub">Поставку на WB собирают со склада WB или из «Остального товара». Склад «иное» — отгрузка вне площадок.</div>'
+      + '<div class="mp-card-sub">Для юрлица, опта или другого направления выберите «Иное — вне площадок».</div>'
       + '<label class="sp-check"><input type="checkbox" id="vwSep"' + (f.keepSeparate ? ' checked' : '') + ' onchange="document.getElementById(\'vwSepMore\').hidden = !this.checked">'
       + '<span>Хранить отдельно<small>Товар этого склада не лежит в одной ячейке с товаром других складов продавца. Грузчику подсказываются отдельные ячейки.</small></span></label>'
       + '<div id="vwSepMore"' + (f.keepSeparate ? '' : ' hidden') + '>'
@@ -5830,8 +5914,9 @@
       +   '<label class="sp-vw-field">Зона — не обязательно<input class="mp-field" id="vwZone" maxlength="2000" placeholder="Например: ряд 3 или ячейки 4.1.2, 4.1.3" value="' + escapeHTML(f.zoneText || '') + '"></label>'
       +   '<div class="mp-card-sub">Зона — закреплённые ячейки: ничего другого туда не кладут. Заполнится — товар положат рядом, а вам придёт предупреждение.</div>'
       + '</div>'
+      + '<div id="vwFormError" class="stock-form-error" role="alert" hidden></div>'
       + '<div class="rc-actions"><span class="grow"></span><button type="button" class="wh-onboarding-btn" onclick="closeVwForm()">Отмена</button>'
-      + '<button type="button" class="wh-onboarding-btn primary" id="vwSave" onclick="saveVw()">' + (f.id ? 'Сохранить' : 'Завести склад') + '</button></div></div>';
+      + '<button type="button" class="wh-onboarding-btn primary" id="vwSave" onclick="saveVw()">' + (f.id ? 'Сохранить' : 'Создать виртуальный склад') + '</button></div></div>';
   }
   function openVwForm(id){
     if(!sp.vw || sp.vw.error) return;
@@ -5842,7 +5927,11 @@
     renderSellerPanel();
     const el = document.getElementById('vwName'); if(el) el.focus();
   }
-  function closeVwForm(){ sp.vwForm = null; renderSellerPanel(); }
+  function closeVwForm(){
+    warehouseVwCreateRequested = false;
+    sp.vwForm = null; renderSellerPanel();
+    if(sp.origin === 'warehouse') document.getElementById('warehouseVwCreate')?.focus();
+  }
   function setVwMarketplace(value){
     if(!VW_MP[value]) return;
     document.getElementById('vwMp').value = value;
@@ -5889,7 +5978,12 @@
     const keepSeparate = document.getElementById('vwSep').checked;
     const defectSeparate = keepSeparate && document.getElementById('vwSepDefect').checked;
     const zoneText = keepSeparate ? document.getElementById('vwZone').value.trim() : '';
-    if(!name){ showWhToast('Назовите склад.'); return; }
+    const error = document.getElementById('vwFormError');
+    if(error){ error.hidden = true; error.textContent = ''; }
+    if(!name){
+      if(error){ error.hidden = false; error.textContent = 'Укажите название виртуального склада.'; }
+      document.getElementById('vwName').focus(); return;
+    }
     const body = { companyId, name, marketplace, keepSeparate, defectSeparate };
     const was = f.was || {};
     if(zoneText !== (was.zone ? was.zone.text : '')) body.zone = parseZone(zoneText);
@@ -5923,7 +6017,10 @@
         showWhToast('Склад «' + name + '» заведён — продавцу пришло уведомление.');
       }
       await loadSellerVw();
-    } catch(e){ if(sp === context){ showWhToast('Не получилось: ' + e.message); btn.disabled = false; } }
+    } catch(e){ if(sp === context){
+      if(error){ error.hidden = false; error.textContent = 'Не удалось сохранить склад: ' + e.message; }
+      showWhToast('Не получилось: ' + e.message); btn.disabled = false;
+    } }
   }
   async function archiveVw(id){
     const context = sp, companyId = context.companyId;
@@ -6351,13 +6448,13 @@
       && (Date.now() - new Date(m.lastUsedAt).getTime()) < 60 * 60 * 1000).length;
     const writers = marketplaces.filter(m => m.writeEnabled).length;
 
-    if(marketplaces.length === 0){
+    if(dot && title && sub && marketplaces.length === 0){
       dot.classList.remove('connected');
       title.textContent = 'Ни одна площадка не подключена';
       sub.textContent = companies.length + ' '
         + pluralRu(companies.length, 'клиент', 'клиента', 'клиентов')
         + ' в складе · заказы с маркетплейсов пока не приходят, Аргус видит только накладные из 1С';
-    } else {
+    } else if(dot && title && sub){
       dot.classList.toggle('connected', alive > 0);
       title.textContent = alive > 0 ? 'Площадки подключены' : 'Подключено, но связи давно не было';
       sub.textContent = marketplaces.length + ' из ' + companies.length + ' '
