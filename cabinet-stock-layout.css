@@ -1,6 +1,12 @@
 /* Остатки и виртуальные склады: та же палитра, более ясная рабочая композиция. */
 #view-warehouse{overflow-y:auto;min-height:0;}
 #view-warehouse #whMapWrap{flex:0 0 auto;height:auto!important;}
+#warehouseVwStockPane[hidden]{display:none;}
+#view-warehouse.vw-stock-open>.stock-vw-entry,
+#view-warehouse.vw-stock-open>#warehouseVwWorkspace,
+#view-warehouse.vw-stock-open>#whOnboarding,
+#view-warehouse.vw-stock-open>#whConstructor,
+#view-warehouse.vw-stock-open>#whMapWrap{display:none!important;}
 .stock-workspace{gap:22px;padding:28px 32px;}
 .stock-workspace .staff-head{align-items:flex-start;gap:24px;margin-bottom:0;}
 .stock-workspace .staff-title{font:600 24px/1.3 var(--sans);}
@@ -72,7 +78,7 @@
 .stock-vw-workspace{margin-top:0;}
 .stock-vw-workspace>summary{font-size:18px;}
 .stock-vw-workspace>summary>span{font-size:16px;}
-.stock-vw-content{max-height:min(64vh,720px);padding:8px 20px 22px;}
+.stock-vw-content{max-height:none;overflow:visible;padding:8px 20px 22px;}
 .stock-vw-content #warehouseVwPicker[hidden]{display:none;}
 .stock-vw-content .sp-sec{padding:20px;}
 .stock-vw-content .sp-head{flex-wrap:wrap;gap:12px;margin-bottom:10px;font:600 20px/1.4 var(--sans);}
@@ -143,7 +149,7 @@
   .stock-vw-entry{gap:14px;margin:18px 14px 14px;}
   .stock-vw-entry .wh-onboarding-btn{width:100%;}
   .stock-vw-workspace{margin:0 14px;}
-  .stock-vw-content{padding:8px 14px 18px;max-height:64vh;}
+  .stock-vw-content{padding:8px 14px 18px;}
   .stock-vw-content .sp-key{align-items:flex-start;flex-direction:column;gap:12px;}
   .stock-vw-content .mp-card-acts{width:100%;}
   .stock-vw-content .sp-vw-form{max-width:none;}

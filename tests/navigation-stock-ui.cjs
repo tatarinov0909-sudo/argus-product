@@ -267,8 +267,8 @@ const stock = (companyId, extra) => [
       assert.ok(!managerStore.calls.some(call => ['/api/alerts/today', '/api/warehouses/me/readiness'].includes(call.path)));
       await page.close();
     }
-    // A long warehouse list must hand wheel scrolling to the page at its boundary.
-    // Merely checking scrollWidth misses an unreachable map below overflow:hidden.
+    // The warehouse page owns scrolling, including long virtual warehouse lists.
+    // Hit the visible list itself and verify that the map below remains reachable.
     for (const width of [375, 1440, 2048, 2560]) {
       const {page, store: wheelStore} = await prepare('owner');
       await page.setViewportSize({width, height:900});
@@ -290,11 +290,21 @@ const stock = (companyId, extra) => [
       });
       assert.ok(style.dark && style.height >= 44, 'VW action uses the dark theme and a usable target');
       if(process.env.ARGUS_SCREENSHOT_DIR) await page.screenshot({animations:'disabled',path:path.join(process.env.ARGUS_SCREENSHOT_DIR,'warehouse-buttons-'+width+'.png')});
-      await page.locator('.stock-vw-content').evaluate(el => {el.scrollTop = el.scrollHeight;});
-      const content = await page.locator('.stock-vw-content').boundingBox();
-      await page.mouse.move(Math.min(width - 24, content.x + 100), Math.min(875, content.y + 160));
+      const contentPoint = await page.locator('.stock-vw-content').evaluate(el => {
+        const box = el.getBoundingClientRect(), outer = document.querySelector('#view-warehouse').getBoundingClientRect();
+        const top = Math.max(0, box.top, outer.top), bottom = Math.min(window.innerHeight, box.bottom, outer.bottom);
+        const point = {x:box.left + 4, y:(top + bottom) / 2};
+        const css = getComputedStyle(el);
+        return {...point, visible:bottom > top, hitsContent:el.contains(document.elementFromPoint(point.x, point.y)),
+          overflowY:css.overflowY, maxHeight:css.maxHeight, scrollTop:el.scrollTop};
+      });
+      assert.ok(contentPoint.visible && contentPoint.hitsContent, 'wheel must hit the visible warehouse list');
+      assert.equal(contentPoint.overflowY, 'visible', 'the warehouse list must not own a nested scroll container');
+      assert.equal(contentPoint.maxHeight, 'none');
+      await page.mouse.move(contentPoint.x, contentPoint.y);
       await page.mouse.wheel(0, 450);
       await page.waitForFunction(() => document.querySelector('#view-warehouse').scrollTop > 100);
+      assert.equal(await page.locator('.stock-vw-content').evaluate(el => el.scrollTop), 0, 'wheel scroll belongs to the outer page');
       await page.locator('#view-warehouse').evaluate(el => {el.scrollTop = 0;});
       const outer = await page.locator('#view-warehouse').boundingBox();
       await page.mouse.move(outer.x + 3, Math.min(875, outer.y + 200));

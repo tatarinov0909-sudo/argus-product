@@ -52,10 +52,17 @@
       localStorage.removeItem('argus_token');
       localStorage.removeItem('argus_role');
       window.location.href = 'login.html';
-      throw new Error('сессия истекла');
+      const error = new Error('сессия истекла');
+      error.status = 401;
+      throw error;
     }
     const data = await res.json().catch(() => null);
-    if(!res.ok) throw new Error((data && data.error) || 'Ошибка запроса');
+    if(!res.ok){
+      const error = new Error((data && data.error) || 'Ошибка запроса');
+      error.status = res.status;
+      error.data = data;
+      throw error;
+    }
     return data;
   }
 
@@ -224,12 +231,14 @@
   // на прошлую, а не уводит из кабинета на вход (см. back.js).
   const viewTrail = [];
   let currentView = null;
+  let warehouseVwStockSession = null;
 
   function switchView(view, fromBack){
     if(GROUP_NAV[view]){
       view = document.getElementById('view-' + view)?.dataset.currentView;
     }
     if(!canOpenView(view)) return;
+    if(view !== 'warehouse' && warehouseVwStockSession) closeWarehouseVwStock(false);
     if(!fromBack && currentView && currentView !== view){
       viewTrail.push(currentView);
       if(viewTrail.length > 50) viewTrail.shift();
@@ -5760,6 +5769,7 @@
   let warehouseVwCreateRequested = false;
   const spOpen = () => document.getElementById('wbWhModal').classList.contains('open');
   async function openSellerPanel(companyId){
+    closeWarehouseVwStock(false);
     warehouseVwCreateRequested = false;
     document.getElementById('warehouseVwWorkspace').open = false;
     document.getElementById('warehouseVwBody').innerHTML = '';
@@ -5796,6 +5806,7 @@
   }
   function setWarehouseVwCompany(companyId){
     if(!canOpenView('warehouse') || companyId && !companies.some(c => c.id === companyId)) return;
+    if(warehouseVwStockSession && warehouseVwStockSession.companyId !== companyId) closeWarehouseVwStock(false);
     warehouseVwCompanyId = companyId;
     if(sp.origin === 'warehouse' && sp.companyId === companyId){
       renderWarehouseVwPicker();
@@ -5810,6 +5821,7 @@
   }
   function startWarehouseVwCreate(companyId){
     if(!canOpenView('warehouse')) return;
+    closeWarehouseVwStock(false);
     if(!companies.length){ showWhToast('Сначала добавьте клиента в разделе «Клиенты».'); return; }
     const selected = [companyId, warehouseVwCompanyId, productsFor, companies.length === 1 ? companies[0].id : '']
       .find(id => id && companies.some(c => c.id === id)) || '';
@@ -5829,6 +5841,48 @@
     setWarehouseVwCompany(warehouseVwCompanyId);
   }
   Object.assign(window, { setWarehouseVwCompany, onWarehouseVwToggle, startWarehouseVwCreate });
+
+  function closeWarehouseVwStock(restore = true){
+    const session = warehouseVwStockSession;
+    if(!session) return;
+    warehouseVwStockSession = null;
+    session.controller?.close(false);
+    const host = document.getElementById('warehouseVwStockPane');
+    host.hidden = true;
+    host.replaceChildren();
+    const view = document.getElementById('view-warehouse');
+    view.classList.remove('vw-stock-open');
+    if(restore && sp === session.context){
+      view.scrollTop = session.scrollTop;
+      [...document.querySelectorAll('[data-vw-stock]')].find(el => el.dataset.vwStock === session.warehouseId)?.focus({preventScroll:true});
+    }
+  }
+  function openVwStock(warehouseId){
+    if(!canOpenView('warehouse') || sp.origin !== 'warehouse' || !sp.companyId || sp.vw?.error) return;
+    const warehouse = sp.vw?.warehouses.find(w => w.id === warehouseId);
+    if(!warehouse || !window.ArgusVwStock) return;
+    closeWarehouseVwStock(false);
+    const context = sp, view = document.getElementById('view-warehouse');
+    const host = document.getElementById('warehouseVwStockPane');
+    const session = {context,companyId:context.companyId,warehouseId,scrollTop:view.scrollTop,controller:null};
+    warehouseVwStockSession = session;
+    host.hidden = false;
+    view.classList.add('vw-stock-open');
+    view.scrollTop = 0;
+    session.controller = window.ArgusVwStock.open({host,companyId:context.companyId,
+      sessionScope:{role:authPayload.role,warehouseId:authPayload.warehouseId,
+        ...(IS_MANAGER?{staffKeyId:authPayload.staffKeyId}:{ownerId:authPayload.ownerId})},
+      companyName:companies.find(c => c.id === context.companyId)?.name || '',warehouse,request:apiFetch,
+      onClose:() => {if(warehouseVwStockSession === session) closeWarehouseVwStock();},
+      onChanged:async () => {
+        delete vwCache[context.companyId];
+        if(sp !== context) return;
+        const refreshed = await Promise.allSettled([loadSellerVw(),renderWarehouseMap(),productsFor === context.companyId ? loadProducts() : Promise.resolve()]);
+        if(sp === context && refreshed.some(r => r.status === 'rejected')) showWhToast('Операция обработана, но обновить все данные не удалось. Откройте склад ещё раз.');
+      },
+    });
+  }
+  window.openVwStock = openVwStock;
 
   /* ---------- Склады продавца (виртуальные склады, владелец 02.10.2026) ----------
      Часть товара продавца под своё назначение: площадка, юрлицо, «иное».
@@ -5880,7 +5934,9 @@
       if(w.zone && w.zone.cells) tags.push('зона: ' + w.zone.text + ' (пустых ' + w.zone.empty + ' из ' + w.zone.cells + ')');
       html += '<div class="sp-key"><span><b>' + escapeHTML(w.name) + '</b> <span class="mp-card-sub">' + escapeHTML(tags.join(' · ')) + '</span>'
         + (w.zone && w.zone.cells && !w.zone.empty ? '<span class="mp-card-sub wbo-warn">в зоне нет пустых ячеек — новый товар положат рядом</span>' : '') + '</span>'
-        + '<span class="mp-card-acts" style="margin:0;"><button type="button" class="mp-act" onclick="openVwForm(\'' + w.id + '\')">Изменить</button>'
+        + '<span class="mp-card-acts" style="margin:0;">'
+        + (sp.origin === 'warehouse' ? '<button type="button" class="mp-act" data-vw-stock="' + escapeHTML(w.id) + '" onclick="openVwStock(\'' + w.id + '\')">Добавить товары</button>' : '')
+        + '<button type="button" class="mp-act" onclick="openVwForm(\'' + w.id + '\')">Изменить</button>'
         + '<button type="button" class="mp-act warn" onclick="archiveVw(\'' + w.id + '\')">Убрать</button></span></div>';
     }
     if(sp.vwForm && !sp.vwForm.id) html += vwFormHtml();
