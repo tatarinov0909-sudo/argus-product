@@ -1099,11 +1099,27 @@
   .rc-list-head{display:flex; align-items:baseline; gap:12px; margin-bottom:10px; flex-wrap:wrap;}
   .rc-src{font-size:13px; color:var(--muted); line-height:1.45; margin-top:3px; font-family:var(--sans); font-variant-numeric:tabular-nums;}
   .rc-acts{display:flex; gap:14px; justify-content:flex-end; flex-wrap:wrap;}
-  .nav-soon{margin-left:auto; font-size:11px; color:var(--muted); border:1px solid var(--line); border-radius:6px; padding:1px 6px;}
-  .bill-soon{font-size:12px; font-weight:600; color:var(--yellow, #C9A66B); border:1px solid currentColor; border-radius:6px; padding:2px 8px; margin-left:8px; vertical-align:middle;}
-  .bill-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-top:8px;}
-  .bill-card{border:1px dashed var(--line); border-radius:12px; padding:16px; display:grid; gap:6px; font-size:14px;}
-  .bill-card span{color:var(--muted); font-size:13px;}
+  /* Расчёты с продавцами (04.10.2026): прайс и начисления за месяц. */
+  .bill-month{max-width:200px;}
+  .bill-prices{display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin:12px 0;}
+  .bill-prices .rc-field small{color:var(--muted); font-size:13px;}
+  .bill-opts{display:flex; flex-wrap:wrap; gap:8px 20px; font-size:14px; margin-bottom:12px;}
+  .bill-opts label{display:flex; gap:8px; align-items:center; cursor:pointer;}
+  .bill-warn{border:1px solid rgba(201,166,107,0.6); background:var(--yellow-soft); color:var(--yellow); border-radius:10px; padding:10px 14px; font-size:14px; margin-bottom:12px;}
+  .bill-wrap{overflow-x:auto; border:1px solid var(--line); border-radius:10px;}
+  .bill-row{cursor:pointer;} .bill-row:hover td{background:var(--panel-2);}
+  .bill-detail td{background:var(--bg); font-size:14px;}
+  .bill-detail .bill-line{margin:6px 0;} .bill-detail .bill-src{color:var(--muted); font-size:13px;}
+  .bill-total td{font-weight:700;}
+  @media (max-width:640px){
+    .bill-month{max-width:none; width:100%;}
+    .bill-table thead{display:none;}
+    .bill-table, .bill-table tbody{display:block; width:100%;}
+    .bill-table tr{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:6px 12px; padding:12px; border-bottom:1px solid var(--line);}
+    .bill-table td{display:block; padding:0; border:0; min-width:0; overflow-wrap:anywhere;}
+    .bill-table td:first-child{grid-column:1 / -1;}
+    .bill-table td[data-l]::before{content:attr(data-l); display:block; font-size:12px; color:var(--muted);}
+  }
   .rc-flag-bad{color:var(--terracotta);}
   .rc-facts{display:grid; grid-template-columns:max-content 1fr; gap:6px 18px; margin:0 0 16px; font-size:14px;}
   .rc-facts dt{color:var(--muted);}
@@ -2341,7 +2357,7 @@
     <div class="nav-item" id="nav-warehouse" onclick="switchView('warehouse')"><span class="nav-dot"></span>Склад и ячейки</div>
     <div class="nav-item" id="nav-inv" onclick="switchView('inv')"><span class="nav-dot"></span>Инвентаризация<span class="nav-badge" id="invBadge"></span></div>
     <div class="nav-item" id="nav-acts" onclick="switchView('acts')"><span class="nav-dot"></span>Акты</div>
-    <div class="nav-item" id="nav-billing" onclick="switchView('billing')"><span class="nav-dot"></span>Расчёты с продавцами<span class="nav-soon">скоро</span></div>
+    <div class="nav-item" id="nav-billing" onclick="switchView('billing')"><span class="nav-dot"></span>Расчёты с продавцами</div>
 
     <div class="nav-sep"></div>
     <div class="nav-label">Настройки</div>
@@ -2789,19 +2805,14 @@
       <div class="staff-wrap">
         <div class="staff-head">
           <div>
-            <div class="staff-title">Расчёты с продавцами <span class="bill-soon">в разработке</span></div>
-            <div class="staff-sub">Здесь склад будет видеть, сколько каждый продавец должен за работу склада, — и тот же
-              расчёт продавец увидит у себя в кабинете. Сейчас раздел пустой: считать начнём, когда вы утвердите прайс склада.</div>
+            <div class="staff-title">Расчёты с продавцами</div>
+            <div class="staff-sub">Сколько каждый продавец должен складу за месяц — по вашему прайсу и работе, которую
+              записал Аргус: приёмка, сборка заказов, возвраты и хранение по дням.</div>
           </div>
+          <label class="rc-field bill-month"><span>Месяц</span><input type="month" id="billMonth" class="mp-field" onchange="loadBilling()"></label>
         </div>
-        <div class="bill-grid">
-          <div class="bill-card"><b>Хранение</b><span>за каждый день: сколько места занимал товар продавца — ячейки, паллеты или объём</span></div>
-          <div class="bill-card"><b>Упаковка</b><span>пакет, ВПП, короб, стрейч — по каждому собранному заказу и поставке</span></div>
-          <div class="bill-card"><b>Приёмка и операции</b><span>приёмка по штукам или местам, сборка заказа, маркировка, стикеровка, возвраты</span></div>
-          <div class="bill-card"><b>Счёт за период</b><span>итог по продавцу за месяц с расшифровкой по дням и операциям, выгрузка в Excel</span></div>
-        </div>
-        <div class="staff-sub" style="margin-top:18px">Что нужно от вас, чтобы включить: прайс склада (цена хранения и каждой
-          услуги).</div>
+        <div id="billTariff"></div>
+        <div id="billCharges"></div>
       </div>
     </div>
 
@@ -3127,7 +3138,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <script src="back.js?v=4901b838" defer></script>
 <script src="form-keys.js?v=02a92e0e" defer></script>
-<script src="cabinet_main.js?v=e64a5a14" defer></script>
+<script src="cabinet_main.js?v=1486a7fc" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->

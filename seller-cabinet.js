@@ -296,7 +296,7 @@
       const row = ws.getRow(head + 1 + k);
       columns.forEach((c, i) => {
         const cell = row.getCell(i + 1); const v = c.get(r, k);
-        if (c.type === 'num') { cell.value = v == null || v === '' ? null : Number(v); cell.numFmt = '#,##0'; }
+        if (c.type === 'num') { cell.value = v == null || v === '' ? null : Number(v); cell.numFmt = c.money ? '#,##0.00' : '#,##0'; }
         // Excel не знает часовых поясов: пишем время таким, каким его видит человек.
         else if (c.type === 'date') { const d = v ? new Date(v) : null; cell.value = d ? new Date(d.getTime() - d.getTimezoneOffset() * 60000) : null; cell.numFmt = c.dayOnly ? 'dd.mm.yyyy' : 'dd.mm.yyyy hh:mm'; }
         else if (c.type === 'link') { cell.value = v ? { text: 'Открыть на WB', hyperlink: v } : null; cell.font = { color: { argb: 'FF3355CC' }, underline: true }; }
@@ -314,7 +314,7 @@
         // сумма, где неизвестное посчитано нулём.
         const unknown = c.total && rows.some((r, k) => c.get(r, k) == null);
         cell.value = i === 0 ? 'Итого' : !c.total ? null : unknown ? '—' : rows.reduce((s, r, k) => s + Number(c.get(r, k) || 0), 0);
-        if (c.total) cell.numFmt = '#,##0';
+        if (c.total) cell.numFmt = c.money ? '#,##0.00' : '#,##0';
         cell.font = { bold: true };
         cell.alignment = { vertical: 'middle', horizontal: i === 0 || c.type === 'text' ? 'left' : 'center' };
         cell.border = { top: { style: 'medium', color: { argb: 'FF9AA3BC' } }, bottom: thin, left: thin, right: thin };
@@ -1311,7 +1311,48 @@
   }
 
   // ---------- Расчёты (заглушка) ----------
-  function renderBilling() {
+  // Расчёт за месяц (04.10.2026): тот же, что у склада, — услуга, сколько,
+  // по какой ставке и из каких операций. Показывается, когда склад включил.
+  let billMonth = null;
+  const rub = (v) => Number(v).toLocaleString('ru-RU', { minimumFractionDigits: v % 1 ? 2 : 0, maximumFractionDigits: 2 }) + ' ₽';
+  async function renderBilling() {
+    const run = state.viewRun;
+    const zone = state.profile?.timezone || 'Europe/Moscow';
+    const months = Array.from({ length: 12 }, (_, i) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i); return d.toLocaleDateString('sv-SE', { timeZone: zone }).slice(0, 7); });
+    if (!billMonth) billMonth = months[0];
+    $('view').innerHTML = loading;
+    let b;
+    try { b = await api('/api/sellers/billing?month=' + encodeURIComponent(billMonth)); } catch (e) { if (run === state.viewRun) $('view').innerHTML = empty('Расчёт не загрузился', e.message); return; }
+    if (run !== state.viewRun) return;
+    if (!b.enabled) { renderBillingSoon(); return; }
+    const monthName = (m) => new Date(m + '-15').toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+    const day = (s) => s.split('-').reverse().slice(0, 2).join('.');
+    const src = (l) => ({ storage: 'занято по дням: ', picking: 'заказов по дням: ', receiving: 'приходы: ', returns: 'возвраты: ' }[l.service] || '')
+      + (l.service === 'storage' || l.service === 'picking'
+        ? l.details.map((d) => day(d.label) + ' — ' + n(d.qty)) : l.details.map((d) => d.label + ' — ' + n(d.qty) + ' шт.')).join(', ');
+    $('view').innerHTML = (state.owner && !b.shownToSeller ? notice('Продавец этот расчёт пока не видит', 'Показ включается в кабинете склада: «Расчёты с продавцами» → «Показывать расчёт продавцам».', true) : '')
+      + (b.approximate ? notice('Расчёт по примерным ценам', 'Склад ещё не утвердил свой прайс — суммы могут измениться.', true) : '')
+      + toolbar('', dropdown('bill-month', { label: 'Месяц', value: billMonth, options: months.map((m) => ({ value: m, text: monthName(m) })), onPick: (m) => { billMonth = m; renderBilling(); } }), excelButton)
+      + `<section class="stock-strip bill-strip"><div class="stat main"><div class="stat-label">Начислено за ${h(monthName(billMonth))}</div><div class="stat-value">${h(rub(b.total))}</div><div class="stat-note">по прайсу склада, не выставленный счёт</div></div></section>`
+      + (b.lines.length ? table([
+        { title: 'Услуга', cell: (l) => `<span class="cell-main">${h(l.title)}</span><span class="cell-sub">${h(src(l))}</span>` },
+        { title: 'Сколько', cls: 'n', cell: (l) => n(l.qty) },
+        { title: 'Ставка', cls: 'n', cell: (l) => h(rub(l.rate) + ' за ' + l.unit) },
+        { title: 'Сумма', cls: 'n', cell: (l) => `<span class="strong-num">${h(rub(l.amount))}</span>` },
+      ], b.lines) : empty('За этот месяц начислений нет', 'Склад не принимал, не собирал и не хранил ваш товар в этом месяце.', 'check'))
+      + `<p class="help" style="margin-top:12px">${b.storageSince ? 'Хранение считается с ' + h(b.storageSince.split('-').reverse().join('.')) + ' — с этого дня склад записывает занятое место каждые сутки. ' : ''}Упаковки и маркировки в расчёте пока нет — склад их ещё не записывает в Аргусе.</p>`;
+    const xl = $('view').querySelector('[data-excel]');
+    if (xl) xl.onclick = () => runExport(xl, () => exportExcel({ file: 'Расчёт ' + billMonth, sheet: 'Расчёт', title: `Расчёт со складом — ${state.profile.name}, ${monthName(billMonth)}`,
+      filterText: b.approximate ? 'по примерным ценам склада' : '', rows: b.lines, columns: [
+        { header: 'Услуга', type: 'text', get: (l) => l.title, min: 18 },
+        { header: 'Сколько', type: 'num', get: (l) => l.qty },
+        { header: 'Единица', type: 'text', get: (l) => l.unit },
+        { header: 'Ставка, ₽', type: 'num', money: true, get: (l) => l.rate },
+        { header: 'Сумма, ₽', type: 'num', money: true, total: true, get: (l) => l.amount },
+        { header: 'Из чего', type: 'text', get: (l) => src(l), min: 30, max: 80 },
+      ] }));
+  }
+  function renderBillingSoon() {
     const card = (title, text) => `<div class="bill-card"><strong>${h(title)}</strong><span>${h(text)}</span></div>`;
     $('view').innerHTML = notice('Раздел в разработке', 'Склад ещё не включил расчёты в Аргусе. Когда включит, здесь появится счёт за каждый месяц с расшифровкой — без таблиц по почте.')
       + `<div class="bill-grid">${card('Хранение', 'за каждый день: сколько места занимал ваш товар на складе')}`

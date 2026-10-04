@@ -239,6 +239,7 @@
     if(view==='orders'){ loadMpOrders(); }
     if(view==='supplies'){ loadSupplies(); }
     if(view==='acts'){ loadActs(); }
+    if(view==='billing'){ loadBilling(); }
     if(view==='products'){ openProductsView(); }
     if(view==='chat'){
       loadReadiness();
@@ -7033,6 +7034,111 @@
     saveXlsx('Приходы', 'Приходы', rows, [18, 24, 18, 12, 14, 18, 22, 24, 26, 18]);
   }
 
+
+  /* ===================== Расчёты с продавцами ===================== */
+
+  // Первая версия (владелец 04.10.2026: «давай пока с примерными цифрами»):
+  // прайс склада и начисления за месяц из записанной работы. Пока прайс не
+  // сохранён, цены примерные и продавцы расчёт не видят.
+  let billTariff = null;
+  let billData = null;
+  const billOpen = new Set();
+  const rub = (v) => Number(v).toLocaleString('ru-RU', { minimumFractionDigits: v % 1 ? 2 : 0, maximumFractionDigits: 2 }) + ' ₽';
+  const BILL_COLS = ['receiving', 'picking', 'returns', 'storage'];
+
+  async function loadBilling(){
+    const monthInput = document.getElementById('billMonth');
+    if(!monthInput.value){
+      monthInput.value = new Date().toLocaleDateString('sv-SE', { timeZone: (whSettings && whSettings.timezone) || 'Europe/Moscow' }).slice(0, 7);
+    }
+    const box = document.getElementById('billCharges');
+    box.innerHTML = '<div class="staff-empty">Считаем…</div>';
+    try{
+      [billTariff, billData] = await Promise.all([apiFetch('/api/warehouses/billing/tariff'),
+        apiFetch('/api/warehouses/billing/charges?month=' + encodeURIComponent(monthInput.value))]);
+    } catch(e){ box.innerHTML = '<div class="staff-empty">Не удалось посчитать: ' + escapeHTML(e.message) + '</div>'; return; }
+    renderBillTariff();
+    renderBillCharges();
+  }
+  window.loadBilling = loadBilling;
+
+  function renderBillTariff(){
+    const t = billTariff;
+    document.getElementById('billTariff').innerHTML = '<div class="rc-card" data-form>'
+      + '<div class="staff-title" style="font-size:17px; margin:0;">Прайс склада</div>'
+      + (t.approximate ? '<div class="bill-warn" style="margin-top:10px">Цены примерные — из коммерческого предложения другого фулфилмента. '
+        + 'Поставьте свои и нажмите «Сохранить прайс». Пока прайс не сохранён, продавцы расчёт не видят.</div>'
+        : '<div class="ord-meta" style="margin-top:4px">Сохранён ' + new Date(t.updatedAt).toLocaleString('ru-RU') + (t.updatedBy ? ' · ' + escapeHTML(t.updatedBy) : '') + '</div>')
+      + '<div class="bill-prices">' + Object.keys(t.services).map(function(k){
+        const unit = k === 'storage' ? t.storageUnits[t.storageUnit] : t.services[k].unit;
+        return '<label class="rc-field"><span>' + escapeHTML(t.services[k].title) + ', ₽</span>'
+          + '<input type="text" inputmode="decimal" class="mp-field" data-bill-price="' + k + '" value="' + escapeHTML(String(t.prices[k]).replace('.', ',')) + '">'
+          + '<small' + (k === 'storage' ? ' id="billStorageUnit"' : '') + '>за ' + escapeHTML(unit) + '</small></label>';
+      }).join('') + '</div>'
+      + '<div class="bill-opts"><span>Хранение берём:</span>' + Object.keys(t.storageUnits).map(function(u){
+        return '<label><input type="radio" name="billUnit" value="' + u + '"' + (t.storageUnit === u ? ' checked' : '') + ' onchange="document.getElementById(\'billStorageUnit\').textContent = \'за \' + billTariffUnit(this.value)"> за ' + escapeHTML(t.storageUnits[u]) + '</label>';
+      }).join('') + '</div>'
+      + '<div class="bill-opts"><label><input type="checkbox" id="billShow"' + (t.showSellers ? ' checked' : '') + '> Показывать расчёт продавцам в их кабинете</label></div>'
+      + '<div class="rc-actions"><span class="grow"></span><button type="button" class="wh-onboarding-btn primary" id="billSave" onclick="saveBillTariff()">Сохранить прайс</button></div></div>';
+  }
+  window.billTariffUnit = (u) => billTariff.storageUnits[u];
+
+  async function saveBillTariff(){
+    const prices = {};
+    document.querySelectorAll('[data-bill-price]').forEach(function(i){ prices[i.dataset.billPrice] = i.value.trim(); });
+    const unit = document.querySelector('input[name="billUnit"]:checked');
+    const btn = document.getElementById('billSave');
+    btn.disabled = true;
+    try{
+      await apiFetch('/api/warehouses/billing/tariff', { method: 'PUT', body: { prices, storageUnit: unit ? unit.value : 'cell_day',
+        showSellers: document.getElementById('billShow').checked } });
+      showWhToast('Прайс сохранён — расчёт пересчитан.');
+      await loadBilling();
+    } catch(e){ showWhToast('Прайс не сохранён: ' + e.message); btn.disabled = false; }
+  }
+  window.saveBillTariff = saveBillTariff;
+
+  function billLineHtml(l){
+    const day = (s) => s.split('-').reverse().slice(0, 2).join('.');
+    const src = { storage: 'Занято по дням: ', picking: 'Заказов по дням: ', receiving: 'Приходы: ', returns: 'Возвраты: ' }[l.service]
+      + (l.service === 'storage' || l.service === 'picking'
+        ? l.details.map(d => day(d.label) + ' — ' + nfmt(d.qty)).join(', ')
+        : l.details.map(d => d.label + ' — ' + nfmt(d.qty) + ' шт.').join(', '));
+    return '<div class="bill-line"><b>' + escapeHTML(l.title) + ':</b> ' + nfmt(l.qty) + ' × ' + rub(l.rate) + ' за ' + escapeHTML(l.unit) + ' = <b>' + rub(l.amount) + '</b>'
+      + '<div class="bill-src">' + escapeHTML(src) + '</div></div>';
+  }
+
+  function renderBillCharges(){
+    const d = billData;
+    const box = document.getElementById('billCharges');
+    const since = d.storageSince ? d.storageSince.split('-').reverse().join('.') : null;
+    const note = '<div class="ord-meta" style="margin:12px 0">' + (since ? 'Хранение считается с ' + since + ' — с этого дня Аргус каждые сутки записывает, сколько места занимает каждый продавец. ' : '')
+      + 'Упаковку и маркировку Аргус пока не записывает — их в расчёте нет.' + (d.approximate ? ' <b>Расчёт по примерным ценам.</b>' : '') + '</div>';
+    if(!d.sellers.length){ box.innerHTML = note + '<div class="staff-empty">За этот месяц работы по продавцам не записано.</div>'; return; }
+    const cell = (s, k) => { const l = s.lines.find(x => x.service === k); return l ? rub(l.amount) : '—'; };
+    box.innerHTML = note + '<div class="rc-list-head"><div class="staff-title" style="font-size:17px; margin:0;">Начислено за месяц · ' + rub(d.total) + '</div>'
+      + '<button type="button" class="wh-onboarding-btn" onclick="exportBilling()">Выгрузить в Excel</button></div>'
+      + '<div class="bill-wrap"><table class="ord-table bill-table"><thead><tr><th>Продавец</th><th>Приёмка</th><th>Сборка</th><th>Возвраты</th><th>Хранение</th><th>Итого</th></tr></thead><tbody>'
+      + d.sellers.map(function(s){
+        const open = billOpen.has(s.companyId);
+        return '<tr class="bill-row" onclick="toggleBillRow(\'' + s.companyId + '\')"><td><b>' + escapeHTML(s.name) + '</b> <span class="ord-meta">' + (open ? '▴' : '▾') + '</span></td>'
+          + BILL_COLS.map((k, i) => '<td data-l="' + ['Приёмка', 'Сборка', 'Возвраты', 'Хранение'][i] + '">' + cell(s, k) + '</td>').join('') + '<td data-l="Итого"><b>' + rub(s.total) + '</b></td></tr>'
+          + (open ? '<tr class="bill-detail"><td colspan="6">' + s.lines.map(billLineHtml).join('') + '</td></tr>' : '');
+      }).join('') + '</tbody></table></div>';
+  }
+  window.toggleBillRow = function(id){ if(billOpen.has(id)) billOpen.delete(id); else billOpen.add(id); renderBillCharges(); };
+
+  function exportBilling(){
+    const rows = [];
+    billData.sellers.forEach(function(s){
+      s.lines.forEach(function(l){
+        rows.push({ 'Продавец': s.name, 'Услуга': l.title, 'Количество': l.qty, 'Единица': l.unit, 'Ставка, ₽': l.rate, 'Сумма, ₽': l.amount });
+      });
+      rows.push({ 'Продавец': s.name, 'Услуга': 'Итого', 'Количество': '', 'Единица': '', 'Ставка, ₽': '', 'Сумма, ₽': s.total });
+    });
+    saveXlsx('Расчёты ' + billData.month, 'Расчёты', rows, [26, 20, 12, 18, 12, 14]);
+  }
+  window.exportBilling = exportBilling;
 
   /* ===================== Заказы с маркетплейсов ===================== */
 
