@@ -7,7 +7,7 @@ const rows=[{id:'row',row_num:1,rack_count:100,tier_count:7,blocks:[
   {id:'empty',warehouse_row_id:'row',rack_start:10,rack_end:10,tier_start:1,tier_end:1,state:'empty',fill_pct:0,stock:[]},
 ]},{id:'emptyrow',row_num:2,rack_count:100,tier_count:7,blocks:[]}];
 (async()=>{
-  const browser=await chromium.launch({headless:true,channel:'chrome'});
+  const browser=await chromium.launch({headless:true,channel:process.env.ARGUS_BROWSER_CHANNEL||'msedge'});
   try{
     const page=await browser.newPage({viewport:{width:2048,height:1120}}),errors=[];
     page.on('pageerror',e=>errors.push(e.message));
@@ -22,26 +22,33 @@ const rows=[{id:'row',row_num:1,rack_count:100,tier_count:7,blocks:[
       if(u.pathname==='/api/cells/rows')data=rows;
       if(u.pathname==='/api/warehouses/me')data={name:'Проверка карты',warehouse_code:'test'};
       if(u.pathname==='/api/sync/status')data={};
+      if(u.pathname==='/api/warehouses/me/readiness')data={ready:true,steps:[]};
+      if(u.pathname==='/api/alerts/today')data={};
+      if(u.pathname==='/api/sellers/stock-summary')data={sellers:[]};
       if(u.pathname==='/api/leads/manage/access')return route.fulfill({status:403,json:{error:'test'}});
       if(u.pathname==='/api/inventory/advice')return route.fulfill({status:503,json:{error:'test'}});
       return route.fulfill({json:data});
     });
-    await page.addInitScript(()=>{localStorage.setItem('argus_token','offline-test');localStorage.setItem('argus_role','owner');});
+    const token='test.'+Buffer.from(JSON.stringify({role:'owner',ownerId:'fixture',warehouseId:'fixture'})).toString('base64url')+'.test';
+    await page.addInitScript(token=>{localStorage.setItem('argus_token',token);localStorage.setItem('argus_role','owner');},token);
     await page.goto('http://argus.test/cabinet_main.html');
-    await page.locator('#nav-warehouse').click();
+    await page.locator('#nav-products').click();
+    await page.locator('#tab-warehouse').click();
     await page.getByText('вместимость не задана',{exact:true}).waitFor();
     const numbers=await page.locator('.wh-summary-stat .num').allTextContents();
     assert.deepEqual(numbers,['2','1','1','—']); // 2 real addresses, not 1400 slots.
-    assert.ok(!(await page.locator('#whMapWrap').textContent()).includes('%'));
+    // The legend documents measured fill bands; missing dimensions must
+    // still produce no percentage on an actual summary or occupied cell.
+    assert.ok(!(await page.locator('#whSummary').textContent()).includes('%'));
     assert.ok((await page.locator('#whStatusLine').textContent()).includes('1 ряд'));
     await page.locator('#row-rect-1').click();
     await page.locator('#fp-row-1.visible').waitFor();
     assert.ok((await page.locator('#fp-row-1 .wh-row-group-stats').textContent()).includes('1 из 2'));
     const cell=page.locator('.wh-cell[data-block-id="occupied"]');
     assert.ok((await cell.getAttribute('class')).includes('fill-unknown'));
-    assert.equal(await cell.evaluate(e=>getComputedStyle(e).backgroundImage),'none');
+    assert.equal(await cell.evaluate(e=>e.style.getPropertyValue('--p').trim()),'');
     assert.equal(await page.locator('.wh-row-group-meter,.wh-row-rect-fill').count(),0);
     assert.deepEqual(errors,[]);
-    console.log('PASS map: actual addresses and quantities, uniform occupied state, no false capacity percentage');
+    console.log('PASS map: actual addresses and quantities, explicit unknown capacity, no invented fill percentage');
   }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

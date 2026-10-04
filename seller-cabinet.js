@@ -64,7 +64,7 @@
       products: { ...blankUi(), stock: 'all', orders: 'all', sort: 'name', extra: new Set(), category: 'all', vw: 'all' },
       returns: { ...blankUi(), status: 'all', quality: 'all', period: 'all' },
       wb: { ...blankUi(), confirm: null },
-      orders: { ...blankUi(), status: 'all', period: 'all', supply: 'all', wbwh: 'all', sort: 'new' },
+      orders: { ...blankUi(), status: 'all', period: 'all', supply: 'all', wbwh: new Set(), sort: 'new' },
       supplies: { ...blankUi(), status: 'all', dest: 'all', period: 'all', sort: 'new' },
       documents: { ...blankUi(), status: 'all', diff: 'all', period: 'all', sort: 'new' },
       defects: { ...blankUi(), source: 'all', kind: 'all', period: 'all' },
@@ -540,7 +540,7 @@
   state.defaults = {
     products: () => ({ q: '', stock: 'all', orders: 'all', sort: 'name', extra: new Set(), category: 'all', vw: 'all' }),
     returns: () => ({ q: '', status: 'all', quality: 'all', period: 'all' }),
-    orders: () => ({ q: '', status: 'all', period: 'all', supply: 'all', wbwh: 'all', sort: 'new' }),
+    orders: () => ({ q: '', status: 'all', period: 'all', supply: 'all', wbwh: new Set(), sort: 'new' }),
     supplies: () => ({ q: '', status: 'all', dest: 'all', period: 'all', sort: 'new' }),
     documents: () => ({ q: '', status: 'all', diff: 'all', period: 'all', sort: 'new' }),
     defects: () => ({ q: '', source: 'all', kind: 'all', period: 'all' }),
@@ -1127,7 +1127,7 @@
     const rows = state.data.orders.rows.filter((r) => matches(ui.q, [r.number, r.name, r.sku, r.mp_rid, r.mp_nm_id, r.mp_article, r.mp_barcode, r.supply_number, ...wbIds(r.sku)])
       && orderMatchesStatus(r, ui.status) && inPeriod(orderAt(r), ui.period)
       && (ui.supply === 'all' || (ui.supply === 'none' ? !r.supply_number : r.supply_number === ui.supply))
-      && (ui.wbwh === 'all' || (ui.wbwh === 'none' ? !r.mp_warehouse_id : r.mp_warehouse_id === ui.wbwh)));
+      && (!ui.wbwh.size || ui.wbwh.has(String(r.mp_warehouse_id || 'none'))));
     const by = { new: (a, b) => new Date(orderAt(b)) - new Date(orderAt(a)), old: (a, b) => new Date(orderAt(a)) - new Date(orderAt(b)),
       product: (a, b) => String(productName(a)).localeCompare(String(productName(b)), 'ru'), qty: (a, b) => Number(b.qty) - Number(a.qty) };
     return rows.sort(by[ui.sort]);
@@ -1135,7 +1135,7 @@
   const ORDER_COLUMNS = [
     { key: 'photo', title: 'Фото', cls: 'w-photo', cell: (r) => photo(r.sku, r.mp_nm_id) },
     { key: 'product', title: 'Товар', locked: true, main: true, cell: (r) => `<span class="cell-main">${h(productName(r))}</span>${r.mp_article ? `<span class="cell-sub">Артикул продавца: ${h(r.mp_article)}</span>` : ''}` },
-    { key: 'order', title: 'Заказ', cell: (r) => `<button class="link-button nowrap" data-order="${h(r.id)}">${h(r.number)}</button>${r.mp_rid ? `<span class="cell-sub nowrap">${h(r.mp_rid)}</span>` : ''}` },
+    { key: 'order', title: 'Заказ', cell: (r) => `<button class="link-button nowrap" data-order="${h(r.id)}">${h(r.number)}</button> ${sellerOrderMarketplace(r.source)}${r.mp_rid ? `<span class="cell-sub nowrap">${h(r.mp_rid)}</span>` : ''}` },
     { key: 'wb', title: 'Артикул WB', cell: (r) => idCell(r.mp_nm_id ? [r.mp_nm_id] : wbIds(r.sku), r.mp_barcode) },
     { key: 'qty', title: 'Кол-во', cls: 'n', cell: (r) => num(r.qty) },
     { key: 'at', title: 'Оформлен на WB', cls: 'n', cell: (r) => h(when(orderAt(r))) },
@@ -1144,6 +1144,11 @@
     { key: 'status', title: 'Статус', cls: 'c', cell: (r) => badge(orderStatus(r), orderStyle(r)) + (r.stock_conflict ? '<span class="row-note warn">Склад сверяет заказ</span>' : '') },
     { key: 'loaded', title: 'Загружен в Аргус', cls: 'n', hidden: true, cell: (r) => h(when(r.created_at)) },
   ];
+  const sellerOrderMarketplace = (source) => {
+    const key = String(source || '').toLowerCase();
+    if (!key) return '';
+    return `<span class="workspace-marketplace ${key === '1c' ? 'onec' : ['wb', 'ozon'].includes(key) ? key : ''}">${h({ wb: 'WB', ozon: 'Ozon', '1c': '1С' }[key] || key.toUpperCase())}</span>`;
+  };
   function renderOrders() {
     const ui = state.ui.orders; const supplies = [...new Set(state.data.orders.rows.map((r) => r.supply_number).filter(Boolean))].sort().reverse();
     const whs = [...new Map(state.data.orders.rows.filter((r) => r.mp_warehouse_id).map((r) => [r.mp_warehouse_id, r.mp_warehouse_name || 'склад WB ' + r.mp_warehouse_id])).entries()]
@@ -1153,7 +1158,10 @@
         dropdown('o-status', { label: 'Статус', value: ui.status, options: ORDER_STATUS, onPick: (v) => { ui.status = v; ui.shown = state.prefs.rows; renderOrders(); } })
         + dropdown('o-period', { label: 'Период', value: ui.period, options: PERIODS, onPick: (v) => { ui.period = v; ui.shown = state.prefs.rows; renderOrders(); } })
         + dropdown('o-supply', { label: 'Поставка', value: ui.supply, options: [{ value: 'all', text: 'Любая' }, { value: 'none', text: 'Без поставки' }, ...supplies.map((x) => ({ value: x, text: x }))], onPick: (v) => { ui.supply = v; ui.shown = state.prefs.rows; renderOrders(); } })
-        + (whs.length > 1 ? dropdown('o-wbwh', { label: 'Склад WB', value: ui.wbwh, options: [{ value: 'all', text: 'Любой' }, ...whs.map(([value, text]) => ({ value, text })), { value: 'none', text: 'Склад не известен' }], onPick: (v) => { ui.wbwh = v; ui.shown = state.prefs.rows; renderOrders(); } }) : '')
+        + (whs.length || ui.wbwh.size ? dropdown('o-wbwh', { label: ui.wbwh.size ? 'Склады WB' : 'Все склады WB', value: ui.wbwh, multi: true,
+          options: [{ value: 'all', text: 'Все склады WB' }, ...whs.map(([value, text]) => ({ value: String(value), text })),
+            ...(state.data.orders.rows.some((r) => !r.mp_warehouse_id) ? [{ value: 'none', text: 'Склад не известен' }] : [])],
+          onPick: (v) => { if (v === 'all') ui.wbwh.clear(); else if (ui.wbwh.has(v)) ui.wbwh.delete(v); else ui.wbwh.add(v); ui.shown = state.prefs.rows; renderOrders(); } }) : '')
         + dropdown('o-sort', { label: 'Сортировка', value: ui.sort, options: [{ value: 'new', text: 'Сначала новые' }, { value: 'old', text: 'Сначала старые' }, { value: 'product', text: 'По товару' }, { value: 'qty', text: 'Больше штук' }], onPick: (v) => { ui.sort = v; renderOrders(); } })
         + resetLink('orders'),
         columnChooser('orders', ORDER_COLUMNS, renderOrders) + excelButton)
@@ -1200,7 +1208,7 @@
     return rows.sort(by[ui.sort]);
   }
   const SUPPLY_COLUMNS = [
-    { key: 'num', title: 'Поставка', cell: (r) => `<button class="link-button nowrap" data-supply="${h(r.id)}">${h(r.number)}</button><span class="cell-sub">составлена ${h(when(r.createdAt))}</span>` },
+    { key: 'num', title: 'Поставка', cell: (r) => `<button class="link-button nowrap" data-supply="${h(r.id)}">${h(r.number)}</button> ${sellerOrderMarketplace(r.marketplace || (r.mpSupplyId ? 'wb' : ''))}<span class="cell-sub">составлена ${h(when(r.createdAt))}</span>` },
     { key: 'dest', title: 'Куда и когда', cell: (r) => `<span class="cell-main">${h(r.destination || 'пункт ещё не выбран')}</span>${r.shipDate ? `<span class="cell-sub">отгрузка ${h(day(dateOnly(r.shipDate)))}</span>` : ''}` },
     { key: 'units', title: 'Штук', cls: 'n', cell: (r) => num(r.units) },
     { key: 'status', title: 'Статус', cls: 'c', cell: (r) => badge(r.statusName, SUPPLY_STYLE[r.status] || '') },
@@ -1232,9 +1240,11 @@
       + `<div class="mini-stats"><div><span>Заказов</span><strong>${n(r.orders)}</strong></div><div><span>Штук</span><strong>${n(r.units)}</strong></div><div><span>Составлена</span><strong style="font-size:15px">${h(when(r.createdAt))}</strong></div></div>`
       + (r.mpBarcodeFile ? `<div class="supply-qr-big"><img src="data:image/svg+xml;base64,${h(r.mpBarcodeFile)}" alt="QR поставки"><div><div class="help">Поставка на WB</div><b>${h(r.mpSupplyId || '')}</b></div></div>` : '')
       + table([
-        { title: 'Заказ', cell: (i) => h(i.order) }, { title: 'Товар', cell: (i) => h(productName({ sku: i.sku, name: i.name })) },
+        { title: 'Заказ', cell: (i) => h(i.order) }, { title: 'Фото', cls: 'w-photo', cell: (i) => photo(i.sku) },
+        { title: 'Товар', cell: (i) => h(productName({ sku: i.sku, name: i.name })) },
         { title: 'Шт.', cls: 'n', cell: (i) => n(i.qty) }, { title: 'Статус', cls: 'c', cell: (i) => h(i.status) },
       ], r.items);
+    wirePhotos($('drawerBody'));
   }
 
   // ---------- Приходы ----------
@@ -1310,55 +1320,86 @@
     wireRows(host, ui, renderDocumentRows);
   }
 
-  // ---------- Расчёты (заглушка) ----------
-  // Расчёт за месяц (04.10.2026): тот же, что у склада, — услуга, сколько,
-  // по какой ставке и из каких операций. Показывается, когда склад включил.
-  let billMonth = null;
-  const rub = (v) => Number(v).toLocaleString('ru-RU', { minimumFractionDigits: v % 1 ? 2 : 0, maximumFractionDigits: 2 }) + ' ₽';
-  async function renderBilling() {
-    const run = state.viewRun;
+  // ---------- Персональный прайс, начисления и выставленные счета ----------
+  let billMonth = null, billRun = 0, billInvoices = [], billNextCursor = null;
+  const rub = (v) => v == null ? '—' : Number(v).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
+  const billDate = (v) => v ? String(v).slice(0,10).split('-').reverse().join('.') : '—';
+  const BILL_STATUS = {unpaid:'Ожидает оплаты',partial:'Оплачен частично',paid:'Оплачен',overdue:'Просрочен'};
+  const BILL_SERVICE = {receiving:'Приёмка',picking:'Сборка заказов',returns:'Возвраты',storage:'Хранение'};
+  function billLinesTable(lines){
+    return table([
+      {title:'Услуга',cell:l => '<span class="cell-main">' + h(l.title || BILL_SERVICE[l.service]) + '</span>' + ((l.details || []).length ? '<details class="bill-work"><summary>Работы и даты</summary>' + l.details.map(d => '<div>' + h(d.label || d.day || d.date || '') + ' · ' + n(d.qty) + ' · ' + h(rub(d.amount)) + '</div>').join('') + '</details>' : '')},
+      {title:'Количество',cls:'n',cell:l => n(l.qty)},
+      {title:'Единица',cell:l => h(l.unit)},
+      {title:'Цена',cls:'n',cell:l => l.missingTariff ? 'Нет цены на дату работы' : l.rate == null ? 'По истории цен' : h(rub(l.rate))},
+      {title:'Сумма',cls:'n',cell:l => l.missingTariff ? 'Нужен прайс' : '<span class="strong-num">' + h(rub(l.amount)) + '</span>'}
+    ],lines || []);
+  }
+  function sellerInvoiceHtml(i){
+    return '<details class="seller-invoice" data-seller-invoice="' + h(i.id) + '"><summary><strong>Счёт ' + h(i.number) + '</strong><span>' + billDate(i.from) + ' — ' + billDate(i.to) + '</span><strong>' + h(rub(i.total)) + '</strong><span class="seller-invoice-status ' + h(i.status) + '">' + h(BILL_STATUS[i.status] || i.status) + '</span></summary><div class="seller-invoice-body">'
+      + '<div class="seller-bill-facts"><span>Оплатить до <b>' + billDate(i.dueDate) + '</b></span><span>Оплачено <b>' + h(rub(i.paid)) + '</b></span><span>Осталось <b>' + h(rub(i.balance)) + '</b></span><button type="button" class="button" data-invoice-excel="' + h(i.id) + '">Выгрузить счёт в Excel</button></div>'
+      + billLinesTable(i.lines)
+      + '<h3>Полученные складом оплаты</h3>'
+      + ((i.payments || []).length ? table([{title:'Дата',cell:p => billDate(p.paidOn)},{title:'Сумма',cls:'n',cell:p => h(rub(p.amount))},{title:'Комментарий',cell:p => h(p.note || '—')}],i.payments) : '<p class="help">Оплат пока не отмечено.</p>') + '</div></details>';
+  }
+  function renderSellerInvoices(){
+    const host = $('sellerInvoices');
+    if(!host) return;
+    const open = new Set([...host.querySelectorAll('details[data-seller-invoice][open]')].map(e => e.dataset.sellerInvoice));
+    host.innerHTML = '<h2>Выставленные счета</h2>' + (billInvoices.length ? billInvoices.map(sellerInvoiceHtml).join('') : empty('Счетов ещё нет','Склад пока не выставлял вам счёт за работу.','document'))
+      + (billNextCursor ? '<button type="button" class="button" id="sellerInvoiceMore">Ещё счета</button>' : '');
+    host.querySelectorAll('details[data-seller-invoice]').forEach(e => { e.open = open.has(e.dataset.sellerInvoice); });
+    host.querySelectorAll('[data-invoice-excel]').forEach(button => { button.onclick = () => {
+      const i = billInvoices.find(i => i.id === button.dataset.invoiceExcel);
+      if(!i) return;
+      const rows = [...i.lines,{title:'Итого по счёту',amount:i.total},{title:'Оплачено',amount:i.paid},{title:'Остаток',amount:i.balance}];
+      runExport(button,() => exportExcel({file:'Счёт ' + i.number,sheet:'Счёт',title:'Счёт ' + i.number + ' — ' + state.profile.name,
+        filterText:billDate(i.from) + ' — ' + billDate(i.to) + '. Оплатить до ' + billDate(i.dueDate),rows,
+        columns:[{header:'Услуга',type:'text',get:l => l.title,min:24},{header:'Количество',type:'num',get:l => l.qty},
+          {header:'Единица',type:'text',get:l => l.unit,min:18},{header:'Цена, ₽',type:'num',money:true,get:l => l.rate},
+          {header:'Сумма, ₽',type:'num',money:true,get:l => l.amount}]}));
+    }; });
+    const more = $('sellerInvoiceMore');
+    if(more) more.onclick = async () => {
+      const run = billRun, viewRun = state.viewRun; more.disabled = true;
+      try{
+        const b = await api('/api/sellers/billing?month=' + encodeURIComponent(billMonth) + '&invoiceCursor=' + encodeURIComponent(billNextCursor));
+        if(run !== billRun || viewRun !== state.viewRun) return;
+        billInvoices.push(...b.invoices); billNextCursor = b.nextInvoiceCursor; renderSellerInvoices();
+      }catch(e){toast('Не удалось загрузить счета: ' + e.message); more.disabled = false;}
+    };
+  }
+  async function renderBilling(){
+    const run = ++billRun, viewRun = state.viewRun;
     const zone = state.profile?.timezone || 'Europe/Moscow';
-    const months = Array.from({ length: 12 }, (_, i) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i); return d.toLocaleDateString('sv-SE', { timeZone: zone }).slice(0, 7); });
-    if (!billMonth) billMonth = months[0];
+    if(!billMonth) billMonth = new Date().toLocaleDateString('sv-SE',{timeZone:zone}).slice(0,7);
     $('view').innerHTML = loading;
     let b;
-    try { b = await api('/api/sellers/billing?month=' + encodeURIComponent(billMonth)); } catch (e) { if (run === state.viewRun) $('view').innerHTML = empty('Расчёт не загрузился', e.message); return; }
-    if (run !== state.viewRun) return;
-    if (!b.enabled) { renderBillingSoon(); return; }
-    const monthName = (m) => new Date(m + '-15').toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
-    const day = (s) => s.split('-').reverse().slice(0, 2).join('.');
-    const src = (l) => ({ storage: 'занято по дням: ', picking: 'заказов по дням: ', receiving: 'приходы: ', returns: 'возвраты: ' }[l.service] || '')
-      + (l.service === 'storage' || l.service === 'picking'
-        ? l.details.map((d) => day(d.label) + ' — ' + n(d.qty)) : l.details.map((d) => d.label + ' — ' + n(d.qty) + ' шт.')).join(', ');
-    $('view').innerHTML = (state.owner && !b.shownToSeller ? notice('Продавец этот расчёт пока не видит', 'Показ включается в кабинете склада: «Расчёты с продавцами» → «Показывать расчёт продавцам».', true) : '')
-      + (b.approximate ? notice('Расчёт по примерным ценам', 'Склад ещё не утвердил свой прайс — суммы могут измениться.', true) : '')
-      + toolbar('', dropdown('bill-month', { label: 'Месяц', value: billMonth, options: months.map((m) => ({ value: m, text: monthName(m) })), onPick: (m) => { billMonth = m; renderBilling(); } }), excelButton)
-      + `<section class="stock-strip bill-strip"><div class="stat main"><div class="stat-label">Начислено за ${h(monthName(billMonth))}</div><div class="stat-value">${h(rub(b.total))}</div><div class="stat-note">по прайсу склада, не выставленный счёт</div></div></section>`
-      + (b.lines.length ? table([
-        { title: 'Услуга', cell: (l) => `<span class="cell-main">${h(l.title)}</span><span class="cell-sub">${h(src(l))}</span>` },
-        { title: 'Сколько', cls: 'n', cell: (l) => n(l.qty) },
-        { title: 'Ставка', cls: 'n', cell: (l) => h(rub(l.rate) + ' за ' + l.unit) },
-        { title: 'Сумма', cls: 'n', cell: (l) => `<span class="strong-num">${h(rub(l.amount))}</span>` },
-      ], b.lines) : empty('За этот месяц начислений нет', 'Склад не принимал, не собирал и не хранил ваш товар в этом месяце.', 'check'))
-      + `<p class="help" style="margin-top:12px">${b.storageSince ? 'Хранение считается с ' + h(b.storageSince.split('-').reverse().join('.')) + ' — с этого дня склад записывает занятое место каждые сутки. ' : ''}Упаковки и маркировки в расчёте пока нет — склад их ещё не записывает в Аргусе.</p>`;
-    const xl = $('view').querySelector('[data-excel]');
-    if (xl) xl.onclick = () => runExport(xl, () => exportExcel({ file: 'Расчёт ' + billMonth, sheet: 'Расчёт', title: `Расчёт со складом — ${state.profile.name}, ${monthName(billMonth)}`,
-      filterText: b.approximate ? 'по примерным ценам склада' : '', rows: b.lines, columns: [
-        { header: 'Услуга', type: 'text', get: (l) => l.title, min: 18 },
-        { header: 'Сколько', type: 'num', get: (l) => l.qty },
-        { header: 'Единица', type: 'text', get: (l) => l.unit },
-        { header: 'Ставка, ₽', type: 'num', money: true, get: (l) => l.rate },
-        { header: 'Сумма, ₽', type: 'num', money: true, total: true, get: (l) => l.amount },
-        { header: 'Из чего', type: 'text', get: (l) => src(l), min: 30, max: 80 },
-      ] }));
+    try{ b = await api('/api/sellers/billing?month=' + encodeURIComponent(billMonth)); }
+    catch(e){ if(run === billRun && viewRun === state.viewRun) $('view').innerHTML = empty('Расчёты не загрузились',e.message); return; }
+    if(run !== billRun || viewRun !== state.viewRun) return;
+    if(!b.enabled){ renderBillingSoon(); return; }
+    billInvoices = b.invoices || []; billNextCursor = b.nextInvoiceCursor;
+    const t = b.tariff || {}, s = b.schedule || {};
+    const cadence = {daily:'каждый день',weekly:'каждую неделю',monthly:'каждый месяц',custom:'каждые ' + s.intervalDays + ' дней'}[s.cadence];
+    $('view').innerHTML = (state.owner && !b.shownToSeller ? notice('Клиент этот расчёт пока не видит','Показ включается в настройках персонального прайса клиента в разделе «Расчёты».',true) : '')
+      + '<div class="seller-bill-toolbar"><label class="field"><span>Месяц начислений</span><input type="month" id="sellerBillMonth" value="' + h(billMonth) + '"></label><button type="button" class="button" data-bill-excel>Выгрузить начисления в Excel</button></div>'
+      + '<section class="stat-strip"><div class="stat"><div class="stat-label">Начислено за выбранный месяц</div><div class="stat-value">' + h(rub(b.total)) + '</div><div class="stat-note">по вашему персональному прайсу услуг; выставленные счета — ниже</div></div></section>'
+      + (b.lines?.length ? billLinesTable(b.lines) : empty('За этот месяц начислений нет','За выбранный месяц склад не записал оплачиваемую работу.','check'))
+      + '<details class="seller-invoice"><summary><strong>Ваш прайс услуг</strong><span>' + (t.configured ? 'Персональные цены услуг' : 'Склад ещё не настроил ваш прайс') + '</span></summary><div class="seller-invoice-body">'
+      + (t.configured ? table([{title:'Услуга',cell:l => h(l.title)},{title:'Цена',cls:'n',cell:l => h(rub(l.rate))},{title:'Единица',cell:l => h(l.unit)}],Object.entries(BILL_SERVICE).map(([k,title]) => ({title,rate:t.prices[k],unit:k === 'storage' ? (t.storageUnit === 'unit_day' ? 'штука в день' : 'место в день') : k === 'picking' ? 'заказ' : 'штука'}))) : '<p class="help">При отсутствии цены склад сначала настраивает прайс, затем выставляет счёт.</p>')
+      + (t.history?.length ? '<details class="bill-work"><summary>История цен</summary>' + table([{title:'Действуют с',cell:x => billDate(x.effectiveFrom)},...Object.entries(BILL_SERVICE).map(([k,title]) => ({title,cls:'n',cell:x => h(rub(x.prices[k]))})),{title:'Хранение за',cell:x => x.storageUnit === 'unit_day' ? 'штуку в день' : 'место в день'}],t.history) + '</details>' : '')
+      + '<p class="help">' + (s.enabled ? 'Счета выставляются ' + h(cadence) + '.' : 'Счета выставляются складом вручную.') + ' Срок оплаты: ' + h(s.paymentDays ?? 14) + ' дней после выставления. Суммы уже выставленных счетов сохраняются при изменении прайса.</p></div></details>'
+      + '<div id="sellerInvoices"></div><p class="help">Упаковка и маркировка пока не учитываются: склад ещё не записывает эти операции для расчёта.</p>';
+    $('sellerBillMonth').onchange = e => { if(e.target.value){billMonth = e.target.value;renderBilling();} };
+    renderSellerInvoices();
+    const xl = $('view').querySelector('[data-bill-excel]');
+    xl.onclick = () => runExport(xl,() => exportExcel({file:'Начисления ' + billMonth,sheet:'Начисления',title:'Начисления — ' + state.profile.name,
+      filterText:billMonth,rows:b.lines || [],columns:[{header:'Услуга',type:'text',get:l => l.title,min:24},{header:'Количество',type:'num',get:l => l.qty},
+        {header:'Единица',type:'text',get:l => l.unit,min:18},{header:'Цена, ₽',type:'num',money:true,get:l => l.rate},{header:'Сумма, ₽',type:'num',money:true,get:l => l.amount}]}));
   }
-  function renderBillingSoon() {
-    const card = (title, text) => `<div class="bill-card"><strong>${h(title)}</strong><span>${h(text)}</span></div>`;
-    $('view').innerHTML = notice('Раздел в разработке', 'Склад ещё не включил расчёты в Аргусе. Когда включит, здесь появится счёт за каждый месяц с расшифровкой — без таблиц по почте.')
-      + `<div class="bill-grid">${card('Хранение', 'за каждый день: сколько места занимал ваш товар на складе')}`
-      + card('Упаковка', 'пакет, ВПП, короб — по каждому заказу и поставке на WB')
-      + card('Приёмка и операции', 'приёмка, сборка, маркировка, стикеровка, возвраты')
-      + card('Счёт за период', 'итог за месяц с расшифровкой по дням и операциям, выгрузка в Excel') + '</div>';
+  function renderBillingSoon(){
+    $('view').innerHTML = notice('Склад пока не открыл вам расчёты','После включения здесь будут ваш персональный прайс, начисления, отдельные счета и отмеченные складом оплаты.');
   }
 
   // ---------- Склад брака ----------
