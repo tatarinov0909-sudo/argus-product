@@ -1918,22 +1918,27 @@
       const s = p.summary; const newLines = p.lines.filter((l) => l.isNew).length;
       const products = s.products + (f.createNew ? s.newProducts : 0); const units = s.units + (f.createNew ? s.newUnits : 0);
       const lost = s.notMatched + (f.createNew ? 0 : newLines);
+      // Три группы строк (рецензия 04.10, рекомендация 7): готово, нужен ваш
+      // выбор, не попадут — проблемные наверху, чтобы не искать их в файле.
+      const group = (l) => (noVw(l) && !f.byRow[l.row] ? 1 : l.sku || (l.isNew && f.createNew) ? 2 : l.isNew ? 1 : 0);
+      const counts = [0, 0, 0]; p.lines.forEach((l) => { counts[group(l)] += 1; });
+      const lines = [...p.lines].sort((a, b) => group(a) - group(b) || a.row - b.row);
       $('inboundPreview').innerHTML = err
-        + `<div class="mini-stats">${mini('Товаров', products)}${mini('Штук', units)}${mini('Не попадут строк', lost)}</div>`
+        + `<div class="mini-stats">${mini('Штук в приход', units)}${mini('Готово строк', counts[2])}${mini('Нужен выбор', counts[1])}${mini('Не попадут строк', counts[0])}</div>`
         + (s.newProducts ? `<label class="check-line"><input type="checkbox" id="createNew" ${f.createNew ? 'checked' : ''}><span>Завести новые товары в каталог — ${counted(s.newProducts, 'товар', 'товара', 'товаров')}, ${n(s.newUnits)} шт.<small>Название, артикул и штрихкод возьмём из файла. Склад проверит карточки при приёмке.</small></span></label>` : '')
         + (lost ? notice('Часть строк не попадёт в приход', 'Товара нет в вашем каталоге на складе, а для нового не хватает названия и артикула или штрихкода, или количество не целое.'
           + (p.lines.some(noVw) ? ' Или склада из столбца «Склад» у вас нет — выберите склад у строки.' : ''), true) : '')
         + table([{ title: 'Строка файла', cell: (l) => `<span class="cell-main" style="font-weight:400">${h([l.barcode, l.article, l.name].filter(Boolean).join(' · '))}</span><span class="cell-sub">строка ${l.row}</span>` },
           { title: 'Товар на складе', cell: (l) => (l.sku ? `<span class="cell-main" style="font-weight:400">${h(l.productName)}</span><span class="cell-sub">узнали по: ${h(l.by)}</span>`
             : l.isNew ? `<span class="row-note ${f.createNew ? 'warn' : 'bad'}" style="margin:0">${f.createNew ? 'Новый товар — заведём в каталог' : 'Нет в каталоге — не попадёт'}</span>`
-              : `<span class="row-note bad" style="margin:0">${h(l.error || 'Не узнали')}</span>`) },
+              : `<span class="row-note bad" style="margin:0">${h(l.error || 'Не узнали')}</span>`) + (noVw(l) && !f.byRow[l.row] ? '<span class="cell-sub">выберите склад в столбце «Склад»</span>' : '') },
           { title: 'Шт.', cls: 'n', cell: (l) => (l.error ? '—' : n(l.qty)) },
           // Склады продавца: строка ложится на выбранный склад (02.10.2026).
           ...(p.lines.some((l) => l.vwName) ? [{ title: 'Склад', cell: (l) => dropdown('inb-vw-' + l.row, {
             value: f.byRow[l.row] || (noVw(l) ? '' : l.vwName || 'Остальной товар'), neutral: true,
             options: [...(noVw(l) && !f.byRow[l.row] ? [{ value: '', text: 'Выберите склад' }] : []),
               ...[...(state.vw?.warehouses || []).map((w) => w.name), 'Остальной товар'].map((x) => ({ value: x, text: x }))],
-            onPick: (x) => { f.byRow[l.row] = x; send(false); } }) }] : [])], p.lines).replace('class="table-wrap"', 'class="table-wrap open-menus"')
+            onPick: (x) => { f.byRow[l.row] = x; send(false); } }) }] : [])], lines).replace('class="table-wrap"', 'class="table-wrap open-menus"')
         + (p.lines.some((l) => l.vwName) ? '<p class="help" style="margin-top:8px">Разделить товар между складами — например, 500 на Озон и 300 на WB — можно в файле: столбец «Склад» и по строке на каждый склад.</p>' : '')
         + `<button class="button primary" type="submit" style="margin-top:16px;width:100%" ${f.busy || !products ? 'disabled' : ''}>${f.busy ? 'Отправляем…' : edit ? 'Сохранить с новым списком' : 'Отправить на склад'}</button>`;
       if ($('createNew')) $('createNew').onchange = (e) => { f.createNew = e.target.checked; draw(); };

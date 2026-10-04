@@ -241,6 +241,7 @@
     if(view==='acts'){ loadActs(); }
     if(view==='products'){ openProductsView(); }
     if(view==='chat'){
+      loadReadiness();
       loadToday();
       loadChatHistory();
       const badge = document.getElementById('chatBadge');
@@ -5076,6 +5077,37 @@
     box.hidden = false;
   }
   window.loadToday = loadToday;
+
+  // Запуск склада (рецензия 04.10, рекомендация 6): шаги по фактическому
+  // состоянию, заканчиваются первой настоящей операцией. Всё сделано — блока нет.
+  const READY_STEPS = {
+    survey: ['Заполните анкету склада', 'Как ведёте учёт остатков, часовой пояс, кто составляет поставки WB.', 'settings'],
+    seller: ['Заведите продавца', 'Склад хранит товар продавцов — начните с одного.', 'mp'],
+    catalog: ['Загрузите товары продавца', 'Каталог файлом или по одному: без него приход не собрать.', 'products'],
+    stock_1c: ['Подключите 1С', 'Остатки и накладные придут из неё — вы выбрали учёт в 1С.', '1c'],
+    stock_argus: ['Загрузите начальные остатки', 'Если товар уже лежит на складе. Пустой склад наполнится приходами.', 'warehouse'],
+    cells: ['Разметьте ячейки', 'Если храните товар по адресам — тогда работник кладёт в ячейку, а Аргус помнит где.', 'warehouse'],
+    worker: ['Заведите работника', 'Он получит ключ и будет принимать и собирать с телефона.', 'staff'],
+    seller_key: ['Выдайте продавцу ключ', 'Он увидит свои товары, приходы и брак в своём кабинете.', 'mp'],
+    first_operation: ['Проведите первый приход', 'С одним товаром: заведите приход, работник примет, продавец увидит у себя. После этого склад работает.', 'receipts'],
+  };
+  async function loadReadiness(){
+    const box = document.getElementById('readyCard');
+    if(!box) return;
+    let r;
+    try{ r = await apiFetch('/api/warehouses/me/readiness'); } catch(e){ return; }
+    const must = r.steps.filter(s => !s.optional);
+    const left = r.steps.filter(s => !s.done);
+    if(must.every(s => s.done)){ box.hidden = true; return; }
+    const firstNeeded = left.find(s => !s.optional);
+    box.innerHTML = '<div class="ready-title">Запуск склада: сделано ' + must.filter(s => s.done).length + ' из ' + must.length + '</div>'
+      + '<div class="ready-sub">Шаги отмечаются сами, когда дело сделано. Нажмите на шаг — откроется нужный раздел.</div>'
+      + left.map(s => { const t = READY_STEPS[s.key] || [s.key, '', 'chat'];
+        return '<button type="button" class="ready-step' + (s === firstNeeded ? ' next' : '') + '" onclick="switchView(\'' + t[2] + '\')">'
+          + '<i>' + (s === firstNeeded ? '→' : '○') + '</i><div><b>' + escapeHTML(t[0]) + (s.optional ? ' <span class="opt">· по желанию</span>' : '') + '</b>'
+          + '<span>' + escapeHTML(t[1]) + '</span></div></button>'; }).join('');
+    box.hidden = false;
+  }
 
   async function loadChatHistory(){
     if(chatLoaded) return;

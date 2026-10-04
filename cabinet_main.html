@@ -431,6 +431,19 @@
   .j-export{background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:0 14px; color:var(--muted); font-size:14px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; white-space:nowrap;}
   .j-export:hover{color:var(--text); border-color:var(--accent);}
 
+  /* Запуск нового склада: что ещё не сделано, по фактическому состоянию. */
+  .ready{padding:12px 24px; border-bottom:1px solid var(--line); background:var(--panel); max-height:45vh; overflow-y:auto;}
+  .ready-title{font-size:15px; font-weight:700;}
+  .ready-sub{font-size:13px; color:var(--muted); margin-top:2px;}
+  .ready-step{display:flex; gap:10px; align-items:flex-start; width:100%; margin-top:8px; padding:9px 12px; border:1px solid var(--line); border-radius:8px; background:var(--panel-2); color:var(--text); font:inherit; text-align:left; cursor:pointer;}
+  .ready-step:hover{border-color:var(--accent);}
+  .ready-step b{display:block; font-size:14px; font-weight:600;}
+  .ready-step span{display:block; font-size:13px; color:var(--muted);}
+  .ready-step .opt{display:inline; color:var(--muted); font-weight:400;}
+  .ready-step i{font-style:normal; color:var(--yellow); flex-shrink:0;}
+  .ready-step.next{border-color:rgba(201,166,107,0.6);}
+  @container (max-width:700px){ .ready{padding:10px 12px;} }
+
   /* «Сегодня» над чатом владельца: четыре цифры, каждая открывает свой список. */
   .today{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; padding:12px 24px; border-bottom:1px solid var(--line); background:var(--panel);}
   .today-tile{background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:10px 14px; text-align:left; color:var(--text); font:inherit; cursor:pointer; min-width:0;}
@@ -2411,6 +2424,7 @@
           </button>
         </div>
 
+        <div class="ready" id="readyCard" hidden></div>
         <div class="today" id="todayStrip" hidden></div>
 
         <div class="chat-body">
@@ -3113,7 +3127,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <script src="back.js?v=4901b838" defer></script>
 <script src="form-keys.js?v=02a92e0e" defer></script>
-<script src="cabinet_main.js?v=c66b3b1a" defer></script>
+<script src="cabinet_main.js?v=e64a5a14" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->
