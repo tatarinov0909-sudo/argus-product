@@ -158,6 +158,14 @@
   }
   .view{display:none; height:100vh;}
   .view.active{display:flex;}
+  /* Телефон: раздел — под полосой меню, а не во всю высоту окна. Иначе низ
+     любого списка (высота полосы, ~65 px) уходил за край экрана и последнюю
+     строку было не докрутить (проверка 02.10.2026). Стоит после .view, чтобы
+     перекрыть его 100vh. */
+  @media(max-width:760px){
+    .main{display:flex; flex-direction:column;}
+    .view{height:auto; flex:1; min-height:0;}
+  }
 
   /* CHAT */
   .chat{flex:1; min-width:0; display:flex; flex-direction:column; border-right:1px solid var(--line);}
@@ -176,7 +184,6 @@
   .connected-agent{display:flex; align-items:center; gap:7px; position:relative; cursor:pointer;}
   .mini-avatar{width:24px; height:24px; border-radius:7px; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; position:relative; flex-shrink:0;}
   .mini-avatar.warehouse{background:var(--terracotta-soft); color:var(--terracotta);}
-  .mini-avatar.analyst{background:var(--an-soft); color:var(--an);}
   .mini-dot{width:7px; height:7px; border-radius:50%; background:var(--green); position:absolute; bottom:-1px; right:-1px; border:1.5px solid var(--panel);}
   .connected-agent-name{font-size:14px; color:var(--muted);}
   .connected-agent-tip{
@@ -198,7 +205,6 @@
   .connected-agent-tip-head{display:flex; align-items:center; gap:6px; margin-bottom:5px;}
   .connected-agent-tip-dot{width:6px; height:6px; border-radius:50%; flex-shrink:0;}
   .connected-agent-tip-dot.warehouse{background:var(--terracotta);}
-  .connected-agent-tip-dot.analyst{background:var(--an);}
   .connected-agent-tip-title{font-size:14px; font-weight:700; color:var(--text);}
   .connected-agent-tip-text{font-size:13px; line-height:1.55; color:var(--muted);}
   .msg-detail-trigger{position:relative; color:var(--accent); font-weight:600; cursor:pointer; text-decoration:underline; text-decoration-style:dotted;}
@@ -235,7 +241,6 @@
   }
   .avatar.agent{background:var(--accent-soft); color:var(--accent);}
   .avatar.agent.warehouse{background:var(--terracotta-soft); color:var(--terracotta);}
-  .avatar.agent.analyst{background:var(--an-soft); color:var(--an);}
   .avatar.user{background:var(--panel-2); color:var(--muted); border:1px solid var(--line);}
   .bubble{background:var(--panel); border:1px solid var(--line); border-left:3px solid transparent; border-radius:10px; padding:13px 15px; font-size:16px; line-height:1.65;}
   .msg.user .bubble{background:var(--panel-2);}
@@ -426,6 +431,43 @@
   .j-export{background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:0 14px; color:var(--muted); font-size:14px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; white-space:nowrap;}
   .j-export:hover{color:var(--text); border-color:var(--accent);}
 
+  /* Запуск нового склада: что ещё не сделано, по фактическому состоянию. */
+  .ready{padding:12px 24px; border-bottom:1px solid var(--line); background:var(--panel); max-height:45vh; overflow-y:auto;}
+  .ready-title{font-size:15px; font-weight:700;}
+  .ready-sub{font-size:13px; color:var(--muted); margin-top:2px;}
+  .ready-step{display:flex; gap:10px; align-items:flex-start; width:100%; margin-top:8px; padding:9px 12px; border:1px solid var(--line); border-radius:8px; background:var(--panel-2); color:var(--text); font:inherit; text-align:left; cursor:pointer;}
+  .ready-step:hover{border-color:var(--accent);}
+  .ready-step b{display:block; font-size:14px; font-weight:600;}
+  .ready-step span{display:block; font-size:13px; color:var(--muted);}
+  .ready-step .opt{display:inline; color:var(--muted); font-weight:400;}
+  .ready-step i{font-style:normal; color:var(--yellow); flex-shrink:0;}
+  .ready-step.next{border-color:rgba(201,166,107,0.6);}
+  @container (max-width:700px){ .ready{padding:10px 12px;} }
+
+  /* «Сегодня» над чатом владельца: четыре цифры, каждая открывает свой список. */
+  .today{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; padding:12px 24px; border-bottom:1px solid var(--line); background:var(--panel);}
+  .today-tile{background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:10px 14px; text-align:left; color:var(--text); font:inherit; cursor:pointer; min-width:0;}
+  .today-tile:hover{border-color:var(--accent);}
+  .today-tile .lbl{font-size:13px; color:var(--muted);}
+  .today-tile .num{font-size:24px; font-weight:700; line-height:1.3;}
+  .today-tile .sub{font-size:13px; color:var(--muted); overflow-wrap:anywhere;}
+  .today-tile.zero .num{color:var(--muted);}
+  .today-tile.warn{border-color:rgba(201,166,107,0.6);} .today-tile.warn .num{color:var(--yellow);}
+  .today-tile.ok .num{color:var(--green); font-size:18px;}
+  /* Ширину берём у колонки чата, а не у окна: рядом может стоять панель контекста. */
+  .chat{container-type:inline-size;}
+  @container (max-width:700px){
+    .today{grid-template-columns:repeat(2,minmax(0,1fr)); padding:10px 12px; gap:8px;}
+    .today-tile{padding:8px 10px;} .today-tile .num{font-size:20px;}
+  }
+
+  /* Приход на телефоне: сначала список, форма — по «Новый приход» (рецензия 04.10). */
+  .rc-new{display:none;}
+  @media (max-width:640px){
+    .rc-new{display:inline-flex;}
+    .rc-form:not(.open){display:none;}
+  }
+
   /* STATS */
   .j-stats{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:18px;}
   .j-stat{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px;}
@@ -463,7 +505,6 @@
   .j-entry{display:flex; gap:12px; padding:15px 16px; background:var(--panel); border:1px solid var(--line); border-left:2px solid transparent; border-radius:10px; margin-bottom:10px;}
   .j-entry.orchestrator{background:var(--panel-orch); border-left-color:var(--accent);}
   .j-entry.warehouse{background:var(--panel-wh); border-left-color:var(--terracotta);}
-  .j-entry.analyst{background:var(--panel-an); border-left-color:var(--an);}
   .j-check{
     appearance:none; -webkit-appearance:none; width:18px; height:18px; margin-top:2px; flex-shrink:0;
     cursor:pointer; border:1.5px solid var(--line); border-radius:5px; background:var(--panel-2);
@@ -478,12 +519,10 @@
   .j-avatar{width:32px; height:32px; border-radius:9px; background:var(--panel-2); display:flex; align-items:center; justify-content:center; flex-shrink:0;}
   .j-entry.orchestrator .j-avatar{background:rgba(95,175,166,0.14); color:var(--accent);}
   .j-entry.warehouse .j-avatar{background:rgba(217,142,110,0.14); color:var(--terracotta);}
-  .j-entry.analyst .j-avatar{background:rgba(183,166,94,0.16); color:var(--an);}
   .j-body{flex:1; min-width:0;}
   .j-top{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;}
   .j-agent{font-size:14px; font-weight:700; color:var(--accent);}
   .j-agent.warehouse{color:var(--terracotta);}
-  .j-agent.analyst{color:var(--an);}
   .j-time{font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums;}
   .j-text{font-size:16px; line-height:1.6; margin-bottom:8px; color:var(--text);}
   .j-meta{display:flex; align-items:center; gap:10px;}
@@ -580,6 +619,8 @@
   .ord-place:focus, .ord-search:focus{outline:none; border-color:var(--accent);}
   .ord-date{width:170px;}
   .ord-point{width:460px;}
+  .ord-vw{width:300px; cursor:pointer;}
+  .ord-vw-line{background:var(--panel-2); border:1px solid var(--line); border-radius:6px; color:var(--text); font-size:13px; padding:2px 6px; margin-top:2px;}
   .ord-sort, .sup-filters select{background:var(--panel-2); border:1px solid var(--line); border-radius:8px;
     padding:9px 12px; color:var(--text); font-family:var(--sans); font-size:15px;}
   .sup-filters{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:14px;}
@@ -850,6 +891,27 @@
   .act-row .ord-sub{margin-top:2px;}
   .ord-when, .ord-no, .ord-table th{white-space:nowrap;}
   .ord-scroll{max-height:52vh; overflow:auto; border:1px solid var(--line); border-radius:10px;}
+  /* Заказы на телефоне — карточками, без прокрутки вбок (rules/formatting.md;
+     проверка 03.10.2026). Подписи — из заголовков столбцов. */
+  @media(max-width:640px){
+    .ord-cards thead{display:none;}
+    .ord-cards, .ord-cards tbody{display:block; width:100%;}
+    .ord-cards tr{display:grid; grid-template-columns:28px minmax(0,1fr) minmax(0,1fr); gap:6px 12px; padding:12px; border-bottom:1px solid var(--line);}
+    .ord-cards td{display:block; padding:0; border:0; min-width:0; overflow-wrap:anywhere; text-align:left; white-space:normal;}
+    .ord-cards td:first-child{grid-row:span 4;}
+    .ord-cards td:nth-child(4){grid-column:2 / -1;}
+    .ord-cards td:nth-child(n+2)::before{display:block; font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em;}
+    .ord-cards td:nth-child(2)::before{content:'Заказ';}
+    .ord-cards td:nth-child(3)::before{content:'Оформлен';}
+    .ord-cards td:nth-child(4)::before{content:'Товар';}
+    .ord-cards td:nth-child(5)::before{content:'Артикул МП';}
+    .ord-cards td:nth-child(6)::before{content:'Штрихкод';}
+    .ord-cards td:nth-child(7)::before{content:'Куда';}
+    .ord-cards td:nth-child(8)::before{content:'Кол-во';}
+    .ord-cards td:nth-child(9)::before{content:'На складе, шт.';}
+    .ord-cards td:only-child{grid-column:1 / -1;}
+    .ord-cards td:only-child::before{content:none;}
+  }
 
   .wh-beam{
     position:absolute; left:3px; right:3px; height:2px; margin-bottom:-1px;
@@ -1037,11 +1099,27 @@
   .rc-list-head{display:flex; align-items:baseline; gap:12px; margin-bottom:10px; flex-wrap:wrap;}
   .rc-src{font-size:13px; color:var(--muted); line-height:1.45; margin-top:3px; font-family:var(--sans); font-variant-numeric:tabular-nums;}
   .rc-acts{display:flex; gap:14px; justify-content:flex-end; flex-wrap:wrap;}
-  .nav-soon{margin-left:auto; font-size:11px; color:var(--muted); border:1px solid var(--line); border-radius:6px; padding:1px 6px;}
-  .bill-soon{font-size:12px; font-weight:600; color:var(--yellow, #C9A66B); border:1px solid currentColor; border-radius:6px; padding:2px 8px; margin-left:8px; vertical-align:middle;}
-  .bill-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-top:8px;}
-  .bill-card{border:1px dashed var(--line); border-radius:12px; padding:16px; display:grid; gap:6px; font-size:14px;}
-  .bill-card span{color:var(--muted); font-size:13px;}
+  /* Расчёты с продавцами (04.10.2026): прайс и начисления за месяц. */
+  .bill-month{max-width:200px;}
+  .bill-prices{display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin:12px 0;}
+  .bill-prices .rc-field small{color:var(--muted); font-size:13px;}
+  .bill-opts{display:flex; flex-wrap:wrap; gap:8px 20px; font-size:14px; margin-bottom:12px;}
+  .bill-opts label{display:flex; gap:8px; align-items:center; cursor:pointer;}
+  .bill-warn{border:1px solid rgba(201,166,107,0.6); background:var(--yellow-soft); color:var(--yellow); border-radius:10px; padding:10px 14px; font-size:14px; margin-bottom:12px;}
+  .bill-wrap{overflow-x:auto; border:1px solid var(--line); border-radius:10px;}
+  .bill-row{cursor:pointer;} .bill-row:hover td{background:var(--panel-2);}
+  .bill-detail td{background:var(--bg); font-size:14px;}
+  .bill-detail .bill-line{margin:6px 0;} .bill-detail .bill-src{color:var(--muted); font-size:13px;}
+  .bill-total td{font-weight:700;}
+  @media (max-width:640px){
+    .bill-month{max-width:none; width:100%;}
+    .bill-table thead{display:none;}
+    .bill-table, .bill-table tbody{display:block; width:100%;}
+    .bill-table tr{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:6px 12px; padding:12px; border-bottom:1px solid var(--line);}
+    .bill-table td{display:block; padding:0; border:0; min-width:0; overflow-wrap:anywhere;}
+    .bill-table td:first-child{grid-column:1 / -1;}
+    .bill-table td[data-l]::before{content:attr(data-l); display:block; font-size:12px; color:var(--muted);}
+  }
   .rc-flag-bad{color:var(--terracotta);}
   .rc-facts{display:grid; grid-template-columns:max-content 1fr; gap:6px 18px; margin:0 0 16px; font-size:14px;}
   .rc-facts dt{color:var(--muted);}
@@ -1063,19 +1141,42 @@
   .rc-msg{padding:10px 12px; border:1px solid var(--line); border-radius:10px; margin:0 40px 8px 0; font-size:14px; white-space:pre-wrap; overflow-wrap:anywhere;}
   .rc-msg.mine{margin:0 0 8px 40px; background:var(--accent-soft); border-color:transparent;}
   .rc-msg .rc-src{white-space:normal; margin-bottom:4px;}
-  .rc-reply{display:grid; gap:8px; margin-top:10px;}
-  .rc-reply select, .rc-reply textarea{background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:inherit;}
+  .rc-reply{display:grid; grid-template-columns:minmax(0,1fr); gap:8px; margin-top:10px;}
+  .rc-reply select, .rc-reply textarea{min-width:0; max-width:100%; width:100%; box-sizing:border-box; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:inherit;}
   .rc-reply .wh-onboarding-btn{justify-self:start;}
   .rc-bottom{display:flex; gap:18px; margin-top:20px; flex-wrap:wrap;}
   /* Товары */
-  .pr-bar{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
-  .pr-bar select{max-width:280px;}
+  /* Панели над таблицей — с отступом снизу: поиск и «Выгрузить в Excel» не
+     липнут к шапке таблицы (владелец 03.10.2026). */
+  .pr-bar{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px;}
+  .pr-bar .grow{flex:1;}
+  .pr-filters{display:flex; gap:8px; flex-wrap:wrap; margin:0 0 16px;}
+  .pr-back{background:none; border:none; color:var(--accent); font:inherit; font-size:14px; cursor:pointer; padding:0;}
+  .pr-seller{font-size:16px;}
+  .pr-scroll{overflow-x:auto;}
+  .pr-click{cursor:pointer;}
+  .pr-click:hover td{background:var(--panel-2);}
+  .pr-name{font-weight:600; color:var(--accent);}
+  .pr-table td.strong{font-weight:700;}
+  .pr-total td{font-weight:700; border-bottom:none;}
+  /* Склады продавца в «Остатках продавцов» (02.10.2026). */
+  #productsVwBar:empty, #productsTransfers:empty{display:none;}
+  .pr-vw{display:flex; align-items:center; gap:8px; font-size:14px; color:var(--muted);}
+  .pr-vw select{max-width:240px;}
+  .pr-split{margin-top:2px;}
+  .pr-move{display:inline-block; margin-top:4px; font-size:12.5px;}
+  .pr-transfers{margin-bottom:16px;}
+  .tr-grid{display:flex; flex-direction:column; gap:10px; margin:12px 0 4px;}
+  .tr-grid label{display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--muted);}
   .pr-bar input{max-width:360px; flex:1; min-width:200px;}
+  @media(max-width:760px){ .pr-bar input{max-width:none; flex:1 1 100%; min-width:0;} }
   .pr-table{width:100%; border-collapse:collapse; font-size:14px;}
   .pr-table th{text-align:left; font-size:12px; color:var(--muted); font-weight:600; letter-spacing:.04em;
     text-transform:uppercase; padding:0 12px 8px 0; border-bottom:1px solid var(--line);}
   .pr-table td{padding:10px 12px 10px 0; border-bottom:1px solid var(--line); vertical-align:top;}
   .pr-table td.num, .pr-table th.num{text-align:right; white-space:nowrap;}
+  /* Последний столбец — вровень с правым краем панели (кнопка Excel). */
+  .pr-table th:last-child, .pr-table td:last-child{padding-right:0;}
   .pr-table td.num{font-family:var(--mono);}
   .pr-table .sub{font-family:var(--mono); font-size:12px; color:var(--muted);}
   .pr-table .warn{color:var(--terracotta);}
@@ -1414,6 +1515,9 @@
   .wh-row-group.visible{display:block; animation:fadeInUp 0.3s var(--ease) both;}
   .wh-row-group-head{display:flex; align-items:center; gap:14px; margin-bottom:14px; flex-wrap:wrap;}
   .wh-cell.merged{border-radius:5px;}
+  /* Ячейка брака — формой, а не цветом: цвет на карте значит заполненность. */
+  .wh-cell .wh-defect-mark{position:absolute; left:3px; bottom:2px; font-size:9px; line-height:1; font-weight:700;
+    color:var(--text, #EDEBE6); opacity:.75; pointer-events:none;}
   .wh-row-group-title{font-size:14px; font-weight:700; color:var(--text); flex-shrink:0;}
   .wh-row-group-meter{flex:1 1 auto; min-width:40px; height:5px; background:var(--bg); border-radius:3px; overflow:hidden;}
   .wh-row-group-meter-fill{display:block; height:100%; background:linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius:3px; transition:width 0.4s var(--ease);}
@@ -1766,6 +1870,8 @@
   .inv-diff-row{display:flex; justify-content:space-between; align-items:baseline; gap:14px; padding:9px 0; border-top:1px solid var(--line); font-size:14px;}
   .inv-diff-sku{display:block; font-family:var(--mono); font-size:12px; color:var(--muted); margin-top:2px;}
   .inv-diff-nums{font-size:14px; color:var(--muted); white-space:nowrap;}
+  /* На телефоне числа расхождения — строкой ниже, целиком (проверка 03.10.2026). */
+  @media(max-width:520px){ .inv-diff-row{flex-wrap:wrap;} .inv-diff-nums{white-space:normal;} }
   .inv-diff-nums .up{color:var(--accent); font-weight:600;}
   .inv-diff-nums .down{color:#D98E6E; font-weight:600;}
   .inv-note{margin-top:10px; padding:9px 11px; border-radius:8px; background:rgba(201,166,107,0.12); color:#C9A66B; font-size:14px;}
@@ -1856,6 +1962,17 @@
   .mp-card-click{cursor:pointer; transition:border-color .15s;}
   .mp-card-click:hover{border-color:var(--accent-2);}
   .sp-sec{border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:14px; background:var(--panel-2);}
+  /* Склады продавца: форма склада внутри окна продавца (02.10.2026). */
+  .rc-vw-line{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid var(--line-soft); font-size:14px;}
+  .rc-vw-line select{width:auto; max-width:220px;}
+  .sp-check{display:flex; gap:10px; align-items:flex-start; font-size:14px; cursor:pointer;}
+  .sp-check input{width:18px; height:18px; margin-top:2px; accent-color:var(--accent); flex:none;}
+  .sp-check small{display:block; color:var(--muted); font-size:12.5px; margin-top:2px;}
+  #vwSepMore{display:flex; flex-direction:column; gap:8px; padding-left:28px;}
+  #vwSepMore[hidden]{display:none;}
+  .sp-vw-form{display:flex; flex-direction:column; gap:8px; padding:10px 0; border-top:1px solid var(--line-soft);}
+  .sp-vw-field{display:flex; flex-direction:column; gap:4px; font-size:13px; color:var(--muted);}
+  #vwSepMore:not([hidden]){display:flex; flex-direction:column; gap:8px;}
   .sp-head{display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px; font-size:15px;}
   .sp-count{font-size:14px; font-weight:600; margin:6px 0 2px;}
   .wbw-row.on b{color:var(--accent-2);}
@@ -1933,6 +2050,9 @@
   .ask-text:empty{display:none;}
   .ask-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:20px;}
   .ask-box.danger .ask-ok{background:var(--terracotta); border-color:var(--terracotta); color:#fff;}
+  /* «Внимание! Вы даёте доступ…» — заметно, красным (владелец 04.10.2026). */
+  .ask-box.danger{border-color:var(--terracotta); box-shadow:0 0 0 2px var(--terracotta);}
+  .ask-box.danger .ask-title{color:var(--terracotta);}
   .sup-state{font-size:13px; padding:5px 12px; border-radius:20px; border:1px solid var(--line); color:var(--muted); white-space:nowrap;}
   .sup-acts{display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;}
   .sup-acts .mp-act{font-size:14px; padding:8px 14px; border:1px solid var(--line); border-radius:8px;
@@ -2179,7 +2299,51 @@
 
   /* View transition */
   .view.active{animation:fadeInUp 0.3s var(--ease) both;}
+
+  /* Главная и группы навигации — рабочая сводка на всю ширину. */
+  .home-wrap{flex:1; min-width:0; overflow-y:auto; padding:26px 30px 34px;}
+  .home-head{display:flex; align-items:flex-start; justify-content:space-between; gap:18px; margin-bottom:22px;}
+  .home-head h1{font-size:26px; line-height:1.25; margin:0 0 8px;}
+  .home-head p,.home-status{font-size:16px; line-height:1.5; color:var(--muted); margin:0;}
+  .home-status{margin-bottom:14px;}
+  .home-table{width:100%; border-collapse:collapse; font-size:18px; line-height:1.5;}
+  .home-table th{font-size:15px; font-weight:600; color:var(--muted); text-align:left; padding:12px 16px; border-bottom:1px solid var(--line);}
+  .home-table td{padding:16px; vertical-align:middle; border-bottom:1px solid var(--line);}
+  .home-table th+th,.home-table td+td{border-left:1px solid var(--line-soft);}
+  .home-table .home-num{text-align:center; font-variant-numeric:tabular-nums; font-weight:700; min-width:100px;}
+  .home-table .home-detail{font-size:16px; color:var(--muted);}
+  .home-table .home-warn{color:var(--yellow);}
+  .home-link,.home-refresh{min-height:44px; padding:10px 16px; border:1px solid var(--line); border-radius:8px; background:var(--panel-2); color:var(--text); font:inherit; font-size:16px; font-weight:600; cursor:pointer;}
+  .home-link:hover,.home-refresh:hover{border-color:var(--accent); color:var(--accent);}
+  .home-actions-title{font-size:19px; margin:28px 0 12px;}
+  .home-actions{display:flex; flex-wrap:wrap; gap:10px;}
+  .nav-group .oc-wrap{max-width:none; width:100%; min-width:0;}
+  .nav-pane-tabs{gap:12px; overflow-x:auto;}
+  .nav-pane-tabs .pane-tab{min-height:48px; white-space:nowrap; padding-left:10px; padding-right:10px;}
+  .nav-launch.ready{max-height:none; padding:20px; margin:0 0 24px; border:1px solid var(--line); border-radius:10px;}
+  .nav-launch .ready-title{font-size:19px;}
+  .nav-launch .ready-sub,.nav-launch .ready-step span{font-size:16px; line-height:1.5;}
+  .nav-launch .ready-step{min-height:48px; padding:12px;}
+  .nav-launch .ready-step b{font-size:17px;}
+  .sidebar-nav .nav-item[role="button"]:focus-visible,.home-link:focus-visible,.home-refresh:focus-visible,.nav-pane-tabs .pane-tab:focus-visible{outline:2px solid var(--accent); outline-offset:3px;}
+  @media(max-width:640px){
+    .home-wrap{padding:18px 14px 28px;}
+    .home-head{flex-wrap:wrap; gap:12px;}
+    .home-table thead{display:none;}
+    .home-table,.home-table tbody,.home-table tr,.home-table td{display:block; width:100%;}
+    .home-table tr{padding:12px 0; border-bottom:1px solid var(--line);}
+    .home-table td{border:0; padding:5px 0;}
+    .home-table td+td{border:0;}
+    .home-table .home-num{text-align:left; min-width:0;}
+    .home-table .home-num:before{content:attr(data-label) ': '; font-weight:400; color:var(--muted);}
+    .home-link{width:100%; text-align:left;}
+    .home-actions{flex-direction:column;}
+    .nav-pane-tabs{padding:0 12px;}
+    .nav-launch.ready{padding:14px;}
+  }
 </style>
+<link rel="stylesheet" href="cabinet-workspace.css?v=8ef0874e">
+<link rel="stylesheet" href="cabinet-order-filters.css?v=89c62720">
 </head>
 <body>
 
@@ -2202,9 +2366,8 @@
 <div class="app">
 
   <div class="sidebar">
-    <!-- Куда ведёт логотип, человек выбирает сам в меню профиля (владелец
-         26.09.2026); по умолчанию — журнал действий. -->
-    <div class="logo" id="logoLink" role="button" tabindex="0" title="В журнал действий"
+    <!-- Выбор назначения логотипа сохраняется в меню профиля. -->
+    <div class="logo" id="logoLink" role="button" tabindex="0" title="На главную"
          onclick="goLogo()"
          onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault(); goLogo();}">
       <svg class="logo-mark" viewBox="0 0 32 20" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2219,38 +2382,27 @@
 
     <nav class="sidebar-nav" aria-label="Разделы кабинета">
     <div class="nav-label">Рабочее место</div>
-    <div class="nav-item active" id="nav-chat" onclick="switchView('chat')"><span class="nav-dot"></span>Чат<span class="nav-badge" id="chatBadge"></span></div>
-    <div class="nav-item" id="nav-journal" onclick="switchView('journal')"><span class="nav-dot"></span>Журнал действий<span class="nav-badge" id="navBadge">1</span></div>
-
-    <!-- Разделы по работе: заказы → склад → настройки (решение владельца
-         22.09). Раздел, из которого у человека не осталось ни одного пункта,
-         прячется вместе с заголовком. -->
+    <div class="nav-item" id="nav-home" onclick="switchView('home')"><span class="nav-dot"></span><span class="nav-name">Главная</span></div>
+    <div class="nav-item" id="nav-chat" onclick="switchView('chat')"><span class="nav-dot"></span><span class="nav-name">Чат</span><span class="nav-badge" id="chatBadge"></span></div>
+    <div class="nav-item" id="nav-journal" onclick="switchView('journal')"><span class="nav-dot"></span><span class="nav-name">Журнал действий</span><span class="nav-badge" id="navBadge"></span></div>
     <div class="nav-sep"></div>
-    <div class="nav-label">Заказы</div>
-    <div class="nav-item" id="nav-orders" onclick="switchView('orders')"><span class="nav-dot"></span>Заказы с маркетплейсов<span class="nav-badge" id="ordersBadge"></span></div>
-    <div class="nav-item" id="nav-supplies" onclick="switchView('supplies')"><span class="nav-dot"></span>Поставки<span class="nav-badge" id="suppliesBadge"></span></div>
-
+    <div class="nav-label">Операции</div>
+    <div class="nav-item" id="nav-orders" onclick="switchView('orders')"><span class="nav-dot"></span><span class="nav-name">Заказы</span><span class="nav-badge" id="ordersBadge"></span></div>
+    <div class="nav-item" id="nav-supplies" onclick="switchView('supplies')"><span class="nav-dot"></span><span class="nav-name">Поставки</span><span class="nav-badge" id="suppliesBadge"></span></div>
+    <div class="nav-item" id="nav-receipts" onclick="switchView('inbound')"><span class="nav-dot"></span><span class="nav-name">Приходы и акты</span></div>
+    <div class="nav-item" id="nav-products" onclick="switchView('stock')"><span class="nav-dot"></span><span class="nav-name">Склад и товары</span></div>
     <div class="nav-sep"></div>
-    <div class="nav-label">Склад</div>
-    <div class="nav-item" id="nav-receipts" onclick="switchView('receipts')"><span class="nav-dot"></span>Приход товара</div>
-    <div class="nav-item" id="nav-products" onclick="switchView('products')"><span class="nav-dot"></span>Товары</div>
-    <div class="nav-item" id="nav-warehouse" onclick="switchView('warehouse')"><span class="nav-dot"></span>Склад и ячейки</div>
-    <div class="nav-item" id="nav-inv" onclick="switchView('inv')"><span class="nav-dot"></span>Инвентаризация<span class="nav-badge" id="invBadge"></span></div>
-    <div class="nav-item" id="nav-acts" onclick="switchView('acts')"><span class="nav-dot"></span>Акты</div>
-    <div class="nav-item" id="nav-billing" onclick="switchView('billing')"><span class="nav-dot"></span>Расчёты с продавцами<span class="nav-soon">скоро</span></div>
-
-    <div class="nav-sep"></div>
-    <div class="nav-label">Настройки</div>
-    <div class="nav-item" id="nav-settings" onclick="switchView('settings')"><span class="nav-dot"></span>Настройки склада<span class="nav-badge" id="settingsBadge">!</span></div>
-    <div class="nav-item" id="nav-mp" onclick="switchView('mp')"><span class="nav-dot"></span>Продавцы и площадки</div>
-    <div class="nav-item" id="nav-staff" onclick="switchView('staff')"><span class="nav-dot"></span>Сотрудники</div>
-    <div class="nav-item" id="nav-1c" onclick="switchView('1c')"><span class="nav-dot"></span>Подключение 1С</div>
+    <div class="nav-label">Управление</div>
+    <div class="nav-item" id="nav-mp" onclick="switchView('mp')"><span class="nav-dot"></span><span class="nav-name">Клиенты</span></div>
+    <div class="nav-item" id="nav-billing" onclick="switchView('billing')"><span class="nav-dot"></span><span class="nav-name">Расчёты</span></div>
+    <div class="nav-item" id="nav-staff" onclick="switchView('staff')"><span class="nav-dot"></span><span class="nav-name">Сотрудники</span></div>
+    <div class="nav-item" id="nav-settings" onclick="switchView('configuration')"><span class="nav-dot"></span><span class="nav-name">Настройки</span><span class="nav-badge" id="settingsBadge">!</span></div>
     </nav>
 
     <div class="sidebar-footer">
       <div class="account-menu" id="accountMenu">
         <div class="account-menu-item logo-target-head" onclick="toggleLogoTargets()">
-          <span>Логотип ведёт в</span><b id="logoTargetName">Журнал действий</b>
+          <span>Логотип ведёт в</span><b id="logoTargetName">Главная</b>
         </div>
         <div class="logo-target-list" id="logoTargetList"></div>
         <div class="account-menu-sep"></div>
@@ -2272,7 +2424,20 @@
 
   <div class="main">
 
-    <div class="view active" id="view-chat">
+    <div class="view" id="view-home">
+      <div class="home-wrap">
+        <div class="home-head">
+          <div><h1>Главная</h1><p>Текущая работа склада и задачи, которые требуют внимания.</p></div>
+          <button type="button" class="home-refresh" onclick="loadHome()">Обновить сводку</button>
+        </div>
+        <p class="home-status" id="homeUpdated" role="status">Загружаем сводку…</p>
+        <div id="todayStrip" aria-live="polite"></div>
+        <h2 class="home-actions-title">Перейти к работе</h2>
+        <div class="home-actions" id="homeActions"></div>
+      </div>
+    </div>
+
+    <div class="view" id="view-chat">
       <div class="chat">
         <div class="chat-head">
           <div class="chat-head-left">
@@ -2310,18 +2475,7 @@
                   <span class="connected-agent-tip-dot warehouse"></span>
                   <span class="connected-agent-tip-title">Кладовщик</span>
                 </div>
-                <div class="connected-agent-tip-text">Принимает поставки по штрихкоду, сверяет ячейки и остатки с 1С, находит расхождения и присылает их вам на подтверждение.</div>
-              </div>
-            </div>
-            <div class="connected-agent" tabindex="0" onclick="togglePin(this)">
-              <div class="mini-avatar analyst">АН<span class="mini-dot"></span></div>
-              <span class="connected-agent-name">Аналитик</span>
-              <div class="connected-agent-tip">
-                <div class="connected-agent-tip-head">
-                  <span class="connected-agent-tip-dot analyst"></span>
-                  <span class="connected-agent-tip-title">Аналитик</span>
-                </div>
-                <div class="connected-agent-tip-text">Считает оборачиваемость и заполненность склада, собирает периодические отчёты и предупреждает о переполнении секторов.</div>
+                <div class="connected-agent-tip-text">Отвечает, где лежит товар и сколько его, что в документах, что ждёт работы и вашего решения. Сам напоминает о проблемах склада и подсказывает грузчику ячейку.</div>
               </div>
             </div>
           </div>
@@ -2334,11 +2488,12 @@
         <div class="chat-body">
           <div class="chat-empty" id="chatEmpty">
             <div class="chat-empty-title">Спросите про склад</div>
-            <div class="chat-empty-sub">Оркестратор передаёт вопрос Кладовщику и отвечает тем, что тот нашёл в ячейках.</div>
+            <div class="chat-empty-sub">Оркестратор передаёт вопрос Кладовщику: товары и ячейки, поставки, привозы, брак, кто что делает.</div>
             <div class="chat-empty-hints">
               <button type="button" onclick="askOrchestrator(this.textContent)">Где лежит PB000022269?</button>
-              <button type="button" onclick="askOrchestrator(this.textContent)">Что лежит в ряду 1?</button>
-              <button type="button" onclick="askOrchestrator(this.textContent)">Найди товар по названию: короб</button>
+              <button type="button" onclick="askOrchestrator(this.textContent)">Что сейчас собирается?</button>
+              <button type="button" onclick="askOrchestrator(this.textContent)">Что привезут сегодня?</button>
+              <button type="button" onclick="askOrchestrator(this.textContent)">Кто что делает на складе?</button>
             </div>
           </div>
         </div>
@@ -2430,6 +2585,7 @@
         </div>
 
         <div id="jList"></div>
+        <div id="journalMore" class="journal-more"></div>
 
         <div class="j-empty" id="jEmpty">По выбранным фильтрам записей не найдено.</div>
 
@@ -2437,6 +2593,14 @@
     </div>
 
     <div class="view" id="view-warehouse">
+
+      <details class="stock-vw-workspace" id="warehouseVwWorkspace" ontoggle="onWarehouseVwToggle()">
+        <summary>Склады продавцов <span>Назначение товара, отдельное хранение и зоны</span></summary>
+        <div class="stock-vw-content">
+          <div id="warehouseVwPicker"></div>
+          <div id="warehouseVwBody"><div class="stock-hint">Выберите продавца, чтобы увидеть и настроить его склады.</div></div>
+        </div>
+      </details>
 
       <div class="wh-onboarding" id="whOnboarding">
         <div class="wh-onboarding-icon">
@@ -2516,21 +2680,33 @@
     </div>
 
     <div class="view" id="view-staff">
-      <div class="staff-wrap">
-        <!-- Три роли — три раздела, у каждого своя форма выдачи ключа.
-             Общий список с выпадающим «кем выдать» владелец трижды заполнил
-             не той ролью: выбор стоял рядом, но глазами не читался. Здесь
-             промахнуться нечем — ключ выдаётся в том разделе, куда человек
-             и относится. -->
+      <div class="staff-wrap staff-workspace">
+        <div class="staff-head staff-workspace-head">
+          <div><div class="staff-title">Сотрудники</div><div class="staff-sub">Ключи доступа и права на работу со складом.</div></div>
+          <div class="staff-code-chip">Код склада: <b id="whCodeChip">—</b></div>
+        </div>
+        <div class="staff-columns">
+        <section class="staff-column staff-workers">
+          <div class="staff-head"><div><div class="staff-title">Кладовщики</div><div class="staff-sub">Приёмка, сборка и пересчёт на телефоне.</div></div>
+            <button class="workspace-button" type="button" onclick="toggleStaffForm('worker')" aria-controls="staffWorkerForm" aria-expanded="false" id="staffWorkerFormButton">+ Выдать ключ</button>
+          </div>
+          <div id="staffWorkerForm" hidden>
+            <div class="staff-add" data-form><input type="text" id="staffNameInput" placeholder="Имя кладовщика" aria-label="Имя кладовщика"><button type="button" onclick="addStaffMember()">Создать ключ кладовщика</button></div>
+          </div>
+          <div class="staff-toggle open" id="staffToggle"><span id="staffToggleLabel">Кладовщики</span></div>
+          <div id="staffRows"></div>
+        </section>
+        <section class="staff-column staff-managers">
         <div class="staff-head">
           <div>
             <div class="staff-title">Менеджеры</div>
-            <div class="staff-sub">Заказы с площадок, поставки и журнал. Входит по имени и своему ключу — без пароля. Всё остальное открывается отдельно, галочками ниже.</div>
+            <div class="staff-sub">Заказы, поставки и журнал. Дополнительные права задаются отдельно.</div>
           </div>
-          <div class="staff-code-chip">Код склада: <b id="whCodeChip">—</b></div>
+          <button class="workspace-button" type="button" onclick="toggleStaffForm('manager')" aria-controls="staffManagerForm" aria-expanded="false" id="staffManagerFormButton">+ Выдать ключ</button>
         </div>
 
         <!-- Ключ выдаёт только кнопка: Enter форму не отправляет (владелец 27.09.2026). -->
+        <div id="staffManagerForm" hidden>
         <div class="staff-add" data-form>
           <input type="text" id="managerNameInput" placeholder="Имя менеджера">
           <button onclick="addManager()">+ Выдать ключ менеджера</button>
@@ -2539,30 +2715,14 @@
           <div class="staff-grants-title">Что открыть менеджеру, кроме заказов, поставок и журнала</div>
           <div class="staff-grants-list" id="staffGrantsList"></div>
         </div>
+        </div>
 
-        <div class="staff-toggle" id="managersToggle" onclick="toggleManagersList()">
-          <span class="staff-toggle-arrow">▸</span>
+        <div class="staff-toggle open" id="managersToggle">
           <span id="managersToggleLabel">Менеджеры</span>
         </div>
-        <div id="managerRows" hidden></div>
-
-        <div class="staff-head staff-section">
-          <div>
-            <div class="staff-title">Кладовщики</div>
-            <div class="staff-sub">Приёмка, сборка и пересчёт на телефоне. Кладовщик не видит заказы, чат и деньги — только свою работу у полок.</div>
-          </div>
+        <div id="managerRows"></div>
+        </section>
         </div>
-        <div class="staff-add" data-form>
-          <input type="text" id="staffNameInput" placeholder="Имя кладовщика">
-          <button onclick="addStaffMember()">+ Выдать ключ кладовщика</button>
-        </div>
-        <div class="staff-toggle" id="staffToggle" onclick="toggleStaffList()">
-          <span class="staff-toggle-arrow" id="staffToggleArrow">▸</span>
-          <span id="staffToggleLabel">Кладовщики</span>
-        </div>
-        <div id="staffRows" hidden></div>
-
-
       </div>
     </div>
 
@@ -2577,8 +2737,9 @@
             <div class="staff-sub">Товар привезли на склад — заведите приход. Грузчик увидит его у себя в «Приёмке», примет по факту и разложит по ячейкам. Приходы из 1С появляются здесь сами.</div>
           </div>
           <button type="button" class="wh-onboarding-btn" onclick="exportInvoices()">Выгрузить в Excel</button>
+          <button type="button" class="wh-onboarding-btn primary rc-new" id="receiptNewBtn" onclick="toggleReceiptForm()">+ Новый приход</button>
         </div>
-        <div class="rc-card" data-form>
+        <div class="rc-card rc-form" id="receiptForm" data-form>
           <div class="rc-top">
             <label class="rc-field"><span>Продавец</span>
               <select id="invoiceCompanySelect" class="mp-field" onchange="receiptCompanyChanged()"></select></label>
@@ -2684,26 +2845,25 @@
          заказов, а живут они дальше своей жизнью — сборка, документы, «нет
          товара», «Уехала». В одном экране с очередью заказов их было не найти. -->
     <!-- Акты приёмки на хранение и отгрузки с хранения — по шаблонам склада. -->
-    <!-- Расчёты с продавцами — заглушка (владелец 27.09.2026: «добавь как
-         заглушку, чтобы не забыли»). Считать начнём, когда владелец утвердит
-         прайс склада; что нужно — в docs/Отложено.md, «Биллинг услуг склада». -->
+    <!-- Персональные прайсы, начисления и отдельные счета клиентов. -->
     <div class="view" id="view-billing">
       <div class="staff-wrap">
         <div class="staff-head">
           <div>
-            <div class="staff-title">Расчёты с продавцами <span class="bill-soon">в разработке</span></div>
-            <div class="staff-sub">Здесь склад будет видеть, сколько каждый продавец должен за работу склада, — и тот же
-              расчёт продавец увидит у себя в кабинете. Сейчас раздел пустой: считать начнём, когда вы утвердите прайс склада.</div>
+            <div class="staff-title">Расчёты</div>
+            <div class="staff-sub">У каждого клиента свой прайс услуг. Начисления за период превращаются в отдельный счёт; оплаты фиксируются здесь.</div>
           </div>
         </div>
-        <div class="bill-grid">
-          <div class="bill-card"><b>Хранение</b><span>за каждый день: сколько места занимал товар продавца — ячейки, паллеты или объём</span></div>
-          <div class="bill-card"><b>Упаковка</b><span>пакет, ВПП, короб, стрейч — по каждому собранному заказу и поставке</span></div>
-          <div class="bill-card"><b>Приёмка и операции</b><span>приёмка по штукам или местам, сборка заказа, маркировка, стикеровка, возвраты</span></div>
-          <div class="bill-card"><b>Счёт за период</b><span>итог по продавцу за месяц с расшифровкой по дням и операциям, выгрузка в Excel</span></div>
+        <div class="workspace-filters" id="billFilters">
+          <div class="rc-field"><span>Клиент</span><div id="billCompanyChoice"></div></div>
+          <label class="rc-field"><span>Период с</span><input type="date" class="mp-field" id="billFrom" onchange="loadBilling()"></label>
+          <label class="rc-field"><span>По включительно</span><input type="date" class="mp-field" id="billTo" onchange="loadBilling()"></label>
+          <button type="button" class="workspace-button" onclick="loadBilling()">Обновить</button>
         </div>
-        <div class="staff-sub" style="margin-top:18px">Что нужно от вас, чтобы включить: прайс склада (цена хранения и каждой
-          услуги).</div>
+        <div id="billError" role="status"></div>
+        <div id="billTariff"></div>
+        <div id="billCharges"></div>
+        <div id="billInvoices"></div>
       </div>
     </div>
 
@@ -2728,9 +2888,10 @@
         <div class="staff-head">
           <div>
             <div class="staff-title">Поставки</div>
-            <div class="staff-sub">Поставка становится собранной сама, когда грузчики соберут каждый заказ. Когда машина уедет — отметьте «Уехала». Пока по поставке ничего не собрано, её можно разобрать: заказы вернутся в очередь. Составляют поставку во вкладке «Заказы с маркетплейсов».</div>
+            <div class="staff-sub">Поставка становится собранной сама, когда грузчики соберут каждый заказ. Когда машина уедет — отметьте «Уехала». Пока по поставке ничего не собрано, её можно разобрать: заказы вернутся в очередь. Новую поставку составляют из выбранных заказов клиента.</div>
           </div>
-          <button class="wh-onboarding-btn" type="button" onclick="loadSupplies()">Обновить</button>
+          <div class="order-supply-actions"><button class="wh-onboarding-btn primary" id="newSupplyButton" type="button" onclick="switchView('orders')">Новая поставка</button>
+            <button class="wh-onboarding-btn" type="button" onclick="loadSupplies()">Обновить</button></div>
         </div>
         <div id="suppliesList"></div>
       </div>
@@ -2739,11 +2900,11 @@
     <!-- Товары — каталог продавцов: что есть, сколько лежит и где. Новый товар
          заводится здесь, не дожидаясь 1С (решение владельца 22.09). -->
     <div class="view" id="view-products">
-      <div class="staff-wrap">
+      <div class="staff-wrap stock-workspace">
         <div class="staff-head">
           <div>
-            <div class="staff-title">Товары</div>
-            <div class="staff-sub">Каталог продавцов: сколько товара лежит в ячейках Аргуса, где и сколько по учёту 1С. Новый товар можно завести здесь, не дожидаясь 1С. Когда такой же артикул того же продавца придёт из 1С, карточки свяжутся сами.</div>
+            <div class="staff-title">Остатки продавцов</div>
+            <div class="staff-sub">Остатки и размещение товаров. Выберите клиента и его склад; нажмите на товар, чтобы открыть подробности.</div>
           </div>
           <button class="wh-onboarding-btn primary" type="button" onclick="toggleProductForm(true)">+ Добавить товар</button>
         </div>
@@ -2767,12 +2928,35 @@
             <button type="button" class="wh-onboarding-btn primary" id="productFormSave" onclick="saveProduct()">Завести товар</button>
           </div>
         </div>
-        <div class="pr-bar">
-          <select id="productsCompany" class="mp-field" onchange="loadProducts()"></select>
-          <input type="search" id="productsSearch" class="mp-field" placeholder="Название, артикул или штрихкод" oninput="renderProducts()">
-          <span class="ord-meta" id="productsMeta"></span>
+        <div class="stock-context" id="productsCompanyPicker"></div>
+        <!-- Сводка по всем продавцам → товары продавца (владелец 02.10.2026). -->
+        <div id="productsLevel1">
+          <div class="pr-bar">
+            <input type="search" id="sellersSearch" class="mp-field" placeholder="Продавец" oninput="renderSellerStock()">
+            <span class="ord-meta" id="sellersMeta"></span>
+            <span class="grow"></span>
+            <button type="button" class="wh-onboarding-btn" onclick="exportSellerStock()">Выгрузить в Excel</button>
+          </div>
+          <div id="sellersList"><div class="staff-empty">Загружаем…</div></div>
         </div>
-        <div id="productsList"><div class="staff-empty">Выберите продавца.</div></div>
+        <div id="productsLevel2" hidden>
+          <div class="pr-bar">
+            <button type="button" class="pr-back stock-back" onclick="showSellerStock()">← Все продавцы</button>
+            <b class="pr-seller" id="productsSellerName"></b>
+            <a class="stock-context-button" id="productsSellerCabinet" href="client_access.html">Кабинет этого продавца</a>
+            <button type="button" class="stock-context-button" id="productsWarehouseSettings" onclick="openProductsWarehouses()">Настроить склады продавца</button>
+          </div>
+          <div class="pr-bar">
+            <input type="search" id="productsSearch" class="mp-field" placeholder="Название, артикул или штрихкод" oninput="renderProducts()">
+            <span class="ord-meta" id="productsMeta"></span>
+            <span class="grow"></span>
+            <button type="button" class="wh-onboarding-btn" onclick="exportProducts()">Выгрузить в Excel</button>
+          </div>
+          <div class="pr-filters" id="productsFilters"></div>
+          <div class="pr-bar" id="productsVwBar"></div>
+          <div id="productsTransfers"></div>
+          <div id="productsList"></div>
+        </div>
       </div>
     </div>
 
@@ -2783,7 +2967,7 @@
              карточкой в «Площадках». Теперь всё про продавца — в его окне. -->
         <div class="sl-head">
           <div>
-            <div class="staff-title">Продавцы</div>
+            <div class="staff-title">Клиенты</div>
             <div class="staff-sub">Нажмите на продавца: ключ в его кабинет, связь с 1С, Wildberries и склады на WB.</div>
           </div>
           <div class="sl-head-acts">
@@ -2792,6 +2976,13 @@
           </div>
         </div>
 
+        <div class="sl-tools" data-form>
+          <input type="search" id="sellerSearch" class="mp-field sl-search" placeholder="Найти клиента" oninput="renderMpCards()" autocomplete="off">
+          <div class="sl-add">
+            <input type="text" id="companyNameInput" class="mp-field" placeholder="Название нового клиента" onkeydown="if(event.key==='Enter') addCompany()">
+            <button class="wh-onboarding-btn primary" type="button" onclick="addCompany()">+ Добавить клиента</button>
+          </div>
+        </div>
         <div class="oc-status-bar" id="mpStatusBar">
           <div class="oc-status-dot" id="mpStatusDot"></div>
           <div>
@@ -2802,14 +2993,6 @@
 
         <div id="mpProgress"></div>
         <div id="mpUnresolved"></div>
-
-        <div class="sl-tools" data-form>
-          <input type="search" id="sellerSearch" class="mp-field sl-search" placeholder="Найти продавца" oninput="renderMpCards()" autocomplete="off">
-          <div class="sl-add">
-            <input type="text" id="companyNameInput" class="mp-field" placeholder="Название нового продавца" onkeydown="if(event.key==='Enter') addCompany()">
-            <button class="wh-onboarding-btn primary" type="button" onclick="addCompany()">+ Добавить продавца</button>
-          </div>
-        </div>
 
         <div id="mpList"></div>
         <div id="mpSyncResult"></div>
@@ -2828,6 +3011,7 @@
 
     <div class="view" id="view-settings">
       <div class="oc-wrap">
+        <div class="ready nav-launch" id="readyCard" hidden></div>
         <div class="staff-head">
           <div>
             <div class="staff-title">Настройки склада</div>
@@ -2853,6 +3037,10 @@
             <div class="set-q-title">Как вас называют продавцы на WB</div>
             <div class="set-help" style="margin-bottom:8px;">Продавец сам называет склад на WB, который завёл под вас, — например «ФФ Восход СПБ». Склады со словом из названия вашего склада Аргус отмечает вашими сам. Если продавцы пишут вас иначе, впишите эти слова через запятую.</div>
             <input id="setWbNames" class="mp-field" maxlength="300" placeholder="например: Восток, VSKHD">
+          </div>
+          <div class="set-q">
+            <div class="set-q-title">Напоминания о складах продавцов</div>
+            <label class="sp-check"><input type="checkbox" id="setVwReminders"><span>Кладовщик напоминает о складах продавцов<small>В утренней сводке и в ответе «что сейчас на складе»: заявки продавцов на перенос, переносы и решения, которые ждут продавца, заполненные зоны складов, задания «переложить».</small></span></label>
           </div>
           <div class="set-actions"><button class="wh-onboarding-btn primary" type="button" onclick="saveSettings()">Сохранить</button><span id="setResult" class="set-help"></span></div>
         </div>
@@ -3004,7 +3192,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <script src="back.js?v=4901b838" defer></script>
 <script src="form-keys.js?v=cd462175" defer></script>
-<script src="cabinet_main.js?v=76917963" defer></script>
+<script src="billing-owner.js?v=efc632a4" defer></script>
+<script src="cabinet_main.js?v=cdced5f3" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->

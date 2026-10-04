@@ -225,6 +225,21 @@ main { padding: 28px var(--page-x) 64px; }
 
 /* ---------- Таблицы ---------- */
 .table-wrap { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow-x: auto; }
+/* Список внутри таблицы предпросмотра привоза — меню не обрезается. */
+.table-wrap.open-menus { overflow: visible; }
+/* Склады продавца (02.10.2026). */
+.vw-ask-form .field { margin-top: 10px; }
+.vw-ask-form .drawer-actions, .vw-notes .drawer-actions { margin-top: 10px; }
+.vw-move { margin-top: 16px; display: grid; gap: 12px; }
+.vw-split { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-top: 12px; }
+.vw-split .field small { display: block; font-size: 12px; color: var(--muted); margin-top: 4px; }
+.vw-split b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.notice .vw-split-sum { margin-top: 14px; }
+.vw-move .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+/* Длинные названия складов не раздвигают форму за край карточки (проверка 03.10.2026). */
+.vw-move .field, .vw-move .dd, .vw-move .dd-btn, .vw-move input { min-width: 0; max-width: 100%; }
+.vw-move .dd-btn { width: 100%; }
+.vw-move .dd-btn .dd-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .grid { width: 100%; border-collapse: collapse; font-size: 18px; }
 .grid th {
   position: sticky; top: 0; z-index: 1; padding: 12px 14px; background: var(--panel-2);
@@ -292,6 +307,20 @@ main { padding: 28px var(--page-x) 64px; }
 .notice p { font-size: 14px; color: var(--muted); margin-top: 3px; }
 .notice.warning { border-color: #5d4a33; background: var(--warn-bg); }
 .notice.warning .icon, .notice.warning strong { color: var(--warn); }
+/* «Нужен ваш ответ»: строка — что ждёт, как давно и куда нажать. */
+.need-answer > div { flex: 1; min-width: 0; }
+.na-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--panel); color: var(--text); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.why-available { margin: -6px 0 16px; font-size: 14px; color: var(--muted); }
+.why-available b { color: var(--text); font-weight: 500; }
+.next-step { margin: -4px 0 16px; font-size: 14px; color: var(--muted); }
+.next-step b { color: var(--text); font-weight: 500; }
+.na-row:hover { border-color: var(--warn); }
+.na-row small { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+.na-go { flex-shrink: 0; color: var(--warn); font-size: 13px; }
+@media (max-width: 640px) { .na-row { flex-direction: column; align-items: flex-start; gap: 6px; } }
+/* Завершённые уведомления — две строки, целиком по нажатию. */
+.note-line { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+.note-line.open { display: block; }
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60; max-width: calc(100vw - 32px); padding: 12px 18px; border-radius: 10px; background: #26303f; border: 1px solid var(--line-2); box-shadow: 0 12px 32px rgba(0, 0, 0, .45); font-size: 14px; }
 
 /* ---------- Выезжающая карточка и окна ---------- */
@@ -301,7 +330,8 @@ dialog::backdrop { background: rgba(8, 11, 18, .6); }
 .drawer[open], .modal[open] { display: flex; flex-direction: column; }
 .drawer-head { flex: none; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 22px 24px 18px; border-bottom: 1px solid var(--line); }
 .drawer-head .eyebrow { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
-.drawer-head h2 { font-size: 20px; font-weight: 600; line-height: 1.3; }
+.drawer-head h2 { font-size: 20px; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+.drawer-head h2.open { display: block; }
 .drawer-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 22px 24px 40px; }
 .drawer-meta { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; font-size: 14px; color: var(--muted); margin-bottom: 20px; }
 .drawer-meta b { color: var(--text); font-weight: 500; }
@@ -370,6 +400,11 @@ dialog::backdrop { background: rgba(8, 11, 18, .6); }
 .steps li.done strong { color: var(--text); }
 .steps li.now { border-top-color: var(--warn); }
 .steps li.now strong { color: var(--warn); }
+.steps.story { grid-template-columns: 1fr; gap: 0; }
+.steps.story li { border-top: 0; border-left: 3px solid var(--line-2); padding: 4px 0 10px 12px; }
+.steps.story li.done { border-left-color: var(--accent); }
+.steps.story li.now { border-left-color: var(--warn); }
+.steps.story li p { color: var(--text); }
 .facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 15px; margin: 0 0 8px; }
 .facts dt { color: var(--muted); }
 .facts dd { margin: 0; overflow-wrap: anywhere; }
@@ -470,7 +505,7 @@ dialog::backdrop { background: rgba(8, 11, 18, .6); }
   .stat-value { font-size: 24px; }
   .toolbar { flex-wrap: wrap; }
   .search { flex-basis: 100%; max-width: none; }
-  .toolbar-end { margin-left: 0; }
+  .toolbar-end { margin-left: 0; flex-wrap: wrap; max-width: 100%; }
   /* Фильтры на телефоне — одной прокручиваемой строкой, а не стопкой. */
   .filters { flex-wrap: nowrap; overflow-x: auto; margin-right: calc(-1 * var(--page-x)); padding-right: var(--page-x); scrollbar-width: none; }
   .filters::-webkit-scrollbar { display: none; }
@@ -484,6 +519,7 @@ dialog::backdrop { background: rgba(8, 11, 18, .6); }
   .inbound-form .two { grid-template-columns: 1fr; }
   .inbound-form .three { grid-template-columns: 1fr 1fr; }
   .doc-fields .two { grid-template-columns: 1fr; }
+  .vw-move .two { grid-template-columns: 1fr; }
   .steps { grid-template-columns: 1fr; gap: 0; }
   .steps li { border-top: 0; border-left: 3px solid var(--line-2); padding: 4px 0 8px 12px; }
   .steps li.done { border-left-color: var(--accent); }
@@ -522,3 +558,11 @@ dialog::backdrop { background: rgba(8, 11, 18, .6); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Решение по браку: четыре варианта карточками с пояснением. */
+.decide-options { display: grid; gap: 8px; }
+.decide-option { text-align: left; border: 1px solid var(--line-2); border-radius: 10px; padding: 12px 14px; background: var(--panel); color: inherit; font: inherit; cursor: pointer; }
+.decide-option:hover { background: var(--hover); }
+.decide-option[aria-pressed="true"] { border-color: var(--accent); background: var(--hover); }
+.decide-option strong { display: block; font-size: 15px; font-weight: 500; }
+.decide-option span { display: block; font-size: 14px; color: var(--muted); margin-top: 3px; }

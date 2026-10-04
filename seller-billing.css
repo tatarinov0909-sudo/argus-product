@@ -1,0 +1,17 @@
+.seller-bill-toolbar{display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin-bottom:16px;}
+.seller-bill-toolbar .field{min-width:200px;}
+.seller-invoice{margin:16px 0;border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+.seller-invoice>summary{display:flex;align-items:center;flex-wrap:wrap;gap:16px;padding:16px;cursor:pointer;list-style:none;font-size:17px;}
+.seller-invoice>summary:before{content:'▸';color:var(--accent);}
+.seller-invoice[open]>summary:before{content:'▾';}
+.seller-invoice-body{padding:0 16px 18px;}
+.seller-invoice-body h3{font-size:18px;margin:20px 0 12px;}
+.seller-bill-facts{display:flex;gap:20px;align-items:center;flex-wrap:wrap;padding:12px 0 18px;}
+.seller-invoice-status{margin-left:auto;font-size:15px;padding:5px 10px;border-radius:6px;background:var(--panel-2);}
+.seller-invoice-status.paid{color:var(--green);background:var(--green-bg);}
+.seller-invoice-status.overdue{color:var(--red);background:var(--red-bg);}
+.seller-invoice-status.partial{color:var(--warn);background:var(--warn-bg);}
+.bill-work{margin:10px 0;font-size:15px;line-height:1.6;}
+.bill-work>summary{cursor:pointer;color:var(--accent);}
+#sellerInvoices>h2{font-size:22px;margin:26px 0 14px;}
+@media(max-width:640px){.seller-invoice>summary{gap:10px;font-size:16px;}.seller-invoice-body{padding:0 12px 14px;}.seller-bill-facts{gap:12px;}.seller-invoice-status{margin-left:0;}}

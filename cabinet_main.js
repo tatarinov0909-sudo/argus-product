@@ -80,7 +80,7 @@
       warehouseName = wh.name;
       // Анкета не заполнена — отметка у «Настройки склада».
       const setBadge = document.getElementById('settingsBadge');
-      if(setBadge) setBadge.classList.toggle('show', !wh.setup_at);
+      if(setBadge) setBadge.classList.toggle('show', !IS_MANAGER && !wh.setup_at);
       document.getElementById('whSelectLabel').textContent = wh.name + (wh.city ? ' · ' + wh.city : '');
       // Код склада на экране «Сотрудники» до сих пор был из макета — 7734,
       // склада с таким кодом не существует. Владелец читал его как настоящий,
@@ -144,47 +144,79 @@
   }
   initResizeHandles();
 
-  // Какие экраны живут внутри другого: {ключ вида: [вид-хозяин, номер вкладки]}.
-  const INNER_PANES = { inv: ['warehouse', 1] };
-
-  // Переносит содержимое одного экрана внутрь другого и делает две вкладки.
-  // Разметку не трогаем: переносим узлы на старте, чтобы обработчики, id и
-  // всё, что на них завязано, остались прежними.
-  function mergePanes(hostId, extraId, titles){
-    const host = document.getElementById('view-' + hostId);
-    const extra = document.getElementById('view-' + extraId);
-    if(!host || !extra) return;
+  // Сохраняем старые ID экранов: по ним работают загрузчики, фильтры и ссылки.
+  const INNER_PANES = {};
+  const GROUP_NAV = { stock: 'products', inbound: 'receipts', configuration: 'settings' };
+  const VIEW_KEYS = ['home', 'chat', 'journal', 'orders', 'supplies', 'receipts', 'products', 'warehouse', 'mp', 'staff', '1c', 'inv', 'acts', 'billing', 'settings'];
+  function canOpenView(view){
+    if(!VIEW_KEYS.includes(view)) return false;
+    if(!IS_MANAGER) return true;
+    const grants = authPayload.grants || [];
+    if(view === 'chat' || view === 'settings') return false;
+    if(view === 'warehouse' || view === 'inv') return grants.includes('warehouse');
+    if(view === 'mp') return grants.includes('clients') || grants.includes('marketplaces');
+    const grant = { staff: 'staff', '1c': 'integration', billing: 'billing' }[view];
+    return !grant || grants.includes(grant);
+  }
+  function navForView(view){
+    const group = INNER_PANES[view];
+    return GROUP_NAV[group ? group[0] : view] || view;
+  }
+  function mergePanes(hostId, definitions){
+    const panes = definitions.filter(p => canOpenView(p.id) && document.getElementById('view-' + p.id));
+    if(!panes.length) return;
+    const host = document.createElement('div');
+    host.id = 'view-' + hostId;
+    host.className = 'view nav-group';
+    const first = document.getElementById('view-' + panes[0].id);
+    first.parentElement.insertBefore(host, first);
     const wrap = document.createElement('div');
     wrap.className = 'pane-wrap';
     const tabs = document.createElement('div');
-    tabs.className = 'pane-tabs';
-    const bodies = [document.createElement('div'), document.createElement('div')];
-    bodies.forEach(b => { b.className = 'pane-body'; });
-    while(host.firstChild) bodies[0].appendChild(host.firstChild);
-    while(extra.firstChild) bodies[1].appendChild(extra.firstChild);
-    extra.remove();
-    bodies[1].hidden = true;
-    titles.forEach((title, i) => {
+    tabs.className = 'pane-tabs nav-pane-tabs';
+    tabs.setAttribute('role', 'tablist');
+    tabs.setAttribute('aria-label', document.getElementById('nav-' + GROUP_NAV[hostId])?.textContent.trim() || 'Раздел');
+    wrap.appendChild(tabs);
+    panes.forEach((pane, i) => {
+      const body = document.getElementById('view-' + pane.id);
+      body.classList.remove('view', 'active');
+      body.classList.add('pane-body');
+      body.hidden = i !== 0;
+      body.setAttribute('role', 'tabpanel');
+      body.setAttribute('aria-labelledby', 'tab-' + pane.id);
+      INNER_PANES[pane.id] = [hostId, i];
       const btn = document.createElement('button');
       btn.type = 'button';
+      btn.id = 'tab-' + pane.id;
       btn.className = 'pane-tab' + (i === 0 ? ' active' : '');
-      btn.textContent = title;
-      btn.onclick = () => showPane(hostId, i);
+      btn.textContent = pane.title;
+      btn.dataset.view = pane.id;
+      btn.setAttribute('role', 'tab');
+      btn.setAttribute('aria-controls', body.id);
+      btn.setAttribute('aria-selected', String(i === 0));
+      btn.onclick = () => switchView(pane.id);
+      btn.onkeydown = (event) => {
+        if(!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const buttons = [...tabs.children];
+        const at = buttons.indexOf(btn);
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
+          : (at + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
+        buttons[next].click(); buttons[next].focus();
+      };
       tabs.appendChild(btn);
+      wrap.appendChild(body);
     });
-    wrap.appendChild(tabs);
-    bodies.forEach(b => wrap.appendChild(b));
     host.appendChild(wrap);
-    host.dataset.panes = titles.length;
+    host.dataset.panes = panes.length;
+    host.dataset.currentView = panes[0].id;
   }
 
   function showPane(hostId, index){
     const host = document.getElementById('view-' + hostId);
     if(!host || !host.dataset.panes) return;
-    host.querySelectorAll(':scope > .pane-wrap > .pane-body').forEach((b, i) => { b.hidden = i !== index; });
-    host.querySelectorAll(':scope > .pane-wrap > .pane-tabs > .pane-tab').forEach((t, i) => {
-      t.classList.toggle('active', i === index);
-    });
+    const tab = host.querySelectorAll(':scope > .pane-wrap > .pane-tabs > .pane-tab')[index];
+    if(tab) switchView(tab.dataset.view);
   }
   window.showPane = showPane;
 
@@ -194,25 +226,37 @@
   let currentView = null;
 
   function switchView(view, fromBack){
+    if(GROUP_NAV[view]){
+      view = document.getElementById('view-' + view)?.dataset.currentView;
+    }
+    if(!canOpenView(view)) return;
     if(!fromBack && currentView && currentView !== view){
       viewTrail.push(currentView);
       if(viewTrail.length > 50) viewTrail.shift();
     }
     currentView = view;
-    // Экран может жить внутри другого: открываем хозяина и нужную вкладку.
+    // Показываем группу и её выбранный экран, сохраняя исходный маршрут.
     const inner = INNER_PANES[view];
-    if(inner && document.getElementById('view-' + inner[0])?.dataset.panes){
-      switchView(inner[0], true);
-      currentView = view;
-      showPane(inner[0], inner[1]);
-      return;
+    const hostId = inner ? inner[0] : view;
+    document.querySelectorAll('.main > .view').forEach(el => el.classList.toggle('active', el.id === 'view-' + hostId));
+    document.querySelectorAll('.nav-group .pane-body').forEach(body => body.classList.remove('active'));
+    if(inner){
+      const host = document.getElementById('view-' + hostId);
+      host.dataset.currentView = view;
+      host.querySelectorAll(':scope > .pane-wrap > .pane-body').forEach((body, i) => {
+        body.hidden = i !== inner[1]; body.classList.toggle('active', i === inner[1]);
+      });
+      host.querySelectorAll(':scope > .pane-wrap > .pane-tabs > .pane-tab').forEach((tab, i) => {
+        tab.classList.toggle('active', i === inner[1]);
+        tab.setAttribute('aria-selected', String(i === inner[1]));
+        tab.tabIndex = i === inner[1] ? 0 : -1;
+      });
     }
-    // «?.»: у менеджера части пунктов меню нет вовсе (их убирает блок
-    // инициализации), и без проверки кабинет падал при первом же открытии.
-    for(const v of ['chat', 'journal', 'orders', 'supplies', 'receipts', 'products', 'warehouse', 'mp', 'staff', '1c', 'inv', 'acts', 'billing', 'settings']){
-      document.getElementById('view-' + v)?.classList.toggle('active', view === v);
-      document.getElementById('nav-' + v)?.classList.toggle('active', view === v);
-    }
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(el => {
+      const active = el.id === 'nav-' + navForView(view);
+      el.classList.toggle('active', active);
+      if(active) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current');
+    });
     // Приход: свежий список (грузчик мог принять), каталог выбранного продавца.
     if(view === 'receipts'){
       loadInvoicesList();
@@ -224,22 +268,16 @@
       // Открыли журнал — сразу свежий, а не то, что было 25 секунд назад.
       loadJournal(false);
     }
-    // Переписку тянем при первом открытии чата, а не при загрузке кабинета:
-    // человек может весь день просидеть на складе и ни разу сюда не зайти.
-    // Но «открытие» — это и старт кабинета тоже: чат открыт по умолчанию,
-    // и раньше на нём никто switchView не вызывал, потому что активность
-    // стояла классом в разметке. Экран выглядел открытым, а обработчик
-    // открытия не срабатывал — история появлялась только после ухода
-    // на другую вкладку и обратно. Поэтому старт теперь идёт через эту же
-    // функцию (см. блок инициализации), а не через классы в HTML.
+    if(view==='home'){ loadHome(); }
     if(view==='mp'){ loadMarketplaces(); }
-    if(view==='settings'){ loadSettings(); }
-    if(view==='1c'){ load1CKey(); }
+    if(view==='settings'){ loadSettings(); loadReadiness(); }
+    if(view==='1c'){ load1CKey(); load1CStatus(); }
     if(view==='inv'){ loadInventory(); }
     if(view==='orders'){ loadMpOrders(); }
     if(view==='supplies'){ loadSupplies(); }
     if(view==='acts'){ loadActs(); }
-    if(view==='products'){ loadProducts(); }
+    if(view==='billing'){ loadBilling(); }
+    if(view==='products'){ openProductsView(); }
     if(view==='chat'){
       loadChatHistory();
       const badge = document.getElementById('chatBadge');
@@ -248,7 +286,7 @@
   }
 
   argusBackButton({
-    buttons: '.wh-panel-back',
+    buttons: '.wh-panel-back, .pr-back',
     fallback: function(){
       const prev = viewTrail.pop();
       if(!prev) return false;
@@ -258,20 +296,20 @@
   });
 
   // Логотип «Аргус» ведёт туда, куда человек выбрал в меню профиля;
-  // по умолчанию — в журнал действий (владелец 26.09.2026). Выбор хранится в
+  // по умолчанию — на главную. Прежний выбор сохраняется в
   // этом браузере: это удобство человека, а не настройка склада.
-  const LOGO_TARGETS = ['journal', 'chat', 'orders', 'supplies', 'receipts', 'products', 'warehouse'];
+  const LOGO_TARGETS = ['home', 'chat', 'journal', 'orders', 'supplies', 'receipts', 'products', 'mp', 'billing', 'staff', 'settings'];
   // По роли: владелец и менеджер за одним компьютером выбирают каждый своё.
   const LOGO_KEY = 'argus_logo_target_' + ROLE;
   const navName = (v) => {
-    const el = document.getElementById('nav-' + v);
-    return el ? el.firstChild.nextSibling.textContent.trim() : v;
+    const el = document.getElementById('nav-' + navForView(v));
+    return el ? (el.querySelector('.nav-name')?.textContent || el.firstChild.nextSibling.textContent).trim() : v;
   };
   function logoTarget(){
     let v = null;
     try{ v = localStorage.getItem(LOGO_KEY); } catch(e){}
-    if(v && document.getElementById('nav-' + v)) return v;
-    return document.getElementById('nav-journal') ? 'journal' : 'orders';
+    if(v && canOpenView(v) && document.getElementById('nav-' + navForView(v))) return v;
+    return 'home';
   }
   function goLogo(){ switchView(logoTarget()); }
   function renderLogoTargets(){
@@ -279,7 +317,8 @@
     document.getElementById('logoTargetName').textContent = navName(now);
     document.getElementById('logoLink').title = 'Перейти: ' + navName(now);
     document.getElementById('logoTargetList').innerHTML = LOGO_TARGETS
-      .filter(v => document.getElementById('nav-' + v))
+      .filter(v => document.getElementById('nav-' + navForView(v)) && (canOpenView(v) || v === 'settings' && canOpenView('1c')))
+      .map(v => v === 'settings' && !canOpenView(v) ? '1c' : v)
       .map(v => '<div class="account-menu-item' + (v === now ? ' on' : '') + '" onclick="setLogoTarget(\'' + v + '\')">'
         + escapeHTML(navName(v)) + '</div>').join('');
   }
@@ -332,6 +371,24 @@
         <span>${escapeHTML(GRANT_LABELS[g][0])}${GRANT_LABELS[g][1] ? `<i>${escapeHTML(GRANT_LABELS[g][1])}</i>` : ''}</span>
       </label>`).join('');
   }
+  // Права, через которые менеджер получает чужие данные или ключи входа:
+  // включая такое право, руководитель видит крупное предупреждение
+  // (владелец 04.10.2026).
+  const GRANT_RISK = {
+    clients: 'Менеджер сможет заводить продавцов и выдавать им ключи входа. По ключу продавца открывается его кабинет: остатки, заказы, документы.',
+    staff: 'Менеджер сможет выдавать и отзывать ключи работников склада — то есть впускать людей на склад в Аргусе.',
+    marketplaces: 'Менеджер сможет подключать ключи WB продавцов и разрешать Аргусу менять статусы их заказов на WB.',
+    integration: 'Менеджер сможет выдавать ключи обмена с 1С. По такому ключу читаются товары и документы склада.',
+    billing: 'Менеджер увидит тарифы и расчёты с продавцами.',
+  };
+  document.addEventListener('change', async (e) => {
+    const box = e.target;
+    if(!box.matches || !box.matches('input[data-grant]') || !box.checked || !GRANT_RISK[box.dataset.grant]) return;
+    const ok = await askConfirm('Внимание! Вы даёте доступ к разделу «' + grantTitle(box.dataset.grant) + '»\n\n'
+      + GRANT_RISK[box.dataset.grant] + '\n\nЭто может привести к утечке данных. Давайте такое право только тому, кому доверяете.');
+    if(!ok) box.checked = false;
+  });
+
   function grantsChecked(prefix){
     return [...document.querySelectorAll(`input[data-grant][data-for="${prefix}"]:checked`)].map(i => i.dataset.grant);
   }
@@ -416,6 +473,9 @@
   }
 
   function renderStaffTable(){
+    const managerColumn = document.querySelector('.staff-managers');
+    if(managerColumn) managerColumn.hidden = IS_MANAGER;
+    document.querySelector('.staff-columns')?.classList.toggle('staff-workers-only', IS_MANAGER);
     // Менеджеры и кладовщики — разные разделы. Менеджеру список менеджеров
     // сервер не отдаёт вовсе (их ключи — дело владельца), поэтому раздел у
     // него просто пустой, и это честно написано.
@@ -494,6 +554,21 @@
   window.toggleStaffList = toggleStaffList;
   window.toggleCompaniesList = toggleCompaniesList;
 
+  function toggleStaffForm(kind, open){
+    const manager = kind === 'manager';
+    if(manager && IS_MANAGER) return;
+    const prefix = manager ? 'staffManagerForm' : 'staffWorkerForm';
+    const form = document.getElementById(prefix);
+    const button = document.getElementById(prefix + 'Button');
+    if(!form || !button) return;
+    const show = open === undefined ? form.hidden : !!open;
+    form.hidden = !show;
+    button.setAttribute('aria-expanded', String(show));
+    button.textContent = show ? 'Закрыть форму' : '+ Выдать ключ';
+    if(show) document.getElementById(manager ? 'managerNameInput' : 'staffNameInput').focus();
+  }
+  window.toggleStaffForm = toggleStaffForm;
+
   // Кладовщик и менеджер заводятся в своих разделах: одна форма с выбором
   // роли трижды подвела — владелец выбирал «Менеджер», а ключ уходил работнику.
   async function addStaffMember(){
@@ -505,6 +580,7 @@
       input.value = '';
       await loadStaff();
       toggleStaffList(true);
+      toggleStaffForm('worker', false);
       showWhToast('Ключ ' + key.key_code + ' выдан кладовщику «' + name + '». '
         + 'Вход по нему откроет приёмку и сборку.');
     } catch(e){
@@ -524,6 +600,7 @@
       document.querySelectorAll('input[data-grant][data-for="new"]').forEach(i => { i.checked = false; });
       await loadStaff();
       toggleManagersList(true);
+      toggleStaffForm('manager', false);
       showWhToast('Ключ ' + key.key_code + ' выдан менеджеру «' + name + '». '
         + 'Вход по нему откроет кабинет с заказами.');
     } catch(e){
@@ -945,6 +1022,7 @@
       addInvoiceItemRow();
       await loadInvoicesList();
       suggestReceiptNumber();
+      toggleReceiptForm(false);
       showWhToast('Приход ' + number + ' создан: ' + units + ' шт. Грузчик увидит его в «Приёмке».');
     } catch(e){
       showWhToast('Приход не создан: ' + e.message);
@@ -954,6 +1032,13 @@
   }
   window.submitInvoice = submitInvoice;
   window.addInvoiceItemRow = addInvoiceItemRow;
+  function toggleReceiptForm(open){
+    const form = document.getElementById('receiptForm');
+    const on = form.classList.toggle('open', open);
+    document.getElementById('receiptNewBtn').textContent = on ? 'Скрыть форму' : '+ Новый приход';
+    if(on) form.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+  window.toggleReceiptForm = toggleReceiptForm;
 
   let lastInvoices = [];
 
@@ -1188,6 +1273,10 @@
     let c;
     try{ c = await apiFetch('/api/inbound/' + encodeURIComponent(id)); }
     catch(e){ if(id === receiptOpenId) box.innerHTML = '<div class="staff-empty">Не удалось открыть: ' + escapeHTML(e.message) + '</div>'; return; }
+    // Склады продавца: у строки прихода виден её склад, до приёмки строки его
+    // можно поменять (виртуальные склады, 02.10.2026).
+    let vws = null;
+    try{ vws = (await vwOf(c.companyId)).warehouses; } catch(_){}
     if(id !== receiptOpenId) return;
     const keep = box.scrollTop;
     document.getElementById('receiptTitle').textContent = 'Приход ' + c.number + ' · ' + c.companyName;
@@ -1248,6 +1337,7 @@
       + '<button type="button" class="wh-onboarding-btn primary" onclick="sendReceiptComment()">Отправить продавцу</button></div>';
     box.innerHTML = '<dl class="rc-facts">' + facts.map(f => '<dt>' + escapeHTML(f[0]) + '</dt><dd>' + escapeHTML(f[1]) + '</dd>').join('') + '</dl>'
       + arrival + verdict
+      + receiptVwHtml(c, vws)
       + itemNotesHtml(c.notes, 'rc')
       + '<div class="rc-section">Документы поставщика</div>' + docs
       + '<div class="rc-section">Переписка с продавцом</div>' + talk
@@ -1255,6 +1345,31 @@
       + '<span class="staff-action" data-history-invoice="' + escapeHTML(c.id) + '" data-history-label="' + escapeHTML(c.number) + '" onclick="closeReceipt()">История в журнале</span></div>';
     box.scrollTop = keep;
   }
+
+  // Строки прихода по складам продавца. Строку ещё не принимали — склад
+  // меняется; принятую — уже нет (товар в ячейках числится за складом).
+  function receiptVwHtml(c, vws){
+    if(!vws || !vws.length) return '';
+    const name = (vw) => vw ? ((vws.find(w => w.id === vw) || {}).name || 'убранный склад') : 'Остальной товар';
+    const open = c.status !== 'completed';
+    return '<div class="rc-section">Склады продавца</div>'
+      + c.lines.map(l => '<div class="rc-vw-line"><span>' + escapeHTML(l.name || l.sku) + '<span class="rc-src"> · ' + nfmt(l.declared) + ' шт.</span></span>'
+        + (open && l.accepted == null
+          ? '<select class="mp-field" aria-label="Склад строки" onchange="setReceiptLineVw(\'' + l.id + '\', this.value, this)">'
+            + vws.concat([{ id: null, name: 'Остальной товар' }]).map(w => '<option value="' + (w.id || 'main') + '"' + ((w.id || null) === (l.vw || null) ? ' selected' : '') + '>'
+              + escapeHTML(w.name) + '</option>').join('') + '</select>'
+          : '<b>' + escapeHTML(name(l.vw)) + '</b>')
+        + '</div>').join('');
+  }
+  async function setReceiptLineVw(itemId, value, el){
+    el.disabled = true;
+    try{
+      await apiFetch('/api/vwarehouses/items', { method: 'POST', body: { itemIds: [itemId], vw: value === 'main' ? null : value } });
+      showWhToast('Склад строки поменян — продавцу пришло уведомление.');
+    } catch(e){ showWhToast(e.message); }
+    renderReceipt();
+  }
+  window.setReceiptLineVw = setReceiptLineVw;
 
   // Записки грузчиков о товаре (третье задание 27.09.2026) — в карточке
   // прихода и поставки: ждущие — с «Принял к сведению», отмеченные — кем и
@@ -1331,51 +1446,351 @@
   }
   window.removeReceiptDoc = removeReceiptDoc;
 
-  /* ===================== Товары ===================== */
+  /* ===================== Остатки продавцов ===================== */
 
-  // Каталог продавца: что есть, сколько в ячейках Аргуса, где и сколько по
-  // учёту 1С. Новый товар заводится здесь, не дожидаясь 1С.
+  // Владелец 02.10.2026: сначала сводка по всем продавцам — те же числа, что
+  // продавец видит у себя (всего, заказано, в сборке, в пути, доступно, брак),
+  // и сколько лежит в ячейках; нажал на продавца — его товары с теми же
+  // числами плюс то, что видит только склад: ячейки и что не разложено.
+  // Считает сервер одним правилом с кабинетом продавца и чатом Кладовщика.
+  let sellerStock = null;     // { sellers: [...] } из /api/sellers/stock-summary
   let productRows = [];
-  let productsFor = '';
+  let productsFor = '';       // открытый продавец; пусто — сводка
+  let productsFilter = 'all';
+  // Виртуальные склады продавца (02.10.2026): какой склад смотрим и что ждёт
+  // переноса.
+  let productsVw = 'all';      // 'all' | 'main' | id склада
+  let productTransfers = [];
+  let productDecisions = [];   // спорные ситуации, которые ждут продавца
+  let productVws = [];
+  let productsLoadRun = 0;
+  let productsSummaryScroll = 0;
+
+  const nfmt = (v) => (v === null || v === undefined ? '—' : Number(v).toLocaleString('ru-RU'));
+
+  // Один выбор продавца для товаров и складов, без повторного запроса списка.
+  function stockCompanyChoiceHtml(selected, action, allLabel){
+    const company = companies.find(c => c.id === selected);
+    const option = (id, name) => '<button type="button" aria-pressed="' + (selected === id) + '" onclick="'
+      + action + '(' + escapeHTML(JSON.stringify(id)) + ')">' + escapeHTML(name) + '</button>';
+    return '<details class="stock-choice"><summary><span class="stock-choice-label">Продавец</span><b>'
+      + escapeHTML(company ? company.name : allLabel) + '</b></summary><div class="stock-choice-menu">'
+      + '<input type="search" class="mp-field" placeholder="Найти продавца" aria-label="Найти продавца" oninput="filterStockChoices(this)">'
+      + option('', allLabel) + companies.map(c => option(c.id, c.name)).join('')
+      + '<div class="stock-hint" hidden>Продавец не найден.</div></div></details>';
+  }
+  function filterStockChoices(input){
+    const menu = input.parentElement;
+    const q = input.value.trim().toLocaleLowerCase('ru');
+    let shown = 0;
+    menu.querySelectorAll('button').forEach(button => {
+      button.hidden = !button.textContent.toLocaleLowerCase('ru').includes(q);
+      if(!button.hidden) shown++;
+    });
+    menu.querySelector('.stock-hint').hidden = shown > 0;
+  }
+  function selectProductsCompany(id){
+    if(id && !companies.some(c => c.id === id)) return;
+    if(id) openSellerProducts(id); else showSellerStock();
+  }
+  function renderProductsCompanyPicker(){
+    const host = document.getElementById('productsCompanyPicker');
+    if(host) host.innerHTML = stockCompanyChoiceHtml(productsFor, 'selectProductsCompany', 'Все продавцы');
+    document.getElementById('productsWarehouseSettings').hidden = !canOpenView('warehouse');
+  }
+  function openProductsWarehouses(){
+    if(!canOpenView('warehouse') || !productsFor) return;
+    switchView('warehouse');
+    document.getElementById('warehouseVwWorkspace').open = true;
+    setWarehouseVwCompany(productsFor);
+  }
+  Object.assign(window, { filterStockChoices, selectProductsCompany, openProductsWarehouses });
+
+  // Каталог общий для продавца, фото не добавляет запрос по каждой строке.
+  function loadProductPhotos(companyId){
+    loadOrderPhotoCatalog(companyId);
+  }
+  function productPhotoHtml(companyId, sku){
+    const cards = ordersPhotoCatalog.get(companyId)?.products.get(sku)?.cards || [];
+    return orderPhotoHtml(cards.find(card => card.photoUrl)?.photoUrl);
+  }
+  function labelStockTable(host){
+    const labels = [...host.querySelectorAll('thead th')].map(th => th.textContent.trim());
+    host.querySelectorAll('tbody tr').forEach(row => {
+      [...row.children].forEach((cell, index) => { cell.dataset.label = labels[index] || ''; });
+    });
+  }
 
   function renderProductsCompanySelects(){
     const opts = companies.map(c => '<option value="' + escapeHTML(c.id) + '">' + escapeHTML(c.name) + '</option>').join('');
-    ['productsCompany', 'productFormCompany'].forEach(id => {
-      const el = document.getElementById(id);
-      if(!el) return;
+    const el = document.getElementById('productFormCompany');
+    if(el){
       const keep = el.value;
       el.innerHTML = companies.length ? opts : '<option value="">Сначала добавьте продавца</option>';
       if(keep && companies.some(c => c.id === keep)) el.value = keep;
-    });
-    if(document.getElementById('view-products')?.classList.contains('active')) loadProducts();
+    }
+    renderProductsCompanyPicker();
+    renderWarehouseVwPicker();
+    if(document.getElementById('view-products')?.classList.contains('active')) openProductsView();
   }
 
-  async function loadProducts(){
-    const companyId = document.getElementById('productsCompany').value;
-    const box = document.getElementById('productsList');
-    if(!companyId){ box.innerHTML = '<div class="staff-empty">Выберите продавца.</div>'; return; }
+  // Вход в раздел: открыт продавец — его товары, иначе сводка.
+  function openProductsView(){
+    if(productsFor) return loadProducts();
+    return loadSellerStock();
+  }
+
+  async function loadSellerStock(){
+    productsFor = '';
+    productsLoadRun++;
+    renderProductsCompanyPicker();
+    document.getElementById('productsLevel1').hidden = false;
+    document.getElementById('productsLevel2').hidden = true;
+    const box = document.getElementById('sellersList');
+    if(!sellerStock) box.innerHTML = '<div class="staff-empty">Загружаем…</div>';
+    try{
+      sellerStock = await apiFetch('/api/sellers/stock-summary');
+    } catch(e){
+      box.innerHTML = '<div class="staff-empty">Не удалось загрузить остатки: ' + escapeHTML(e.message) + '</div>';
+      return;
+    }
+    if(!productsFor) renderSellerStock();
+  }
+  window.loadSellerStock = loadSellerStock;
+
+  function sellerStockRows(){
+    const q = String(document.getElementById('sellersSearch').value || '').trim().toLowerCase();
+    return (sellerStock ? sellerStock.sellers : []).filter(s => !q || s.name.toLowerCase().includes(q));
+  }
+
+  function renderSellerStock(){
+    const box = document.getElementById('sellersList');
+    const all = sellerStock ? sellerStock.sellers : [];
+    const rows = sellerStockRows();
+    document.getElementById('sellersMeta').textContent = all.length
+      ? all.length + ' ' + pluralRu(all.length, 'продавец', 'продавца', 'продавцов') : '';
+    if(all.length === 0){ box.innerHTML = '<div class="staff-empty">Продавцов пока нет — заведите их в «Клиентах».</div>'; return; }
+    if(rows.length === 0){ box.innerHTML = '<div class="staff-empty">Такого продавца нет.</div>'; return; }
+    const sum = (f) => rows.reduce((t, s) => t + Number(s[f] || 0), 0);
+    const known = (f) => (rows.some(s => s[f] !== null) ? sum(f) : null);
+    const updated = (s) => (s.updatedAt ? (sellerStock.source === 'argus' ? 'пересчёт ' : '1С: ')
+      + new Date(s.updatedAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
+    box.innerHTML = '<div class="pr-scroll"><table class="pr-table pr-sellers"><thead><tr><th>Продавец</th>'
+      + '<th class="num">Всего</th><th class="num">Заказано</th><th class="num">В сборке</th><th class="num">В пути</th>'
+      + '<th class="num">Доступно</th><th class="num">Брак</th><th class="num">Не хватает</th><th class="num">В ячейках</th></tr></thead><tbody>'
+      + rows.map(s => '<tr class="pr-click" tabindex="0" onclick="openSellerProducts(\'' + escapeHTML(s.companyId) + '\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();this.click()}">'
+        + '<td><span class="pr-name">' + escapeHTML(s.name) + '</span><div class="sub">'
+        + escapeHTML([nfmt(s.productCount) + ' ' + pluralRu(s.productCount, 'товар', 'товара', 'товаров'), updated(s)].filter(Boolean).join(' · '))
+        + (s.unknownCount ? '<br>без числа учёта: ' + nfmt(s.unknownCount) : '') + '</div></td>'
+        + '<td class="num">' + nfmt(s.total) + '</td>'
+        + '<td class="num">' + nfmt(s.ordered) + '</td>'
+        + '<td class="num">' + nfmt(s.inAssembly) + '</td>'
+        + '<td class="num">' + nfmt(s.inTransit) + '</td>'
+        + '<td class="num strong">' + nfmt(s.available) + '</td>'
+        + '<td class="num' + (s.defect ? ' warn' : '') + '">' + nfmt(s.defect) + '</td>'
+        + '<td class="num' + (s.shortageCount ? ' warn' : '') + '">' + (s.shortageCount ? nfmt(s.shortageCount) + ' ' + pluralRu(s.shortageCount, 'товар', 'товара', 'товаров') : '—') + '</td>'
+        + '<td class="num">' + nfmt(s.inCells) + '</td>'
+        + '</tr>').join('')
+      + (rows.length > 1 ? '<tr class="pr-total"><td>Итого</td><td class="num">' + nfmt(known('total')) + '</td><td class="num">' + nfmt(sum('ordered'))
+        + '</td><td class="num">' + nfmt(sum('inAssembly')) + '</td><td class="num">' + nfmt(sum('inTransit')) + '</td><td class="num">' + nfmt(known('available'))
+        + '</td><td class="num">' + nfmt(sum('defect')) + '</td><td class="num">' + (sum('shortageCount') ? nfmt(sum('shortageCount')) : '—') + '</td><td class="num">' + nfmt(sum('inCells')) + '</td></tr>' : '')
+      + '</tbody></table></div>';
+    labelStockTable(box);
+  }
+  window.renderSellerStock = renderSellerStock;
+
+  function exportSellerStock(){
+    saveXlsx('Остатки продавцов', 'Продавцы', sellerStockRows().map(s => ({
+      'Продавец': s.name, 'Товаров': s.productCount, 'Всего': s.total, 'Заказано': s.ordered,
+      'В сборке': s.inAssembly, 'В пути': s.inTransit, 'Доступно': s.available, 'Брак': s.defect,
+      'Товаров, где заказов больше остатка': s.shortageCount, 'В ячейках': s.inCells,
+      'Товаров без числа учёта': s.unknownCount,
+    })), [28, 9, 11, 11, 10, 9, 11, 8, 18, 11, 14]);
+  }
+  window.exportSellerStock = exportSellerStock;
+
+  function openSellerProducts(companyId){
+    const scroller = document.querySelector('#view-products > .stock-workspace');
+    if(!productsFor) productsSummaryScroll = scroller?.scrollTop || 0;
     productsFor = companyId;
-    box.innerHTML = '<div class="staff-empty">Загружаем…</div>';
+    productsFilter = 'all';
+    productsVw = 'all';
+    document.getElementById('productsSearch').value = '';
+    loadProducts();
+  }
+  window.openSellerProducts = openSellerProducts;
+
+  function showSellerStock(){
+    productsFor = '';
+    loadSellerStock().then(() => {
+      if(!productsFor){
+        const scroller = document.querySelector('#view-products > .stock-workspace');
+        if(scroller) scroller.scrollTop = productsSummaryScroll;
+      }
+    });
+  }
+  window.showSellerStock = showSellerStock;
+
+  async function loadProducts(){
+    const companyId = productsFor;
+    if(!companyId) return loadSellerStock();
+    const run = ++productsLoadRun;
+    renderProductsCompanyPicker();
+    document.getElementById('productsLevel1').hidden = true;
+    document.getElementById('productsLevel2').hidden = false;
+    const company = companies.find(c => c.id === companyId);
+    document.getElementById('productsSellerName').textContent = company ? company.name : '';
+    document.getElementById('productsSellerCabinet').href = 'client_access.html?companyId=' + encodeURIComponent(companyId) + '#products';
+    const box = document.getElementById('productsList');
+    const scroller = document.querySelector('#view-products > .stock-workspace');
+    const sameCompany = box.dataset.companyId === companyId;
+    const scrollTop = sameCompany ? scroller?.scrollTop || 0 : 0;
+    if(!sameCompany) box.innerHTML = '<div class="staff-empty">Загружаем…</div>';
+    box.dataset.companyId = companyId;
     let rows;
     try{
       rows = await apiFetch('/api/sellers/stock?companyId=' + encodeURIComponent(companyId));
     } catch(e){
-      if(productsFor === companyId) box.innerHTML = '<div class="staff-empty">Не удалось загрузить товары: ' + escapeHTML(e.message) + '</div>';
+      if(productsFor === companyId && run === productsLoadRun) box.innerHTML = '<div class="staff-empty">Не удалось загрузить товары: ' + escapeHTML(e.message) + '</div>';
       return;
     }
-    if(productsFor !== companyId) return;   // пока ждали, выбрали другого продавца
-    productRows = rows;
+    if(productsFor !== companyId || run !== productsLoadRun) return;   // пока ждали, сменили продавца или обновили
+    productRows = rows.filter(r => r.listed);
+    // Склады продавца и переносы, ждущие решения, — только если склады есть.
+    productTransfers = []; productVws = []; productDecisions = [];
+    if(productRows.some(r => r.byWarehouse)){
+      try{
+        const vws = (await vwOf(companyId, true)).warehouses;
+        const [transfers, decisions] = await Promise.all([
+          apiFetch('/api/vwarehouses/transfers?open=1&companyId=' + encodeURIComponent(companyId)),
+          apiFetch('/api/vwarehouses/decisions?open=1&companyId=' + encodeURIComponent(companyId))]);
+        if(productsFor !== companyId || run !== productsLoadRun) return;
+        productVws = vws; productTransfers = transfers; productDecisions = decisions;
+      } catch(e){ showWhToast('Склады продавца не загрузились: ' + e.message); }
+      if(productsFor !== companyId || run !== productsLoadRun) return;
+    }
+    loadProductPhotos(companyId);
     renderProducts();
+    if(scroller) scroller.scrollTop = scrollTop;
   }
   window.loadProducts = loadProducts;
+
+  // Число товара на выбранном складе: null — «все склады».
+  const vwKey = (id) => (id === null ? 'main' : id);
+  const prVw = (r) => (productsVw === 'all' || !r.byWarehouse ? null
+    : r.byWarehouse.find(w => vwKey(w.id) === productsVw) || { onHand: 0, inAssembly: 0, available: 0, defect: 0 });
+  function setProductsVw(v){
+    if(v !== 'all' && v !== 'main' && !productVws.some(w => w.id === v)) return;
+    productsVw = v; renderProducts();
+  }
+  window.setProductsVw = setProductsVw;
+
+  // Перенос между складами продавца: учёт, физически ничего не двигается.
+  // pre: { companyId, to, qty, note, after } — из карточки поставки, когда
+  // складу поставки не хватает товара (владелец 02.10.2026).
+  async function openTransfer(sku, pre = {}){
+    const companyId = pre.companyId || productsFor;
+    let r = companyId === productsFor ? productRows.find(x => x.sku === sku) : null;
+    if(!r){
+      try{ r = (await apiFetch('/api/sellers/stock?companyId=' + encodeURIComponent(companyId))).find(x => x.sku === sku); }
+      catch(e){ showWhToast('Остатки продавца не загрузились: ' + e.message); return; }
+    }
+    if(!r || !r.byWarehouse){ showWhToast('У этого продавца нет складов, переносить некуда.'); return; }
+    const opts = (sel) => r.byWarehouse.map(w => '<option value="' + vwKey(w.id) + '"' + (sel === vwKey(w.id) ? ' selected' : '') + '>'
+      + escapeHTML(w.name) + ' — ' + nfmt(w.onHand) + ' шт.</option>').join('');
+    const richest = (skip) => r.byWarehouse.filter(w => vwKey(w.id) !== skip).sort((a, b) => (b.onHand || 0) - (a.onHand || 0))[0] || r.byWarehouse[0];
+    const from = pre.to ? vwKey(richest(pre.to).id)
+      : productsVw !== 'all' ? productsVw : vwKey((r.byWarehouse.find(w => w.onHand > 0) || r.byWarehouse[0]).id);
+    const to = pre.to || vwKey((r.byWarehouse.find(w => vwKey(w.id) !== from) || r.byWarehouse[0]).id);
+    const overlay = document.createElement('div');
+    overlay.className = 'ask-overlay';
+    overlay.innerHTML = '<div class="ask-box" role="dialog" aria-modal="true" data-form>'
+      + '<div class="ask-title">Перенести между складами</div>'
+      + '<div class="ask-text">' + escapeHTML(r.name || r.sku) + '. Остатки складов поменяются, продавцу придёт уведомление. Если один из складов хранится отдельно, грузчику придёт задание переложить товар.</div>'
+      + '<div class="tr-grid"><label>Откуда<select class="mp-field" id="trFrom">' + opts(from) + '</select></label>'
+      + '<label>Куда<select class="mp-field" id="trTo">' + opts(to) + '</select></label>'
+      + '<label>Сколько штук<input class="mp-field" id="trQty" type="number" min="1" inputmode="numeric" value="' + escapeHTML(pre.qty || '') + '"></label>'
+      + '<label>Комментарий — не обязательно<input class="mp-field" id="trNote" maxlength="300" placeholder="Например: под поставку на Озон" value="' + escapeHTML(pre.note || '') + '"></label></div>'
+      + '<div class="ask-actions"><button type="button" class="wh-onboarding-btn ask-cancel">Отмена</button>'
+      + '<button type="button" class="wh-onboarding-btn primary ask-ok">Перенести</button></div></div>';
+    const close = () => overlay.remove();
+    overlay.addEventListener('click', (e) => { if(e.target === overlay) close(); });
+    overlay.querySelector('.ask-cancel').onclick = close;
+    overlay.querySelector('.ask-ok').onclick = async () => {
+      const f = overlay.querySelector('#trFrom').value, t = overlay.querySelector('#trTo').value;
+      const qty = Number(overlay.querySelector('#trQty').value);
+      if(f === t){ showWhToast('Склад «откуда» и «куда» — один и тот же.'); return; }
+      if(!Number.isInteger(qty) || qty < 1){ showWhToast('Сколько штук переносим?'); return; }
+      const btn = overlay.querySelector('.ask-ok'); btn.disabled = true;
+      try{
+        const res = await apiFetch('/api/vwarehouses/transfers', { method: 'POST', body: {
+          companyId, sku, qty, fromVw: f === 'main' ? null : f, toVw: t === 'main' ? null : t,
+          note: overlay.querySelector('#trNote').value.trim() || undefined } });
+        close();
+        showWhToast(res.status === 'waiting_seller'
+          ? 'Продавец запретил складу решать такое без него — просьба отправлена ему, перенос сделается после «Согласен».'
+          : res.status === 'to_move'
+          ? 'Грузчику создано задание переложить: ' + res.fromName + ' → ' + res.toName + ', ' + nfmt(res.qty) + ' шт. Остатки складов поменяются по мере перекладки.'
+          : 'Перенесено: ' + res.fromName + ' → ' + res.toName + ', ' + nfmt(res.qty) + ' шт. Продавцу пришло уведомление «обратите внимание».');
+        if(pre.after) pre.after(); else loadProducts();
+      } catch(e){ showWhToast(e.message); btn.disabled = false; }
+    };
+    document.body.appendChild(overlay);
+    overlay.querySelector('#trQty').focus();
+  }
+  window.openTransfer = openTransfer;
+
+  // Заявка продавца на перенос: выполнить или отказать с причиной.
+  async function decideTransfer(id, approve){
+    const t = productTransfers.find(x => x.id === id); if(!t) return;
+    let reason;
+    if(!approve){
+      reason = await askText('Отказать в переносе ' + t.number + '?', 'Причина — продавец её увидит', 'Например: на складе Озон под этот товар нет места');
+      if(reason === null) return;
+    } else if(!await askConfirm('Выполнить перенос ' + t.number + '?\n\n«' + (t.name || t.sku) + '», ' + t.qty + ' шт.: «' + t.fromName + '» → «' + t.toName + '».')) return;
+    try{
+      const res = await apiFetch('/api/vwarehouses/transfers/' + id + '/decide', { method: 'POST', body: { approve, reason: reason || undefined } });
+      showWhToast(!approve ? 'Отказано — продавцу пришло уведомление.'
+        : res && res.status === 'to_move' ? 'Грузчику создано задание переложить — продавцу пришло уведомление.'
+        : 'Перенос выполнен — продавцу пришло уведомление.');
+      loadProducts();
+      if(typeof loadJournal === 'function') loadJournal(true);
+    } catch(e){ showWhToast(e.message); }
+  }
+  window.decideTransfer = decideTransfer;
+
+  // Вопрос с полем ввода: строка — ответ, null — отмена.
+  function askText(title, label, placeholder){
+    return new Promise((resolve) => {
+      const overlay = document.createElement('div');
+      overlay.className = 'ask-overlay';
+      overlay.innerHTML = '<div class="ask-box" role="dialog" aria-modal="true"><div class="ask-title"></div>'
+        + '<label class="tr-grid"><span class="ask-text"></span><input class="mp-field" maxlength="300"></label>'
+        + '<div class="ask-actions"><button type="button" class="wh-onboarding-btn ask-cancel">Отмена</button>'
+        + '<button type="button" class="wh-onboarding-btn primary ask-ok">Отправить</button></div></div>';
+      overlay.querySelector('.ask-title').textContent = title;
+      overlay.querySelector('.ask-text').textContent = label;
+      const input = overlay.querySelector('input'); input.placeholder = placeholder || '';
+      const done = (v) => { overlay.remove(); resolve(v); };
+      overlay.addEventListener('click', (e) => { if(e.target === overlay) done(null); });
+      overlay.querySelector('.ask-cancel').onclick = () => done(null);
+      overlay.querySelector('.ask-ok').onclick = () => done(input.value.trim());
+      input.addEventListener('keydown', (e) => { if(e.key === 'Enter') done(input.value.trim()); if(e.key === 'Escape') done(null); });
+      document.body.appendChild(overlay);
+      input.focus();
+    });
+  }
 
   // Где лежит — по карте склада, если она загружена (у менеджера без права
   // «склад» её нет: тогда только число ячеек).
   function productCells(companyId, sku){
     const out = [];
+    // Выбран склад продавца — только его товар (виртуальный склад, 02.10.2026).
+    const vw = productsVw === 'all' ? undefined : productsVw === 'main' ? null : productsVw;
     Object.keys(cellBlocks || {}).forEach(rowNum => {
       (cellBlocks[rowNum] || []).forEach(b => {
-        const q = (b.stock || []).filter(it => it.companyId === companyId && it.sku === sku)
+        const q = (b.stock || []).filter(it => it.companyId === companyId && it.sku === sku
+            && (vw === undefined || (it.vw || null) === vw))
           .reduce((s, it) => s + Number(it.qty || 0), 0);
         if(q > 0) out.push({ label: blockAddr(rowNum, b), qty: q });
       });
@@ -1383,47 +1798,149 @@
     return out;
   }
 
+  // Что видит только склад: сколько в ячейках (годное и брак) и сколько по
+  // учёту не разложено — числится, а в ячейках Аргуса его нет.
+  const prDefect = (r) => prVw(r)?.defect ?? (Number(r.defective || 0) + Number(r.packagingDefect || 0));
+  const prInCells = (r) => Number(r.qty || 0) + Number(r.notForSale || 0);
+  const prNotPlaced = (r) => (r.totalKnown ? Math.max(0, Number(r.total) - prInCells(r) - Number(r.staged || 0)) : 0);
+  const PR_FILTERS = [
+    ['all', 'Все', () => true],
+    ['short', 'Заказов больше, чем товара', (r) => r.shortage],
+    ['defect', 'Есть брак', (r) => prDefect(r) > 0],
+    ['notPlaced', 'Не разложено по ячейкам', (r) => prNotPlaced(r) > 0],
+  ];
+
+  function productsShown(){
+    const q = String(document.getElementById('productsSearch').value || '').trim().toLowerCase();
+    const test = (PR_FILTERS.find(f => f[0] === productsFilter) || PR_FILTERS[0])[2];
+    // Выбран склад продавца — только товар, который на нём есть.
+    const onVw = (r) => { const w = prVw(r); return !w || w.onHand || w.inAssembly || w.defect; };
+    return productRows.filter(r => test(r) && onVw(r) && (!q || [r.name, r.sku, r.barcode].some(v => String(v || '').toLowerCase().includes(q))))
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ru'));
+  }
+
+  function setProductsFilter(key){ productsFilter = key; renderProducts(); }
+  window.setProductsFilter = setProductsFilter;
+
   function renderProducts(){
     const box = document.getElementById('productsList');
     const companyId = productsFor;
-    const q = String(document.getElementById('productsSearch').value || '').trim().toLowerCase();
-    const rows = productRows.filter(r => !q || [r.name, r.sku, r.barcode].some(v => String(v || '').toLowerCase().includes(q)))
-      .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ru'));
-    const inCells = productRows.filter(r => Number(r.qty) + Number(r.notForSale || 0) > 0).length;
-    document.getElementById('productsMeta').textContent = productRows.length
-      ? productRows.length + ' ' + pluralRu(productRows.length, 'товар', 'товара', 'товаров') + ' · в ячейках — ' + inCells
+    document.getElementById('productsFilters').innerHTML = PR_FILTERS.map(([key, label, test]) => {
+      const n = key === 'all' ? productRows.length : productRows.filter(test).length;
+      return '<button type="button" class="jf-chip' + (productsFilter === key ? ' active' : '') + '" aria-pressed="' + (productsFilter === key) + '" onclick="setProductsFilter(\'' + key + '\')">'
+        + escapeHTML(label) + (key === 'all' ? '' : ' · ' + nfmt(n)) + '</button>';
+    }).join('');
+    const rows = productsShown();
+    const hasVw = productRows.some(r => r.byWarehouse);
+    // Склады продавца: выбор склада и заявки на перенос, ждущие решения.
+    const vwBox = document.getElementById('productsVwBar');
+    const vwChoices = [{ id: 'all', name: 'Основной — весь товар продавца' }, ...productVws, { id: 'main', name: 'Остальной товар' }];
+    const selectedVw = vwChoices.find(w => w.id === productsVw) || vwChoices[0];
+    vwBox.innerHTML = !hasVw ? '' : '<details class="stock-choice"><summary><span class="stock-choice-label">Склад продавца</span><b>'
+      + escapeHTML(selectedVw.name) + '</b></summary><div class="stock-choice-menu">'
+      + vwChoices.map(w => '<button type="button" aria-pressed="' + (productsVw === w.id) + '" onclick="setProductsVw('
+        + escapeHTML(JSON.stringify(w.id)) + ')">' + escapeHTML(w.name) + '</button>').join('')
+      + '</div></details>'
+      + (productsVw !== 'all' ? '<span class="stock-hint">По складу: остаток, сборка, доступно и брак. Заказы WB до поставки и «Не разложено по ячейкам» — по всему товару продавца.</span>' : '');
+    document.getElementById('productsTransfers').innerHTML = productTransfers.length
+      ? '<div class="rc-card pr-transfers"><div class="staff-title" style="font-size:15px;">Переносы ждут решения · ' + productTransfers.length + '</div>'
+        + productTransfers.map(t => '<div class="sp-key"><span><b>' + escapeHTML(t.number) + '</b> «' + escapeHTML(t.name || t.sku) + '», ' + nfmt(t.qty) + ' шт.: '
+          + escapeHTML(t.fromName) + ' → ' + escapeHTML(t.toName)
+          + '<span class="mp-card-sub">' + (t.status === 'requested' ? 'просит продавец'
+            : t.status === 'to_move' ? 'грузчик перекладывает — остатки меняются по мере перекладки'
+            : 'ждёт согласия продавца — он запретил складу решать такое без него')
+          + (t.note ? ' · ' + escapeHTML(t.note) : '') + '</span></span>'
+          + (t.status === 'requested' ? '<span class="mp-card-acts" style="margin:0;"><span class="mp-act" onclick="decideTransfer(\'' + t.id + '\', true)">Выполнить</span>'
+            + '<span class="mp-act warn" onclick="decideTransfer(\'' + t.id + '\', false)">Отказать</span></span>' : '')
+          + '</div>').join('') + '</div>'
       : '';
+    // Спорные ситуации ждут продавца — склад их видит, решить не может.
+    if(productDecisions.length) document.getElementById('productsTransfers').innerHTML +=
+      '<div class="rc-card pr-transfers"><div class="staff-title" style="font-size:15px;">Ждёт решения продавца · ' + productDecisions.length + '</div>'
+      + productDecisions.map(d => '<div class="sp-key"><span>' + escapeHTML(d.title)
+        + '<span class="mp-card-sub">пока записано по правилу: ' + escapeHTML(d.parts.map(x => x.name + ' — ' + x.value).join(', '))
+        + ' · продавец запретил складу решать такое без него</span></span></div>').join('') + '</div>';
+    document.getElementById('productsMeta').textContent = productRows.length
+      ? nfmt(productRows.length) + ' ' + pluralRu(productRows.length, 'товар', 'товара', 'товаров') : '';
     if(productRows.length === 0){ box.innerHTML = '<div class="staff-empty">У продавца пока нет товаров. Заведите первый кнопкой «+ Добавить товар».</div>'; return; }
-    if(rows.length === 0){ box.innerHTML = '<div class="staff-empty">По этому поиску ничего нет.</div>'; return; }
-    box.innerHTML = '<table class="pr-table"><thead><tr><th>Товар</th><th>Штрихкод</th>'
-      + '<th class="num">В ячейках</th><th class="num">По 1С</th><th>Где лежит</th></tr></thead><tbody>'
+    if(rows.length === 0){ box.innerHTML = '<div class="staff-empty">Под этот поиск и фильтр товаров нет.</div>'; return; }
+    box.innerHTML = '<div class="pr-scroll"><table class="pr-table"><thead><tr><th>Товар</th>'
+      + '<th class="num">Всего</th><th class="num">Заказано</th><th class="num">В сборке</th><th class="num">В пути</th>'
+      + '<th class="num">Доступно</th><th class="num">Брак</th><th class="num">В ячейках</th><th>Где лежит</th></tr></thead><tbody>'
       + rows.map(r => {
         const cells = productCells(companyId, r.sku);
-        const bad = Number(r.notForSale || 0);
         const where = cells.length
-          ? cells.slice(0, 3).map(c => escapeHTML(c.label) + ' — ' + c.qty).join('<br>')
+          ? cells.slice(0, 3).map(c => escapeHTML(c.label) + ' — ' + nfmt(c.qty)).join('<br>')
             + (cells.length > 3 ? '<div class="sub">и ещё ' + (cells.length - 3) + '</div>' : '')
           : Number(r.cells) > 0 ? 'в ' + r.cells + ' ' + pluralRu(Number(r.cells), 'ячейке', 'ячейках', 'ячейках')
           : '<span class="sub">не в ячейках</span>';
-        return '<tr>'
-          + '<td>' + escapeHTML(r.name || '—') + '<div class="sub">' + escapeHTML(r.sku) + '</div></td>'
-          + '<td class="sub">' + escapeHTML(r.barcode || '—') + '</td>'
-          + '<td class="num">' + (Number(r.qty) || 0) + (bad ? '<div class="sub warn">брак ' + bad + '</div>' : '') + '</td>'
-          + '<td class="num">' + (r.totalKnown ? escapeHTML(String(r.total)) : '—') + '</td>'
+        const notPlaced = prNotPlaced(r);
+        const short = r.shortage ? Number(r.orderedNotInSupply || 0) + Number(r.inAssembly || 0) - Number(r.total || 0) : 0;
+        const w = prVw(r);
+        // Раскладка по складам — под названием, только ненулевые склады.
+        const split = hasVw && !w && r.byWarehouse
+          ? r.byWarehouse.filter(x => x.onHand).map(x => escapeHTML(x.name) + ' ' + nfmt(x.onHand)).join(' · ') : '';
+        const name = '<td><div class="stock-product">' + productPhotoHtml(companyId, r.sku) + '<div>' + escapeHTML(r.name || '—') + '<div class="sub">' + escapeHTML([r.sku, r.barcode].filter(Boolean).join(' · ')) + '</div>'
+          + (split ? '<div class="sub pr-split">' + split + '</div>' : '')
+          + (hasVw && r.byWarehouse && r.byWarehouse.some(x => x.onHand > 0) ? '<button type="button" class="stock-move" onclick="openTransfer('
+            + escapeHTML(JSON.stringify(r.sku)) + ')">Перенести</button>' : '') + '</div></div></td>';
+        if(w){
+          return '<tr>' + name
+            + '<td class="num">' + nfmt(w.onHand) + '</td>'
+            + '<td class="num sub">—</td>'
+            + '<td class="num">' + nfmt(w.inAssembly) + '</td>'
+            + '<td class="num sub">—</td>'
+            + '<td class="num strong">' + nfmt(w.available) + '</td>'
+            + '<td class="num' + (w.defect ? ' warn' : '') + '">' + nfmt(w.defect) + '</td>'
+            + '<td class="num sub">—</td>'
+            + '<td class="cells">' + where + '</td>'
+            + '</tr>';
+        }
+        return '<tr>' + name
+          + '<td class="num">' + (r.totalKnown ? nfmt(r.total) : '<span class="sub" title="Из учёта числа ещё не пришло">—</span>') + '</td>'
+          + '<td class="num">' + nfmt(r.orderedNotInSupply) + '</td>'
+          + '<td class="num">' + nfmt(r.inAssembly) + '</td>'
+          + '<td class="num">' + nfmt(r.inTransit) + '</td>'
+          + '<td class="num strong">' + nfmt(r.sellerAvailable) + (short > 0 ? '<div class="sub warn">не хватает ' + nfmt(short) + '</div>' : '') + '</td>'
+          + '<td class="num' + (prDefect(r) ? ' warn' : '') + '">' + nfmt(prDefect(r)) + '</td>'
+          + '<td class="num">' + nfmt(prInCells(r)) + (notPlaced ? '<div class="sub warn">не разложено ' + nfmt(notPlaced) + '</div>' : '') + '</td>'
           + '<td class="cells">' + where + '</td>'
           + '</tr>';
       }).join('')
-      + '</tbody></table>';
+      + '</tbody></table></div>';
+    labelStockTable(box);
   }
   window.renderProducts = renderProducts;
+
+  function exportProducts(){
+    const company = companies.find(c => c.id === productsFor);
+    // Выбран склад продавца — числа по нему, как на экране; «Все склады» —
+    // общие числа и раскладка по складам.
+    const vwLabel = productsVw === 'all' ? '' : productsVw === 'main' ? 'Остальной товар'
+      : ((productVws.find(w => w.id === productsVw) || {}).name || 'склад');
+    const hasVw = productRows.some(r => r.byWarehouse);
+    saveXlsx('Остатки ' + (company ? company.name : 'продавца') + (vwLabel ? ' — ' + vwLabel : ''), 'Товары', productsShown().map(r => {
+      const w = prVw(r);
+      const where = productCells(productsFor, r.sku).map(c => c.label + ' — ' + c.qty).join(', ');
+      if(w) return { 'Товар': r.name, 'Артикул': r.sku, 'Штрихкод': r.barcode || '', 'Склад': vwLabel, 'На складе': w.onHand,
+        'В сборке': w.inAssembly, 'Доступно': w.available, 'Брак': w.defect, 'Где лежит': where };
+      return {
+        'Товар': r.name, 'Артикул': r.sku, 'Штрихкод': r.barcode || '', 'Всего': r.totalKnown ? r.total : null,
+        'Заказано': r.orderedNotInSupply, 'В сборке': r.inAssembly, 'В пути': r.inTransit, 'Доступно': r.sellerAvailable,
+        'Брак': prDefect(r), 'В ячейках': prInCells(r), 'Не разложено': prNotPlaced(r),
+        ...(hasVw ? { 'По складам': (r.byWarehouse || []).filter(x => x.onHand).map(x => x.name + ' ' + x.onHand).join(', ') } : {}),
+        'Где лежит': where,
+      };
+    }), vwLabel ? [40, 16, 16, 16, 11, 10, 10, 8, 30] : [40, 16, 16, 9, 10, 10, 9, 10, 8, 11, 12].concat(hasVw ? [28] : [], [30]));
+  }
+  window.exportProducts = exportProducts;
 
   function toggleProductForm(open){
     const form = document.getElementById('productForm');
     form.hidden = !open;
     if(open){
       const sel = document.getElementById('productFormCompany');
-      const current = document.getElementById('productsCompany').value;
-      if(current) sel.value = current;
+      if(productsFor) sel.value = productsFor;
       document.getElementById('productFormSku').focus();
     }
   }
@@ -1450,8 +1967,8 @@
       // Новый товар сразу доступен в приходе: каталог продавца перечитается.
       delete receiptCatalog[companyId];
       if(document.getElementById('invoiceCompanySelect').value === companyId) loadReceiptCatalog(companyId);
-      document.getElementById('productsCompany').value = companyId;
-      await loadProducts();
+      sellerStock = null;
+      openSellerProducts(companyId);
       showWhToast('Товар «' + name + '» заведён. Его можно выбирать в приходе.');
     } catch(e){
       showWhToast('Товар не заведён: ' + e.message);
@@ -1722,8 +2239,12 @@
     // серый экран. Именно так и происходило после удаления схемы. Поэтому
     // сначала возвращаем его на место.
     const ctor = document.getElementById('whConstructor');
-    const home = document.getElementById('view-warehouse');
-    if(ctor.parentElement !== home) home.insertBefore(ctor, document.getElementById('whMapWrap'));
+    // Дом — там, где карта: вкладки «Карта склада / Инвентаризация» переносят
+    // содержимое раздела во вложенный блок (проверка 03.10.2026: вставка в сам
+    // раздел падала, и у нового склада конструктор не открывался).
+    const map = document.getElementById('whMapWrap');
+    const home = map.parentElement;
+    if(ctor.parentElement !== home) home.insertBefore(ctor, map);
 
     // Склада ещё нет: пересобирать нечего и объединений ячеек не существует,
     // так что предупреждение о потере здесь только пугает.
@@ -2163,7 +2684,7 @@
         const block = {
           r0: b.rack_start, r1: b.rack_end, t0: b.tier_start, t1: b.tier_end,
           state: b.state, blockId: b.id, stock: b.stock || [], fill: b.fill || null,
-          label: b.label || null, stock1c: b.stock_1c || [],
+          label: b.label || null, stock1c: b.stock_1c || [], defectZone: b.defect_zone === true,
         };
         blockById[b.id] = {block, rowNum: row.row_num};
         return block;
@@ -2365,8 +2886,8 @@
       }
       const hint = (tall
         ? addr + ' — высокий отсек: ' + missing + ' ' + pluralRu(missing, 'балки', 'балок', 'балок') + ' не хватает'
-        : addr) + (b.state === 'occupied' ? ' · ' + cellFillText(b.fill) : '');
-      cellsHtml += `<div class="wh-cell in-grid ${b.state}${mergedClass}${tall ? ' tall' : ''}${paint.cls}" data-row="${rowNum}" data-id="${b.r0}" data-tier="${b.t0}" data-addr="${escapeHTML(addr)}" data-state="${b.state}" data-block-id="${b.blockId}"${style} onclick="selectCell(this)" title="${escapeHTML(hint)}">${beams}</div>`;
+        : addr) + (b.state === 'occupied' ? ' · ' + cellFillText(b.fill) : '') + (b.defectZone ? ' · ячейка брака' : '');
+      cellsHtml += `<div class="wh-cell in-grid ${b.state}${mergedClass}${tall ? ' tall' : ''}${paint.cls}" data-row="${rowNum}" data-id="${b.r0}" data-tier="${b.t0}" data-addr="${escapeHTML(addr)}" data-state="${b.state}" data-block-id="${b.blockId}"${style} onclick="selectCell(this)" title="${escapeHTML(hint)}">${beams}${b.defectZone ? '<b class="wh-defect-mark" aria-hidden="true">Б</b>' : ''}</div>`;
     });
 
     let labelsHtml = '';
@@ -2400,7 +2921,7 @@
             : 'Свернуть до занятых — ' + occupiedRacks.size + ' из ' + existingRacks.size}</button>`);
 
     return `<div class="wh-row-group${editing ? ' editing' : ''}" id="fp-row-${rowNum}">
-      <button class="wh-panel-back" onclick="showWhSummary()">← Назад к сводке</button>
+      ${whPanelActionsHtml()}
       <div class="wh-row-group-head">
         <button class="wh-row-group-title wh-renamable" type="button" onclick="startRename('row', ${rowNum})"
                 title="Нажмите, чтобы переименовать ряд">Ряд ${escapeHTML(String(rowLabel(rowNum)))}</button>
@@ -3048,10 +3569,22 @@
   }
 
   function showWhSummary(){
+    closeWhDetailPanel();
     showWhPanel('whSummary');
     document.querySelectorAll('.wh-row-rect').forEach(r=>r.classList.remove('selected-row'));
     renderWhSummary();
   }
+  function whPanelActionsHtml(){
+    return '<div class="stock-map-actions"><button class="wh-panel-back" type="button" onclick="showWhSummary()">← Назад к сводке</button>'
+      + '<button class="stock-context-button" type="button" onclick="closeWhPanels()" aria-label="Убрать все панели карты">✕ Убрать панели</button></div>';
+  }
+  function closeWhPanels(){
+    closeWhDetailPanel();
+    clearWhSearch();
+    document.querySelectorAll('#whContent > .wh-row-group').forEach(panel => panel.classList.remove('visible'));
+    document.querySelectorAll('.wh-row-rect').forEach(row => row.classList.remove('selected-row'));
+  }
+  window.closeWhPanels = closeWhPanels;
 
   // Ждёт решения — запись pending, на которую ещё не ответили. Решение не
   // меняет исходную запись (журнал только дописывается), поэтому без
@@ -3060,7 +3593,9 @@
   function isUrgentWaiting(e){ return Boolean(e.urgent) && isWaiting(e); }
   // Записка грузчика о товаре (третье задание 27.09.2026): решать там нечего —
   // её отмечают «Принял к сведению».
-  function isNote(e){ return e.entity_type === 'item_note'; }
+  // «Принял к сведению» — записка грузчика о товаре и предупреждение «зона
+  // склада продавца заполнена» (02.10.2026).
+  function isNote(e){ return e.entity_type === 'item_note' || e.entity_type === 'vw_zone'; }
   // Текст срочной отметки уже начинается с «ОЧЕНЬ ВАЖНО:» — рядом с красной
   // меткой эти слова дублировались бы.
   function urgentText(text){
@@ -3072,7 +3607,7 @@
   // argus-ai.online»: то выглядит как чужое предупреждение, пугает и ничего
   // не выделяет. Первый абзац вопроса — заголовок, остальное — пояснение.
   // Enter — «Да», Escape и клик мимо — «Отмена».
-  const DANGER_WORDS = /^(Удалить|Разобрать|Отключить|Отменить|Отклонить|Убрать)/;
+  const DANGER_WORDS = /^(Удалить|Разобрать|Отключить|Отменить|Отклонить|Убрать|Внимание)/;
   function askConfirm(message){
     return new Promise(function(resolve){
       const parts = String(message || '').split('\n\n');
@@ -3153,6 +3688,9 @@
   }
 
   function focusRow(n){
+    const current = document.getElementById('fp-row-' + n);
+    if(current && current.classList.contains('visible')){ showWhSummary(); return; }
+    closeWhDetailPanel();
     showWhPanel('fp-row-' + n);
     document.querySelectorAll('.wh-row-rect').forEach(r=>r.classList.remove('selected-row'));
     const rect = document.getElementById('row-rect-' + n);
@@ -3166,13 +3704,14 @@
   }
 
   function selectZone(id){
+    closeWhDetailPanel();
     showWhPanel('whZoneDetail');
     document.querySelectorAll('.wh-row-rect').forEach(r=>r.classList.remove('selected-row'));
 
     const items = dropzoneData[id] || [];
     const detail = document.getElementById('whZoneDetail');
     const zoneName = zoneLabels[id] || id;
-    const backBtn = `<button class="wh-panel-back" onclick="showWhSummary()">← Назад к сводке</button>`;
+    const backBtn = whPanelActionsHtml();
 
     if(items.length === 0){
       detail.innerHTML = `
@@ -3301,11 +3840,32 @@
         <button class="wh-onboarding-btn" style="margin-top:14px; width:100%;" type="button"
                 data-history-cell="${escapeHTML(el.dataset.blockId)}" data-history-label="${escapeHTML(displayAddr)}">Что здесь происходило</button>
         ${stock.length ? `<button class="wh-onboarding-btn" style="margin-top:8px; width:100%;" type="button" onclick="exportCell('${el.dataset.blockId}')">Выгрузить в Excel</button>` : ''}
+        ${entry ? `<button class="wh-onboarding-btn" style="margin-top:8px; width:100%;" type="button" onclick="toggleDefectZone('${el.dataset.blockId}')">${entry.block.defectZone ? 'Снять отметку «ячейка брака»' : 'Сделать ячейкой брака'}</button>
+        <div class="wh-detail-note" style="margin-top:6px;">${entry.block.defectZone ? 'Ячейка брака: сюда Аргус первой предложит грузчику класть брак продавцов.' : 'Ячейку брака Аргус предложит грузчику первой, когда тот отмечает брак.'}</div>` : ''}
       </div>
     `;
     keepStill(el, () => detail.classList.add('open'));
     if(stock.length) loadCellItems(el.dataset.blockId);
   }
+
+  // Ячейка брака (владелец 02.10.2026): её Аргус первой предлагает грузчику,
+  // когда тот отмечает брак, — после ячеек, где уже лежит брак этого продавца.
+  async function toggleDefectZone(blockId){
+    const entry = blockById[blockId];
+    if(!entry) return;
+    const on = !entry.block.defectZone;
+    try{ await apiFetch('/api/defects/zones/' + encodeURIComponent(blockId), { method: 'PATCH', body: { on } }); }
+    catch(e){ showWhToast('Не получилось: ' + e.message); return; }
+    entry.block.defectZone = on;
+    const el = document.querySelector('.wh-cell[data-block-id="' + blockId + '"]');
+    if(el){
+      el.querySelector('.wh-defect-mark')?.remove();
+      if(on) el.insertAdjacentHTML('beforeend', '<b class="wh-defect-mark" aria-hidden="true">Б</b>');
+      selectCell(el);
+    }
+    showWhToast(on ? 'Ячейка ' + (el ? el.dataset.addr : '') + ' — ячейка брака' : 'Отметка «ячейка брака» снята');
+  }
+  window.toggleDefectZone = toggleDefectZone;
 
   const CELL_QUALITY_CLASS = { good: '', defective: ' bad', packaging_defect: ' bad' };
   async function loadCellItems(blockId){
@@ -3415,9 +3975,12 @@
   function pickDay(dayKey, e){
     if(e) e.stopPropagation();
     journalDayFilter = dayKey;
+    journalScope = null;
+    journalHistoryPages = 1;
+    journalPendingPages = 1;
     document.getElementById('dnPopover').classList.remove('open');
     renderJournalCalendar();
-    applyFilters();
+    loadJournal(true);
   }
   function toggleAccountMenu(){
     document.getElementById('accountMenu').classList.toggle('open');
@@ -3455,6 +4018,7 @@
     ['onec',     'Обмен с 1С',             '#E3C75A', ICO('<ellipse cx="8" cy="4" rx="5" ry="1.8"/><path d="M3 4v8c0 1 2.2 1.8 5 1.8s5-.8 5-1.8V4"/><path d="M3 8c0 1 2.2 1.8 5 1.8s5-.8 5-1.8"/>')],
     ['docs',     'Акты и документы',       '#B9B2A5', ICO('<path d="M4 2.5h5.5L12.5 6v7.5H4z"/><path d="M6 8.5h4.5M6 11h3"/>')],
     ['cells',    'Склад и ячейки',         '#D98E6E', ICO('<rect x="2.5" y="2.5" width="11" height="11" rx="1.6"/><path d="M2.5 8h11M8 2.5v11"/>')],
+    ['defects',  'Брак',                   '#E07A6A', ICO('<path d="M8 2 1.8 13h12.4z"/><path d="M8 6.5v3M8 11.4v.1"/>')],
     ['staff',    'Сотрудники',             '#86C08A', ICO('<circle cx="8" cy="5.5" r="2.5"/><path d="M3 13.5c.6-2.6 2.6-4 5-4s4.4 1.4 5 4"/>')],
     ['agent',    'Кладовщик',              '#9AA7FF', '<svg width="16" height="16" viewBox="0 0 22 22" aria-hidden="true"><use href="#icon-warehouse-agent"/></svg>'],
   ].map(function(c){ return { key: c[0], label: c[1], color: c[2], icon: c[3] }; });
@@ -3492,14 +4056,72 @@
   let journalSeenIds = new Set();
   let journalPollTimer = null;
   let journalUnread = 0;
+  let journalHistoryPages = 1, journalPendingPages = 1;
+  let journalNextCursor = null, journalPendingCursor = null;
+  let journalLoadRun = 0;
+  let journalMoreLoading = false;
+
+  function journalQuery(cursor, pendingCursor){
+    const q = new URLSearchParams({date: journalDayFilter || whDay(new Date()), limit:'100'});
+    if(cursor) q.set('cursor', cursor);
+    if(pendingCursor) q.set('pendingCursor', pendingCursor);
+    return '?' + q;
+  }
+  function renderJournalMore(){
+    const host = document.getElementById('journalMore');
+    if(!host) return;
+    host.innerHTML = journalScope ? ''
+      : (journalNextCursor ? '<button type="button" class="workspace-button" onclick="loadMoreJournal(false)"' + (journalMoreLoading ? ' disabled' : '') + '>Ещё записи за этот день</button>' : '')
+      + (journalPendingCursor ? '<button type="button" class="workspace-button" onclick="loadMoreJournal(true)"' + (journalMoreLoading ? ' disabled' : '') + '>Ещё ожидающие решения</button>' : '');
+  }
+  async function loadMoreJournal(pending){
+    if(journalMoreLoading || journalScope) return;
+    const cursor = pending ? journalPendingCursor : journalNextCursor;
+    if(!cursor) return;
+    journalMoreLoading = true;
+    const run = journalLoadRun;
+    renderJournalMore();
+    try{
+      const page = await apiFetch('/api/journal' + journalQuery(pending ? null : cursor, pending ? cursor : null));
+      if(run !== journalLoadRun) return;
+      const extra = pending ? page.pending : page.entries;
+      const known = new Set(journalEntries.map(e => e.id));
+      journalEntries.push(...extra.filter(e => !known.has(e.id)));
+      if(pending){ journalPendingCursor = page.pendingNextCursor; journalPendingPages++; }
+      else{ journalNextCursor = page.nextCursor; journalHistoryPages++; }
+      refreshJournalList();
+    } catch(e){ showWhToast('Не удалось загрузить продолжение: ' + e.message); }
+    finally{ journalMoreLoading = false; renderJournalMore(); }
+  }
+  window.loadMoreJournal = loadMoreJournal;
 
   async function loadJournal(initial){
+    const run = ++journalLoadRun;
     let fresh;
     const query = journalScope
       ? '?' + (journalScope.kind === 'cell' ? 'cellBlockId=' : 'invoiceId=') + journalScope.id
-      : '';
+      : journalQuery();
     try{
       fresh = await apiFetch('/api/journal' + query);
+      if(run !== journalLoadRun) return;
+      if(!Array.isArray(fresh)){
+        const history = fresh.entries.slice(), pending = fresh.pending.slice();
+        let next = fresh.nextCursor, pendingNext = fresh.pendingNextCursor;
+        // Перечитываем только страницы, которые человек уже открыл. Так
+        // решения других сотрудников и раскрытые строки остаются актуальны.
+        for(let p=1;p<journalHistoryPages && next;p++){
+          const page = await apiFetch('/api/journal' + journalQuery(next));
+          if(run !== journalLoadRun) return;
+          history.push(...page.entries); next = page.nextCursor;
+        }
+        for(let p=1;p<journalPendingPages && pendingNext;p++){
+          const page = await apiFetch('/api/journal' + journalQuery(null, pendingNext));
+          if(run !== journalLoadRun) return;
+          pending.push(...page.pending); pendingNext = page.pendingNextCursor;
+        }
+        journalNextCursor = next; journalPendingCursor = pendingNext;
+        fresh = [...pending, ...history];
+      } else { journalNextCursor = journalPendingCursor = null; }
     } catch(e){
       if(initial){
         journalEntries = [];
@@ -3516,6 +4138,7 @@
     const newIds = initial ? [] : fresh.map(e => e.id).filter(id => !journalSeenIds.has(id));
     journalSeenIds = new Set(fresh.map(e => e.id));
     journalEntries = fresh;
+    renderJournalMore();
 
     renderContextPanel();
     refreshJournalList(newIds);
@@ -4022,15 +4645,9 @@
       days[k] = (days[k] || 0) + 1;
     });
     const keys = Object.keys(days).sort().reverse().slice(0, 30);
-    if(keys.length === 0){
-      box.innerHTML = '<div class="dn-cal-head"><span>Записей нет</span></div>';
-      return;
-    }
-    box.innerHTML = '<div class="dn-cal-head"><span>Дни с записями</span>'
-      + (journalDayFilter
-        ? '<button type="button" class="dn-reset" onclick="pickDay(null, event)">Все дни</button>'
-        : '')
-      + '</div>'
+    box.innerHTML = '<div class="dn-cal-head"><span>Выбрать день</span>'
+      + '<button type="button" class="dn-reset" onclick="pickDay(null, event)">Сегодня</button></div>'
+      + '<label class="rc-field" style="padding:12px;"><span>Любая дата в истории склада</span><input type="date" class="mp-field" aria-label="Дата журнала" max="' + whDay(new Date()) + '" value="' + (journalDayFilter || whDay(new Date())) + '" onchange="if(this.value)pickDay(this.value,event)"></label>'
       + '<div class="dn-list">'
       + keys.map(function(k){
         return '<button type="button" class="dn-day-row' + (journalDayFilter === k ? ' selected' : '')
@@ -4077,6 +4694,7 @@
 
   async function showJournalFor(kind, id, label){
     journalScope = { kind: kind, id: id, label: label };
+    journalHistoryPages = journalPendingPages = 1;
     journalOpenWorkOnce = kind === 'invoice';
     // Фильтры ленты сбрасываем: они относились к общему журналу, и молча
     // унести их в историю ячейки — способ показать пустой экран без причины.
@@ -4089,6 +4707,7 @@
 
   async function clearJournalScope(){
     journalScope = null;
+    journalHistoryPages = journalPendingPages = 1;
     await loadJournal(true);
   }
 
@@ -4170,8 +4789,11 @@
           ? 'Проверьте записанный отбор и фактическое движение товара в сверке. Данные 1С автоматически не изменяются.'
           : e.urgent && e.invoice_supply_id
             ? 'Убранный заказ вернётся в очередь, поставка уедет без него. Данные 1С не изменяются.'
+          : e.entity_type === 'vw_transfer'
+            ? 'Просьба продавца. О решении ему придёт уведомление. Данные 1С не изменяются.'
           : isNote(e)
-            ? 'Грузчик написал о товаре. Отметка «Принял к сведению» сохранится в журнале с вашим именем.'
+            ? (e.entity_type === 'vw_zone' ? 'Зона склада продавца заполнена. Расширьте зону в окне продавца — иначе товар положат рядом.'
+              : 'Грузчик написал о товаре.') + ' Отметка «Принял к сведению» сохранится в журнале с вашим именем.'
             : 'Решение сохранится в журнале вместе с вашим именем. Данные 1С не изменяются.'}</div>
       </div>
     `;}).join('');
@@ -4185,6 +4807,11 @@
       ? '<div class="ctx-btn ' + (primary ? 'confirm' : 'reject') + '" onclick="' + onclick + '">' + label + '</div>'
       : '<span class="staff-action" style="display:inline-block; margin-left:8px;" onclick="' + onclick + '">' + label + '</span>';
     const id = escapeHTML(e.id);
+    // Заявка продавца на перенос между его складами (проверка 03.10.2026).
+    if(e.entity_type === 'vw_transfer'){
+      return act(true, "resolveTransferEntry('" + id + "', true)", 'Выполнить')
+        + act(false, "resolveTransferEntry('" + id + "', false)", 'Отказать');
+    }
     const order = escapeHTML(String(e.invoice_number || '').replace(/['\\]/g, ''));
     return (e.invoice_supply_id
         ? act(true, "removeSupplyOrder('" + escapeHTML(e.invoice_id) + "', '" + order + "')", 'Убрать заказ из поставки')
@@ -4209,6 +4836,26 @@
     }
   }
   window.resolveUrgent = resolveUrgent;
+
+  async function resolveTransferEntry(id, approve){
+    const entry = journalEntries.find(x => x.id === id);
+    const text = entry ? urgentText(entry.action_text) : '';
+    let reason;
+    if(!approve){
+      reason = await askText('Отказать в переносе?', 'Причина — продавец её увидит', 'Например: на складе Озон под этот товар нет места');
+      if(reason === null) return;
+    } else if(!await askConfirm('Выполнить перенос?\n\n' + text)) return;
+    try{
+      await apiFetch('/api/journal/' + id + '/resolve', {method:'POST', body:{
+        resolution: approve ? 'confirm' : 'rollback', note: reason || undefined,
+      }});
+      showWhToast(approve ? 'Готово — продавцу пришло уведомление.' : 'Отказано — продавцу пришло уведомление.');
+      await loadJournal();
+    } catch(e){
+      showWhToast('Не удалось выполнить действие: ' + e.message);
+    }
+  }
+  window.resolveTransferEntry = resolveTransferEntry;
 
   async function resolveJournalEntry(id, resolution){
     // 'ack' — «Принял к сведению» записку грузчика: одно нажатие, без вопроса.
@@ -4259,7 +4906,7 @@
     // что может сделать поиск. Фильтр по категории ничего не раскрывает:
     // строка работы и так целиком одной категории. Остальное — как раскрыл
     // человек (journalOpen), и перерисовка раз в 25 секунд этого не трогает.
-    const filtering = Boolean(search) || Boolean(journalDayFilter) || attentionOnly;
+    const filtering = Boolean(search) || attentionOnly;
     document.querySelectorAll('.j-group').forEach(function(g){
       g.classList.toggle('open', filtering || journalOpen.has(g.dataset.group));
     });
@@ -4282,7 +4929,7 @@
         ].join(' ').toLowerCase();
         show = searchable.includes(search);
       }
-      if(show && journalDayFilter){ show = entry.dataset.day === journalDayFilter; }
+      if(show && journalDayFilter && !waiting){ show = entry.dataset.day === journalDayFilter; }
       entry.style.display = show ? 'flex' : 'none';
       if(show){
         visibleCount++;
@@ -4303,7 +4950,7 @@
     jEmpty.textContent = 'По выбранным фильтрам записей не найдено.';
     // Подпись описывает то, что видно СЕЙЧАС: с включённым фильтром «19 записей»
     // над списком из трёх — вранье, а журналу верить надо.
-    const scope = journalDayFilter ? journalDayLabel(journalDayFilter) : 'Все дни';
+    const scope = journalScope ? 'История' : journalDayLabel(journalDayFilter || whDay(new Date()));
     const tail = pending > 0
       ? ' · ' + pending + ' ' + pluralRu(pending, 'ждёт', 'ждут', 'ждут') + ' решения'
       : '';
@@ -4613,6 +5260,121 @@
     badge.textContent = unread > 0 ? String(unread) : "";
     badge.classList.toggle("show", unread > 0);
   }
+  // Главная использует готовую серверную сводку владельца. У менеджера другой
+  // доступ: только очередь заказов и переходы к разрешённым разделам.
+  let homeRun = 0;
+  const HOME_LINKS = [['orders', 'Заказы'], ['supplies', 'Поставки'], ['inbound', 'Приходы и акты'],
+    ['stock', 'Склад и товары'], ['mp', 'Клиенты'], ['billing', 'Расчёты'], ['staff', 'Сотрудники'],
+    ['configuration', 'Настройки'], ['journal', 'Журнал действий'], ['chat', 'Чат']];
+  function renderHomeActions(){
+    document.getElementById('homeActions').innerHTML = HOME_LINKS
+      .filter(([view]) => document.getElementById('nav-' + (GROUP_NAV[view] || view)))
+      .map(([view, title]) => '<button type="button" class="home-link" onclick="switchView(\'' + view + '\')">' + title + '</button>').join('');
+  }
+  function renderHomeRows(rows){
+    const row = (r) => '<tr><td><b>' + escapeHTML(r.title) + '</b></td>'
+      + '<td class="home-num' + (r.warn ? ' home-warn' : '') + '" data-label="Количество">' + escapeHTML(String(r.value)) + '</td>'
+      + '<td class="home-detail">' + escapeHTML(r.detail) + '</td>'
+      + '<td><button type="button" class="home-link" onclick="switchView(\'' + r.view + '\')">' + escapeHTML(r.action || 'Открыть') + '</button></td></tr>';
+    document.getElementById('todayStrip').innerHTML = '<table class="home-table"><thead><tr><th>Работа</th><th class="home-num">Количество</th><th>Состояние</th><th>Перейти</th></tr></thead><tbody>'
+      + rows.filter(r => canOpenView(r.view)).map(row).join('') + '</tbody></table>';
+  }
+  async function loadHome(){
+    const run = ++homeRun;
+    const status = document.getElementById('homeUpdated');
+    renderHomeActions();
+    status.textContent = 'Обновляем сводку…';
+    try{
+      if(!IS_MANAGER){
+        await loadToday(run);
+      } else {
+        const partners = await apiFetch('/api/supplies/pending');
+        if(run !== homeRun) return;
+        const orders = partners.reduce((sum, p) => sum + Number(p.orders || 0), 0);
+        const units = partners.reduce((sum, p) => sum + Number(p.units || 0), 0);
+        renderHomeRows([
+          { title: 'Заказы без поставки', value: nfmt(orders), detail: nfmt(units) + ' шт. товара ждут распределения по поставкам', view: 'orders', action: 'Выбрать заказы' },
+          { title: 'Поставки', value: '—', detail: 'Сборка, документы и отгрузка', view: 'supplies', action: 'Открыть поставки' },
+          { title: 'Приходы и переписка', value: '—', detail: 'Привозы клиентов, комментарии и документы', view: 'receipts', action: 'Открыть приходы' },
+          { title: 'Журнал действий', value: '—', detail: 'Работа сотрудников и решения по событиям', view: 'journal', action: 'Открыть журнал' },
+        ]);
+      }
+      if(run !== homeRun) return;
+      const zone = whSettings?.timezone || 'Europe/Moscow';
+      status.textContent = 'Сводка получена ' + new Date().toLocaleString('ru-RU', { timeZone: zone });
+    } catch(e){
+      if(run !== homeRun) return;
+      document.getElementById('todayStrip').innerHTML = '';
+      status.textContent = 'Сводка не загрузилась. Нажмите «Обновить сводку» или откройте нужный раздел ниже.';
+    }
+  }
+  window.loadHome = loadHome;
+  async function loadToday(run = homeRun){
+    const box = document.getElementById('todayStrip');
+    if(!box) return;
+    const t = await apiFetch('/api/alerts/today');
+    if(run !== homeRun) return;
+    const n = (x, one, few, many) => x > 0 ? nfmt(x) + ' ' + pluralRu(x, one, few, many) : '';
+    const detail = (subs) => subs.filter(Boolean).join(' · ') || 'Сейчас нет';
+    const s = t.ship, r = t.receive, d = t.decide, x = t.exchange;
+    const ship = s.supplies + s.ready + s.onec;
+    const rec = r.arrivals + r.returns;
+    const dec = d.discrepancies + d.sellerRequests + d.recounts;
+    const exch = x.sync.length + (x.wbUnmapped > 0 ? 1 : 0);
+    renderHomeRows([
+      { title: 'Отгрузки', value: nfmt(ship), detail: detail([n(s.supplies, 'поставка в сборке', 'поставки в сборке', 'поставок в сборке'),
+        n(s.ready, 'готова к отгрузке', 'готовы к отгрузке', 'готовы к отгрузке'), n(s.onec, 'отгрузка из 1С', 'отгрузки из 1С', 'отгрузок из 1С')]), view: 'supplies', action: 'Открыть поставки' },
+      { title: 'Приёмка', value: nfmt(rec), detail: detail([r.arrived ? n(r.arrived, 'машина приехала', 'машины приехали', 'машин приехали')
+        : n(r.arrivals, 'привоз ожидается', 'привоза ожидаются', 'привозов ожидаются'), n(r.returns, 'возврат разобрать', 'возврата разобрать', 'возвратов разобрать')]), view: 'receipts', action: 'Открыть приходы' },
+      { title: 'Ждут решения', value: nfmt(dec), warn: dec > 0, detail: detail([n(d.discrepancies, 'расхождение', 'расхождения', 'расхождений'),
+        n(d.sellerRequests, 'заявка клиента на перенос', 'заявки клиентов на перенос', 'заявок клиентов на перенос'), n(d.recounts, 'пересчёт', 'пересчёта', 'пересчётов')]),
+        view: d.discrepancies ? 'journal' : d.recounts ? 'inv' : d.sellerRequests ? 'products' : 'journal', action: 'Посмотреть решения' },
+      { title: 'Проблемы обмена', value: nfmt(exch), warn: exch > 0, detail: detail([x.sync.length ? '1С: ' + n(x.sync.length, 'неполадка', 'неполадки', 'неполадок') : '',
+        x.wbUnmapped ? n(x.wbUnmapped, 'заказ WB не сопоставлен', 'заказа WB не сопоставлены', 'заказов WB не сопоставлены') : '', exch ? '' : 'Неполадок не видно']),
+        view: x.sync.length ? '1c' : 'mp', action: 'Проверить обмен' },
+      { title: 'Переписка с клиентами', value: '—', detail: 'Комментарии и документы по каждому приходу', view: 'receipts', action: 'Открыть приходы' },
+    ]);
+  }
+  window.loadToday = loadToday;
+
+  // Запуск склада (рецензия 04.10, рекомендация 6): шаги по фактическому
+  // состоянию, заканчиваются первой настоящей операцией. Всё сделано — блока нет.
+  const READY_STEPS = {
+    survey: ['Заполните анкету склада', 'Как ведёте учёт остатков, часовой пояс, кто составляет поставки WB.', 'settings'],
+    seller: ['Заведите продавца', 'Склад хранит товар продавцов — начните с одного.', 'mp'],
+    catalog: ['Загрузите товары продавца', 'Каталог файлом или по одному: без него приход не собрать.', 'products'],
+    stock_1c: ['Подключите 1С', 'Остатки и накладные придут из неё — вы выбрали учёт в 1С.', '1c'],
+    stock_argus: ['Загрузите начальные остатки', 'Если товар уже лежит на складе. Пустой склад наполнится приходами.', 'warehouse'],
+    cells: ['Разметьте ячейки', 'Если храните товар по адресам — тогда работник кладёт в ячейку, а Аргус помнит где.', 'warehouse'],
+    worker: ['Заведите работника', 'Он получит ключ и будет принимать и собирать с телефона.', 'staff'],
+    seller_key: ['Выдайте продавцу ключ', 'Он увидит свои товары, приходы и брак в своём кабинете.', 'mp'],
+    first_operation: ['Проведите первый приход', 'С одним товаром: заведите приход, работник примет, продавец увидит у себя. После этого склад работает.', 'receipts'],
+  };
+  async function loadReadiness(){
+    const box = document.getElementById('readyCard');
+    if(!box || IS_MANAGER) return;
+    let r;
+    try{ r = await apiFetch('/api/warehouses/me/readiness'); }
+    catch(e){
+      box.hidden = false;
+      box.innerHTML = '<div class="ready-title">Запуск склада</div><div class="ready-sub">Не удалось проверить шаги запуска.</div>'
+        + '<button type="button" class="ready-step" onclick="loadReadiness()"><b>Повторить проверку</b></button>';
+      return;
+    }
+    const must = r.steps.filter(s => !s.optional);
+    const left = r.steps.filter(s => !s.done);
+    if(must.every(s => s.done)){ box.hidden = true; return; }
+    const firstNeeded = left.find(s => !s.optional);
+    box.innerHTML = '<div class="ready-title">Запуск склада: сделано ' + must.filter(s => s.done).length + ' из ' + must.length + '</div>'
+      + '<div class="ready-sub">Шаги отмечаются сами, когда дело сделано. Нажмите на шаг — откроется нужный раздел.</div>'
+      + left.map(s => { const t = READY_STEPS[s.key] || [s.key, '', 'chat'];
+        return '<button type="button" class="ready-step' + (s === firstNeeded ? ' next' : '') + '" onclick="switchView(\'' + t[2] + '\')">'
+          + '<i>' + (s === firstNeeded ? '→' : '○') + '</i><div><b>' + escapeHTML(t[0]) + (s.optional ? ' <span class="opt">· по желанию</span>' : '') + '</b>'
+          + '<span>' + escapeHTML(t[1]) + '</span></div></button>'; }).join('');
+    box.hidden = false;
+  }
+  window.loadReadiness = loadReadiness;
+
   async function loadChatHistory(){
     if(chatLoaded) return;
     chatLoaded = true;
@@ -4873,6 +5635,7 @@
     const zones = TIMEZONES.some(z => z[0] === s.timezone) ? TIMEZONES : [[s.timezone, s.timezone], ...TIMEZONES];
     tz.innerHTML = zones.map(z => '<option value="' + escapeHTML(z[0]) + '"' + (z[0] === s.timezone ? ' selected' : '') + '>' + escapeHTML(z[1]) + '</option>').join('');
     document.getElementById('setWbNames').value = (s.wb_names || []).join(', ');
+    document.getElementById('setVwReminders').checked = s.vw_reminders !== false;
     document.getElementById('setResult').textContent = s.setup_at ? '' : 'Ответьте на вопросы и нажмите «Сохранить».';
   }
   async function saveSettings(){
@@ -4883,6 +5646,7 @@
       legalName: document.getElementById('setLegal').value.trim(),
       timezone: document.getElementById('setTz').value,
       wbNames: document.getElementById('setWbNames').value.split(',').map(x => x.trim()).filter(Boolean),
+      vwReminders: document.getElementById('setVwReminders').checked,
     };
     const stock = pick('setStock'), supplies = pick('setSupplies');
     if(stock) body.stockSource = stock;
@@ -4940,17 +5704,253 @@
   }
   const canManageKeys = () => !IS_MANAGER || (authPayload.grants || []).includes('marketplaces');
 
-  let sp = { companyId: null, data: null, error: '' };
+  let sp = { companyId: null, data: null, error: '', origin: 'seller' };
+  let warehouseVwCompanyId = '';
   const spOpen = () => document.getElementById('wbWhModal').classList.contains('open');
   async function openSellerPanel(companyId){
-    sp = { companyId, data: null, error: '' };
+    document.getElementById('warehouseVwWorkspace').open = false;
+    document.getElementById('warehouseVwBody').innerHTML = '';
+    sp = { companyId, data: null, error: '', vw: null, vwForm: null, origin: 'seller' };
     const c = companies.find(x => x.id === companyId);
     document.getElementById('wbWhTitle').textContent = c ? c.name : 'Продавец';
     document.getElementById('wbWhModal').classList.add('open');
     renderSellerPanel();
+    loadSellerVw();
     await loadSellerPanelData();
   }
   window.openSellerPanel = openSellerPanel;
+
+  // В «Клиентах» остаётся карточка продавца, а управление его складами
+  // доступно рядом с ячейками. Один контекст формы не дублирует id полей.
+  function renderWarehouseVwPicker(){
+    const host = document.getElementById('warehouseVwPicker');
+    if(host) host.innerHTML = stockCompanyChoiceHtml(warehouseVwCompanyId, 'setWarehouseVwCompany', 'Выберите продавца');
+  }
+  function renderWarehouseVw(){
+    renderWarehouseVwPicker();
+    const body = document.getElementById('warehouseVwBody');
+    if(!body) return;
+    body.innerHTML = sp.origin === 'warehouse' && sp.companyId
+      ? vwSectionHtml() : '<div class="stock-hint">Выберите продавца, чтобы увидеть и настроить его склады.</div>';
+  }
+  function setWarehouseVwCompany(companyId){
+    if(!canOpenView('warehouse') || companyId && !companies.some(c => c.id === companyId)) return;
+    warehouseVwCompanyId = companyId;
+    if(sp.origin === 'warehouse' && sp.companyId === companyId){
+      renderWarehouseVwPicker();
+      if(!document.getElementById('warehouseVwBody').childElementCount) renderWarehouseVw();
+      return;
+    }
+    closeWbWarehouses();
+    document.getElementById('wbWhBody').innerHTML = '';
+    sp = { companyId, data: null, error: '', vw: null, vwForm: null, origin: 'warehouse' };
+    renderWarehouseVw();
+    if(companyId) loadSellerVw();
+  }
+  function onWarehouseVwToggle(){
+    if(!document.getElementById('warehouseVwWorkspace').open) return;
+    renderWarehouseVwPicker();
+    setWarehouseVwCompany(warehouseVwCompanyId);
+  }
+  Object.assign(window, { setWarehouseVwCompany, onWarehouseVwToggle });
+
+  /* ---------- Склады продавца (виртуальные склады, владелец 02.10.2026) ----------
+     Часть товара продавца под своё назначение: площадка, юрлицо, «иное».
+     Заводит склад; продавец их видит и выбирает в привозе. «Основной» — весь
+     товар продавца (владелец 03.10.2026), «Остальной товар» — всё,
+     что не разнесено по заведённым складам. */
+  const VW_MP = { wb: 'WB', ozon: 'Озон', yandex: 'Яндекс Маркет', other: 'иное' };
+  const vwCache = {};   // companyId → { warehouses, wbChoices, at }
+  async function vwOf(companyId, fresh = false){
+    const c = vwCache[companyId];
+    if(c && !fresh && Date.now() - c.at < 30000) return c;
+    const d = await apiFetch('/api/vwarehouses?companyId=' + encodeURIComponent(companyId));
+    vwCache[companyId] = { warehouses: d.warehouses, wbChoices: d.wbChoices, rights: d.rights, at: Date.now() };
+    return vwCache[companyId];
+  }
+  window.vwOf = vwOf;
+  async function loadSellerVw(){
+    const context = sp, id = context.companyId;
+    if(!id) return;
+    try{
+      const d = await vwOf(id, true);
+      let tasks = [];
+      if(d.warehouses.length){ try{ tasks = (await apiFetch('/api/vwarehouses/move-tasks')).filter(t => t.companyId === id); } catch(_){} }
+      if(sp === context){ sp.vw = d; sp.vwTasks = tasks; renderSellerPanel(); }
+    }
+    catch(e){ if(sp === context){ sp.vw = { error: e.message }; renderSellerPanel(); } }
+  }
+  function vwSectionHtml(){
+    const v = sp.vw;
+    let html = '<div class="sp-sec"><div class="sp-head"><b>Склады продавца</b>'
+      + (v && !v.error && !sp.vwForm ? '<button class="wh-onboarding-btn" type="button" onclick="openVwForm()">+ Склад</button>' : '') + '</div>'
+      + '<div class="mp-card-sub" style="margin-bottom:6px;">Часть товара продавца под своё назначение — площадку, юрлицо, опт. '
+      + 'По умолчанию товар лежит в тех же ячейках, меняется только учёт; «хранить отдельно» — у склада свои ячейки, можно закрепить зону. '
+      + 'Продавец видит склады и выбирает их в привозе. «Основной» — весь товар продавца; что ни к одному складу не отнесено, — «Остальной товар».</div>';
+    if(!v) return html + '<div class="mp-card-sub">Загружаю…</div></div>';
+    if(v.error) return html + '<div class="mp-card-sub wbo-warn">Не загрузилось: ' + escapeHTML(v.error) + '</div>'
+      + '<button type="button" class="wh-onboarding-btn" onclick="loadSellerVw()">Повторить загрузку</button></div>';
+    html += '<div class="sp-key"><span><b>Основной</b> <span class="mp-card-sub">весь товар продавца, без брака</span></span></div>';
+    for(const w of v.warehouses){
+      if(sp.vwForm && sp.vwForm.id === w.id){ html += vwFormHtml(); continue; }
+      const tags = [VW_MP[w.marketplace]];
+      if(w.keepSeparate) tags.push(w.defectSeparate ? 'хранится отдельно, брак тоже' : 'хранится отдельно');
+      if(w.zone && w.zone.cells) tags.push('зона: ' + w.zone.text + ' (пустых ' + w.zone.empty + ' из ' + w.zone.cells + ')');
+      html += '<div class="sp-key"><span><b>' + escapeHTML(w.name) + '</b> <span class="mp-card-sub">' + escapeHTML(tags.join(' · ')) + '</span>'
+        + (w.zone && w.zone.cells && !w.zone.empty ? '<span class="mp-card-sub wbo-warn">в зоне нет пустых ячеек — новый товар положат рядом</span>' : '') + '</span>'
+        + '<span class="mp-card-acts" style="margin:0;"><span class="mp-act" onclick="openVwForm(\'' + w.id + '\')">Изменить</span>'
+        + '<span class="mp-act warn" onclick="archiveVw(\'' + w.id + '\')">Убрать</span></span></div>';
+    }
+    if(sp.vwForm && !sp.vwForm.id) html += vwFormHtml();
+    html += '<div class="sp-key"><span><b>Остальной товар</b> <span class="mp-card-sub">не отнесён ни к одному складу · любая площадка</span></span></div>';
+    // Задания грузчику «переложить» по складам этого продавца.
+    const tasks = (sp.vwTasks || []);
+    if(tasks.length){
+      html += '<div class="mp-card-sub" style="margin-top:8px;"><b>Задания грузчику «переложить» · ' + tasks.length + '</b></div>'
+        + tasks.map(t => '<div class="sp-key"><span>«' + escapeHTML(t.name || t.sku) + '», осталось ' + nfmt(t.left) + ' из ' + nfmt(t.qty) + ' шт. из ячейки ' + escapeHTML(t.fromLabel)
+          + '<span class="mp-card-sub">' + (t.kind === 'transfer' ? 'перенос ' + escapeHTML(t.transfer || '') + ': «' + escapeHTML(t.fromName) + '» → «' + escapeHTML(t.toName) + '»'
+            : 'разделить: товар склада «' + escapeHTML(t.toName) + '» лежит вместе с другим') + '</span></span>'
+          + '<span class="mp-card-acts" style="margin:0;"><span class="mp-act warn" onclick="cancelVwTask(\'' + t.id + '\')">Снять</span></span></div>').join('');
+    }
+    return html + '</div>';
+  }
+  function vwFormHtml(){
+    const f = sp.vwForm;
+    return '<div class="sp-vw-form" data-form>'
+      + '<label class="sp-vw-field">Название<input class="mp-field" id="vwName" maxlength="100" placeholder="Например: Озон, ООО Ромашка, Опт" value="' + escapeHTML(f.name || '') + '"></label>'
+      + '<input type="hidden" id="vwMp" value="' + escapeHTML(f.marketplace) + '"><details class="stock-choice" id="vwMarketplaceChoice">'
+      + '<summary><span class="stock-choice-label">Площадка</span><b>' + escapeHTML(VW_MP[f.marketplace]) + '</b></summary><div class="stock-choice-menu">'
+      + Object.entries(VW_MP).map(([k, t]) => '<button type="button" aria-pressed="' + (f.marketplace === k) + '" onclick="setVwMarketplace(\'' + k + '\')">' + (k === 'other' ? 'Иное — вне площадок' : t) + '</button>').join('')
+      + '</div></details>'
+      + '<div class="mp-card-sub">Поставку на WB собирают со склада WB или из «Остального товара». Склад «иное» — отгрузка вне площадок.</div>'
+      + '<label class="sp-check"><input type="checkbox" id="vwSep"' + (f.keepSeparate ? ' checked' : '') + ' onchange="document.getElementById(\'vwSepMore\').hidden = !this.checked">'
+      + '<span>Хранить отдельно<small>Товар этого склада не лежит в одной ячейке с товаром других складов продавца. Грузчику подсказываются отдельные ячейки.</small></span></label>'
+      + '<div id="vwSepMore"' + (f.keepSeparate ? '' : ' hidden') + '>'
+      +   '<label class="sp-check"><input type="checkbox" id="vwSepDefect"' + (f.defectSeparate ? ' checked' : '') + '><span>И брак тоже отдельно<small>Иначе брак этого склада лежит в общих ячейках брака.</small></span></label>'
+      +   '<label class="sp-vw-field">Зона — не обязательно<input class="mp-field" id="vwZone" maxlength="2000" placeholder="Например: ряд 3 или ячейки 4.1.2, 4.1.3" value="' + escapeHTML(f.zoneText || '') + '"></label>'
+      +   '<div class="mp-card-sub">Зона — закреплённые ячейки: ничего другого туда не кладут. Заполнится — товар положат рядом, а вам придёт предупреждение.</div>'
+      + '</div>'
+      + '<div class="rc-actions"><span class="grow"></span><button type="button" class="wh-onboarding-btn" onclick="closeVwForm()">Отмена</button>'
+      + '<button type="button" class="wh-onboarding-btn primary" id="vwSave" onclick="saveVw()">' + (f.id ? 'Сохранить' : 'Завести склад') + '</button></div></div>';
+  }
+  function openVwForm(id){
+    if(!sp.vw || sp.vw.error) return;
+    const w = id ? (sp.vw.warehouses || []).find(x => x.id === id) : null;
+    sp.vwForm = w ? { id: w.id, name: w.name, marketplace: w.marketplace, keepSeparate: w.keepSeparate, defectSeparate: w.defectSeparate,
+        zoneText: w.zone ? w.zone.text : '', was: w }
+      : { id: null, name: '', marketplace: 'wb', keepSeparate: false, defectSeparate: false, zoneText: '' };
+    renderSellerPanel();
+    const el = document.getElementById('vwName'); if(el) el.focus();
+  }
+  function closeVwForm(){ sp.vwForm = null; renderSellerPanel(); }
+  function setVwMarketplace(value){
+    if(!VW_MP[value]) return;
+    document.getElementById('vwMp').value = value;
+    const choice = document.getElementById('vwMarketplaceChoice');
+    choice.querySelector('summary b').textContent = VW_MP[value];
+    choice.querySelectorAll('button').forEach(button => button.setAttribute('aria-pressed', button.getAttribute('onclick').includes("'" + value + "'")));
+    choice.open = false;
+  }
+  window.setVwMarketplace = setVwMarketplace;
+  // «ряд 3, 4.1.2» → { rows: [3], cells: ['4.1.2'] }.
+  function parseZone(text){
+    const rows = [], cells = [];
+    String(text || '').split(/[,;]+/).map(x => x.trim()).filter(Boolean).forEach(x => {
+      const m = x.match(/^(?:ряд\s*)?(\d+)$/i);
+      if(m) rows.push(Number(m[1])); else cells.push(x);
+    });
+    return { rows, cells };
+  }
+  // Три ответа: задания, только новое, отмена (null).
+  function askSeparate(name, n){
+    return new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.className = 'ask-overlay';
+      overlay.innerHTML = '<div class="ask-box" role="dialog" aria-modal="true"><div class="ask-title"></div><div class="ask-text"></div>'
+        + '<div class="ask-actions" style="flex-wrap:wrap;"><button type="button" class="wh-onboarding-btn ask-cancel">Отмена</button>'
+        + '<button type="button" class="wh-onboarding-btn ask-new">Только новый товар</button>'
+        + '<button type="button" class="wh-onboarding-btn primary ask-tasks">Создать задания</button></div></div>';
+      overlay.querySelector('.ask-title').textContent = 'Товар склада «' + name + '» уже лежит вместе с другим';
+      overlay.querySelector('.ask-text').textContent = 'В ' + n + ' ' + pluralRu(n, 'ячейке', 'ячейках', 'ячейках')
+        + ' товар этого склада лежит вместе с товаром других складов продавца. Создать грузчику задания переложить его отдельно — или разделять только новый товар, а уже лежащее оставить как есть?';
+      const done = (v) => { overlay.remove(); resolve(v); };
+      overlay.addEventListener('click', (e) => { if(e.target === overlay) done(null); });
+      overlay.querySelector('.ask-cancel').onclick = () => done(null);
+      overlay.querySelector('.ask-new').onclick = () => done('new');
+      overlay.querySelector('.ask-tasks').onclick = () => done('tasks');
+      document.body.appendChild(overlay);
+    });
+  }
+  async function saveVw(){
+    const context = sp, companyId = context.companyId;
+    const f = context.vwForm; if(!f) return;
+    const name = document.getElementById('vwName').value.trim();
+    const marketplace = document.getElementById('vwMp').value;
+    const keepSeparate = document.getElementById('vwSep').checked;
+    const defectSeparate = keepSeparate && document.getElementById('vwSepDefect').checked;
+    const zoneText = keepSeparate ? document.getElementById('vwZone').value.trim() : '';
+    if(!name){ showWhToast('Назовите склад.'); return; }
+    const body = { companyId, name, marketplace, keepSeparate, defectSeparate };
+    const was = f.was || {};
+    if(zoneText !== (was.zone ? was.zone.text : '')) body.zone = parseZone(zoneText);
+    const btn = document.getElementById('vwSave'); btn.disabled = true;
+    try{
+      if(f.id){
+        // Включают «хранить отдельно», а товар уже лежит вместе — спросить.
+        const turnedOn = (keepSeparate && !was.keepSeparate) || (defectSeparate && !was.defectSeparate);
+        if(turnedOn){
+          const m = await apiFetch('/api/vwarehouses/' + f.id + '/mixed?companyId=' + encodeURIComponent(companyId) + (defectSeparate ? '&defect=1' : ''));
+          if(sp !== context) return;
+          if(m.cells){
+            const answer = await askSeparate(name, m.cells);
+            if(sp !== context) return;
+            if(!answer){ btn.disabled = false; return; }
+            body.separateExisting = answer;
+          }
+        }
+        const r = await apiFetch('/api/vwarehouses/' + f.id, { method: 'PATCH', body });
+        delete vwCache[companyId];
+        if(sp !== context) return;
+        sp.vwForm = null;
+        showWhToast('Склад сохранён.' + (r.tasks ? ' Грузчику созданы задания «переложить»: ' + r.tasks + '.' : '')
+          + (r.zone && r.zone.foreign ? ' В зоне лежит чужой товар в ' + r.zone.foreign + ' яч. — его надо убрать.' : ''));
+      } else {
+        if(body.zone === undefined && zoneText) body.zone = parseZone(zoneText);
+        await apiFetch('/api/vwarehouses', { method: 'POST', body });
+        delete vwCache[companyId];
+        if(sp !== context) return;
+        sp.vwForm = null;
+        showWhToast('Склад «' + name + '» заведён — продавцу пришло уведомление.');
+      }
+      await loadSellerVw();
+    } catch(e){ if(sp === context){ showWhToast('Не получилось: ' + e.message); btn.disabled = false; } }
+  }
+  async function archiveVw(id){
+    const context = sp, companyId = context.companyId;
+    const w = (context.vw.warehouses || []).find(x => x.id === id); if(!w) return;
+    if(!await askConfirm('Убрать склад «' + w.name + '»?\n\nУбрать можно только пустой склад: товар с него сначала переносят на другой.')) return;
+    if(sp !== context) return;
+    try{
+      await apiFetch('/api/vwarehouses/' + id + '?companyId=' + encodeURIComponent(companyId), { method: 'DELETE' });
+      delete vwCache[companyId];
+      if(sp !== context) return;
+      showWhToast('Склад «' + w.name + '» убран.');
+      await loadSellerVw();
+    } catch(e){ showWhToast(e.message); }
+  }
+  async function cancelVwTask(id){
+    const context = sp;
+    if(!await askConfirm('Снять задание «переложить»?\n\nНепереложенное останется там, где лежит, и числится за прежним складом.')) return;
+    if(sp !== context) return;
+    try{
+      await apiFetch('/api/vwarehouses/move-tasks/' + id + '/cancel', { method: 'POST', body: {} });
+      if(sp !== context) return;
+      showWhToast('Задание снято.');
+      await loadSellerVw();
+    } catch(e){ showWhToast(e.message); }
+  }
+  window.cancelVwTask = cancelVwTask;
+  Object.assign(window, { openVwForm, closeVwForm, saveVw, archiveVw, loadSellerVw });
   async function copySellerKey(code){
     try{ await navigator.clipboard.writeText(code); showWhToast('Ключ ' + code + ' скопирован.'); }
     catch(e){ showWhToast('Ключ: ' + code); }
@@ -4959,13 +5959,14 @@
   function closeWbWarehouses(){ document.getElementById('wbWhModal').classList.remove('open'); }
   window.closeWbWarehouses = closeWbWarehouses;
   async function loadSellerPanelData(){
-    const id = sp.companyId;
+    const context = sp, id = context.companyId;
     if(!id || !marketplaces.some(m => m.companyId === id && m.marketplace === 'wb')){ sp.data = null; renderSellerPanel(); return; }
-    try{ const d = await apiFetch('/api/marketplaces/' + id + '/wb/warehouses'); if(sp.companyId === id){ sp.data = d; sp.error = ''; } }
-    catch(e){ if(sp.companyId === id) sp.error = e.message; }
-    renderSellerPanel();
+    try{ const d = await apiFetch('/api/marketplaces/' + id + '/wb/warehouses'); if(sp === context){ sp.data = d; sp.error = ''; } }
+    catch(e){ if(sp === context) sp.error = e.message; }
+    if(sp === context) renderSellerPanel();
   }
   function renderSellerPanel(){
+    if(sp.origin === 'warehouse'){ renderWarehouseVw(); return; }
     const body = document.getElementById('wbWhBody');
     if(!body || !sp.companyId) return;
     const id = sp.companyId;
@@ -4985,12 +5986,15 @@
         + '</span></div>';
       html += '<div class="sp-sec"><div class="sp-head"><b>Кабинет продавца</b>'
         + '<button class="wh-onboarding-btn" type="button" onclick="issueSellerKey(' + q(id) + ')">+ Выдать ключ</button></div>'
+        + '<div class="sp-key"><span>Остатки, заказы, склад брака — как видит продавец. Решить по браку за продавца можно там же.</span>'
+        + '<a class="mp-act" href="client_access.html?companyId=' + encodeURIComponent(id) + '#products">Открыть кабинет продавца</a></div>'
         + '<div class="mp-card-sub" style="margin-bottom:6px;">По ключу продавец входит в свой кабинет и видит только свой товар, заказы и документы.</div>'
         + (active.length ? active.map(keyRow).join('') : '<div class="mp-card-sub wbo-warn">Рабочего ключа нет — продавец не может войти.</div>')
         + (revoked.length ? '<details class="wbo-more"><summary>Отозванные ключи — ' + revoked.length + '</summary>' + revoked.map(keyRow).join('') + '</details>' : '')
         + '<div class="sp-key"><span>1С: ' + (company.one_c_external_id ? '<b>' + escapeHTML(company.one_c_counterparty_name || 'контрагент связан') + '</b>' : 'не связан с контрагентом') + '</span>'
         + '<span class="mp-act" onclick="openOneCMapping(' + q(id) + ')">' + (company.one_c_external_id ? 'Изменить' : 'Связать с 1С') + '</span></div>'
         + '</div>';
+      html += vwSectionHtml();
     }
     html += '<div class="sp-sec"><div class="sp-head"><b>Wildberries</b>'
       + (st.chip ? '<span class="mp-chip ' + st.chipCss + '">' + st.chip + '</span>' : '') + '</div>';
@@ -5343,7 +6347,6 @@
     const sub = document.getElementById('mpStatusSub');
     if(!document.getElementById('mpList')) return;
 
-    const waiting = mpPending.reduce((s, x) => s + x.orders, 0);
     const alive = marketplaces.filter(m => m.lastUsedAt
       && (Date.now() - new Date(m.lastUsedAt).getTime()) < 60 * 60 * 1000).length;
     const writers = marketplaces.filter(m => m.writeEnabled).length;
@@ -5356,9 +6359,7 @@
         + ' в складе · заказы с маркетплейсов пока не приходят, Аргус видит только накладные из 1С';
     } else {
       dot.classList.toggle('connected', alive > 0);
-      title.textContent = waiting > 0
-        ? waiting + ' ' + pluralRu(waiting, 'заказ ждёт', 'заказа ждут', 'заказов ждут') + ' поставки'
-        : (alive > 0 ? 'Заказы приходят, ждущих нет' : 'Подключено, но связи давно не было');
+      title.textContent = alive > 0 ? 'Площадки подключены' : 'Подключено, но связи давно не было';
       sub.textContent = marketplaces.length + ' из ' + companies.length + ' '
         + pluralRu(companies.length, 'клиента', 'клиентов', 'клиентов') + ' на площадках · '
         + (writers > 0
@@ -5762,12 +6763,12 @@
       + '<span class="mp-act" onclick="window.open(\'act_print.html?kind=' + kind + '&id=' + encodeURIComponent(id) + '\', \'_blank\')">'
       + (kind === 'receipt' ? 'Акт приёмки' : 'Акт отгрузки') + '</span></div>';
     box.innerHTML = '<div class="acts-cols">'
-      + '<div class="acts-col"><h3>Приёмка на хранение</h3>'
+      + '<div class="acts-col' + (receipts.length ? '' : ' act-empty') + '"><h3>Приёмка на хранение</h3>'
       +   (receipts.length ? receipts.map(i => row('receipt', i.id, i.number,
             (i.company_name || '') + ' · ' + (stateOf[i.status] || i.status) + ' · ' + new Date(i.created_at).toLocaleDateString('ru-RU'))).join('')
           : '<div class="ord-meta">Приходов пока нет.</div>')
       + '</div>'
-      + '<div class="acts-col"><h3>Отгрузка с хранения</h3>'
+      + '<div class="acts-col' + (shipments.length ? '' : ' act-empty') + '"><h3>Отгрузка с хранения</h3>'
       +   (shipments.length ? shipments.map(s => row('shipment', s.id, s.number,
             (s.company_name || '') + ' · ' + (s.statusName || s.status) + (s.destination ? ' · ' + s.destination : ''))).join('')
           : '<div class="ord-meta">Поставок пока нет.</div>')
@@ -5909,8 +6910,10 @@
       + (align.busy === 'apply' ? 'Записываю…' : 'Выровнять по документу') + '</button>';
   }
 
+  // defaultVw — склад продавца для строк без столбца «Склад» ('' — «Основной»),
+  // vws — склады выбранного продавца (владелец 02.10.2026).
   const stockLoad = { companyId: '', rows: null, blank: 0, fileName: '', preview: null, error: '',
-    busy: '', seq: 0, batches: null };
+    busy: '', seq: 0, batches: null, defaultVw: '', vws: [] };
 
   function openStockLoad(){
     document.getElementById('stockLoadModal').classList.add('open');
@@ -5918,7 +6921,7 @@
     if(!id || !companies.some(c => c.id === id)) id = companies.length === 1 ? companies[0].id : '';
     // Проверка с прошлого раза могла устареть — открываем со свежей.
     stockLoad.preview = null;
-    if(id !== stockLoad.companyId || stockLoad.rows) setStockLoadCompany(id); else renderStockLoad();
+    setStockLoadCompany(id);   // склады продавца — свежие при каждом открытии
     loadStockBatches();
   }
   window.openStockLoad = openStockLoad;
@@ -5964,11 +6967,20 @@
     stockLoad.companyId = id;
     stockLoad.preview = null;
     stockLoad.error = '';
+    stockLoad.defaultVw = '';
+    stockLoad.vws = [];
+    if(id) vwOf(id).then(d => { if(stockLoad.companyId === id){ stockLoad.vws = d.warehouses; renderStockLoad(); } }).catch(() => {});
     // Файл уже выбран — проверяем его заново для нового продавца: артикулы
     // и «уже лежит» у каждого продавца свои.
     if(stockLoad.rows && id) previewStockLoad(); else renderStockLoad();
   }
   window.setStockLoadCompany = setStockLoadCompany;
+  function setStockLoadVw(id){
+    stockLoad.defaultVw = id;
+    stockLoad.preview = null;
+    if(stockLoad.rows && stockLoad.companyId) previewStockLoad(); else renderStockLoad();
+  }
+  window.setStockLoadVw = setStockLoadVw;
 
   // Бланк на весь каталог продавца. Ячейка подставлена там, где её знает 1С;
   // количество пустое — его вписывают у полки. «По 1С» — только для сверки.
@@ -5979,12 +6991,13 @@
       data = await apiFetch('/api/cells/initial-stock/template?companyId=' + encodeURIComponent(stockLoad.companyId));
     } catch(e){ showWhToast('Не удалось получить бланк: ' + e.message); return; }
     const rows = [];
+    const withVw = stockLoad.vws.length > 0;
     data.products.forEach(p => {
       // «Продавец» — чтобы бланк одного продавца нельзя было загрузить другому:
       // сервер отклонит строки с чужим именем.
       const base = { 'Артикул': p.sku, 'Товар': p.name, 'Штрихкод': p.barcode || '',
         'По 1С (для сверки)': p.stock1c == null ? '' : p.stock1c, 'Количество': '', 'Состояние': '',
-        'Продавец': data.seller.name };
+        ...(withVw ? { 'Склад': '' } : {}), 'Продавец': data.seller.name };
       (p.cells1c && p.cells1c.length ? p.cells1c : ['']).forEach(cell => rows.push(Object.assign({ 'Ячейка': cell }, base)));
     });
     // Колонка «Ячейка» — текстом, и с запасом пустых строк под дописанное
@@ -5999,7 +7012,7 @@
       range.e.r = Math.max(range.e.r, last);
       ws['!ref'] = XLSX.utils.encode_range(range);
     };
-    saveXlsx('Бланк остатков — ' + data.seller.name, 'Остатки', rows, [14, 16, 42, 16, 12, 12, 14, 22], asText);
+    saveXlsx('Бланк остатков — ' + data.seller.name, 'Остатки', rows, [14, 16, 42, 16, 12, 12, 14].concat(withVw ? [16] : [], [22]), asText);
   }
   window.downloadStockTemplate = downloadStockTemplate;
 
@@ -6041,6 +7054,7 @@
       qty: ['количество', 'кол-во', 'посчитано'],
       quality: ['состояние', 'состояние товара'],
       seller: ['продавец'],
+      warehouse: ['склад', 'склад продавца', 'виртуальный склад'],
     };
     let head = -1;
     let cols = {};
@@ -6063,6 +7077,7 @@
         qty: number(r, cols.qty),
         quality: cols.quality != null ? text(r, cols.quality) : '',
         seller: cols.seller != null ? text(r, cols.seller) : '',
+        warehouse: cols.warehouse != null ? text(r, cols.warehouse) : '',
       };
       if(!row.cell && !row.sku && !row.qty) continue;
       // Не посчитано — строка бланка, до которой не дошли. На сервер её не
@@ -6125,7 +7140,7 @@
     let error = '';
     try{
       preview = await apiFetch('/api/cells/initial-stock', { method: 'POST',
-        body: { companyId: stockLoad.companyId, rows: stockLoad.rows } });
+        body: { companyId: stockLoad.companyId, rows: stockLoad.rows, defaultVw: stockLoad.defaultVw || null } });
     } catch(e){
       error = 'Проверка не прошла: ' + e.message;
     }
@@ -6150,7 +7165,7 @@
     let r;
     try{
       r = await apiFetch('/api/cells/initial-stock', { method: 'POST',
-        body: { companyId: stockLoad.companyId, rows: stockLoad.rows, apply: true,
+        body: { companyId: stockLoad.companyId, rows: stockLoad.rows, apply: true, defaultVw: stockLoad.defaultVw || null,
           expect: { ok: s.ok, units: s.units } } });
     } catch(e){
       // Ответ не дошёл — неизвестно, записалось ли. Перепроверяем: повтор
@@ -6232,7 +7247,7 @@
               + pluralRu(s.notInFile, 'товара', 'товаров', 'товаров') + ', которых нет в файле. Их можно загрузить следующим файлом.</div>'
             : '')
         + '<table class="sl-table"><thead><tr><th>Строка</th><th>Ячейка</th><th>Товар</th>'
-        + '<th class="num">Кол-во</th><th>Состояние</th><th>Проверка</th></tr></thead><tbody>'
+        + '<th class="num">Кол-во</th><th>Состояние</th>' + (stockLoad.vws.length ? '<th>Склад</th>' : '') + '<th>Проверка</th></tr></thead><tbody>'
         + shown.map(l => '<tr' + (l.error ? ' class="bad"' : l.already ? ' class="done"' : '') + '>'
           + '<td class="num">' + l.line + '</td>'
           // Вписанное и найденное — рядом, когда они различаются: подмену
@@ -6244,6 +7259,7 @@
               : '<span class="mono">' + escapeHTML(l.sku || '—') + '</span>') + '</td>'
           + '<td class="num">' + (l.qty == null ? '—' : l.qty) + '</td>'
           + '<td>' + escapeHTML(SL_QUALITY[l.quality] || '') + '</td>'
+          + (stockLoad.vws.length ? '<td>' + escapeHTML(l.vwName || '') + '</td>' : '')
           + '<td>' + (l.error ? '<span class="err">' + escapeHTML(l.error) + '</span>'
               : l.already ? 'уже загружено ' + escapeHTML(l.already)
               : '<span class="okay">загрузится</span>') + '</td>'
@@ -6262,6 +7278,12 @@
       + '<div class="sl-field"><label for="stockLoadCompany">Продавец</label>'
       + '<select class="mp-field" id="stockLoadCompany" onchange="setStockLoadCompany(this.value)"'
       + (stockLoad.busy ? ' disabled' : '') + '>' + options + '</select></div>'
+      // Склады продавца: куда идут строки без столбца «Склад».
+      + (stockLoad.vws.length ? '<div class="sl-field"><label for="stockLoadVw">Склад продавца по умолчанию</label>'
+        + '<select class="mp-field" id="stockLoadVw" onchange="setStockLoadVw(this.value)"' + (stockLoad.busy ? ' disabled' : '') + '>'
+        + '<option value="">Остальной товар</option>'
+        + stockLoad.vws.map(w => '<option value="' + escapeHTML(w.id) + '"' + (w.id === stockLoad.defaultVw ? ' selected' : '') + '>' + escapeHTML(w.name) + '</option>').join('')
+        + '</select><div class="ord-meta">Для строк без столбца «Склад». В файле можно указать склад у каждой строки — столбец «Склад».</div></div>' : '')
       + '<div class="sl-row">'
       +   '<button class="wh-onboarding-btn" type="button" onclick="downloadStockTemplate()"'
       +     (stockLoad.companyId ? '' : ' disabled') + '>Скачать бланк</button>'
@@ -6340,6 +7362,11 @@
   }
 
 
+  /* ===================== Расчёты с продавцами ===================== */
+
+  function loadBilling(){ return ArgusBilling.load(); }
+  window.loadBilling = loadBilling;
+
   /* ===================== Заказы с маркетплейсов ===================== */
 
   // Экран менеджера. Порядок намеренно такой: сперва продавцы с числом
@@ -6351,6 +7378,41 @@
   // Чей экран заказов открыт сейчас: ответы приходят с задержкой, и поздний
   // ответ по прошлому продавцу не должен перерисовать чужой экран.
   let ordersCompanyId = null;
+  const ordersPhotoCatalog = new Map();
+  const orderMarketplaceBadge = (value) => {
+    const source = String(value || '').toLowerCase();
+    const label = { wb: 'WB', ozon: 'Ozon', '1c': '1С' }[source];
+    return source ? '<span class="workspace-marketplace ' + (source === '1c' ? 'onec' : source === 'wb' || source === 'ozon' ? source : '')
+      + '">' + escapeHTML(label || source.toUpperCase()) + '</span>' : '';
+  };
+  function orderPhotoHtml(url){
+    let safe = null;
+    try{
+      const u = new URL(url);
+      if(u.protocol === 'https:' && !u.username && !u.password
+        && ['wbbasket.ru', 'wbstatic.net', 'wildberries.ru'].some(d => u.hostname === d || u.hostname.endsWith('.' + d))) safe = u.href;
+    } catch(_){}
+    return '<span class="order-product-photo" role="img" aria-label="' + (safe ? 'Фото товара' : 'Фото нет') + '">'
+      + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M3 3h18v18H3zM3 16l6-6 5 5 3-3 4 4M15 7h.01"/></svg>'
+      + (safe ? '<img src="' + escapeHTML(safe) + '" alt="" width="44" height="44" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()">' : '') + '</span>';
+  }
+  function orderCatalogPhoto(companyId, order){
+    const products = ordersPhotoCatalog.get(companyId)?.products;
+    const cards = products?.get(order.sku)?.cards || [];
+    const card = order.nmId ? cards.find(c => String(c.nmId) === String(order.nmId)) : cards.find(c => c.photoUrl);
+    return orderPhotoHtml(card?.photoUrl);
+  }
+  function loadOrderPhotoCatalog(companyId){
+    const cached = ordersPhotoCatalog.get(companyId);
+    if(cached && Date.now() - cached.at < 120000) return;
+    const cache = { at: Date.now(), products: cached?.products || new Map() };
+    ordersPhotoCatalog.set(companyId, cache);
+    apiFetch('/api/sellers/catalog?companyId=' + encodeURIComponent(companyId)).then(data => {
+      cache.products = new Map((data.products || []).map(p => [p.sku, p]));
+      if(ordersCompanyId === companyId && ordersPicked === companyId) renderPartnerOrders(companyId);
+      if(productsFor === companyId) renderProducts();
+    }).catch(() => {});
+  }
 
   async function loadMpOrders(){
     const host = document.getElementById('ordersContent');
@@ -6392,10 +7454,8 @@
            onclick="pickOrdersPartner('${p.companyId}')">
         <div class="ord-count">${p.orders}</div>
         <div>
-          <div class="ord-name">${escapeHTML(p.companyName)}</div>
-          <div class="ord-meta">${p.units.toLocaleString('ru-RU')} шт${
-            p.marketplace ? ' · ' + escapeHTML(String(p.marketplace).toUpperCase()) : ''
-          }${p.oldest ? ' · самый ранний — ' + fmtDay(p.oldest) + ', ' + formatLastSeen(p.oldest) : ''}${
+          <div class="ord-name">${escapeHTML(p.companyName)} ${orderMarketplaceBadge(p.marketplace)}</div>
+          <div class="ord-meta">${p.units.toLocaleString('ru-RU')} шт${p.oldest ? ' · самый ранний — ' + fmtDay(p.oldest) + ', ' + formatLastSeen(p.oldest) : ''}${
             p.incomplete > 0
               ? ` · <span class="ord-warn">${p.incomplete} не собрать</span>`
               : ''
@@ -6437,8 +7497,9 @@
     ordersSelected = ordersSelectedFor === companyId
       ? new Set([...ordersSelected].filter(id => rows.some(o => o.id === id && o.ready)))
       : new Set();
-    if(ordersSelectedFor !== companyId) ordersWbWh = 'all';
+    if(ordersSelectedFor !== companyId){ ordersWbWh = new Set(); ordersWhOpen = false; ordersVw = ''; }
     ordersSelectedFor = companyId;
+    loadOrderPhotoCatalog(companyId);
     renderPartnerOrders(companyId);
   }
 
@@ -6463,6 +7524,16 @@
   let ordersPoint = null;
   let ordersPointText = '';
   let ordersShipDate = '';
+  // Склад продавца, с которого собирать поставку (виртуальные склады,
+  // 02.10.2026): '' — не выбран, 'main' — «Основной», иначе id склада.
+  let ordersVw = '';
+  window.setOrdersVw = (companyId, value) => { ordersVw = value; renderPartnerOrders(companyId); };
+  // Из каких складов можно собрать: на WB — «Основной» и склады WB, иначе любой.
+  function supplyVwChoices(companyId, isWb){
+    const c = vwCache[companyId];
+    if(!c){ vwOf(companyId).then(() => renderPartnerOrders(companyId)).catch(() => {}); return null; }
+    return isWb ? c.wbChoices : c.warehouses.concat([{ id: null, name: 'Остальной товар' }]);
+  }
   let pointsSearchTimer = null;
   const pointLabel = (p) => (p.officeType === 'sc' ? 'Сортировочный центр WB — ' : '')
     + String(p.address || p.name || p.id).trim() + ' · №' + p.id;
@@ -6552,14 +7623,46 @@
   // Видна ли строка: поиск и «Только с нехваткой». Галка «выбрать все» стоит
   // над видимым списком и обязана означать ровно его.
   const orderVisible = (o) => matchesOrderSearch(o) && (!ordersShortOnly || Boolean(orderShortLevel(o)))
-    && (ordersWbWh === 'all' || (o.wbWarehouseId || '') === (ordersWbWh === 'none' ? '' : ordersWbWh));
+    && (!ordersWbWh.size || ordersWbWh.has(String(o.wbWarehouseId || 'none')));
   // Склад продавца на WB: поставка WB берёт заказы только одного склада.
-  let ordersWbWh = 'all';
+  let ordersWbWh = new Set();
+  let ordersWhOpen = false;
+  window.setOrdersWhOpen = (open) => { ordersWhOpen = open; };
   function setOrdersWbWh(companyId, value){
-    ordersWbWh = value;
+    if(value === 'all') ordersWbWh.clear();
+    else if(ordersWbWh.has(value)) ordersWbWh.delete(value);
+    else ordersWbWh.add(value);
+    ordersWhOpen = true;
     renderPartnerOrders(companyId);
+    const input = [...document.querySelectorAll('.order-warehouse-filter input')].find(el => el.value === value);
+    if(input) input.focus({ preventScroll: true });
   }
   window.setOrdersWbWh = setOrdersWbWh;
+  document.addEventListener('keydown', (event) => {
+    const filter = event.target.closest?.('.order-warehouse-filter[open]');
+    if(filter && event.key === 'Escape'){
+      event.preventDefault(); filter.open = false; ordersWhOpen = false; filter.querySelector('summary').focus();
+    }
+  });
+  document.addEventListener('click', (event) => {
+    if(event.target.closest?.('.order-warehouse-filter')) return;
+    const filter = document.querySelector('.order-warehouse-filter[open]');
+    if(filter){ filter.open = false; ordersWhOpen = false; }
+  });
+  function orderWarehouseFilter(companyId, whNames){
+    const options = [...whNames].sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'ru'));
+    if(ordersRows.some(o => !o.wbWarehouseId)) options.push(['none', 'Склад WB не известен']);
+    if(!options.length && !ordersWbWh.size) return '';
+    const label = ordersWbWh.size ? 'Выбрано складов: ' + ordersWbWh.size : 'Все склады WB';
+    return '<details class="order-warehouse-filter" ' + (ordersWhOpen ? 'open ' : '') + 'ontoggle="setOrdersWhOpen(this.open)">'
+      + '<summary>' + label + '</summary><div class="order-warehouse-menu" aria-label="Склады для просмотра заказов">'
+      + '<label><input type="checkbox" value="all" ' + (!ordersWbWh.size ? 'checked ' : '')
+      + 'onchange="setOrdersWbWh(\'' + companyId + '\', this.value)">Все склады WB</label>'
+      + options.map(([id, name]) => '<label><input type="checkbox" value="' + escapeHTML(id) + '" '
+        + (ordersWbWh.has(String(id)) ? 'checked ' : '') + 'onchange="setOrdersWbWh(\'' + companyId + '\', this.value)">'
+        + escapeHTML(name || 'Склад WB ' + id) + '</label>').join('')
+      + '<p>Отбор меняет только список заказов.</p></div></details>';
+  }
 
   // Необязательные столбцы — человек включает сам; выбор помним в этом
   // браузере отдельно на склад и роль: владелец и менеджер за одним
@@ -6625,7 +7728,8 @@
     loadAllOrders(companyId);
     if(!ordersAll.rows) return ordersAll.loading ? '<div class="ord-meta" style="margin-top:18px;">Ищу среди остальных заказов продавца…</div>' : '';
     const pending = new Set(ordersRows.map(o => o.id));
-    const hits = ordersAll.rows.filter(r => !pending.has(r.id) && [r.number, r.name, r.sku, r.mp_article, r.mp_nm_id,
+    const hits = ordersAll.rows.filter(r => !pending.has(r.id) && (!ordersWbWh.size || ordersWbWh.has(String(r.mp_warehouse_id || 'none')))
+      && [r.number, r.name, r.sku, r.mp_article, r.mp_nm_id,
       r.mp_barcode, r.mp_rid, r.supply_number].some(v => String(v || '').toLowerCase().includes(q)));
     if(!hits.length) return '';
     return `<div class="ord-meta" style="margin:24px 0 10px;"><b>Среди остальных заказов продавца — ${new Set(hits.map(r => r.id)).size}.</b>
@@ -6673,6 +7777,9 @@
     if(isWb) loadShippingPoints(companyId);
     const points = isWb && Array.isArray(ordersPoints[companyId]) ? ordersPoints[companyId] : null;
     const needShipping = !!points && (!ordersPointId || !ordersShipDate);
+    const vwChoices = supplyVwChoices(companyId, isWb) || [];
+    if(ordersVw && !vwChoices.some(c => (c.id || 'main') === ordersVw)) ordersVw = '';
+    const needVw = vwChoices.length > 1 && !ordersVw;
     // WB не примет в одну поставку заказы разных складов продавца.
     const whNames = new Map(ordersRows.filter(o => o.wbWarehouseId).map(o => [o.wbWarehouseId, o.wbWarehouse]));
     const pickedWh = [...new Set(ordersRows.filter(o => ordersSelected.has(o.id) && o.wbWarehouseId).map(o => o.wbWarehouseId))];
@@ -6688,15 +7795,23 @@
           : '')
         + '</td>';
     };
+    // Заказ из 1С собирают с того склада продавца, который выбрал менеджер
+    // (владелец 02.10.2026); по умолчанию «Основной».
+    const allVw = vwCache[companyId] && vwCache[companyId].warehouses.length
+      ? vwCache[companyId].warehouses.concat([{ id: null, name: 'Остальной товар' }]) : [];
+    const lineVw = (o) => (o.marketplace === '1c' && o.itemId && allVw.length
+      ? `<div class="ord-sub">склад: <select class="ord-vw-line" aria-label="Склад продавца" onchange="setOrderLineVw('${companyId}', '${o.itemId}', this.value, this)">`
+        + allVw.map(w => `<option value="${w.id || ''}"${(w.id || null) === (o.vw || null) ? ' selected' : ''}>${escapeHTML(w.name)}</option>`).join('')
+        + '</select></div>' : '');
     const row = (o, selectable) => `
       <tr class="${selectable ? '' : 'not-ready'}${orderShortLevel(o) ? ' st-' + orderShortLevel(o) : ''}">
         <td>${selectable
           ? `<input type="checkbox" ${ordersSelected.has(o.id) ? 'checked' : ''} onchange="toggleOrderPick('${companyId}', '${o.id}')" aria-label="Выбрать заказ">`
           : ''}</td>
-        <td class="ord-mono ord-no">${escapeHTML(o.number)}${o.rid
+        <td class="ord-mono ord-no">${escapeHTML(o.number)} ${orderMarketplaceBadge(o.marketplace)}${o.rid
           ? `<div class="ord-sub" title="${escapeHTML(o.rid)}">${escapeHTML(String(o.rid).slice(0, 14))}…</div>` : ''}</td>
         <td class="ord-when">${orderWhen(o)}</td>
-        <td>${escapeHTML(o.name || '—')}<div class="ord-mono">${escapeHTML(o.sku || 'не сопоставлен')}</div></td>
+        <td><div class="order-product-name">${orderCatalogPhoto(companyId, o)}<div>${escapeHTML(o.name || '—')}<div class="ord-mono">${escapeHTML(o.sku || 'не сопоставлен')}</div>${lineVw(o)}</div></div></td>
         <td class="ord-mono">${escapeHTML(o.article || '—')}${o.nmId ? `<div class="ord-sub">WB ${escapeHTML(o.nmId)}</div>` : ''}</td>
         <td class="ord-mono">${escapeHTML(o.barcode || '—')}</td>
         <td>${(o.offices || []).length ? escapeHTML(o.offices.join(', ')) : '<span class="ord-sub">—</span>'}${o.wbWarehouse
@@ -6732,11 +7847,17 @@
                value="${escapeHTML(ordersPlace)}" oninput="setOrdersPlace(this.value)">
         <datalist id="ordPlaceList">${[...new Set((supplyRows || []).map(s => s.destination).filter(Boolean))]
           .map(d => `<option value="${escapeHTML(d)}">`).join('')}</datalist>`}
-        <button class="wh-onboarding-btn${n > 0 && !needShipping && !mixedWh ? ' primary' : ''}" type="button"
-                onclick="makeSupply('${companyId}')" ${n === 0 || needShipping || mixedWh ? 'disabled' : ''}>
+        ${vwChoices.length > 1 ? `
+        <select class="ord-place ord-vw" aria-label="Склад продавца, с которого собирать" onchange="setOrdersVw('${companyId}', this.value)">
+          <option value=""${ordersVw ? '' : ' selected'} disabled>С какого склада продавца собирать</option>
+          ${vwChoices.map(c => `<option value="${c.id || 'main'}"${ordersVw === (c.id || 'main') ? ' selected' : ''}>Склад «${escapeHTML(c.name)}»</option>`).join('')}
+        </select>` : ''}
+        <button class="wh-onboarding-btn${n > 0 && !needShipping && !mixedWh && !needVw ? ' primary' : ''}" type="button"
+                onclick="makeSupply('${companyId}')" ${n === 0 || needShipping || mixedWh || needVw ? 'disabled' : ''}>
           ${n === 0 ? 'Выберите заказы для поставки'
             : mixedWh ? 'Выберите заказы одного склада WB'
             : needShipping ? 'Выберите пункт WB и дату отгрузки'
+            : needVw ? 'Выберите склад продавца'
             : `Составить поставку — ${n} ${pluralRu(n, 'заказ', 'заказа', 'заказов')}`}
         </button>
         ${isWb && ordersPoints[companyId] === 'error' ? `<span class="ord-meta ord-warn">Список пунктов WB не загрузился —
@@ -6756,11 +7877,7 @@
         <span class="ord-tools">
           <input class="ord-search" type="search" placeholder="Товар, артикул WB, штрихкод или номер заказа"
                  value="${escapeHTML(ordersSearch)}" oninput="setOrdersSearch('${companyId}', this.value)">
-          ${whNames.size > 1 || ordersWbWh !== 'all' ? `<select class="ord-sort" onchange="setOrdersWbWh('${companyId}', this.value)" aria-label="Склад WB">
-            <option value="all"${ordersWbWh === 'all' ? ' selected' : ''}>Все склады WB</option>
-            ${[...whNames].sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'ru')).map(([id, name]) => `<option value="${escapeHTML(id)}"${ordersWbWh === id ? ' selected' : ''}>${escapeHTML(name)}</option>`).join('')}
-            ${ordersRows.some(o => !o.wbWarehouseId) ? `<option value="none"${ordersWbWh === 'none' ? ' selected' : ''}>Склад WB не известен</option>` : ''}
-          </select>` : ''}
+          ${orderWarehouseFilter(companyId, whNames)}
           <select class="ord-sort" onchange="setOrdersSort('${companyId}', this.value)">
             <option value="product"${ordersSort === 'product' ? ' selected' : ''}>По товару</option>
             <option value="number"${ordersSort === 'number' ? ' selected' : ''}>По номеру заказа</option>
@@ -6786,7 +7903,7 @@
         <span class="ord-sub">по годному остатку в ячейках Аргуса</span>
       </div>
       <div class="ord-scroll">
-        <table class="ord-table">${head(true)}<tbody>${fresh.map(o => row(o, o.ready)).join('')
+        <table class="ord-table ord-cards">${head(true)}<tbody>${fresh.map(o => row(o, o.ready)).join('')
           || emptyRow(ordersShortOnly ? 'Заказов с нехваткой нет.' : 'Под поиск ничего не подходит.')}</tbody></table>
       </div>
       ${confirmed.length ? `
@@ -6795,7 +7912,7 @@
           которую сделали без Аргуса; в поставку Аргуса они не попадут, чтобы не собрать заказ дважды.
         </div>
         <div class="ord-scroll">
-          <table class="ord-table">${head(false)}<tbody>${confirmed.map(o => row(o, false)).join('')}</tbody></table>
+          <table class="ord-table ord-cards">${head(false)}<tbody>${confirmed.map(o => row(o, false)).join('')}</tbody></table>
         </div>` : ''}
       ${otherOrdersHtml(companyId)}
       <div class="ord-meta" style="margin-top:14px;">
@@ -6941,7 +8058,8 @@
     const byProduct = new Map();
     (d.packing || []).forEach(r => {
       const it = byProduct.get(r.sku)
-        || { sku: r.sku, name: r.name, article: r.article, qty: 0, orders: new Set() };
+        || { sku: r.sku, name: r.name, article: r.article, photo: r.photo, qty: 0, orders: new Set() };
+      if(!it.photo && r.photo) it.photo = r.photo;
       it.qty += Number(r.qty || 0);
       it.orders.add(r.orderNumber);
       byProduct.set(r.sku, it);
@@ -6965,11 +8083,18 @@
           : '<span class="warn">не в ячейках Аргуса</span>';
       // По учёту на полках меньше, чем нужно поставке: этим заказам
       // собираться не из чего. Решают до сборки — убрать их из поставки.
-      const short = taken < r.qty && p && p.shortfall > 0
-        ? '<div class="warn">не хватает ' + p.shortfall + ' шт</div>' : '';
+      // Сервер отдаёт, сколько осталось взять (qty) и сколько лежит в ячейках
+      // склада поставки (available); поля shortfall в карточке нет — раньше
+      // «не хватает» здесь не показывалось никогда.
+      const shortBy = p ? Math.max(0, Number(p.qty || 0) - Number(p.available || 0)) : 0;
+      const short = taken < r.qty && shortBy > 0
+        ? '<div class="warn">не хватает ' + shortBy + ' шт</div>'
+          + (d.supply && d.supply.virtualWarehouseName && d.supply.status === 'collecting'
+            ? '<span class="mp-act" onclick="takeFromOtherVw(\'' + id + '\', \'' + escapeHTML(r.sku).replace(/'/g, '&#39;') + '\', ' + shortBy + ')">Взять с другого склада продавца</span>' : '')
+        : '';
       return '<tr>'
-        + '<td>' + escapeHTML(r.name || '—')
-        +   '<div class="sku">' + escapeHTML(r.article || r.sku || '') + '</div></td>'
+        + '<td><div class="order-product-name">' + orderPhotoHtml(r.photo || p?.photo) + '<div>' + escapeHTML(r.name || '—')
+        +   '<div class="sku">' + escapeHTML(r.article || r.sku || '') + '</div></div></div></td>'
         + '<td class="num">' + r.orders.size + '</td>'
         + '<td class="num">' + r.qty + (taken > 0 ? '<div class="sku">собрано ' + taken + '</div>' : '') + '</td>'
         + '<td>' + where + short + '</td>'
@@ -6983,9 +8108,22 @@
       + body + '</tbody></table>';
   }
 
+  // Складу поставки не хватает товара, а на другом складе продавца он есть:
+  // перенос учёта (владелец 02.10.2026). Продавец запретил складу решать
+  // без него — перенос ждёт его «Согласен».
+  function takeFromOtherVw(supplyId, sku, qty){
+    const d = supplyInside[supplyId]; if(!d || !d.supply) return;
+    openTransfer(sku, { companyId: d.supply.companyId, to: vwKey(d.supply.virtualWarehouseId || null), qty,
+      note: 'не хватало для поставки ' + d.supply.number,
+      after: async () => { try{ supplyInside[supplyId] = await apiFetch('/api/supplies/' + supplyId); } catch(_){} renderSupplies(); } });
+  }
+  window.takeFromOtherVw = takeFromOtherVw;
+
   async function loadSupplies(){
     const box = document.getElementById('suppliesList');
     if(!box) return;
+    const newButton = document.getElementById('newSupplyButton');
+    if(newButton) newButton.hidden = !canOpenView('orders');
     let rows;
     try{ rows = await apiFetch('/api/supplies'); }
     catch(e){
@@ -7064,8 +8202,9 @@
         +   '<input class="sup-pick" type="checkbox" aria-label="Выбрать поставку"'
         +     (supplyPicked.has(s.id) ? ' checked' : '')
         +     ' onchange="toggleSupplyPick(\'' + s.id + '\')">'
-        +   escapeHTML(s.number) + '</div>'
-        + '<div><div class="sup-company">' + escapeHTML(s.company_name) + '</div>'
+        +   escapeHTML(s.number) + ' ' + orderMarketplaceBadge(s.marketplace || (s.mp_supply_id ? 'wb' : '')) + '</div>'
+        + '<div><div class="sup-company">' + escapeHTML(s.company_name)
+        +   (s.vw_name ? ' <span class="sup-meta">· склад «' + escapeHTML(s.vw_name) + '»</span>' : '') + '</div>'
         +   '<div class="sup-meta">' + s.orders + ' '
         +   pluralRu(s.orders, 'заказ', 'заказа', 'заказов')
         +   (s.status === 'collecting' && s.orders > 0 ? ' · собрано ' + s.picked + ' из ' + s.orders : '')
@@ -7298,8 +8437,13 @@
     const place = (point ? point.label : ordersPlace.trim()).slice(0, 120);
     const dayText = ordersShipDate
       ? new Date(ordersShipDate + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : '';
+    const vwChoices = supplyVwChoices(companyId, partner && partner.marketplace === 'wb') || [];
+    const vwPick = vwChoices.length > 1 ? vwChoices.find(c => (c.id || 'main') === ordersVw) : null;
+    if(vwChoices.length > 1 && !vwPick){ showWhToast('Выберите, с какого склада продавца собирать поставку.'); return; }
     if(!await askConfirm(`Составить поставку: ${ready.length} ${pluralRu(ready.length, 'заказ', 'заказа', 'заказов')}`
-      + ` продавца «${partner ? partner.companyName : ''}»` + (place ? ` — ${place}` : '') + (dayText ? `, отгрузка ${dayText}` : '') + `?\n\nОна уйдёт на склад, грузчики начнут сборку.`)) return;
+      + ` продавца «${partner ? partner.companyName : ''}»` + (place ? ` — ${place}` : '') + (dayText ? `, отгрузка ${dayText}` : '')
+      + (vwPick ? `, со склада «${vwPick.name}»` : '')
+      + `?\n\nОна уйдёт на склад, грузчики начнут сборку` + (vwPick ? ' — только из товара этого склада.' : '.'))) return;
     supplyInFlight = true;
     const button = document.querySelector('.ord-actions button');
     if(button){ button.disabled = true; button.textContent = 'Составляем поставку…'; }
@@ -7309,8 +8453,10 @@
         body: {
           invoiceIds: ready, marketplace: partner ? partner.marketplace : null, destination: place || null,
           shippingPointId: point ? point.id : null, shipDate: ordersShipDate || null,
+          ...(vwPick ? { virtualWarehouseId: vwPick.id } : {}),
         },
       });
+      ordersVw = '';
       ordersPlace = '';
       ordersPointId = '';
       ordersPoint = null;
@@ -7346,23 +8492,35 @@
   }
   window.makeSupply = makeSupply;
 
+  async function setOrderLineVw(companyId, itemId, value, el){
+    el.disabled = true;
+    try{
+      await apiFetch('/api/vwarehouses/items', { method: 'POST', body: { itemIds: [itemId], vw: value || null } });
+      showWhToast('Склад строки заказа поменян — продавцу пришло уведомление «обратите внимание».');
+    } catch(e){ showWhToast(e.message); }
+    loadPartnerOrders(companyId);
+  }
+  window.setOrderLineVw = setOrderLineVw;
+
   /* ===================== Инициализация ===================== */
 
   // Стартовая вкладка открывается тем же путём, что и любая другая, а не
   // классом "active" в разметке: иначе всё, что должно случаться при открытии
   // вкладки, на первой из них молча не случается.
-  // У менеджера нет доступов, склада как конструктора, 1С, денег и чата
-  // с агентами. Убираем эти пункты и не дёргаем их запросы: иначе кабинет
-  // при каждом открытии получал бы связку отказов и жаловался всплывашками
-  // на то, чего человеку и не положено.
+  // Разделы и внутренние вкладки доступны только по выданным правам.
   // Склад и ячейки менеджеру открывает владелец правом «склад» — решение
   // владельца от 17.09.2026. Сервер это же и проверяет (allowWarehouseView),
   // здесь пункты просто не показываем, чтобы кабинет не стучал в закрытую
   // дверь и не сыпал отказами.
   const CAN_WAREHOUSE = !IS_MANAGER || (authPayload.grants || []).includes('warehouse');
   if(IS_MANAGER){
-    const hidden = ['nav-chat', 'nav-staff', 'nav-1c', 'nav-mp', 'nav-settings'];
-    if(!CAN_WAREHOUSE) hidden.push('nav-warehouse', 'nav-inv');
+    // Разделы по выданным правам (владелец 04.10.2026): галочка открывает
+    // раздел, а не только разрешает действие на сервере.
+    const grants = authPayload.grants || [];
+    const hidden = ['nav-chat'];
+    if(!grants.includes('staff')) hidden.push('nav-staff');
+    if(!grants.includes('clients') && !grants.includes('marketplaces')) hidden.push('nav-mp');
+    if(!grants.includes('integration')) hidden.push('nav-settings');
     // Расчёты — право «Тариф и деньги».
     if(!(authPayload.grants || []).includes('billing')) hidden.push('nav-billing');
     hidden.forEach(id => {
@@ -7374,13 +8532,15 @@
     });
   }
 
-  // Склад и пересчёт — одно место работы; клиенты и их площадки — одно
-  // хозяйство. Вместо девяти боковых пунктов остаётся семь, а внутри
-  // каждого пара вкладок.
-  mergePanes('warehouse', 'inv', ['Карта склада', 'Инвентаризация']);
-  ['nav-inv'].forEach(id => {
-    const el = document.getElementById(id);
-    if(el) el.remove();
+  mergePanes('stock', [{ id: 'products', title: 'Товары' }, { id: 'warehouse', title: 'Склады и ячейки' }, { id: 'inv', title: 'Инвентаризация' }]);
+  mergePanes('inbound', [{ id: 'receipts', title: 'Приходы' }, { id: 'acts', title: 'Акты' }]);
+  mergePanes('configuration', [{ id: 'settings', title: 'Работа склада' }, { id: '1c', title: 'Подключение 1С' }]);
+  document.querySelectorAll('.sidebar-nav .nav-item').forEach(el => {
+    el.setAttribute('role', 'button');
+    el.tabIndex = 0;
+    el.addEventListener('keydown', event => {
+      if(event.key === 'Enter' || event.key === ' '){ event.preventDefault(); el.click(); }
+    });
   });
 
   // Заголовок раздела без единого пункта (у менеджера «Настройки») — лишний:
@@ -7399,8 +8559,7 @@
     }
   });
 
-  // Менеджер начинает с заказов — это его работа. Владелец с чата.
-  switchView(IS_MANAGER ? 'orders' : 'chat');
+  switchView('home');
   renderLogoTargets();
 
   addInvoiceItemRow();

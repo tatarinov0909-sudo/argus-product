@@ -1,0 +1,229 @@
+// Synthetic navigation/home/stock regression. Every request is intercepted; no live data is used.
+// Run: node tests/navigation-stock-ui.cjs
+// ARGUS_PLAYWRIGHT_MODULE selects an existing Playwright package; ARGUS_BROWSER_CHANNEL defaults to msedge.
+const fs = require('node:fs');
+const path = require('node:path');
+const assert = require('node:assert/strict');
+const { chromium } = require(process.env.ARGUS_PLAYWRIGHT_MODULE || 'playwright');
+const SITE = path.resolve(__dirname, '..');
+const ORIGIN = 'https://navigation-stock.invalid';
+const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const VW_A = '11111111-1111-4111-8111-111111111111';
+const VW_B = '22222222-2222-4222-8222-222222222222';
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/kBsAAAAASUVORK5CYII=', 'base64');
+const rows = [{ id: 'test-row', row_num: 1, rack_count: 1, tier_count: 1, blocks: [
+  { id: 'test-block', rack_start: 1, rack_end: 1, tier_start: 1, tier_end: 1, state: 'occupied',
+    stock: [{ companyId: A, sku: 'sku-1', qty: 6, quality: 'good' }] },
+] }];
+const stock = (companyId, extra) => [
+  { sku: 'sku-1', name: 'Тестовый товар А', listed: true, totalKnown: true, total: 12, qty: 6, notForSale: 2,
+    staged: 1, defective: 2, packagingDefect: 0, orderedNotInSupply: 1, inAssembly: 1, inTransit: 2, sellerAvailable: 10,
+    byWarehouse: [{ id: null, name: 'Остальной товар', onHand: 7, inAssembly: 0, available: 7, defect: 0 },
+      { id: companyId === A ? VW_A : VW_B, name: companyId === A ? 'WB А' : 'Озон Б', onHand: 4, inAssembly: 1, available: 3, defect: 2 }] },
+  ...Array.from({ length: 1 + extra }, (_, i) => ({ sku: 'sku-' + (i + 2), name: 'Тестовый товар ' + (i + 2),
+    listed: true, totalKnown: true, total: 4, qty: 4, notForSale: 0, staged: 0, defective: 0, packagingDefect: 0,
+    orderedNotInSupply: 0, inAssembly: 0, inTransit: 0, sellerAvailable: 4,
+    byWarehouse: [{ id: null, name: 'Остальной товар', onHand: 4, inAssembly: 0, available: 4, defect: 0 }] })),
+];
+
+(async () => {
+  const browser = await chromium.launch({ headless: true, channel: process.env.ARGUS_BROWSER_CHANNEL || 'msedge' });
+  const errors = [];
+  const prepare = async (role, grants = []) => {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    const store = { calls: [], failHome: false, failVw: false, holdVw: false, holdMixed: false, release: null, extraStock: 0,
+      warehouses: { [A]: [{ id: VW_A, name: 'WB А', marketplace: 'wb', keepSeparate: false }],
+        [B]: [{ id: VW_B, name: 'Озон Б', marketplace: 'ozon', keepSeparate: false }] } };
+    page.on('pageerror', error => errors.push(`${role}: ${error.stack}`));
+    const token = 'test.' + Buffer.from(JSON.stringify({ role, grants, warehouseId: 'test-warehouse', ownerId: 'test-owner' })).toString('base64url') + '.test';
+    await page.addInitScript(({ role, token }) => {
+      localStorage.setItem('argus_role', role); localStorage.setItem('argus_token', token);
+      localStorage.setItem('argus_logo_target_' + role, 'warehouse');
+    }, { role, token });
+    await page.route('**/*', async route => {
+      const req = route.request(), url = new URL(req.url()), p = url.pathname;
+      if (url.origin === ORIGIN) {
+        const local = path.resolve(SITE, '.' + decodeURIComponent(p));
+        if (!local.startsWith(SITE + path.sep) || !fs.existsSync(local)) return route.fulfill({ status: 404, body: '' });
+        return route.fulfill({ path: local });
+      }
+      if (url.hostname.endsWith('.wbstatic.net')) return route.fulfill({ contentType: 'image/png', body: PNG });
+      if (url.origin !== 'https://api.argus-ai.online') return route.abort();
+      const companyId = url.searchParams.get('companyId'), body = req.postDataJSON();
+      if (req.method() !== 'OPTIONS') store.calls.push({ path: p, method: req.method(), body });
+      let data = [], status = 200;
+      if (p === '/api/leads/manage/access') return route.fulfill({ status: 403, json: { error: 'test' } });
+      if (p === '/api/warehouses/me') data = { name: 'Тестовый склад', timezone: 'Europe/Moscow', stock_source: 'argus', setup_at: '2001-01-01' };
+      if (p === '/api/sellers/companies') data = [{ id: A, name: 'Тестовый продавец А', keys: [] }, { id: B, name: 'Тестовый продавец Б', keys: [] }];
+      if (p === '/api/alerts/today') {
+        data = { ship: { supplies: 2, ready: 1, onec: 3 }, receive: { arrivals: 4, arrived: 1, returns: 2 },
+          decide: { discrepancies: 1, sellerRequests: 2, recounts: 1 }, exchange: { sync: ['test'], wbUnmapped: 3 } };
+        if (store.failHome) { status = 503; data = { error: 'test' }; }
+      }
+      if (p === '/api/alerts') data = { alerts: [] };
+      if (p === '/api/warehouses/me/readiness') data = { steps: [{ key: 'survey', done: false, optional: false }] };
+      if (p === '/api/supplies/pending') data = [{ companyId: A, companyName: 'Тестовый продавец А', orders: 3, units: 5 }];
+      if (p === '/api/sellers/stock-summary') data = { source: 'argus', sellers: [A, B].map((id, i) => ({ companyId: id,
+        name: 'Тестовый продавец ' + (i ? 'Б' : 'А'), total: 16, ordered: 1, inAssembly: 1, inTransit: 2,
+        available: 14, defect: 2, shortageCount: 0, inCells: 10, productCount: 2 })) };
+      if (p === '/api/sellers/stock') data = stock(companyId, store.extraStock);
+      if (p === '/api/sellers/catalog') data = { products: [{ sku: 'sku-1', cards: [{ photoUrl: 'https://test.wbstatic.net/photo.png' }] }] };
+      if (p === '/api/vwarehouses') {
+        if (req.method() === 'GET' && companyId === A && store.holdVw) {
+          store.holdVw = false; await new Promise(resolve => { store.release = resolve; });
+        }
+        if (req.method() === 'POST') { store.warehouses[body.companyId].push({ id: 'test-new-vw', ...body }); data = { id: 'test-new-vw' }; }
+        else data = { warehouses: store.warehouses[companyId] || [], rights: { decide: true }, wbChoices: [] };
+        if (store.failVw && companyId === A) { status = 503; data = { error: 'Тестовая ошибка загрузки' }; }
+      }
+      if (p.endsWith('/mixed')) {
+        if (store.holdMixed) { store.holdMixed = false; await new Promise(resolve => { store.release = resolve; }); }
+        data = { cells: 1 };
+      }
+      if (p === '/api/cells/rows') data = rows;
+      if (p.endsWith('/contents')) data = { items: [] };
+      if (p === '/api/dropzones') data = [{ id: 'test-zone', zone_num: 1, label: 'Тестовая зона', items: [] }];
+      if (p === '/api/sync/status') data = {};
+      if (p === '/api/inventory/advice' || p === '/api/inventory/settings') data = { reasons: [], recountAfterDays: 30, cellsPerRun: 10, minDaysBetweenRuns: 7, cycleDays: 0 };
+      if (p === '/api/journal') data = { date: url.searchParams.get('date'), entries: [], pending: [], nextCursor: null, pendingNextCursor: null };
+      return route.fulfill({ status, json: data });
+    });
+    await page.goto(ORIGIN + '/cabinet_main.html');
+    await page.locator('#view-home.active').waitFor();
+    await page.waitForFunction(() => document.querySelector('#productFormCompany').options.length === 2);
+    return { page, store };
+  };
+  try {
+    const { page: owner, store } = await prepare('owner');
+    await owner.locator('.home-table').waitFor();
+    assert.equal(await owner.locator('.sidebar-nav .nav-item').count(), 11);
+    assert.deepEqual(await owner.locator('.home-table .home-num[data-label]').allTextContents(), ['6', '6', '4', '2', '—']);
+    assert.equal(await owner.locator('#view-chat #readyCard,#view-chat #todayStrip').count(), 0);
+    await owner.locator('#logoLink').click();
+    await owner.locator('#view-warehouse.active').waitFor();
+    assert.equal(await owner.locator('#view-stock .pane-tab').count(), 3);
+    await owner.locator('#tab-inv').click();
+    await owner.locator('#tab-inv').press('ArrowLeft');
+    assert.equal(await owner.locator('#tab-warehouse').getAttribute('aria-selected'), 'true');
+    await owner.locator('#nav-settings').click();
+    await owner.locator('#readyCard:not([hidden])').waitFor();
+    assert.equal(await owner.locator('#view-configuration .pane-tab').count(), 2);
+    await owner.locator('#tab-1c').click();
+    await owner.setViewportSize({width:2560,height:700});
+    assert.ok(await owner.locator('#view-1c .oc-wrap').evaluate(el => el.getBoundingClientRect().width > 1800), '1C uses the full workspace');
+    await owner.setViewportSize({width:1440,height:900});
+    await owner.locator('#nav-receipts').click();
+    await owner.locator('#tab-acts').click();
+    assert.equal(await owner.locator('#nav-receipts').getAttribute('aria-current'), 'page');
+
+    await owner.locator('#nav-products').click(); await owner.locator('#tab-products').click();
+    await owner.locator('#sellersList .pr-click').first().click();
+    await owner.waitForFunction(() => document.querySelectorAll('#productsList tbody tr').length === 2);
+    assert.ok((await owner.locator('#productsSellerCabinet').getAttribute('href')).includes(A));
+    assert.ok(await owner.locator('.stock-back').evaluate(el => el.getBoundingClientRect().height >= 44));
+    await owner.locator('#productsList .order-product-photo img').waitFor();
+    await owner.locator('#productsVwBar summary').click();
+    await owner.locator('#productsVwBar button').filter({ hasText: 'WB А' }).click();
+    await owner.locator('#productsFilters button').filter({ hasText: 'Есть брак' }).click();
+    assert.equal(await owner.locator('#productsList tbody tr').count(), 1);
+    await owner.locator('#nav-journal').click(); await owner.locator('#nav-products').click();
+    await owner.waitForFunction(() => document.querySelectorAll('#productsList tbody tr').length === 1);
+    assert.ok((await owner.locator('#productsVwBar summary').innerText()).includes('WB А'));
+    await owner.locator('#productsWarehouseSettings').click();
+    await owner.waitForFunction(() => document.querySelector('#warehouseVwBody').textContent.includes('WB А'));
+    await owner.locator('#warehouseVwBody button').filter({ hasText: '+ Склад' }).click();
+    assert.equal(await owner.locator('#vwName').count(), 1);
+    await owner.locator('#vwName').fill('Тестовый новый склад');
+    await owner.locator('#vwMarketplaceChoice summary').click();
+    await owner.locator('#vwMarketplaceChoice button').filter({ hasText: 'Озон' }).click();
+    await owner.locator('#vwSep').check(); await owner.locator('#vwZone').fill('ряд 1');
+    await owner.locator('#vwSave').click();
+    await owner.waitForFunction(() => document.querySelector('#warehouseVwBody').textContent.includes('Тестовый новый склад'));
+    const created = store.calls.find(call => call.path === '/api/vwarehouses' && call.method === 'POST');
+    assert.equal(created.body.companyId, A); assert.equal(created.body.marketplace, 'ozon');
+    assert.deepEqual(created.body.zone, { rows: [1], cells: [] });
+    await owner.evaluate(id => openSellerPanel(id), A);
+    await owner.waitForFunction(() => document.querySelector('#wbWhBody').textContent.includes('Тестовый новый склад'));
+    assert.equal(await owner.locator('#warehouseVwBody #vwName').count(), 0);
+    await owner.evaluate(() => closeWbWarehouses()); await owner.locator('#warehouseVwWorkspace>summary').click();
+
+    await owner.evaluate(id => setWarehouseVwCompany(id), B);
+    await owner.waitForFunction(() => document.querySelector('#warehouseVwBody').textContent.includes('Озон Б'));
+    store.holdVw = true;
+    await owner.evaluate(id => setWarehouseVwCompany(id), A);
+    await owner.waitForTimeout(80); assert.equal(typeof store.release, 'function');
+    await owner.evaluate(id => setWarehouseVwCompany(id), B); store.release(); store.release = null;
+    await owner.waitForFunction(() => document.querySelector('#warehouseVwBody').textContent.includes('Озон Б'));
+    await owner.waitForTimeout(80);
+    assert.ok(!(await owner.locator('#warehouseVwBody').innerText()).includes('WB А'));
+    await owner.evaluate(id => setWarehouseVwCompany(id), A);
+    await owner.waitForFunction(() => document.querySelector('#warehouseVwBody').textContent.includes('WB А'));
+    await owner.evaluate(id => openVwForm(id), VW_A); await owner.locator('#vwSep').check();
+    store.holdMixed = true; await owner.locator('#vwSave').click();
+    await owner.waitForTimeout(80); assert.equal(typeof store.release, 'function');
+    await owner.evaluate(id => setWarehouseVwCompany(id), B); store.release(); store.release = null;
+    await owner.waitForTimeout(80);
+    assert.ok(!store.calls.some(call => call.method === 'PATCH'), 'switching client must cancel an unfinished preparation');
+    store.failVw = true; await owner.evaluate(id => setWarehouseVwCompany(id), A);
+    await owner.waitForFunction(() => document.querySelector('#warehouseVwBody').textContent.includes('Тестовая ошибка загрузки'));
+    store.failVw = false; await owner.getByRole('button', { name: 'Повторить загрузку', exact: true }).click();
+    await owner.waitForFunction(() => document.querySelector('#warehouseVwBody').textContent.includes('WB А'));
+
+    await owner.locator('#warehouseVwWorkspace>summary').click();
+    await owner.locator('#row-rect-1').click(); await owner.locator('#fp-row-1.visible').waitFor();
+    await owner.locator('#row-rect-1').click(); await owner.locator('#whSummary.visible').waitFor();
+    await owner.locator('#row-rect-1').click();
+    await owner.locator('#fp-row-1 .wh-cell').click(); await owner.locator('#whCellDetail.open').waitFor();
+    await owner.locator('#fp-row-1 [aria-label="Убрать все панели карты"]').click();
+    assert.equal(await owner.locator('#whContent>.visible,#whCellDetail.open,.selected-row,.wh-cell.selected').count(), 0);
+    await owner.evaluate(() => selectZone('test-zone')); await owner.locator('#whZoneDetail.visible').waitFor();
+    await owner.locator('#whZoneDetail [aria-label="Убрать все панели карты"]').click();
+    assert.equal(await owner.locator('#whContent>.visible').count(), 0);
+
+    await owner.locator('#tab-products').click();
+    await owner.evaluate(() => { setProductsVw('all'); setProductsFilter('all'); });
+    store.extraStock = 30; await owner.evaluate(() => loadProducts());
+    await owner.locator('.stock-workspace').evaluate(el => { el.scrollTop = 400; });
+    await owner.locator('#nav-journal').click(); await owner.locator('#nav-products').click();
+    await owner.waitForFunction(() => document.querySelectorAll('#productsList tbody tr').length === 32);
+    assert.ok(await owner.locator('.stock-workspace').evaluate(el => el.scrollTop >= 380), 'table position survives returning');
+    for (const width of [375, 1440, 2048, 2560]) {
+      await owner.setViewportSize({ width, height: 700 });
+      assert.ok(await owner.locator('.stock-workspace').evaluate(el => el.scrollWidth <= el.clientWidth + 1), `stock fits ${width}`);
+      if(process.env.ARGUS_SCREENSHOT_DIR){fs.mkdirSync(process.env.ARGUS_SCREENSHOT_DIR,{recursive:true});await owner.locator('.stock-workspace').evaluate(el=>{el.scrollTop=0;});await owner.screenshot({animations:'disabled',path:path.join(process.env.ARGUS_SCREENSHOT_DIR,'stock-'+width+'.png')});}
+    }
+    store.failHome = true; await owner.locator('#nav-home').click();
+    await owner.waitForFunction(() => document.querySelector('#homeUpdated').textContent.includes('Сводка не загрузилась'));
+    assert.equal(await owner.locator('#todayStrip .home-table').count(), 0);
+    store.failHome = false; await owner.getByRole('button', { name: 'Обновить сводку', exact: true }).click();
+    await owner.locator('.home-table').waitFor();
+    for (const width of [375, 1440, 2048, 2560]) {
+      await owner.setViewportSize({ width, height: 700 });
+      assert.ok(await owner.locator('.home-wrap').evaluate(el => el.scrollWidth <= el.clientWidth + 1), `home fits ${width}`);
+      if(process.env.ARGUS_SCREENSHOT_DIR){await owner.locator('.home-wrap').evaluate(el=>{el.scrollTop=0;});await owner.screenshot({animations:'disabled',path:path.join(process.env.ARGUS_SCREENSHOT_DIR,'home-'+width+'.png')});}
+    }
+    assert.ok(!store.calls.some(call => call.path.startsWith('/api/marketplaces/') && call.method !== 'GET'));
+    await owner.close();
+
+    for (const grants of [[], ['integration'], ['integration', 'warehouse', 'clients', 'staff', 'billing']]) {
+      const { page, store: managerStore } = await prepare('manager', grants);
+      await page.locator('.home-table').waitFor();
+      assert.equal(await page.locator('.home-table tbody tr').count(), 4);
+      assert.equal(await page.locator('#nav-chat').count(), 0);
+      assert.equal(await page.locator('#tab-warehouse').count(), grants.includes('warehouse') ? 1 : 0);
+      assert.equal(await page.locator('#productsWarehouseSettings').evaluate(el => getComputedStyle(el).display === 'none'), !grants.includes('warehouse'));
+      if (grants.includes('integration')) {
+        await page.locator('#nav-settings').click();
+        assert.equal(await page.locator('#view-configuration .pane-tab').count(), 1);
+        assert.equal(await page.locator('#tab-1c').getAttribute('aria-selected'), 'true');
+        await page.evaluate(() => switchView('settings'));
+        assert.equal(await page.locator('#view-1c').getAttribute('hidden'), null);
+      }
+      assert.ok(!managerStore.calls.some(call => ['/api/alerts/today', '/api/warehouses/me/readiness'].includes(call.path)));
+      await page.close();
+    }
+    assert.deepEqual(errors, []);
+    console.log('PASS navigation/groups/keyboard; real home counts/error retry; readiness placement and manager grants; stock filters/photo/context/scroll/mobile; VW create/old modal/races/retry; map close/reset.');
+  } finally { await browser.close(); }
+})().catch(error => { console.error(error.stack); process.exitCode = 1; });

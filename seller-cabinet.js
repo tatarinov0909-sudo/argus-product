@@ -37,7 +37,7 @@
   const paintIcons = (root = document) => root.querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = icon(el.dataset.icon); });
 
   const NAV = [['products', 'Товары', 'box'], ['orders', 'Заказы', 'orders'], ['supplies', 'Поставки на WB', 'truck'],
-    ['documents', 'Приходы', 'inbox'], ['defects', 'Брак', 'alert'], ['billing', 'Расчёты', 'wallet']];
+    ['documents', 'Приходы', 'inbox'], ['defects', 'Склад брака', 'alert'], ['billing', 'Расчёты', 'wallet']];
   const PAGES = {
     products: { title: 'Товары', subtitle: 'Сколько вашего товара на складе и сколько можно продавать.', data: 'stock', nav: 'products' },
     returns: { title: 'Товары', subtitle: 'Что вернулось на склад и в каком состоянии.', data: 'documents', nav: 'products' },
@@ -45,7 +45,7 @@
     orders: { title: 'Заказы', subtitle: 'Как склад готовит ваши заказы с Wildberries.', data: 'orders', nav: 'orders' },
     supplies: { title: 'Поставки на WB', subtitle: 'Склад собирает их из ваших заказов и везёт на Wildberries.', data: 'supplies', nav: 'supplies' },
     documents: { title: 'Приходы', subtitle: 'Товар, который вы привозите на склад на хранение.', data: 'documents', nav: 'documents' },
-    defects: { title: 'Брак', subtitle: 'Что склад признал браком. Решение по нему — вместе с менеджером склада.', data: 'defects', nav: 'defects' },
+    defects: { title: 'Склад брака', subtitle: 'Ваш брак лежит отдельно от товара в продаже. Решите, что с ним делать, — склад выполнит.', data: 'defects', nav: 'defects' },
     // Заглушка (владелец 27.09.2026): расчёт за хранение и упаковку появится,
     // когда склад утвердит прайс. Данных у страницы пока нет.
     billing: { title: 'Расчёты', subtitle: 'Сколько стоит работа склада с вашим товаром.', data: null, nav: 'billing' },
@@ -55,15 +55,16 @@
 
   const blankUi = () => ({ q: '', shown: 0 });
   const state = {
-    token: localStorage.getItem('argus_token'), owner: localStorage.getItem('argus_role') === 'owner',
+    token: localStorage.getItem('argus_token'), role: localStorage.getItem('argus_role'),
+    owner: ['owner', 'manager'].includes(localStorage.getItem('argus_role')),
     companyId: null, profile: null, catalog: {}, companies: [],
     prefs: { rows: 30, textSize: 'normal' },
     data: {}, summary: null, fetchedAt: {}, view: 'products', viewRun: 0, drawerRun: 0,
     ui: {
-      products: { ...blankUi(), stock: 'all', orders: 'all', sort: 'name', extra: new Set(), category: 'all' },
+      products: { ...blankUi(), stock: 'all', orders: 'all', sort: 'name', extra: new Set(), category: 'all', vw: 'all' },
       returns: { ...blankUi(), status: 'all', quality: 'all', period: 'all' },
       wb: { ...blankUi(), confirm: null },
-      orders: { ...blankUi(), status: 'all', period: 'all', supply: 'all', wbwh: 'all', sort: 'new' },
+      orders: { ...blankUi(), status: 'all', period: 'all', supply: 'all', wbwh: new Set(), sort: 'new' },
       supplies: { ...blankUi(), status: 'all', dest: 'all', period: 'all', sort: 'new' },
       documents: { ...blankUi(), status: 'all', diff: 'all', period: 'all', sort: 'new' },
       defects: { ...blankUi(), source: 'all', kind: 'all', period: 'all' },
@@ -86,7 +87,7 @@
     return !!x.role && x.role === y.role && id(x) === id(y) && x.warehouseId === y.warehouseId;
   };
   async function api(path, options = {}) {
-    if (state.owner && state.companyId && path.startsWith('/api/sellers/')) path += (path.includes('?') ? '&' : '?') + 'companyId=' + encodeURIComponent(state.companyId);
+    if (state.owner && state.companyId && (path.startsWith('/api/sellers/') || path.startsWith('/api/vwarehouses'))) path += (path.includes('?') ? '&' : '?') + 'companyId=' + encodeURIComponent(state.companyId);
     const response = await fetch('https://api.argus-ai.online' + path, {
       method: options.method || 'GET', cache: 'no-store',
       headers: { 'Content-Type': 'application/json', ...(state.token ? { Authorization: 'Bearer ' + state.token } : {}) },
@@ -295,7 +296,7 @@
       const row = ws.getRow(head + 1 + k);
       columns.forEach((c, i) => {
         const cell = row.getCell(i + 1); const v = c.get(r, k);
-        if (c.type === 'num') { cell.value = v == null || v === '' ? null : Number(v); cell.numFmt = '#,##0'; }
+        if (c.type === 'num') { cell.value = v == null || v === '' ? null : Number(v); cell.numFmt = c.money ? '#,##0.00' : '#,##0'; }
         // Excel не знает часовых поясов: пишем время таким, каким его видит человек.
         else if (c.type === 'date') { const d = v ? new Date(v) : null; cell.value = d ? new Date(d.getTime() - d.getTimezoneOffset() * 60000) : null; cell.numFmt = c.dayOnly ? 'dd.mm.yyyy' : 'dd.mm.yyyy hh:mm'; }
         else if (c.type === 'link') { cell.value = v ? { text: 'Открыть на WB', hyperlink: v } : null; cell.font = { color: { argb: 'FF3355CC' }, underline: true }; }
@@ -313,7 +314,7 @@
         // сумма, где неизвестное посчитано нулём.
         const unknown = c.total && rows.some((r, k) => c.get(r, k) == null);
         cell.value = i === 0 ? 'Итого' : !c.total ? null : unknown ? '—' : rows.reduce((s, r, k) => s + Number(c.get(r, k) || 0), 0);
-        if (c.total) cell.numFmt = '#,##0';
+        if (c.total) cell.numFmt = c.money ? '#,##0.00' : '#,##0';
         cell.font = { bold: true };
         cell.alignment = { vertical: 'middle', horizontal: i === 0 || c.type === 'text' ? 'left' : 'center' };
         cell.border = { top: { style: 'medium', color: { argb: 'FF9AA3BC' } }, bottom: thin, left: thin, right: thin };
@@ -366,7 +367,9 @@
 
   // ---------- Вход, запуск, меню ----------
   function renderNav() {
-    const counts = { orders: state.data.orders ? new Set(state.data.orders.rows.filter(orderActive).map((r) => r.id)).size : 0 };
+    const counts = { orders: state.data.orders ? new Set(state.data.orders.rows.filter(orderActive).map((r) => r.id)).size : 0,
+      defects: defectAttention(),
+      documents: state.data.documents ? state.data.documents.rows.filter((r) => r.direction === 'in' && awaitsVerdict(r)).length : 0 };
     const current = PAGES[state.view]?.nav;
     document.querySelectorAll('[data-nav-list]').forEach((host) => {
       host.innerHTML = NAV.map(([key, title, ico]) => `<a href="#${key}" ${key === current ? 'aria-current="page"' : ''}>${icon(ico)}<span>${h(title)}</span>${counts[key] ? `<span class="nav-count">${n(counts[key])}</span>` : ''}</a>`).join('');
@@ -375,7 +378,7 @@
   async function boot() {
     // Роль в самом входе должна совпадать с подписью (27.09.2026): иначе
     // кабинет работал бы чужим входом из соседней вкладки.
-    if (state.token && jwtOf(state.token).role !== (state.owner ? 'owner' : 'seller')) {
+    if (state.token && jwtOf(state.token).role !== (state.owner ? state.role : 'seller')) {
       state.token = null; localStorage.removeItem('argus_token'); localStorage.removeItem('argus_role');
     }
     if (!state.token) { $('loginScreen').hidden = false; return; }
@@ -391,6 +394,8 @@
         renderOwnerSwitch();
       }
       state.profile = await api('/api/sellers/profile'); loadPreferences();
+      // Склады продавца нужны не только «Товарам»: привозу, карточке прихода.
+      try { state.vw = await loadVw(); } catch { state.vw = null; }
       try { const catalog = await api('/api/sellers/catalog'); state.catalog = Object.fromEntries(catalog.products.map((r) => [r.sku, r])); }
       catch { toast('Не удалось загрузить артикулы WB. Обновите страницу.'); }
       $('companyName').textContent = state.profile.name;
@@ -437,7 +442,14 @@
   $('accountMenu').addEventListener('toggle', (e) => { for (const id of ['accountButton', 'mobileAccount']) $(id).setAttribute('aria-expanded', String(e.newState === 'open' && $(id) === accountTrigger)); });
   const draftPrefs = {};
   function renderSettings() {
-    $('settingsFields').innerHTML = `<div class="field"><span>Сколько строк показывать за раз</span>${dropdown('pref-rows', {
+    // Права склада (владелец 02.10.2026): одна галочка. Не стоит — склад сам
+    // решает спорные ситуации с количеством, продавцу «обратите внимание».
+    // Стоит — каждая такая ситуация ждёт решения продавца. Поставки, приёмку
+    // и отгрузку склад ведёт всегда сам. Меняет только сам продавец.
+    const rights = !state.owner && hasVw() ? `<div class="field"><span>Права склада — для всего вашего кабинета</span>`
+      + `<label class="check-line"><input type="checkbox" id="rightForbid" ${draftPrefs.forbid ? 'checked' : ''}><span>Запретить складу решать без меня спорные ситуации с количеством`
+      + `<small>Перенос товара между вашими складами, с какого склада списать недостачу при пересчёте и куда записать лишнее, расхождение приёмки по складам, с какого склада брак. Без галочки склад решает сам, а вам приходит уведомление «обратите внимание». С галочкой — каждый такой случай ждёт вашего решения. Составлять поставки, принимать и отгружать товар склад может всегда.</small></span></label></div>` : '';
+    $('settingsFields').innerHTML = rights + `<div class="field"><span>Сколько строк показывать за раз</span>${dropdown('pref-rows', {
       label: 'Строк', value: String(draftPrefs.rows), options: [15, 30, 50, 100].map((v) => ({ value: String(v), text: String(v) })),
       onPick: (v) => { draftPrefs.rows = Number(v); renderSettings(); },
     })}</div><div class="field"><span>Размер текста в таблицах</span>${dropdown('pref-text', {
@@ -448,11 +460,19 @@
   $('accountSettings').onclick = () => {
     $('accountMenu').hidePopover(); Object.assign(draftPrefs, state.prefs);
     $('settingsCompany').textContent = state.profile.name + ' · фулфилмент ' + $('warehouseName').textContent;
+    draftPrefs.forbid = state.vw?.rights?.decide === false;
     renderSettings(); $('settingsDialog').showModal();
   };
+  $('settingsFields').addEventListener('change', (e) => { if (e.target.id === 'rightForbid') draftPrefs.forbid = e.target.checked; });
   $('closeSettings').onclick = () => $('settingsDialog').close();
-  $('settingsForm').onsubmit = (e) => {
-    e.preventDefault(); writePref('preferences', { ...draftPrefs }); loadPreferences();
+  $('settingsForm').onsubmit = async (e) => {
+    e.preventDefault();
+    if (!state.owner && hasVw() && draftPrefs.forbid !== (state.vw.rights?.decide === false)) {
+      try { state.vw.rights = (await api('/api/vwarehouses/rights', { method: 'PATCH', body: { rights: { decide: !draftPrefs.forbid } } })).rights; }
+      catch (err) { toast('Права склада не сохранились: ' + err.message); return; }
+    }
+    const { forbid, ...prefs } = draftPrefs;
+    writePref('preferences', prefs); loadPreferences();
     Object.values(state.ui).forEach((ui) => { ui.shown = 0; });
     $('settingsDialog').close(); navigate(); toast('Настройки сохранены');
   };
@@ -478,12 +498,18 @@
           state.data.stock = payload.rows || []; state.summary = payload.summary || null;
           // Склады WB и выставленное на WB — дополнение: не загрузились — остатки всё равно показываем.
           try { state.data.wb = await api(API_PATH.wb); state.fetchedAt.wb = new Date(); } catch { state.data.wb = null; }
+          // Склады продавца, уведомления склада и переносы — дополнение тоже.
+          if (refresh || !state.vw) { try { state.vw = await loadVw(); } catch { state.vw = null; } }
         }
         else if (key === 'supplies') { state.data.supplies = payload.rows || []; state.suppliesMore = !!payload.hasMore; }
         else state.data[key] = payload;
         state.fetchedAt[key] = new Date();
       }
       if (!state.data.orders && key !== 'orders') api(API_PATH.orders).then((o) => { state.data.orders = o; state.fetchedAt.orders = new Date(); renderNav(); }).catch(() => {});
+      // Приходы и брак — для «Нужен ваш ответ» и чисел в меню.
+      ['documents', 'defects'].forEach((k) => {
+        if (!state.data[k] && key !== k) api(API_PATH[k]).then((d) => { if (state.data[k]) return; state.data[k] = d; state.fetchedAt[k] = new Date(); renderNav(); refreshNeedAnswer(); }).catch(() => {});
+      });
       if (run !== state.viewRun) return;
       const ui = state.ui[state.view]; if (!ui.shown) ui.shown = state.prefs.rows;
       ({ products: renderProducts, returns: renderReturns, wb: renderWb, orders: renderOrders, supplies: renderSupplies, documents: renderDocuments, defects: renderDefects })[state.view]();
@@ -512,9 +538,9 @@
     wirePhotos(host);
   }
   state.defaults = {
-    products: () => ({ q: '', stock: 'all', orders: 'all', sort: 'name', extra: new Set(), category: 'all' }),
+    products: () => ({ q: '', stock: 'all', orders: 'all', sort: 'name', extra: new Set(), category: 'all', vw: 'all' }),
     returns: () => ({ q: '', status: 'all', quality: 'all', period: 'all' }),
-    orders: () => ({ q: '', status: 'all', period: 'all', supply: 'all', wbwh: 'all', sort: 'new' }),
+    orders: () => ({ q: '', status: 'all', period: 'all', supply: 'all', wbwh: new Set(), sort: 'new' }),
     supplies: () => ({ q: '', status: 'all', dest: 'all', period: 'all', sort: 'new' }),
     documents: () => ({ q: '', status: 'all', diff: 'all', period: 'all', sort: 'new' }),
     defects: () => ({ q: '', source: 'all', kind: 'all', period: 'all' }),
@@ -525,11 +551,31 @@
     .map(([k, t]) => `<a href="#${k}" ${current === k ? 'aria-current="page"' : ''}>${t}</a>`).join('')}</nav>`;
 
   // ---------- Товары: остатки ----------
-  const total = (r) => r.total ?? null;
-  const orderedQty = (r) => Number(r.ordered || 0);
-  const assemblyQty = (r) => Number(r.inAssembly || 0);
-  const transitQty = (r) => Number(r.inTransit || 0);
-  const availableQty = (r) => (r.available == null ? null : Number(r.available));
+  // Склады продавца (виртуальные склады, 02.10.2026): выбран склад — числа
+  // по нему. «Заказано» и «В пути» склада не имеют: склад у заказа появляется
+  // с поставкой.
+  const hasVw = () => !!state.vw?.warehouses?.length;
+  const vwKey = (id) => id || 'main';
+  const vwOn = () => hasVw() && state.ui.products.vw !== 'all';
+  const vwPart = (r) => (!vwOn() || !r.warehouses ? null
+    : r.warehouses.find((w) => vwKey(w.id) === state.ui.products.vw) || { onHand: 0, inAssembly: 0, available: 0, defect: 0 });
+  const total = (r) => { const w = vwPart(r); return w ? w.onHand : r.total ?? null; };
+  const orderedQty = (r) => (vwPart(r) ? null : Number(r.ordered || 0));
+  const assemblyQty = (r) => { const w = vwPart(r); return w ? w.inAssembly : Number(r.inAssembly || 0); };
+  const transitQty = (r) => (vwPart(r) ? null : Number(r.inTransit || 0));
+  const availableQty = (r) => { const w = vwPart(r); if (w) return w.available; return r.available == null ? null : Number(r.available); };
+  const defectQty = (r) => { const w = vwPart(r); return w ? w.defect : Number(r.defective || 0); };
+  const vwName = (id) => (id ? (state.vw?.warehouses || []).find((w) => w.id === id)?.name || 'убранный склад' : 'Остальной товар');
+  const splitText = (r) => (r.warehouses || []).filter((w) => w.onHand).map((w) => w.name + ' ' + n(w.onHand)).join(' · ');
+  // Доступно для WB: только «Основной» и склады WB — товар склада Озон на WB
+  // не продаётся. Заказы WB без поставки ждут как раз этого товара.
+  const wbAvailable = (r) => {
+    if (!r.warehouses || !state.vw?.wbChoices) return r.available == null ? null : Number(r.available);
+    const ids = new Set(state.vw.wbChoices.map((c) => vwKey(c.id)));
+    const parts = r.warehouses.filter((w) => ids.has(vwKey(w.id)));
+    if (parts.some((w) => w.available == null)) return null;
+    return Math.max(0, parts.reduce((a, w) => a + w.available, 0) - Number(r.ordered || 0));
+  };
   const isShort = (r) => r.shortage === true || (total(r) != null && orderedQty(r) + assemblyQty(r) > Number(total(r)));
   // Что стоит за числами (владелец 27.09.2026): нажал на «Заказано», «В сборке»
   // или «В пути» — видишь сами заказы. Какая строка под каким числом, решает
@@ -555,17 +601,23 @@
     { key: 'transit', title: 'В пути', cls: 'n', cell: (r) => bucketNum(r, 'transit') },
     { key: 'available', title: 'Доступно', cls: 'n', cell: (r) => num(availableQty(r), true) },
     { key: 'wbStock', title: 'На WB', cls: 'n', cell: wbStockCell },
-    { key: 'defective', title: 'Брак', cls: 'n', hidden: true, cell: (r) => num(r.defective || 0) },
+    { key: 'defective', title: 'Брак', cls: 'n', hidden: true, cell: (r) => num(defectQty(r)) },
+    { key: 'vwsplit', title: 'По складам', cell: (r) => (splitText(r) ? h(splitText(r)) : '<span class="zero">—</span>') },
     { key: 'category', title: 'Категория', hidden: true, cell: (r) => h(meta(r.sku).category || '—') },
     { key: 'updated', title: 'Учёт на', cls: 'n', hidden: true, cell: (r) => (r.updatedAt ? h(when(r.updatedAt)) : '—') },
   ];
   const STOCK_FILTER = [{ value: 'all', text: 'Все товары' }, { value: 'available', text: 'Есть к продаже' }, { value: 'low', text: 'Заканчивается (≤ 5 шт.)' }, { value: 'none', text: 'Нет к продаже' }];
   const ORDERS_FILTER = [{ value: 'all', text: 'Любые' }, { value: 'any', text: 'Есть заказы' }, { value: 'ordered', text: 'Заказано, ждёт поставки' }, { value: 'assembly', text: 'В сборке' }, { value: 'transit', text: 'В пути на WB' }, { value: 'none', text: 'Без заказов' }];
   const SORTS = [{ value: 'name', text: 'По названию' }, { value: 'availDesc', text: 'Больше доступно' }, { value: 'availAsc', text: 'Меньше доступно' }, { value: 'ordersDesc', text: 'Больше заказов' }, { value: 'totalDesc', text: 'Больше всего на складе' }, { value: 'transitDesc', text: 'Больше в пути' }];
+  // «По складам» — только когда склады заведены и выбраны «Все склады».
+  const productColumns = () => PRODUCT_COLUMNS.filter((c) => c.key !== 'vwsplit' || (hasVw() && !vwOn()));
   const EXTRA = [{ value: 'shortage', text: 'Заказов больше, чем товара' }, { value: 'wbOver', text: 'На WB больше, чем доступно' }, { value: 'defect', text: 'Есть брак на складе' }, { value: 'withPhoto', text: 'С фото' }, { value: 'noPhoto', text: 'Без фото' }, { value: 'noWb', text: 'Без артикула WB' }, { value: 'unknown', text: 'Остаток ещё не получен' }];
   function filteredProducts() {
     const ui = state.ui.products;
     const rows = state.data.stock.filter((r) => {
+      // Выбран склад — только товар, который на нём есть (лежит, в сборке или брак).
+      const w = vwPart(r);
+      if (w && !w.onHand && !w.inAssembly && !w.defect) return false;
       if (!matches(ui.q, [r.name, r.barcode, ...wbIds(r.sku), ...vendorCodes(r.sku), meta(r.sku).category])) return false;
       const avail = availableQty(r);
       if (ui.stock === 'available' && !(avail > 0)) return false;
@@ -582,7 +634,7 @@
       const x = ui.extra;
       if (x.has('shortage') && !isShort(r)) return false;
       if (x.has('wbOver') && !wbOver(r)) return false;
-      if (x.has('defect') && !r.defective) return false;
+      if (x.has('defect') && !defectQty(r)) return false;
       if (x.has('withPhoto') && !photoUrl(r.sku)) return false;
       if (x.has('noPhoto') && photoUrl(r.sku)) return false;
       if (x.has('noWb') && wbIds(r.sku).length) return false;
@@ -607,6 +659,7 @@
     ui.extra.forEach((v) => t.push(EXTRA.find((o) => o.value === v).text.toLowerCase()));
     if (ui.category !== 'all') t.push('категория ' + ui.category);
     if (ui.wbwh && ui.wbwh !== 'all') t.push('склад WB ' + wbName(ui.wbwh));
+    if (vwOn()) t.push('ваш склад «' + vwName(ui.vw === 'main' ? null : ui.vw) + '»');
     return t.length ? 'фильтр: ' + t.join(', ') : 'все товары';
   }
   function renderProducts() {
@@ -616,7 +669,14 @@
     // Товары без числа учёта не гасят итог, а названы под ним (30.09.2026).
     const missing = s.unknownCount ? '\nкроме ' + counted(s.unknownCount, 'товара', 'товаров', 'товаров') + ' без учёта: '
       + (s.unknownNames || []).map((x) => '«' + x + '»').join(', ') + (s.unknownCount > (s.unknownNames || []).length ? '…' : '') : '';
-    const stats = [
+    const byVw = vwOn();
+    const stats = byVw ? [
+      ['На складе', sum(total), 'склад «' + vwName(ui.vw === 'main' ? null : ui.vw) + '»'],
+      ['Заказано', null, 'у заказа склада ещё нет — он появится с поставкой'],
+      ['В сборке', sum(assemblyQty), 'в поставках с этого склада'],
+      ['В пути', null, 'считается по всем складам'],
+      ['Доступно', sum(availableQty), 'на складе − в сборке', 'main'],
+    ] : [
       ['Всего товара', s.total ?? (unknown ? null : sum(total)), counted(s.productCount ?? rows.length, 'наименование', 'наименования', 'наименований') + (s.updatedAt ? '\nучёт на ' + when(s.updatedAt) : '') + missing],
       ['Заказано', s.ordered ?? sum(orderedQty), 'куплено на WB, ещё не в поставке'],
       ['В сборке', s.inAssembly ?? sum(assemblyQty), 'в поставке, склад собирает'],
@@ -624,10 +684,10 @@
       ['Доступно к продаже', s.available ?? (unknown ? null : sum(availableQty)), 'всего − заказано − в сборке' + (s.unknownCount ? ', по товарам с учётом' : ''), 'main'],
     ];
     const short = rows.filter(isShort).length;
-    const over = rows.filter(wbOver).length;
+    const over = wbView() ? rows.filter(wbOver).length : 0;
     const ours = ourWb();
     const categories = [...new Set(rows.map((r) => meta(r.sku).category || 'Без категории'))].sort((a, b) => a.localeCompare(b, 'ru'));
-    $('view').innerHTML = segment('products')
+    $('view').innerHTML = segment('products') + `<div id="needAnswer">${needAnswerHtml()}</div>` + vwNoticeHtml()
       + `<section class="stock-strip" aria-label="Состояние товаров">${stats.map(([label, value, note, cls]) => `<div class="stat ${cls || ''}"><div class="stat-label">${h(label)}</div><div class="stat-value">${value == null ? '—' : n(value) + '<small>шт.</small>'}</div><div class="stat-note">${h(note).replace('\n', '<br>')}</div></div>`).join('')}</section>`
       + (over ? `<button type="button" class="alert-line ${ui.extra.has('wbOver') ? 'on' : ''}" data-wb-over>${icon('alert')}<span><b>${counted(over, 'товар', 'товара', 'товаров')}:</b> на WB выставлено больше, чем доступно на складе — WB может продать то, чего нет. Обновите остатки на WB файлом «Остатки для WB».</span><span class="alert-action">${ui.extra.has('wbOver') ? 'Показаны только они' : 'Показать'}</span></button>` : '')
       + (short ? `<button type="button" class="alert-line ${ui.extra.has('shortage') ? 'on' : ''}" data-shortage>${icon('alert')}<span><b>${counted(short, 'товар', 'товара', 'товаров')}:</b> заказов больше, чем товара по учёту — склад проверяет, «Доступно» по ним ноль.</span><span class="alert-action">${ui.extra.has('shortage') ? 'Показаны только они' : 'Показать'}</span></button>` : '')
@@ -637,9 +697,10 @@
         + dropdown('p-sort', { label: 'Сортировка', value: ui.sort, options: SORTS, onPick: (v) => { ui.sort = v; renderProducts(); } })
         + dropdown('p-extra', { label: 'Ещё фильтры', multi: true, value: ui.extra, options: EXTRA, onPick: (v) => { if (ui.extra.has(v)) ui.extra.delete(v); else ui.extra.add(v); ui.shown = state.prefs.rows; renderProducts(); } })
         + (ours.length > 1 ? dropdown('p-wbwh', { label: 'Склад WB', value: ui.wbwh || 'all', options: [{ value: 'all', text: 'Все ваши склады' }, ...ours.map((w) => ({ value: w.id, text: w.name }))], onPick: (v) => { ui.wbwh = v; renderProducts(); } }) : '')
+        + (hasVw() ? dropdown('p-vw', { label: 'Ваш склад', value: ui.vw, options: [{ value: 'all', text: 'Основной — весь товар' }, ...state.vw.warehouses.map((w) => ({ value: w.id, text: w.name })), { value: 'main', text: 'Остальной товар' }], onPick: (v) => { ui.vw = v; ui.shown = state.prefs.rows; renderProducts(); } }) : '')
         + (categories.length > 1 ? dropdown('p-cat', { label: 'Категория', value: ui.category, options: [{ value: 'all', text: 'Все' }, ...categories.map((c) => ({ value: c, text: c }))], onPick: (v) => { ui.category = v; ui.shown = state.prefs.rows; renderProducts(); } }) : '')
         + resetLink('products'),
-        columnChooser('products', PRODUCT_COLUMNS, renderProducts) + excelButton
+        columnChooser('products', productColumns(), renderProducts) + excelButton
         + `<button class="button" type="button" data-wb-stock title="Файл для WB: «Остатки» → склад продавца → «Загрузить Excel»">${icon('download')}Остатки для WB</button>`)
       + '<div id="rows"></div>';
     const overBtn = $('view').querySelector('[data-wb-over]');
@@ -647,6 +708,7 @@
     const shortBtn = $('view').querySelector('[data-shortage]');
     if (shortBtn) shortBtn.onclick = () => { if (ui.extra.has('shortage')) ui.extra.delete('shortage'); else ui.extra.add('shortage'); ui.shown = state.prefs.rows; renderProducts(); };
     wireView(ui, renderProducts, renderProductRows, exportProducts);
+    wireVwNotices(); wireNeedAnswer();
     const wbBtn = $('view').querySelector('[data-wb-stock]');
     wbBtn.onclick = () => runExport(wbBtn, exportWbStock);
     renderProductRows();
@@ -654,7 +716,7 @@
   function renderProductRows() {
     const ui = state.ui.products; const rows = filteredProducts(); const host = $('rows');
     host.innerHTML = rows.length
-      ? table(visibleColumns('products', PRODUCT_COLUMNS), rows.slice(0, ui.shown), { rowAttrs: (r) => `class="clickable" data-product="${h(r.sku)}"` }) + moreFooter(ui, rows.length, ['товар', 'товара', 'товаров'])
+      ? table(visibleColumns('products', productColumns()), rows.slice(0, ui.shown), { rowAttrs: (r) => `class="clickable" data-product="${h(r.sku)}"` }) + moreFooter(ui, rows.length, ['товар', 'товара', 'товаров'])
       : empty('Товары не найдены', ui.q ? 'Проверьте название, артикул WB или штрихкод.' : 'Под выбранные фильтры не подошёл ни один товар.');
     host.querySelectorAll('[data-product]').forEach((tr) => { tr.onclick = () => openProduct(tr.dataset.product); });
     // Число в строке — сразу к заказам за ним, а не просто в карточку.
@@ -678,11 +740,194 @@
       { header: 'В пути, шт.', type: 'num', total: true, get: transitQty },
       { header: 'Доступно к продаже, шт.', type: 'num', total: true, get: availableQty },
       { header: 'Выставлено на WB, шт.', type: 'num', total: true, get: (r) => wbStockOf(r.sku) },
-      { header: 'Брак на складе, шт.', type: 'num', total: true, get: (r) => r.defective || 0 },
+      { header: 'Брак на складе, шт.', type: 'num', total: true, get: defectQty },
+      ...(hasVw() && !vwOn() ? [{ header: 'По складам', type: 'text', get: splitText, min: 20, max: 60 }] : []),
       { header: 'Учёт на', type: 'date', get: (r) => r.updatedAt },
       { header: 'Карточка WB', type: 'link', get: (r) => wbLink(wbIds(r.sku)[0]) },
     ],
   });
+
+  // ---------- Склады продавца ----------
+  // Часть товара под своё назначение (площадка, юрлицо). Заводит склад;
+  // продавец видит раскладку, просит перенести, отвечает на просьбы склада.
+  async function loadVw() {
+    const [d, notes, transfers, decisions] = await Promise.all([api('/api/vwarehouses'), api('/api/vwarehouses/notifications'),
+      api('/api/vwarehouses/transfers?open=1'), api('/api/vwarehouses/decisions?open=1')]);
+    return { ...d, notes, transfers, decisions };
+  }
+  // «Нужен ваш ответ» (рецензия 04.10, рекомендация 1): всё, что ждёт
+  // продавца, одним списком сверху — что, как давно и куда нажать. Сами
+  // ответы остаются, где были: переносы — ниже на этой странице, акты — в
+  // «Приходах», брак — в «Складе брака».
+  function needAnswerHtml() {
+    const v = state.vw || {}; const docs = state.data.documents?.rows || []; const def = state.data.defects;
+    const oldest = (list) => list.filter(Boolean).sort()[0];
+    const waited = (ts) => { const hrs = Math.floor((Date.now() - new Date(ts)) / 36e5);
+      return hrs < 1 ? 'меньше часа' : hrs < 48 ? counted(hrs, 'час', 'часа', 'часов') : counted(Math.floor(hrs / 24), 'день', 'дня', 'дней'); };
+    const asks = (v.transfers || []).filter((t) => t.status === 'waiting_seller');
+    const decisions = v.decisions || [];
+    const acts = docs.filter((r) => r.direction === 'in' && awaitsVerdict(r));
+    const defects = def ? def.balances.filter((b) => b.undecided > 0) : [];
+    const rows = [
+      [asks.length, counted(asks.length, 'просьба', 'просьбы', 'просьб') + ' склада перенести товар между вашими складами', oldest(asks.map((t) => t.requestedAt)), 'ask', 'Ответить ниже'],
+      [decisions.length, counted(decisions.length, 'спорный случай', 'спорных случая', 'спорных случаев') + ' по вашим складам: как записать', oldest(decisions.map((d) => d.createdAt)), 'decision', 'Решить ниже'],
+      [acts.length, counted(acts.length, 'приход', 'прихода', 'приходов') + (state.owner ? ' приняты не столько, сколько заявил продавец' : ' приняты не столько, сколько вы заявили: согласны?'), oldest(acts.map((r) => r.last_at || r.created_at)), 'acts', 'Открыть приходы'],
+      [defects.length, counted(defects.length, 'товар', 'товара', 'товаров') + ' в браке' + (state.owner ? ' без решения продавца' : ': решите, что делать с браком'), oldest(defects.map((b) => b.since)), 'defects', 'Открыть брак'],
+    ].filter((r) => r[0] > 0);
+    if (!rows.length) return '';
+    const total = rows.reduce((a, r) => a + r[0], 0);
+    return `<div class="notice warning need-answer">${icon('alert')}<div><strong>${state.owner ? 'Ждёт ответа продавца' : 'Нужен ваш ответ'} · ${n(total)}</strong>`
+      + rows.map(([, text, since, go, action]) => `<button type="button" class="na-row" data-na="${go}"><span>${h(text)}${since ? `<small>ждёт ${h(waited(since))}</small>` : ''}</span><span class="na-go">${h(action)} →</span></button>`).join('')
+      + '</div></div>';
+  }
+  function wireNeedAnswer() {
+    $('view').querySelectorAll('[data-na]').forEach((b) => { b.onclick = () => {
+      const go = b.dataset.na;
+      if (go === 'acts') { state.ui.documents.diff = 'answer'; location.hash = 'documents'; return; }
+      if (go === 'defects') { location.hash = 'defects'; return; }
+      $('view').querySelector(go === 'ask' ? '.vw-ask:not(.vw-decision)' : '.vw-decision')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }; });
+  }
+  function refreshNeedAnswer() {
+    const host = $('needAnswer'); if (!host || state.view !== 'products') return;
+    host.innerHTML = needAnswerHtml(); wireNeedAnswer();
+  }
+  function vwNoticeHtml() {
+    const v = state.vw; if (!v) return '';
+    const mine = !state.owner;
+    const ask = (v.transfers || []).filter((t) => t.status === 'waiting_seller').map((t) => `<div class="notice warning vw-ask">${icon('alert')}<div>`
+      + `<strong>Склад просит перенести «${h(t.name || t.sku)}», ${n(t.qty)} шт.: «${h(t.fromName)}» → «${h(t.toName)}»</strong>`
+      + `<p>${t.note ? 'Комментарий склада: ' + h(t.note) + '. ' : ''}${mine ? 'Вы запретили складу решать такое без вас — решите сами.' : 'Ждёт согласия продавца.'}</p>`
+      + (mine ? `<div class="vw-ask-form"><label class="field"><span>Причина отказа — не обязательно, склад её увидит</span><input id="vwReason-${h(t.id)}" maxlength="300"></label>`
+        + `<div class="drawer-actions"><button class="button primary" type="button" data-vw-yes="${h(t.id)}">Согласен</button><button class="button" type="button" data-vw-no="${h(t.id)}">Отказать</button></div></div>` : '')
+      + '</div></div>').join('');
+    const open = (v.transfers || []).filter((t) => t.status === 'requested');
+    const asked = open.length ? notice(mine ? 'Ваши заявки на перенос ждут склада' : 'Заявки продавца на перенос ждут склада',
+      open.map((t) => `${t.number}: «${t.name || t.sku}», ${n(t.qty)} шт., «${t.fromName}» → «${t.toName}»`).join('; ')) : '';
+    // Спорные ситуации, которые ждут продавца (он запретил складу решать без
+    // него): как записано по правилу и поле на каждый склад.
+    const LABEL = { inventory: ['было', 'останется'], receiving: ['заявлено', 'принято'], defect: ['годного было', 'брак с этого склада'] };
+    const decide = (v.decisions || []).map((d) => `<div class="notice warning vw-ask vw-decision" data-decision="${h(d.id)}">${icon('alert')}<div>`
+      + `<strong>${h(d.title)}</strong>`
+      + `<p>${mine ? 'Вы запретили складу решать такое без вас. Пока учёт записан по правилу склада — согласитесь или разделите по-своему.' : 'Ждёт решения продавца: он запретил складу решать такое без него.'}</p>`
+      + `<div class="vw-split">${d.parts.map((x) => `<label class="field"><span>«${h(x.name)}» · ${LABEL[d.kind][0]} ${n(x.before)}</span>`
+        + (mine ? `<input type="number" inputmode="numeric" min="${x.min}" max="${x.max}" value="${x.value}" data-part="${h(x.vw || '')}" aria-label="${h(x.name)}: ${LABEL[d.kind][1]}">`
+          : `<b>${n(x.value)}</b>`) + `<small>${LABEL[d.kind][1]}</small></label>`).join('')}</div>`
+      + (mine ? `<p class="vw-split-sum">Всего должно получиться ${n(d.parts.reduce((a, x) => a + x.value, 0))} шт.</p>`
+        + `<div class="drawer-actions"><button class="button primary" type="button" data-decision-ok="${h(d.id)}">Согласен</button>`
+        + `<button class="button" type="button" data-decision-save="${h(d.id)}">Сохранить по-моему</button></div>` : '')
+      + '</div></div>').join('');
+    // Просьбы склада о согласии и о решении — не здесь: ждущие стоят сверху с
+    // кнопками, на решённые продавец уже ответил сам. Что склад решил сам —
+    // отдельно и заметно: «обратите внимание» (владелец 02.10.2026).
+    const unseen = (v.notes || []).filter((x) => x.unseen && !['vw_transfer_consent', 'vw_decision'].includes(x.kind));
+    const block = (list, cls, ico, title, seenBtn) => (list.length ? `<div class="notice ${cls}">${icon(ico)}<div><strong>${title} · ${n(list.length)}</strong>`
+      + list.slice(0, 5).map((x) => `<p class="note-line" title="Нажмите, чтобы прочитать целиком">${h(when(x.at))} — ${h(x.text)}</p>`).join('')
+      + (list.length > 5 ? `<p>и ещё ${n(list.length - 5)}</p>` : '')
+      + (mine ? `<div class="drawer-actions"><button class="button" type="button" data-vw-seen="${seenBtn}">Понятно</button></div>` : '') + '</div></div>' : '');
+    const self = unseen.filter((x) => x.kind === 'ff_decided');
+    const rest = unseen.filter((x) => x.kind !== 'ff_decided');
+    return decide + ask + asked
+      + block(self, 'warning vw-notes', 'alert', 'Склад решил сам — обратите внимание', 'self')
+      + block(rest, 'vw-notes', 'info', 'От склада', 'rest');
+  }
+  function wireVwNotices() {
+    const host = $('view');
+    host.querySelectorAll('[data-decision-ok], [data-decision-save]').forEach((b) => {
+      b.onclick = async () => {
+        const id = b.dataset.decisionOk || b.dataset.decisionSave;
+        const box = host.querySelector(`[data-decision="${CSS.escape(id)}"]`);
+        const chosen = [...box.querySelectorAll('[data-part]')].map((i) => ({ vw: i.dataset.part || null, qty: Number(i.value) }));
+        b.disabled = true;
+        try {
+          const d = await api('/api/vwarehouses/decisions/' + encodeURIComponent(id), { method: 'POST',
+            body: b.dataset.decisionOk ? { confirm: true } : { chosen } });
+          toast(d.status === 'changed' ? 'Сделано по-вашему: ' + (d.transfers || []).join(', ') : 'Записано: вы согласились.');
+          navigate(true);
+        } catch (e) { b.disabled = false; toast(e.message); }
+      };
+    });
+    // Сумма по складам — сразу под полями.
+    host.querySelectorAll('.vw-decision').forEach((box) => {
+      const sum = box.querySelector('.vw-split-sum'); if (!sum) return;
+      const need = sum.textContent;
+      box.querySelectorAll('[data-part]').forEach((i) => { i.oninput = () => {
+        const got = [...box.querySelectorAll('[data-part]')].reduce((a, x) => a + Number(x.value || 0), 0);
+        sum.textContent = need + ' Сейчас: ' + n(got) + ' шт.';
+      }; });
+    });
+    // Длинные уведомления свёрнуты до двух строк — целиком по нажатию.
+    host.querySelectorAll('.note-line').forEach((p) => { p.onclick = () => p.classList.toggle('open'); });
+    host.querySelectorAll('[data-vw-seen]').forEach((seen) => { seen.onclick = async () => {
+      const self = seen.dataset.vwSeen === 'self';
+      const list = state.vw.notes.filter((x) => x.unseen && !['vw_transfer_consent', 'vw_decision'].includes(x.kind) && (x.kind === 'ff_decided') === self);
+      seen.disabled = true;
+      try { await api('/api/vwarehouses/notifications/seen', { method: 'POST', body: { ids: list.map((x) => x.id) } }); list.forEach((x) => { x.unseen = false; }); renderProducts(); }
+      catch (e) { seen.disabled = false; toast(e.message); }
+    }; });
+    host.querySelectorAll('[data-vw-yes], [data-vw-no]').forEach((b) => {
+      b.onclick = async () => {
+        const id = b.dataset.vwYes || b.dataset.vwNo; const approve = !!b.dataset.vwYes;
+        b.disabled = true;
+        try {
+          const t = await api('/api/vwarehouses/transfers/' + encodeURIComponent(id) + '/decide', { method: 'POST',
+            body: { approve, reason: approve ? undefined : ($('vwReason-' + id)?.value.trim() || undefined) } });
+          toast(approve ? `Перенос ${t.number} выполнен: «${t.fromName}» → «${t.toName}», ${n(t.qty)} шт.` : `Отказано: перенос ${t.number} не сделан.`);
+          navigate(true);
+        } catch (e) { b.disabled = false; toast(e.message); }
+      };
+    });
+  }
+  // Карточка товара: сколько на каждом складе и заявка складу на перенос.
+  function productVwHtml(r) {
+    if (!hasVw() || !r.warehouses) return '';
+    // Как товар хранится, продавцу не показываем (владелец 03.10.2026) — только остатки.
+    const cols = [{ title: 'Склад', cell: (w) => h(w.name) },{ title: 'На складе', cls: 'n', cell: (w) => num(w.onHand) },
+      { title: 'В сборке', cls: 'n', cell: (w) => num(w.inAssembly) }, { title: 'Доступно', cls: 'n', cell: (w) => num(w.available, true) },
+      { title: 'Брак', cls: 'n', cell: (w) => num(w.defect) }];
+    // «Основной» — весь товар вместе, склады — его части (владелец 03.10.2026).
+    // Строка «Основной» — те же числа, что в плитках выше (проверка 03.10.2026).
+    const all = { id: 'all', name: 'Основной — весь товар', onHand: r.total ?? null, inAssembly: Number(r.inAssembly || 0), available: r.available ?? null, defect: Number(r.defective || 0) };
+    const ordered = Number(r.ordered || 0);
+    return `<section class="detail-section" style="margin-top:0"><h3>По вашим складам</h3>${table(cols, [all, ...r.warehouses])}`
+      + (ordered > 0 ? `<p class="help">По складам «Доступно» — без заказанного (${n(ordered)} шт.): у заказов, которые ещё не в поставке, склада пока нет.</p>` : '')
+      + (state.owner ? '' : `<div id="vwMoveForm"></div><div class="drawer-actions" id="vwMoveRow"><button class="button" type="button" id="vwMove">Попросить склад перенести</button></div>`)
+      + '</section>';
+  }
+  function wireProductVw(r) {
+    if (!$('vwMove')) return;
+    const m = { from: vwKey((r.warehouses.find((w) => w.onHand > 0) || r.warehouses[0]).id), to: '', busy: false, error: '' };
+    m.to = vwKey((r.warehouses.find((w) => vwKey(w.id) !== m.from) || r.warehouses[0]).id);
+    const opts = () => r.warehouses.map((w) => ({ value: vwKey(w.id), text: w.name + ' — ' + (w.onHand == null ? '—' : n(w.onHand)) + ' шт.' }));
+    const draw = () => {
+      $('vwMoveRow').hidden = true;
+      $('vwMoveForm').innerHTML = `<div class="vw-move"><div class="two"><div class="field"><span>Откуда</span>${dropdown('vw-from', { value: m.from, neutral: true, options: opts(), onPick: (v) => { m.from = v; keep(); draw(); } })}</div>`
+        + `<div class="field"><span>Куда</span>${dropdown('vw-to', { value: m.to, neutral: true, options: opts(), onPick: (v) => { m.to = v; keep(); draw(); } })}</div></div>`
+        + `<div class="two"><label class="field"><span>Сколько штук</span><input id="vwQty" inputmode="numeric" maxlength="7" value="${h(m.qty || '')}"></label>`
+        + `<label class="field"><span>Комментарий складу — не обязательно</span><input id="vwNote" maxlength="300" value="${h(m.note || '')}" placeholder="Например: под поставку на Озон"></label></div>`
+        + (m.error ? `<p class="error-text">${h(m.error)}</p>` : '')
+        + `<p class="help">Заявка уйдёт складу как важная. Перенесёт склад — вам придёт уведомление.</p>`
+        + `<div class="drawer-actions"><button class="button primary" type="button" id="vwSend" ${m.busy ? 'disabled' : ''}>Отправить заявку</button><button class="button ghost" type="button" id="vwCancel">Отмена</button></div></div>`;
+      $('vwCancel').onclick = () => { $('vwMoveForm').innerHTML = ''; $('vwMoveRow').hidden = false; };
+      $('vwSend').onclick = send;
+    };
+    const keep = () => { m.qty = $('vwQty')?.value; m.note = $('vwNote')?.value; };
+    async function send() {
+      keep();
+      const qty = Number(String(m.qty || '').replace(/\s/g, ''));
+      m.error = m.from === m.to ? 'Склад «откуда» и «куда» — один и тот же.' : !Number.isInteger(qty) || qty < 1 ? 'Сколько штук перенести?' : '';
+      if (m.error) { draw(); return; }
+      m.busy = true; draw();
+      try {
+        const t = await api('/api/vwarehouses/transfers', { method: 'POST', body: { sku: r.sku, qty,
+          fromVw: m.from === 'main' ? null : m.from, toVw: m.to === 'main' ? null : m.to, note: (m.note || '').trim() || undefined } });
+        toast(`Заявка ${t.number} отправлена складу: «${t.fromName}» → «${t.toName}», ${n(t.qty)} шт.`);
+        $('vwMoveForm').innerHTML = ''; $('vwMoveRow').hidden = false;
+        try { state.vw = await loadVw(); } catch { /* заявка ушла, список обновится с «Обновить» */ }
+      } catch (e) { m.busy = false; m.error = e.message; draw(); }
+    }
+    $('vwMove').onclick = draw;
+  }
 
   // ---------- Склады WB ----------
   // Склады продавца на WB у этого фулфилмента и сколько он выставил на WB по
@@ -697,11 +942,13 @@
     return ids.some((id) => s[id] != null) ? ids.reduce((a, id) => a + (s[id] || 0), 0) : null;
   }
   // Всегда по всем нашим складам: WB продаёт с любого из них один и тот же товар.
-  const wbOver = (r) => { const v = wbStockOf(r.sku, 'all'); const a = availableQty(r); return v != null && a != null && v > a; };
+  const wbOver = (r) => { const v = wbStockOf(r.sku, 'all'); const a = wbAvailable(r); return v != null && a != null && v > a; };
+  // Выбран склад не для WB (Озон) — про остатки WB не пугаем (проверка 03.10.2026).
+  const wbView = () => !vwOn() || (state.vw?.wbChoices || []).some((c) => vwKey(c.id) === state.ui.products.vw);
   function wbStockCell(r) {
     const v = wbStockOf(r.sku);
     if (v == null) return num(null);
-    return wbOver(r) ? `<span class="warn-num" title="На WB выставлено больше, чем доступно на складе">${n(v)}</span>` : num(v);
+    return wbOver(r) && wbView() ? `<span class="warn-num" title="На WB выставлено больше, чем доступно на складе">${n(v)}</span>` : num(v);
   }
   async function markWb(id, ours) {
     const path = state.owner ? `/api/marketplaces/${encodeURIComponent(state.companyId)}/wb/warehouses/${encodeURIComponent(id)}`
@@ -779,7 +1026,7 @@
   async function exportWbStock() {
     const lines = []; const noCode = []; const manyCodes = []; const noQty = [];
     for (const r of state.data.stock) {
-      const codes = meta(r.sku).wbBarcodes || []; const qty = availableQty(r);
+      const codes = meta(r.sku).wbBarcodes || []; const qty = wbAvailable(r);
       if (!codes.length) noCode.push(productName(r));
       else if (codes.length > 1) manyCodes.push(productName(r));
       else if (qty == null) noQty.push(productName(r));
@@ -880,7 +1127,7 @@
     const rows = state.data.orders.rows.filter((r) => matches(ui.q, [r.number, r.name, r.sku, r.mp_rid, r.mp_nm_id, r.mp_article, r.mp_barcode, r.supply_number, ...wbIds(r.sku)])
       && orderMatchesStatus(r, ui.status) && inPeriod(orderAt(r), ui.period)
       && (ui.supply === 'all' || (ui.supply === 'none' ? !r.supply_number : r.supply_number === ui.supply))
-      && (ui.wbwh === 'all' || (ui.wbwh === 'none' ? !r.mp_warehouse_id : r.mp_warehouse_id === ui.wbwh)));
+      && (!ui.wbwh.size || ui.wbwh.has(String(r.mp_warehouse_id || 'none'))));
     const by = { new: (a, b) => new Date(orderAt(b)) - new Date(orderAt(a)), old: (a, b) => new Date(orderAt(a)) - new Date(orderAt(b)),
       product: (a, b) => String(productName(a)).localeCompare(String(productName(b)), 'ru'), qty: (a, b) => Number(b.qty) - Number(a.qty) };
     return rows.sort(by[ui.sort]);
@@ -888,7 +1135,7 @@
   const ORDER_COLUMNS = [
     { key: 'photo', title: 'Фото', cls: 'w-photo', cell: (r) => photo(r.sku, r.mp_nm_id) },
     { key: 'product', title: 'Товар', locked: true, main: true, cell: (r) => `<span class="cell-main">${h(productName(r))}</span>${r.mp_article ? `<span class="cell-sub">Артикул продавца: ${h(r.mp_article)}</span>` : ''}` },
-    { key: 'order', title: 'Заказ', cell: (r) => `<button class="link-button nowrap" data-order="${h(r.id)}">${h(r.number)}</button>${r.mp_rid ? `<span class="cell-sub nowrap">${h(r.mp_rid)}</span>` : ''}` },
+    { key: 'order', title: 'Заказ', cell: (r) => `<button class="link-button nowrap" data-order="${h(r.id)}">${h(r.number)}</button> ${sellerOrderMarketplace(r.source)}${r.mp_rid ? `<span class="cell-sub nowrap">${h(r.mp_rid)}</span>` : ''}` },
     { key: 'wb', title: 'Артикул WB', cell: (r) => idCell(r.mp_nm_id ? [r.mp_nm_id] : wbIds(r.sku), r.mp_barcode) },
     { key: 'qty', title: 'Кол-во', cls: 'n', cell: (r) => num(r.qty) },
     { key: 'at', title: 'Оформлен на WB', cls: 'n', cell: (r) => h(when(orderAt(r))) },
@@ -897,6 +1144,11 @@
     { key: 'status', title: 'Статус', cls: 'c', cell: (r) => badge(orderStatus(r), orderStyle(r)) + (r.stock_conflict ? '<span class="row-note warn">Склад сверяет заказ</span>' : '') },
     { key: 'loaded', title: 'Загружен в Аргус', cls: 'n', hidden: true, cell: (r) => h(when(r.created_at)) },
   ];
+  const sellerOrderMarketplace = (source) => {
+    const key = String(source || '').toLowerCase();
+    if (!key) return '';
+    return `<span class="workspace-marketplace ${key === '1c' ? 'onec' : ['wb', 'ozon'].includes(key) ? key : ''}">${h({ wb: 'WB', ozon: 'Ozon', '1c': '1С' }[key] || key.toUpperCase())}</span>`;
+  };
   function renderOrders() {
     const ui = state.ui.orders; const supplies = [...new Set(state.data.orders.rows.map((r) => r.supply_number).filter(Boolean))].sort().reverse();
     const whs = [...new Map(state.data.orders.rows.filter((r) => r.mp_warehouse_id).map((r) => [r.mp_warehouse_id, r.mp_warehouse_name || 'склад WB ' + r.mp_warehouse_id])).entries()]
@@ -906,7 +1158,10 @@
         dropdown('o-status', { label: 'Статус', value: ui.status, options: ORDER_STATUS, onPick: (v) => { ui.status = v; ui.shown = state.prefs.rows; renderOrders(); } })
         + dropdown('o-period', { label: 'Период', value: ui.period, options: PERIODS, onPick: (v) => { ui.period = v; ui.shown = state.prefs.rows; renderOrders(); } })
         + dropdown('o-supply', { label: 'Поставка', value: ui.supply, options: [{ value: 'all', text: 'Любая' }, { value: 'none', text: 'Без поставки' }, ...supplies.map((x) => ({ value: x, text: x }))], onPick: (v) => { ui.supply = v; ui.shown = state.prefs.rows; renderOrders(); } })
-        + (whs.length > 1 ? dropdown('o-wbwh', { label: 'Склад WB', value: ui.wbwh, options: [{ value: 'all', text: 'Любой' }, ...whs.map(([value, text]) => ({ value, text })), { value: 'none', text: 'Склад не известен' }], onPick: (v) => { ui.wbwh = v; ui.shown = state.prefs.rows; renderOrders(); } }) : '')
+        + (whs.length || ui.wbwh.size ? dropdown('o-wbwh', { label: ui.wbwh.size ? 'Склады WB' : 'Все склады WB', value: ui.wbwh, multi: true,
+          options: [{ value: 'all', text: 'Все склады WB' }, ...whs.map(([value, text]) => ({ value: String(value), text })),
+            ...(state.data.orders.rows.some((r) => !r.mp_warehouse_id) ? [{ value: 'none', text: 'Склад не известен' }] : [])],
+          onPick: (v) => { if (v === 'all') ui.wbwh.clear(); else if (ui.wbwh.has(v)) ui.wbwh.delete(v); else ui.wbwh.add(v); ui.shown = state.prefs.rows; renderOrders(); } }) : '')
         + dropdown('o-sort', { label: 'Сортировка', value: ui.sort, options: [{ value: 'new', text: 'Сначала новые' }, { value: 'old', text: 'Сначала старые' }, { value: 'product', text: 'По товару' }, { value: 'qty', text: 'Больше штук' }], onPick: (v) => { ui.sort = v; renderOrders(); } })
         + resetLink('orders'),
         columnChooser('orders', ORDER_COLUMNS, renderOrders) + excelButton)
@@ -953,7 +1208,7 @@
     return rows.sort(by[ui.sort]);
   }
   const SUPPLY_COLUMNS = [
-    { key: 'num', title: 'Поставка', cell: (r) => `<button class="link-button nowrap" data-supply="${h(r.id)}">${h(r.number)}</button><span class="cell-sub">составлена ${h(when(r.createdAt))}</span>` },
+    { key: 'num', title: 'Поставка', cell: (r) => `<button class="link-button nowrap" data-supply="${h(r.id)}">${h(r.number)}</button> ${sellerOrderMarketplace(r.marketplace || (r.mpSupplyId ? 'wb' : ''))}<span class="cell-sub">составлена ${h(when(r.createdAt))}</span>` },
     { key: 'dest', title: 'Куда и когда', cell: (r) => `<span class="cell-main">${h(r.destination || 'пункт ещё не выбран')}</span>${r.shipDate ? `<span class="cell-sub">отгрузка ${h(day(dateOnly(r.shipDate)))}</span>` : ''}` },
     { key: 'units', title: 'Штук', cls: 'n', cell: (r) => num(r.units) },
     { key: 'status', title: 'Статус', cls: 'c', cell: (r) => badge(r.statusName, SUPPLY_STYLE[r.status] || '') },
@@ -985,9 +1240,11 @@
       + `<div class="mini-stats"><div><span>Заказов</span><strong>${n(r.orders)}</strong></div><div><span>Штук</span><strong>${n(r.units)}</strong></div><div><span>Составлена</span><strong style="font-size:15px">${h(when(r.createdAt))}</strong></div></div>`
       + (r.mpBarcodeFile ? `<div class="supply-qr-big"><img src="data:image/svg+xml;base64,${h(r.mpBarcodeFile)}" alt="QR поставки"><div><div class="help">Поставка на WB</div><b>${h(r.mpSupplyId || '')}</b></div></div>` : '')
       + table([
-        { title: 'Заказ', cell: (i) => h(i.order) }, { title: 'Товар', cell: (i) => h(productName({ sku: i.sku, name: i.name })) },
+        { title: 'Заказ', cell: (i) => h(i.order) }, { title: 'Фото', cls: 'w-photo', cell: (i) => photo(i.sku) },
+        { title: 'Товар', cell: (i) => h(productName({ sku: i.sku, name: i.name })) },
         { title: 'Шт.', cls: 'n', cell: (i) => n(i.qty) }, { title: 'Статус', cls: 'c', cell: (i) => h(i.status) },
       ], r.items);
+    wirePhotos($('drawerBody'));
   }
 
   // ---------- Приходы ----------
@@ -1063,45 +1320,164 @@
     wireRows(host, ui, renderDocumentRows);
   }
 
-  // ---------- Расчёты (заглушка) ----------
-  function renderBilling() {
-    const card = (title, text) => `<div class="bill-card"><strong>${h(title)}</strong><span>${h(text)}</span></div>`;
-    $('view').innerHTML = notice('Раздел в разработке', 'Склад ещё не включил расчёты в Аргусе. Когда включит, здесь появится счёт за каждый месяц с расшифровкой — без таблиц по почте.')
-      + `<div class="bill-grid">${card('Хранение', 'за каждый день: сколько места занимал ваш товар на складе')}`
-      + card('Упаковка', 'пакет, ВПП, короб — по каждому заказу и поставке на WB')
-      + card('Приёмка и операции', 'приёмка, сборка, маркировка, стикеровка, возвраты')
-      + card('Счёт за период', 'итог за месяц с расшифровкой по дням и операциям, выгрузка в Excel') + '</div>';
+  // ---------- Персональный прайс, начисления и выставленные счета ----------
+  let billMonth = null, billRun = 0, billInvoices = [], billNextCursor = null;
+  const rub = (v) => v == null ? '—' : Number(v).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
+  const billDate = (v) => v ? String(v).slice(0,10).split('-').reverse().join('.') : '—';
+  const BILL_STATUS = {unpaid:'Ожидает оплаты',partial:'Оплачен частично',paid:'Оплачен',overdue:'Просрочен'};
+  const BILL_SERVICE = {receiving:'Приёмка',picking:'Сборка заказов',returns:'Возвраты',storage:'Хранение'};
+  function billLinesTable(lines){
+    return table([
+      {title:'Услуга',cell:l => '<span class="cell-main">' + h(l.title || BILL_SERVICE[l.service]) + '</span>' + ((l.details || []).length ? '<details class="bill-work"><summary>Работы и даты</summary>' + l.details.map(d => '<div>' + h(d.label || d.day || d.date || '') + ' · ' + n(d.qty) + ' · ' + h(rub(d.amount)) + '</div>').join('') + '</details>' : '')},
+      {title:'Количество',cls:'n',cell:l => n(l.qty)},
+      {title:'Единица',cell:l => h(l.unit)},
+      {title:'Цена',cls:'n',cell:l => l.missingTariff ? 'Нет цены на дату работы' : l.rate == null ? 'По истории цен' : h(rub(l.rate))},
+      {title:'Сумма',cls:'n',cell:l => l.missingTariff ? 'Нужен прайс' : '<span class="strong-num">' + h(rub(l.amount)) + '</span>'}
+    ],lines || []);
+  }
+  function sellerInvoiceHtml(i){
+    return '<details class="seller-invoice" data-seller-invoice="' + h(i.id) + '"><summary><strong>Счёт ' + h(i.number) + '</strong><span>' + billDate(i.from) + ' — ' + billDate(i.to) + '</span><strong>' + h(rub(i.total)) + '</strong><span class="seller-invoice-status ' + h(i.status) + '">' + h(BILL_STATUS[i.status] || i.status) + '</span></summary><div class="seller-invoice-body">'
+      + '<div class="seller-bill-facts"><span>Оплатить до <b>' + billDate(i.dueDate) + '</b></span><span>Оплачено <b>' + h(rub(i.paid)) + '</b></span><span>Осталось <b>' + h(rub(i.balance)) + '</b></span><button type="button" class="button" data-invoice-excel="' + h(i.id) + '">Выгрузить счёт в Excel</button></div>'
+      + billLinesTable(i.lines)
+      + '<h3>Полученные складом оплаты</h3>'
+      + ((i.payments || []).length ? table([{title:'Дата',cell:p => billDate(p.paidOn)},{title:'Сумма',cls:'n',cell:p => h(rub(p.amount))},{title:'Комментарий',cell:p => h(p.note || '—')}],i.payments) : '<p class="help">Оплат пока не отмечено.</p>') + '</div></details>';
+  }
+  function renderSellerInvoices(){
+    const host = $('sellerInvoices');
+    if(!host) return;
+    const open = new Set([...host.querySelectorAll('details[data-seller-invoice][open]')].map(e => e.dataset.sellerInvoice));
+    host.innerHTML = '<h2>Выставленные счета</h2>' + (billInvoices.length ? billInvoices.map(sellerInvoiceHtml).join('') : empty('Счетов ещё нет','Склад пока не выставлял вам счёт за работу.','document'))
+      + (billNextCursor ? '<button type="button" class="button" id="sellerInvoiceMore">Ещё счета</button>' : '');
+    host.querySelectorAll('details[data-seller-invoice]').forEach(e => { e.open = open.has(e.dataset.sellerInvoice); });
+    host.querySelectorAll('[data-invoice-excel]').forEach(button => { button.onclick = () => {
+      const i = billInvoices.find(i => i.id === button.dataset.invoiceExcel);
+      if(!i) return;
+      const rows = [...i.lines,{title:'Итого по счёту',amount:i.total},{title:'Оплачено',amount:i.paid},{title:'Остаток',amount:i.balance}];
+      runExport(button,() => exportExcel({file:'Счёт ' + i.number,sheet:'Счёт',title:'Счёт ' + i.number + ' — ' + state.profile.name,
+        filterText:billDate(i.from) + ' — ' + billDate(i.to) + '. Оплатить до ' + billDate(i.dueDate),rows,
+        columns:[{header:'Услуга',type:'text',get:l => l.title,min:24},{header:'Количество',type:'num',get:l => l.qty},
+          {header:'Единица',type:'text',get:l => l.unit,min:18},{header:'Цена, ₽',type:'num',money:true,get:l => l.rate},
+          {header:'Сумма, ₽',type:'num',money:true,get:l => l.amount}]}));
+    }; });
+    const more = $('sellerInvoiceMore');
+    if(more) more.onclick = async () => {
+      const run = billRun, viewRun = state.viewRun; more.disabled = true;
+      try{
+        const b = await api('/api/sellers/billing?month=' + encodeURIComponent(billMonth) + '&invoiceCursor=' + encodeURIComponent(billNextCursor));
+        if(run !== billRun || viewRun !== state.viewRun) return;
+        billInvoices.push(...b.invoices); billNextCursor = b.nextInvoiceCursor; renderSellerInvoices();
+      }catch(e){toast('Не удалось загрузить счета: ' + e.message); more.disabled = false;}
+    };
+  }
+  async function renderBilling(){
+    const run = ++billRun, viewRun = state.viewRun;
+    const zone = state.profile?.timezone || 'Europe/Moscow';
+    if(!billMonth) billMonth = new Date().toLocaleDateString('sv-SE',{timeZone:zone}).slice(0,7);
+    $('view').innerHTML = loading;
+    let b;
+    try{ b = await api('/api/sellers/billing?month=' + encodeURIComponent(billMonth)); }
+    catch(e){ if(run === billRun && viewRun === state.viewRun) $('view').innerHTML = empty('Расчёты не загрузились',e.message); return; }
+    if(run !== billRun || viewRun !== state.viewRun) return;
+    if(!b.enabled){ renderBillingSoon(); return; }
+    billInvoices = b.invoices || []; billNextCursor = b.nextInvoiceCursor;
+    const t = b.tariff || {}, s = b.schedule || {};
+    const cadence = {daily:'каждый день',weekly:'каждую неделю',monthly:'каждый месяц',custom:'каждые ' + s.intervalDays + ' дней'}[s.cadence];
+    $('view').innerHTML = (state.owner && !b.shownToSeller ? notice('Клиент этот расчёт пока не видит','Показ включается в настройках персонального прайса клиента в разделе «Расчёты».',true) : '')
+      + '<div class="seller-bill-toolbar"><label class="field"><span>Месяц начислений</span><input type="month" id="sellerBillMonth" value="' + h(billMonth) + '"></label><button type="button" class="button" data-bill-excel>Выгрузить начисления в Excel</button></div>'
+      + '<section class="stat-strip"><div class="stat"><div class="stat-label">Начислено за выбранный месяц</div><div class="stat-value">' + h(rub(b.total)) + '</div><div class="stat-note">по вашему персональному прайсу услуг; выставленные счета — ниже</div></div></section>'
+      + (b.lines?.length ? billLinesTable(b.lines) : empty('За этот месяц начислений нет','За выбранный месяц склад не записал оплачиваемую работу.','check'))
+      + '<details class="seller-invoice"><summary><strong>Ваш прайс услуг</strong><span>' + (t.configured ? 'Персональные цены услуг' : 'Склад ещё не настроил ваш прайс') + '</span></summary><div class="seller-invoice-body">'
+      + (t.configured ? table([{title:'Услуга',cell:l => h(l.title)},{title:'Цена',cls:'n',cell:l => h(rub(l.rate))},{title:'Единица',cell:l => h(l.unit)}],Object.entries(BILL_SERVICE).map(([k,title]) => ({title,rate:t.prices[k],unit:k === 'storage' ? (t.storageUnit === 'unit_day' ? 'штука в день' : 'место в день') : k === 'picking' ? 'заказ' : 'штука'}))) : '<p class="help">При отсутствии цены склад сначала настраивает прайс, затем выставляет счёт.</p>')
+      + (t.history?.length ? '<details class="bill-work"><summary>История цен</summary>' + table([{title:'Действуют с',cell:x => billDate(x.effectiveFrom)},...Object.entries(BILL_SERVICE).map(([k,title]) => ({title,cls:'n',cell:x => h(rub(x.prices[k]))})),{title:'Хранение за',cell:x => x.storageUnit === 'unit_day' ? 'штуку в день' : 'место в день'}],t.history) + '</details>' : '')
+      + '<p class="help">' + (s.enabled ? 'Счета выставляются ' + h(cadence) + '.' : 'Счета выставляются складом вручную.') + ' Срок оплаты: ' + h(s.paymentDays ?? 14) + ' дней после выставления. Суммы уже выставленных счетов сохраняются при изменении прайса.</p></div></details>'
+      + '<div id="sellerInvoices"></div><p class="help">Упаковка и маркировка пока не учитываются: склад ещё не записывает эти операции для расчёта.</p>';
+    $('sellerBillMonth').onchange = e => { if(e.target.value){billMonth = e.target.value;renderBilling();} };
+    renderSellerInvoices();
+    const xl = $('view').querySelector('[data-bill-excel]');
+    xl.onclick = () => runExport(xl,() => exportExcel({file:'Начисления ' + billMonth,sheet:'Начисления',title:'Начисления — ' + state.profile.name,
+      filterText:billMonth,rows:b.lines || [],columns:[{header:'Услуга',type:'text',get:l => l.title,min:24},{header:'Количество',type:'num',get:l => l.qty},
+        {header:'Единица',type:'text',get:l => l.unit,min:18},{header:'Цена, ₽',type:'num',money:true,get:l => l.rate},{header:'Сумма, ₽',type:'num',money:true,get:l => l.amount}]}));
+  }
+  function renderBillingSoon(){
+    $('view').innerHTML = notice('Склад пока не открыл вам расчёты','После включения здесь будут ваш персональный прайс, начисления, отдельные счета и отмеченные складом оплаты.');
   }
 
-  // ---------- Брак ----------
+  // ---------- Склад брака ----------
+  // Владелец 02.10.2026: у каждого продавца свой склад брака. Брак попадает
+  // туда с приёмки, сборки, возврата или пересчёта; продавец решает, что с
+  // ним делать (частями можно), склад выполняет. Склад может решить за
+  // продавца — тогда продавцу приходит уведомление здесь же.
   const BUCKET = { defective: 'Брак', packaging_defect: 'Повреждена упаковка', good: 'Годное' };
+  const ACTIONS = {
+    return_to_seller: { title: 'Вернуть мне', text: 'Склад выдаст брак вам или вашему курьеру по акту выдачи. Когда забрать — договоритесь с менеджером склада.' },
+    dispose: { title: 'Утилизировать', text: 'Склад утилизирует брак и составит акт утилизации. Товар уйдёт с вашего остатка навсегда.' },
+    repack: { title: 'Перепаковать и вернуть в продажу', text: 'Когда сам товар цел, а повреждена упаковка. Склад переупакует его, и он вернётся в обычный остаток — его снова можно продавать.' },
+    markdown: { title: 'Уценка отдельным товаром', text: 'Что такое уценка: товар с дефектом продаётся дешевле, отдельной карточкой на Wildberries. Сначала создайте в кабинете WB карточку уценённого товара, потом впишите сюда её штрихкод. Склад наклеит этот штрихкод, и товар появится в остатке как «название — уценка».' },
+  };
+  const DONE = { return_to_seller: 'выдан', dispose: 'утилизирован', repack: 'перепакован, в продаже', markdown: 'в продаже как уценка' };
+  function defectAttention() {
+    const d = state.data.defects; if (!d) return 0;
+    const waiting = d.balances.filter((b) => b.undecided > 0).length;
+    return waiting + (state.owner ? 0 : d.decisions.filter((x) => x.unseen).length);
+  }
   function filteredDefects() {
     const ui = state.ui.defects;
-    return state.data.defects.events.filter((e) => matches(ui.q, [e.name, e.sku, e.note, e.document, ...wbIds(e.sku)])
+    return state.data.defects.moves.filter((e) => matches(ui.q, [e.name, e.sku, e.note, e.document, e.number, ...wbIds(e.sku)])
       && (ui.source === 'all' || e.source === ui.source) && (ui.kind === 'all' || e.bucket === ui.kind) && inPeriod(e.at, ui.period));
   }
+  const whoDecided = (x) => (x.decidedRole === 'seller' ? (state.owner ? 'Продавец' : 'Вы') : x.decidedName || 'Склад');
+  // Решение выполнено частями или на найденное (проверка 03.10.2026).
+  const doneOf = (x) => (Number(x.doneQty) > 0 && Number(x.doneQty) < Number(x.qty)
+    ? `<span class="cell-sub">${x.status === 'done' ? 'выполнено' : 'сделано'} ${n(x.doneQty)} из ${n(x.qty)} шт.${x.status === 'done' ? ' — брака оказалось меньше' : ''}</span>`
+    : x.status === 'done' && Number(x.doneQty) === 0 && x.doneQty != null ? '<span class="cell-sub">брака на складе не оказалось</span>' : '');
+  const actLink = (x) => (x.status === 'done' && (x.action === 'return_to_seller' || x.action === 'dispose')
+    ? `<a class="link-button" href="act_print.html?kind=defect&id=${encodeURIComponent(x.id)}" target="_blank" rel="noopener">${x.action === 'dispose' ? 'Акт утилизации' : 'Акт выдачи'}</a>` : '');
   function renderDefects() {
     const ui = state.ui.defects; const d = state.data.defects;
-    const nowQty = d.now.reduce((s, r) => s + r.defective + r.packaging, 0);
-    const sources = [...new Set(d.events.map((e) => e.source))];
-    $('view').innerHTML = `<p class="note-line">Фото брака со склада появятся здесь, когда склад начнёт их прикладывать. Сейчас видно описание, товар и откуда брак.</p>`
-      + `<div class="section-title" style="margin-top:0"><h2>Сейчас на складе</h2><span>${nowQty ? counted(nowQty, 'штука', 'штуки', 'штук') + ' · ' + counted(d.now.length, 'товар', 'товара', 'товаров') : 'брака нет'}</span></div>`
-      + (d.now.length ? table([
+    const total = d.balances.reduce((s, r) => s + r.qty, 0);
+    const undecided = d.balances.reduce((s, r) => s + r.undecided, 0);
+    const unseen = state.owner ? [] : d.decisions.filter((x) => x.unseen);
+    const sources = [...new Map(d.moves.map((e) => [e.source, e.sourceName])).entries()];
+    $('view').innerHTML = (unseen.length ? `<div class="notice">${icon('info')}<div><strong>Склад решил по вашему браку без вас: ${counted(unseen.length, 'решение', 'решения', 'решений')}</strong>`
+        + unseen.slice(0, 5).map((x) => `<p>${h(x.decidedName || 'Склад')}: «${h(ACTIONS[x.action].title)}» — ${h(x.name || x.sku)}, ${n(x.qty)} шт.${x.note ? ' · ' + h(x.note) : ''}</p>`).join('')
+        + `<p><button class="link-button" id="defectSeen">Понятно</button></p></div></div>` : '')
+      + (undecided ? notice(state.owner ? `Продавец не решил по ${counted(undecided, 'штуке', 'штукам', 'штукам')} брака` : `${counted(undecided, 'штука', 'штуки', 'штук')} брака ждут вашего решения`,
+        state.owner ? 'Решите за продавца, если он попросил по телефону: продавец увидит, кто решил.' : 'Нажмите «Решить» у товара: вернуть вам, утилизировать, перепаковать или продать уценкой. Можно частями.', true) : '')
+      + `<div class="section-title" style="margin-top:0"><h2>Сейчас на складе брака</h2><span>${total ? counted(total, 'штука', 'штуки', 'штук') + ' · ' + counted(d.balances.length, 'товар', 'товара', 'товаров') : 'брака нет'}</span></div>`
+      + (d.balances.length ? table([
         { title: 'Фото', cls: 'w-photo', cell: (r) => photo(r.sku) },
-        { title: 'Товар', cell: (r) => `<button class="link-button" data-open-product="${h(r.sku)}">${h(r.name)}</button>` },
-        { title: 'Артикул WB', cell: (r) => idCell(wbIds(r.sku), state.data.stock?.find((x) => x.sku === r.sku)?.barcode) },
-        { title: 'Брак', cls: 'n', cell: (r) => num(r.defective) },
-        { title: 'Повреждена упаковка', cls: 'n', cell: (r) => num(r.packaging) },
-      ], d.now) : '<div class="table-wrap">' + empty('Брака на складе нет', 'Если склад признает ваш товар браком, он появится здесь.', 'check') + '</div>')
-      + (d.hasMore ? notice('Показана часть случаев', 'Загружены последние 1 000 случаев брака.', true) : '')
-      + `<div class="section-title"><h2>Когда признан браком</h2><span>${counted(d.events.length, 'случай', 'случая', 'случаев')}</span></div>`
-      + toolbar(searchBox('Товар, артикул WB, описание', ui.q),
-        dropdown('f-source', { label: 'Откуда', value: ui.source, options: [{ value: 'all', text: 'Отовсюду' }, ...sources.map((x) => ({ value: x, text: x }))], onPick: (v) => { ui.source = v; ui.shown = state.prefs.rows; renderDefects(); } })
+        { title: 'Товар', cell: (r) => `<button class="link-button" data-open-product="${h(r.sku)}">${h(r.name)}</button>${wbIds(r.sku).length ? `<span class="cell-sub">Артикул WB: ${h(wbIds(r.sku).join(', '))}</span>` : ''}` },
+        { title: 'Что с товаром', cell: (r) => badge(BUCKET[r.bucket] || r.bucket, 'issue') },
+        { title: 'Всего', cls: 'n', cell: (r) => num(r.qty, true) },
+        { title: 'Ждёт решения', cls: 'n', cell: (r) => num(r.undecided) },
+        { title: 'Решено', cls: 'n', cell: (r) => num(r.decided) },
+        { title: 'Лежит с', cls: 'n', cell: (r) => h(r.since ? day(r.since) : '—') },
+        { title: 'Решение', cell: (r) => (r.undecided > 0 ? `<button class="button primary" type="button" data-decide="${h(r.sku)}" data-bucket="${h(r.bucket)}">Решить</button>` : '<span class="muted">решено</span>') },
+      ], d.balances) : '<div class="table-wrap">' + empty('Брака на складе нет', 'Если склад признает ваш товар браком, он появится здесь, и вы решите, что с ним делать.', 'check') + '</div>')
+      + `<div class="section-title"><h2>Решения</h2><span>${counted(d.decisions.length, 'решение', 'решения', 'решений')}</span></div>`
+      + (d.decisions.length ? table([
+        { title: 'Товар', cell: (x) => `<span class="cell-main">${h(x.name || x.sku)}</span><span class="cell-sub">${h(x.number)} · ${h(BUCKET[x.bucket] || x.bucket)}</span>` },
+        { title: 'Решение', cell: (x) => `<span class="cell-main">${h(ACTIONS[x.action].title)}</span>${x.markdownBarcode ? `<span class="cell-sub">Штрихкод уценки: ${h(x.markdownBarcode)}</span>` : ''}${x.note ? `<span class="cell-sub">${h(x.note)}</span>` : ''}` },
+        { title: 'Кол-во', cls: 'n', cell: (x) => num(x.qty) },
+        { title: 'Кто решил', cell: (x) => `<span class="cell-main">${h(whoDecided(x))}</span><span class="cell-sub">${h(when(x.decidedAt))}</span>` },
+        { title: 'Склад', cell: (x) => (x.status === 'done' ? `${badge('Готово: ' + DONE[x.action], 'ready')}<span class="cell-sub">${h(when(x.doneAt))}</span>${doneOf(x)}${actLink(x)}` : badge('Ждёт склада', 'waiting') + doneOf(x)) },
+      ], d.decisions) : '<div class="table-wrap">' + empty('Решений пока нет', 'Здесь будет видно, что вы решили по браку и когда склад это выполнил.', 'document') + '</div>')
+      + (d.hasMore ? notice('Показана часть документов', 'Загружены последние 1 000 перемещений на склад брака.', true) : '')
+      + `<div class="section-title"><h2>Как брак попал на склад</h2><span>${counted(d.moves.length, 'документ', 'документа', 'документов')}</span></div>`
+      + toolbar(searchBox('Товар, артикул WB, описание, номер', ui.q),
+        dropdown('f-source', { label: 'Откуда', value: ui.source, options: [{ value: 'all', text: 'Отовсюду' }, ...sources.map(([value, text]) => ({ value, text }))], onPick: (v) => { ui.source = v; ui.shown = state.prefs.rows; renderDefects(); } })
         + dropdown('f-kind', { label: 'Что с товаром', value: ui.kind, options: [{ value: 'all', text: 'Любое' }, { value: 'defective', text: 'Брак' }, { value: 'packaging_defect', text: 'Повреждена упаковка' }], onPick: (v) => { ui.kind = v; ui.shown = state.prefs.rows; renderDefects(); } })
         + dropdown('f-period', { label: 'Период', value: ui.period, options: PERIODS, onPick: (v) => { ui.period = v; ui.shown = state.prefs.rows; renderDefects(); } })
         + resetLink('defects'))
       + '<div id="rows"></div>';
     wirePhotos($('view'));
+    $('view').querySelectorAll('[data-decide]').forEach((b) => { b.onclick = () => openDecision(b.dataset.decide, b.dataset.bucket); });
+    if ($('defectSeen')) {
+      $('defectSeen').onclick = async () => {
+        try { await api('/api/sellers/defects/seen', { method: 'POST' }); d.decisions.forEach((x) => { x.unseen = false; }); renderDefects(); renderNav(); }
+        catch (e) { toast(e.message); }
+      };
+    }
     wireView(ui, renderDefects, renderDefectRows);
     renderDefectRows();
   }
@@ -1109,23 +1485,74 @@
     const ui = state.ui.defects; const rows = filteredDefects(); const host = $('rows');
     host.innerHTML = rows.length ? table([
       { title: 'Фото', cls: 'w-photo', cell: (e) => photo(e.sku) },
-      { title: 'Товар', cell: (e) => `<span class="cell-main">${h(e.name)}</span>${wbIds(e.sku).length ? `<span class="cell-sub">Артикул WB: ${h(wbIds(e.sku).join(', '))}</span>` : ''}` },
+      { title: 'Товар', cell: (e) => `<span class="cell-main">${h(e.name || e.sku)}</span>${wbIds(e.sku).length ? `<span class="cell-sub">Артикул WB: ${h(wbIds(e.sku).join(', '))}</span>` : ''}` },
       { title: 'Кол-во', cls: 'n', cell: (e) => num(e.qty) },
-      { title: 'Что с товаром', cell: (e) => `${badge(BUCKET[e.bucket] || e.bucket, 'issue')}${e.note ? `<span class="cell-sub">${h(e.note)}</span>` : ''}` },
-      { title: 'Откуда', cell: (e) => `<span class="cell-main">${h(e.source)}</span>${e.document ? `<span class="cell-sub">${h(e.document)}</span>` : ''}` },
+      { title: 'Что с товаром', cell: (e) => `${badge(BUCKET[e.bucket] || e.bucket, 'issue')}${e.note ? `<span class="cell-sub">${h(e.note)}</span>` : ''}${e.hasPhoto ? `<button class="link-button" type="button" data-defect-photo="${h(e.id)}">Фото брака</button>` : ''}` },
+      { title: 'Откуда', cell: (e) => `<span class="cell-main">${h(e.sourceName)}</span><span class="cell-sub">${h([e.number, e.document].filter(Boolean).join(' · '))}</span>` },
       { title: 'Когда', cls: 'n', cell: (e) => h(when(e.at)) },
-    ], rows.slice(0, ui.shown)) + moreFooter(ui, rows.length, ['случай', 'случая', 'случаев'])
-      : '<div class="table-wrap">' + empty('Ничего не найдено', state.data.defects.events.length ? 'Под выбранные фильтры случаев нет.' : 'Склад ещё не признавал ваш товар браком.', 'check') + '</div>';
+    ], rows.slice(0, ui.shown)) + moreFooter(ui, rows.length, ['документ', 'документа', 'документов'])
+      : '<div class="table-wrap">' + empty('Ничего не найдено', state.data.defects.moves.length ? 'Под выбранные фильтры документов нет.' : 'Склад ещё не признавал ваш товар браком.', 'check') + '</div>';
+    wireDefectPhotos(host);
     wireRows(host, ui, renderDefectRows);
+  }
+  function wireDefectPhotos(host) {
+    host.querySelectorAll('[data-defect-photo]').forEach((b) => {
+      b.onclick = async () => {
+        // Окно открываем сразу, по нажатию: иначе браузер примет его за всплывающее.
+        const w = window.open('', '_blank'); b.disabled = true;
+        try {
+          const response = await fetch('https://api.argus-ai.online/api/defects/moves/' + encodeURIComponent(b.dataset.defectPhoto) + '/photo', { headers: { Authorization: 'Bearer ' + state.token }, cache: 'no-store' });
+          if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || 'Фото не открылось');
+          const url = URL.createObjectURL(await response.blob());
+          if (w) w.location.href = url; else location.href = url;
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
+        } catch (e) { if (w) w.close(); toast(e.message); }
+        b.disabled = false;
+      };
+    });
+  }
+  // Решение по браку: что сделать, сколько штук (можно часть), для уценки —
+  // штрихкод карточки уценки на WB.
+  function openDecision(sku, bucket) {
+    const r = state.data.defects.balances.find((x) => x.sku === sku && x.bucket === bucket); if (!r) return;
+    openDrawer(r.name, 'Решение по браку');
+    const pick = { action: '' };
+    const draw = () => {
+      $('drawerBody').innerHTML = `<div class="mini-stats">${mini('На складе брака', r.qty)}${mini('Ждёт решения', r.undecided)}${mini('Уже решено', r.decided)}</div>`
+        + `<p class="help" style="margin-bottom:12px">${h(BUCKET[r.bucket])}${r.since ? ', лежит с ' + h(day(r.since)) : ''} — что с ним сделать?</p>`
+        + `<div class="decide-options">${Object.entries(ACTIONS).map(([key, a]) => `<button type="button" class="decide-option" data-action="${key}" aria-pressed="${pick.action === key}"><strong>${h(a.title)}</strong><span>${h(a.text)}</span></button>`).join('')}</div>`
+        + (pick.action ? '<div class="settings-form" style="margin-top:16px">'
+          + `<label class="field"><span>Сколько штук — можно часть, остальное решите потом</span><input id="decQty" type="number" inputmode="numeric" min="1" max="${r.undecided}" value="${r.undecided}"></label>`
+          + (pick.action === 'markdown' ? '<label class="field"><span>Штрихкод карточки уценки на WB</span><input id="decBarcode" inputmode="numeric" maxlength="64" placeholder="Например: 2040000000017"></label>' : '')
+          + `<label class="field"><span>Комментарий складу — не обязательно</span><textarea id="decNote" rows="2" maxlength="300" placeholder="${pick.action === 'return_to_seller' ? 'Например: заберёт курьер в пятницу' : 'Например: только те, где вмятина'}"></textarea></label>`
+          + (state.owner ? '<p class="help">Вы решаете за продавца: в его кабинете будет видно, кто решил, и придёт уведомление.</p>' : '')
+          + '<div class="drawer-actions"><button class="button primary" type="button" id="decSend">Отправить складу</button></div><p class="error-text" id="decError"></p></div>' : '');
+      $('drawerBody').querySelectorAll('[data-action]').forEach((b) => { b.onclick = () => { pick.action = b.dataset.action; draw(); $('decQty')?.scrollIntoView({ block: 'nearest' }); }; });
+      if (!$('decSend')) return;
+      $('decSend').onclick = async () => {
+        const qty = Number($('decQty').value); const barcode = $('decBarcode')?.value.trim();
+        if (!Number.isInteger(qty) || qty < 1 || qty > r.undecided) { $('decError').textContent = `Сколько штук — от 1 до ${n(r.undecided)}`; return; }
+        if (pick.action === 'markdown' && !barcode) { $('decError').textContent = 'Впишите штрихкод карточки уценки'; $('decBarcode').focus(); return; }
+        $('decSend').disabled = true;
+        try {
+          await api('/api/sellers/defects/decisions', { method: 'POST', body: { sku: r.sku, bucket: r.bucket, qty, action: pick.action, markdownBarcode: barcode || undefined, note: $('decNote').value.trim() || undefined } });
+          $('drawer').close(); toast(`Решение отправлено складу: ${ACTIONS[pick.action].title.toLowerCase()}, ${n(qty)} шт.`); navigate(true);
+        } catch (e) { $('decError').textContent = e.message; $('decSend').disabled = false; }
+      };
+    };
+    draw();
   }
 
   // ---------- Карточки ----------
   function openDrawer(title, eyebrow) {
-    state.drawerRun += 1; $('drawerTitle').textContent = title; $('drawerEyebrow').textContent = eyebrow; $('drawerBody').innerHTML = loading;
+    state.drawerRun += 1; $('drawerTitle').textContent = title; $('drawerTitle').classList.remove('open'); $('drawerEyebrow').textContent = eyebrow; $('drawerBody').innerHTML = loading;
     if (!$('drawer').open) $('drawer').showModal();
     return state.drawerRun;
   }
   $('closeDrawer').onclick = () => $('drawer').close();
+  // Длинное название — три строки, целиком по нажатию: на телефоне числа
+  // карточки не должны уезжать под название (рецензия 04.10).
+  $('drawerTitle').onclick = () => $('drawerTitle').classList.toggle('open');
   $('drawer').addEventListener('close', () => { state.drawerRun += 1; });
   $('drawer').addEventListener('click', (e) => { if (e.target === $('drawer') && e.clientX < $('drawer').getBoundingClientRect().left) $('drawer').close(); });
   const mini = (label, value) => `<div><span>${h(label)}</span><strong>${value == null ? '—' : n(value)}</strong></div>`;
@@ -1139,18 +1566,32 @@
     { key: 'qty', title: 'Шт.', cls: 'n', cell: (x) => num(x.qty) },
   ];
 
+  // «Почему доступно именно столько» (рецензия 04.10, рекомендация 3): то же
+  // правило, что у сервера (sellers/stock.js), словами и с числами товара.
+  function whyAvailable(r) {
+    if (!('total' in r)) return '';
+    if (r.total == null) return '<p class="why-available">Доступно не посчитать: учёта по этому товару у склада пока нет.</p>';
+    const ord = Number(r.ordered || 0); const asm = Number(r.inAssembly || 0); const raw = Number(r.total) - ord - asm;
+    if (Math.max(0, raw) !== Number(r.available)) return '';
+    return `<p class="why-available"><b>Почему доступно ${n(r.available)}:</b> всего ${n(r.total)} − заказано ${n(ord)} − в сборке ${n(asm)}`
+      + (raw < 0 ? ` = ${n(raw)}. Заказов больше, чем товара, поэтому доступно 0 — склад сверяет.` : ` = ${n(raw)}.`)
+      + (Number(r.inTransit) ? ' «В пути» не вычитается: этот товар уже уехал со склада.' : '')
+      + (ord || asm ? ' Нажмите «Заказано» или «В сборке» — увидите сами заказы.' : '') + '</p>';
+  }
   async function openProduct(sku, bucket = null) {
     const r = (state.data.stock || []).find((x) => x.sku === sku)
-      || (state.data.defects?.now || []).find((x) => x.sku === sku) || { sku, name: sku };
+      || (state.data.defects?.balances || []).find((x) => x.sku === sku) || { sku, name: sku };
     const run = openDrawer(productName(r), 'Карточка товара');
     const ids = wbIds(sku);
     $('drawerBody').innerHTML = `<div class="drawer-meta"><span>Артикул WB <b>${h(ids.join(', ') || 'не передан')}</b></span><span>Штрихкод <b>${h(r.barcode || 'не указан')}</b></span>${vendorCodes(sku).length ? `<span>Артикул продавца <b>${h(vendorCodes(sku).join(', '))}</b></span>` : ''}</div>`
-      + `<div class="mini-stats">${mini('Всего', total(r))}${miniBucket('ordered', orderedQty(r))}${miniBucket('assembly', assemblyQty(r))}${miniBucket('transit', transitQty(r))}${mini('Доступно', availableQty(r))}${mini('Брак', r.defective || 0)}</div>`
+      + `<div class="mini-stats">${mini('Всего', r.total ?? null)}${miniBucket('ordered', Number(r.ordered || 0))}${miniBucket('assembly', Number(r.inAssembly || 0))}${miniBucket('transit', Number(r.inTransit || 0))}${mini('Доступно', r.available ?? null)}${mini('Брак', r.defective || 0)}</div>`
+      + whyAvailable(r) + productVwHtml(r)
       + `<section class="detail-section" id="bucketSection"><h3>Какие заказы за этими числами</h3><div id="bucketOrders">${loading}</div></section>`
       + `<div class="drawer-actions"><button class="button" id="productOrders">Все заказы с этим товаром</button>${ids[0] ? `<a class="button ghost" href="${h(wbLink(ids[0]))}" target="_blank" rel="noopener">Карточка на WB</a>` : ''}</div>`
       + `<section class="detail-section"><h3>Движение товара</h3><div id="productHistory">${loading}</div></section>`
       + (r.updatedAt ? `<p class="help" style="margin-top:20px">Учёт на ${h(when(r.updatedAt))}</p>` : '');
     $('productOrders').onclick = () => { Object.assign(state.ui.orders, state.defaults.orders(), { q: ids[0] || productName(r), shown: state.prefs.rows }); $('drawer').close(); location.hash = 'orders'; };
+    wireProductVw(r);
     showBucketOrders(r, bucket, run);
     const events = []; let cursor = null; let busy = false;
     async function more() {
@@ -1191,7 +1632,8 @@
       const list = by[current].slice().sort((a, b) => new Date(orderAt(b)) - new Date(orderAt(a)));
       // Список свежее таблицы (пришли новые заказы) — говорим прямо, а не
       // показываем под числом «3» четыре заказа молча.
-      const stale = Object.keys(BUCKETS).filter((k) => qty(by[k]) !== BUCKETS[k].get(r));
+      const all = { ordered: Number(r.ordered || 0), assembly: Number(r.inAssembly || 0), transit: Number(r.inTransit || 0) };
+      const stale = Object.keys(BUCKETS).filter((k) => qty(by[k]) !== all[k]);
       box.innerHTML = `<div class="segmented bucket-tabs" role="tablist" aria-label="Заказы за числами">${Object.keys(BUCKETS).map((k) => `<button type="button" role="tab" aria-selected="${k === current}" data-bucket-tab="${k}">${h(BUCKETS[k].title)} · ${n(qty(by[k]))} шт.</button>`).join('')}</div>`
         + `<p class="help bucket-note">${h(BUCKETS[current].title)} — ${h(BUCKETS[current].note)}.${list.length ? ' ' + h(counted(orders(list), 'заказ', 'заказа', 'заказов')) + ', ' + h(n(qty(list))) + ' шт.' : ''}</p>`
         + (stale.length ? `<p class="help bucket-note warn">Пока открыта страница, заказы изменились — числа в таблице обновятся по кнопке «Обновить».</p>` : '')
@@ -1206,7 +1648,7 @@
   }
 
   function historyEvent(e) {
-    const labels = { received: 'Принято на склад', picked: 'Собрано для заказа', shipped: 'Отгружено со склада', returned: 'Возврат', add: 'Добавлено', remove: 'Списано', move: 'Перемещение', adjust: 'Корректировка', set: 'Пересчёт', inventory_adjust: 'Пересчёт', inventory: 'Пересчёт', kit_assemble: 'Собран набор', repack: 'Перепаковка', canceled_pick_return: 'Возвращено после отмены WB', initial_load: 'Начальный остаток на складе', initial_load_undo: 'Отмена начального остатка' };
+    const labels = { received: 'Принято на склад', picked: 'Собрано для заказа', shipped: 'Отгружено со склада', returned: 'Возврат', add: 'Добавлено', remove: 'Списано', move: 'Перемещение', adjust: 'Корректировка', set: 'Пересчёт', inventory_adjust: 'Пересчёт', inventory: 'Пересчёт', kit_assemble: 'Собран набор', repack: 'Перепаковка', canceled_pick_return: 'Возвращено после отмены WB', initial_load: 'Начальный остаток на складе', initial_load_undo: 'Отмена начального остатка', defect_in: 'Отмечено браком — на складе брака', defect_return_to_seller: 'Брак выдан вам', defect_dispose: 'Брак утилизирован', defect_repack: 'Брак перепакован — снова в продаже', defect_markdown: 'Брак переклеен на уценку', vw_transfer: 'Перенос между вашими складами' };
     const sign = ['received', 'returned', 'initial_load'].includes(e.kind) ? '+' : ['shipped', 'initial_load_undo'].includes(e.kind) ? '−' : '';
     return `<li><div class="timeline-line"><strong>${h(labels[e.kind] || 'Операция склада')}</strong><span>${sign}${n(e.qty)} шт.</span></div><time>${e.at ? h(when(e.at)) : 'время не сохранено'}</time>${e.document ? `<p>${h(e.document)}</p>` : ''}${e.supplyNumber ? `<p>Поставка ${h(e.supplyNumber)}</p>` : ''}${e.quality ? `<p>${h(BUCKET[e.quality] || e.quality)}</p>` : ''}${e.note ? `<p>${h(e.note)}</p>` : ''}</li>`;
   }
@@ -1319,7 +1761,8 @@
     const run = refresh ? state.drawerRun : openDrawer(row ? row.number : 'Приход', 'Приход');
     const scroll = $('drawerBody').scrollTop;
     try {
-      const [c, data] = await Promise.all([api('/api/inbound/' + encodeURIComponent(id)), api('/api/invoices/' + encodeURIComponent(id))]);
+      const [c, data] = await Promise.all([api('/api/inbound/' + encodeURIComponent(id)), api('/api/invoices/' + encodeURIComponent(id)),
+        state.data.defects ? null : api(API_PATH.defects).then((d) => { state.data.defects = d; }).catch(() => {})]);
       if (run !== state.drawerRun) return;
       $('drawerTitle').textContent = c.number;
       $('drawerBody').innerHTML = inboundCardHtml(c, data);
@@ -1372,6 +1815,57 @@
       }
     }
 
+    // Что дальше и от кого (рецензия 04.10, рекомендация 2): статус говорит,
+    // где приход сейчас, эта строка — кто его продолжит.
+    const you = !state.owner;
+    const next = c.status === 'open' && !c.arrivedAt ? 'склад ждёт машину.'
+      : c.status === 'open' ? 'склад начнёт приёмку.'
+      : c.status === 'in_progress' ? 'склад досчитает товар — расхождение, если будет, появится в конце.'
+      : c.discrepancy && !c.verdict ? (you ? 'ваш ответ на акт расхождений — согласны или нет. Без него вопрос по расхождению не закрыт.' : 'ответ продавца на акт расхождений.')
+      : c.verdict?.value === 'disputed' ? (you ? 'склад видит ваше несогласие и ответит в переписке ниже.' : 'продавец не согласен — ответьте ему в переписке ниже.')
+      : c.unplaced ? `склад разложит ${n(c.unplaced)} шт. по ячейкам.`
+      : null;
+    const nextHtml = `<p class="next-step">${next ? '<b>Дальше:</b> ' + h(next) : '<b>Готово:</b> товар на складе и учтён в остатках.'}</p>`;
+
+    // История расхождения одной лентой (рецензия 04.10, рекомендация 5): что
+    // ждали → что нашли → брак с фото → ответ на акт → решение и исполнение.
+    // Всё из уже существующих данных: приход, брак этого прихода, решения.
+    const def = state.data.defects;
+    const found = def ? def.moves.filter((m) => m.invoiceId === c.id) : [];
+    let storyHtml = '';
+    if ((c.status === 'completed' && c.discrepancy) || found.length) {
+      const story = [];
+      const li = (title, at, body, cls) => story.push(`<li class="${cls}"><strong>${h(title)}</strong>${at ? `<time>${h(when(at))}</time>` : ''}${body}</li>`);
+      li('Ожидали', c.createdAt, `<p>${you ? 'Вы заявили' : 'Продавец заявил'} ${n(c.declared)} шт.</p>`, 'done');
+      if (c.status === 'completed') {
+        const diffs = c.lines.filter((l) => l.accepted != null && l.accepted !== l.declared);
+        li('Нашли при приёмке', c.lastAt, `<p>Принято ${n(c.accepted)} шт.${c.discrepancy ? ` — на ${n(Math.abs(c.discrepancy))} ${c.discrepancy > 0 ? 'больше' : 'меньше'}` : ''}.</p>`
+          + diffs.slice(0, 5).map((l) => `<p>«${h(productName(l))}»: заявлено ${n(l.declared)}, принято ${n(l.accepted)}</p>`).join('')
+          + (diffs.length > 5 ? `<p>и ещё ${counted(diffs.length - 5, 'позиция', 'позиции', 'позиций')} — в списке ниже</p>` : ''), 'done');
+      }
+      if (found.length) {
+        li('Брак при приёмке', found[found.length - 1].at, found.map((m) => `<p>«${h(m.name || m.sku)}» — ${n(m.qty)} шт., ${h((BUCKET[m.bucket] || m.bucket).toLowerCase())}${m.note ? ': ' + h(m.note) : ''}`
+          + (m.hasPhoto ? ` <button class="link-button" type="button" data-defect-photo="${h(m.id)}">Фото</button>` : ' · без фото') + '</p>').join(''), 'done');
+      }
+      if (c.status === 'completed' && c.discrepancy) {
+        li('Ответ на акт', c.verdict?.at, `<p>${c.verdict ? (c.verdict.value === 'agreed' ? `${who} согласились` : `${who} не согласились${c.verdict.note ? ': ' + h(c.verdict.note) : ''}`)
+          : you ? 'Ждём вашего ответа — он выше.' : 'Ждём ответа продавца.'}</p>`, c.verdict ? 'done' : 'now');
+      }
+      if (found.length) {
+        const skus = [...new Set(found.map((m) => m.sku))];
+        const lines = skus.map((sku) => {
+          const ds = def.decisions.filter((d) => d.sku === sku);
+          const left = def.balances.filter((b) => b.sku === sku).reduce((a, b) => a + b.undecided, 0);
+          const name = found.find((m) => m.sku === sku).name || sku;
+          return `<p>«${h(name)}»: ` + (ds.map((d) => `${h(ACTIONS[d.action]?.title || d.action)}, ${n(d.qty)} шт. — ${d.status === 'done' ? h(DONE[d.action] || 'сделано') + ' ' + h(when(d.doneAt)) : 'ждёт склада'}`).join('; ')
+            + (left ? `${ds.length ? '; ' : ''}${n(left)} шт. ждут решения${you ? ' — в «Складе брака»' : ' продавца'}` : '') || 'решено') + '</p>';
+        });
+        const waiting = skus.some((sku) => def.balances.some((b) => b.sku === sku && b.undecided > 0) || def.decisions.some((d) => d.sku === sku && d.status !== 'done'));
+        li('Решение по браку этого товара', null, lines.join(''), waiting ? 'now' : 'done');
+      }
+      storyHtml = `<section class="detail-section"><h3>История расхождения</h3><ol class="steps story">${story.join('')}</ol></section>`;
+    }
+
     const items = data.items.map((r) => ({ ...r, finalized: r.accepted_qty != null, accepted: r.accepted_qty == null ? null : Number(r.accepted_qty) }));
     items.sort((a, b) => Number(b.finalized && b.accepted !== Number(b.declared_qty)) - Number(a.finalized && a.accepted !== Number(a.declared_qty)));
     const complete = items.every((r) => r.finalized);
@@ -1379,7 +1873,7 @@
       + (!complete ? '<p class="help" style="margin-bottom:16px">Приёмка ещё не закончена: расхождение появится в конце.</p>' : '')
       + `<section class="detail-section" style="margin-top:0"><h3>Позиции · ${items.length}</h3><div class="receipt-lines">${items.map((r) => {
         const dec = Number(r.declared_qty); const diff = r.finalized && r.accepted !== dec; const scale = Math.max(1, dec, r.accepted || 0);
-        return `<article class="receipt-item ${diff ? 'issue' : ''}"><h3>${h(productName(r))}</h3><span class="cell-sub">Артикул WB: ${h(wbIds(r.sku).join(', ') || 'не передан')}</span>${diff ? `<span class="row-note bad">Расхождение: ${n(r.accepted - dec)} шт.</span>` : ''}`
+        return `<article class="receipt-item ${diff ? 'issue' : ''}"><h3>${h(productName(r))}</h3><span class="cell-sub">Артикул WB: ${h(wbIds(r.sku).join(', ') || 'не передан')}${hasVw() ? ' · склад «' + h(vwName(r.virtual_warehouse_id)) + '»' : ''}</span>${diff ? `<span class="row-note bad">Расхождение: ${n(r.accepted - dec)} шт.</span>` : ''}`
           + `<div class="receipt-bars"><div class="receipt-bar"><span>Заявлено</span><div class="track"><i style="width:${dec / scale * 100}%"></i></div><span class="num">${n(dec)}</span></div><div class="receipt-bar"><span>Принято</span><div class="track accepted"><i style="width:${(r.accepted || 0) / scale * 100}%"></i></div><span class="num">${r.accepted == null ? '—' : n(r.accepted)}</span></div></div></article>`;
       }).join('')}</div></section>`;
 
@@ -1399,13 +1893,14 @@
       + `<div class="comment-form"><div class="field">${aboutPicker(c)}</div><label class="field"><span>Сообщение</span><textarea id="commentBody" rows="3" maxlength="1000"></textarea></label><div class="drawer-actions"><button class="button primary" type="button" id="commentSend">Отправить</button></div><p class="error-text" id="commentError"></p></div></section>`;
 
     return `<div class="drawer-meta">${badge(...inboundState({ status: c.status, arrived_at: c.arrivedAt, unplaced_qty: c.unplaced }))}<span>Оформлен ${h(when(c.createdAt))}</span></div>`
-      + verdict + stepsHtml + factsHtml + edit + `<div style="margin-top:24px">${lines}</div>` + docs + talk
+      + nextHtml + verdict + storyHtml + stepsHtml + factsHtml + edit + `<div style="margin-top:24px">${lines}</div>` + docs + talk
       + `<div class="drawer-actions"><a class="button" href="act_print.html?kind=receipt&id=${encodeURIComponent(c.id)}" target="_blank" rel="noopener">${icon('document')}Акт приёмки${c.discrepancy ? ' и расхождений' : ''}</a></div>`;
   }
   function wireInboundCard(c) {
     const again = () => { state.inboundDirty = true; return openInboundCard(c.id, true); };
     const busy = (btn, on) => { if (btn) btn.disabled = on; };
     if ($('inboundEdit')) $('inboundEdit').onclick = () => openInbound(c);
+    wireDefectPhotos($('drawerBody'));
     if ($('inboundCancel')) $('inboundCancel').onclick = () => {
       $('editActions').innerHTML = `<span class="help">Отменить привоз ${h(c.number)}? Склад перестанет его ждать.</span><button class="button" type="button" id="cancelYes">Да, отменить</button><button class="button ghost" type="button" id="cancelNo">Нет</button>`;
       $('cancelNo').onclick = () => openInboundCard(c.id, true);
@@ -1475,7 +1970,7 @@
   // edit — карточка привоза (GET /api/inbound/:id): правка до приезда машины.
   function openInbound(edit = null) {
     const run = openDrawer(edit ? 'Изменить привоз ' + edit.number : 'Привезти товар на склад', edit ? 'Привоз' : 'Новый приход');
-    const f = { grid: null, name: '', preview: null, busy: false, error: '', errorTitle: '', createNew: true };
+    const f = { grid: null, name: '', preview: null, busy: false, error: '', errorTitle: '', createNew: true, byRow: {} };
     const tomorrow = new Date(Date.now() + 864e5).toLocaleDateString('sv-SE');
     const v = (x) => h(x ?? '');
     $('drawerBody').innerHTML = `<form class="inbound-form" id="inboundForm"><p class="help">${edit ? 'Поменяйте, что изменилось. Список товаров меняется новым файлом — без файла останется прежний.' : 'Загрузите таблицу, по которой собираете товар: шаблон поставки WB, свою таблицу или выгрузку из 1С. Нужны количество и штрихкод, артикул или название.'}</p>
@@ -1494,6 +1989,8 @@
       weightKg: $('inboundWeight').value.trim().replace(',', '.') || null,
       carrier: $('inboundCarrier').value, vehicle: $('inboundVehicle').value, comment: $('inboundComment').value,
     });
+    // Строка со складом, которого у продавца нет (опечатка в файле).
+    const noVw = (l) => /^склада «/.test(l.error || '');
     function draw() {
       if (run !== state.drawerRun) return; const p = f.preview;
       $('inboundFileName').textContent = f.name || 'Файл не выбран';
@@ -1503,22 +2000,35 @@
       const s = p.summary; const newLines = p.lines.filter((l) => l.isNew).length;
       const products = s.products + (f.createNew ? s.newProducts : 0); const units = s.units + (f.createNew ? s.newUnits : 0);
       const lost = s.notMatched + (f.createNew ? 0 : newLines);
+      // Три группы строк (рецензия 04.10, рекомендация 7): готово, нужен ваш
+      // выбор, не попадут — проблемные наверху, чтобы не искать их в файле.
+      const group = (l) => (noVw(l) && !f.byRow[l.row] ? 1 : l.sku || (l.isNew && f.createNew) ? 2 : l.isNew ? 1 : 0);
+      const counts = [0, 0, 0]; p.lines.forEach((l) => { counts[group(l)] += 1; });
+      const lines = [...p.lines].sort((a, b) => group(a) - group(b) || a.row - b.row);
       $('inboundPreview').innerHTML = err
-        + `<div class="mini-stats">${mini('Товаров', products)}${mini('Штук', units)}${mini('Не попадут строк', lost)}</div>`
+        + `<div class="mini-stats">${mini('Штук в приход', units)}${mini('Готово строк', counts[2])}${mini('Нужен выбор', counts[1])}${mini('Не попадут строк', counts[0])}</div>`
         + (s.newProducts ? `<label class="check-line"><input type="checkbox" id="createNew" ${f.createNew ? 'checked' : ''}><span>Завести новые товары в каталог — ${counted(s.newProducts, 'товар', 'товара', 'товаров')}, ${n(s.newUnits)} шт.<small>Название, артикул и штрихкод возьмём из файла. Склад проверит карточки при приёмке.</small></span></label>` : '')
-        + (lost ? notice('Часть строк не попадёт в приход', 'Товара нет в вашем каталоге на складе, а для нового не хватает названия и артикула или штрихкода, или количество не целое.', true) : '')
+        + (lost ? notice('Часть строк не попадёт в приход', 'Товара нет в вашем каталоге на складе, а для нового не хватает названия и артикула или штрихкода, или количество не целое.'
+          + (p.lines.some(noVw) ? ' Или склада из столбца «Склад» у вас нет — выберите склад у строки.' : ''), true) : '')
         + table([{ title: 'Строка файла', cell: (l) => `<span class="cell-main" style="font-weight:400">${h([l.barcode, l.article, l.name].filter(Boolean).join(' · '))}</span><span class="cell-sub">строка ${l.row}</span>` },
           { title: 'Товар на складе', cell: (l) => (l.sku ? `<span class="cell-main" style="font-weight:400">${h(l.productName)}</span><span class="cell-sub">узнали по: ${h(l.by)}</span>`
             : l.isNew ? `<span class="row-note ${f.createNew ? 'warn' : 'bad'}" style="margin:0">${f.createNew ? 'Новый товар — заведём в каталог' : 'Нет в каталоге — не попадёт'}</span>`
-              : `<span class="row-note bad" style="margin:0">${h(l.error || 'Не узнали')}</span>`) },
-          { title: 'Шт.', cls: 'n', cell: (l) => (l.error ? '—' : n(l.qty)) }], p.lines)
+              : `<span class="row-note bad" style="margin:0">${h(l.error || 'Не узнали')}</span>`) + (noVw(l) && !f.byRow[l.row] ? '<span class="cell-sub">выберите склад в столбце «Склад»</span>' : '') },
+          { title: 'Шт.', cls: 'n', cell: (l) => (l.error ? '—' : n(l.qty)) },
+          // Склады продавца: строка ложится на выбранный склад (02.10.2026).
+          ...(p.lines.some((l) => l.vwName) ? [{ title: 'Склад', cell: (l) => dropdown('inb-vw-' + l.row, {
+            value: f.byRow[l.row] || (noVw(l) ? '' : l.vwName || 'Остальной товар'), neutral: true,
+            options: [...(noVw(l) && !f.byRow[l.row] ? [{ value: '', text: 'Выберите склад' }] : []),
+              ...[...(state.vw?.warehouses || []).map((w) => w.name), 'Остальной товар'].map((x) => ({ value: x, text: x }))],
+            onPick: (x) => { f.byRow[l.row] = x; send(false); } }) }] : [])], lines).replace('class="table-wrap"', 'class="table-wrap open-menus"')
+        + (p.lines.some((l) => l.vwName) ? '<p class="help" style="margin-top:8px">Разделить товар между складами — например, 500 на Озон и 300 на WB — можно в файле: столбец «Склад» и по строке на каждый склад.</p>' : '')
         + `<button class="button primary" type="submit" style="margin-top:16px;width:100%" ${f.busy || !products ? 'disabled' : ''}>${f.busy ? 'Отправляем…' : edit ? 'Сохранить с новым списком' : 'Отправить на склад'}</button>`;
       if ($('createNew')) $('createNew').onchange = (e) => { f.createNew = e.target.checked; draw(); };
     }
     async function send(apply) {
       f.busy = true; f.error = ''; draw();
       try {
-        const r = await api('/api/sellers/inbound', { method: 'POST', body: { grid: f.grid, apply, createNew: f.createNew, ...(edit ? { invoiceId: edit.id } : {}), ...details() } });
+        const r = await api('/api/sellers/inbound', { method: 'POST', body: { grid: f.grid, apply, createNew: f.createNew, warehouseByRow: f.byRow, ...(edit ? { invoiceId: edit.id } : {}), ...details() } });
         if (run !== state.drawerRun) return;
         if (apply) {
           let docNote = '';
@@ -1534,7 +2044,7 @@
       f.busy = false; draw();
     }
     $('inboundFile').onchange = (e) => {
-      const file = e.target.files[0]; e.target.value = ''; if (!file) return; f.preview = null; f.error = ''; f.name = file.name;
+      const file = e.target.files[0]; e.target.value = ''; if (!file) return; f.preview = null; f.error = ''; f.name = file.name; f.byRow = {};
       if (typeof XLSX === 'undefined') { f.error = 'Не загрузился модуль чтения Excel. Обновите страницу.'; f.errorTitle = 'Файл не принят'; draw(); return; }
       const reader = new FileReader();
       reader.onload = () => {
