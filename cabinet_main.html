@@ -431,6 +431,30 @@
   .j-export{background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:0 14px; color:var(--muted); font-size:14px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:6px; white-space:nowrap;}
   .j-export:hover{color:var(--text); border-color:var(--accent);}
 
+  /* «Сегодня» над чатом владельца: четыре цифры, каждая открывает свой список. */
+  .today{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; padding:12px 24px; border-bottom:1px solid var(--line); background:var(--panel);}
+  .today-tile{background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:10px 14px; text-align:left; color:var(--text); font:inherit; cursor:pointer; min-width:0;}
+  .today-tile:hover{border-color:var(--accent);}
+  .today-tile .lbl{font-size:13px; color:var(--muted);}
+  .today-tile .num{font-size:24px; font-weight:700; line-height:1.3;}
+  .today-tile .sub{font-size:13px; color:var(--muted); overflow-wrap:anywhere;}
+  .today-tile.zero .num{color:var(--muted);}
+  .today-tile.warn{border-color:rgba(201,166,107,0.6);} .today-tile.warn .num{color:var(--yellow);}
+  .today-tile.ok .num{color:var(--green); font-size:18px;}
+  /* Ширину берём у колонки чата, а не у окна: рядом может стоять панель контекста. */
+  .chat{container-type:inline-size;}
+  @container (max-width:700px){
+    .today{grid-template-columns:repeat(2,minmax(0,1fr)); padding:10px 12px; gap:8px;}
+    .today-tile{padding:8px 10px;} .today-tile .num{font-size:20px;}
+  }
+
+  /* Приход на телефоне: сначала список, форма — по «Новый приход» (рецензия 04.10). */
+  .rc-new{display:none;}
+  @media (max-width:640px){
+    .rc-new{display:inline-flex;}
+    .rc-form:not(.open){display:none;}
+  }
+
   /* STATS */
   .j-stats{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:18px;}
   .j-stat{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px;}
@@ -2387,6 +2411,8 @@
           </button>
         </div>
 
+        <div class="today" id="todayStrip" hidden></div>
+
         <div class="chat-body">
           <div class="chat-empty" id="chatEmpty">
             <div class="chat-empty-title">Спросите про склад</div>
@@ -2634,8 +2660,9 @@
             <div class="staff-sub">Товар привезли на склад — заведите приход. Грузчик увидит его у себя в «Приёмке», примет по факту и разложит по ячейкам. Приходы из 1С появляются здесь сами.</div>
           </div>
           <button type="button" class="wh-onboarding-btn" onclick="exportInvoices()">Выгрузить в Excel</button>
+          <button type="button" class="wh-onboarding-btn primary rc-new" id="receiptNewBtn" onclick="toggleReceiptForm()">+ Новый приход</button>
         </div>
-        <div class="rc-card" data-form>
+        <div class="rc-card rc-form" id="receiptForm" data-form>
           <div class="rc-top">
             <label class="rc-field"><span>Продавец</span>
               <select id="invoiceCompanySelect" class="mp-field" onchange="receiptCompanyChanged()"></select></label>
@@ -3086,7 +3113,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <script src="back.js?v=4901b838" defer></script>
 <script src="form-keys.js?v=02a92e0e" defer></script>
-<script src="cabinet_main.js?v=391353df" defer></script>
+<script src="cabinet_main.js?v=c66b3b1a" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->

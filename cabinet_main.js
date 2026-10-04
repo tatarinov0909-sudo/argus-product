@@ -241,6 +241,7 @@
     if(view==='acts'){ loadActs(); }
     if(view==='products'){ openProductsView(); }
     if(view==='chat'){
+      loadToday();
       loadChatHistory();
       const badge = document.getElementById('chatBadge');
       if(badge) badge.classList.remove('show');
@@ -963,6 +964,7 @@
       addInvoiceItemRow();
       await loadInvoicesList();
       suggestReceiptNumber();
+      toggleReceiptForm(false);
       showWhToast('Приход ' + number + ' создан: ' + units + ' шт. Грузчик увидит его в «Приёмке».');
     } catch(e){
       showWhToast('Приход не создан: ' + e.message);
@@ -972,6 +974,13 @@
   }
   window.submitInvoice = submitInvoice;
   window.addInvoiceItemRow = addInvoiceItemRow;
+  function toggleReceiptForm(open){
+    const form = document.getElementById('receiptForm');
+    const on = form.classList.toggle('open', open);
+    document.getElementById('receiptNewBtn').textContent = on ? 'Скрыть форму' : '+ Новый приход';
+    if(on) form.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+  window.toggleReceiptForm = toggleReceiptForm;
 
   let lastInvoices = [];
 
@@ -5035,6 +5044,39 @@
     badge.textContent = unread > 0 ? String(unread) : "";
     badge.classList.toggle("show", unread > 0);
   }
+  // «Сегодня» — четыре цифры над чатом (отчёт рецензии 03.10, раздел 30).
+  // Ничего своего не показывает: каждая плитка открывает существующий список.
+  async function loadToday(){
+    const box = document.getElementById('todayStrip');
+    if(!box) return;
+    let t;
+    try{ t = await apiFetch('/api/alerts/today'); } catch(e){ return; }
+    const n = (x, one, few, many) => x > 0 ? nfmt(x) + ' ' + pluralRu(x, one, few, many) : '';
+    const tile = (label, num, subs, view, cls) => '<button type="button" class="today-tile ' + cls + '" onclick="switchView(\'' + view + '\')">'
+      + '<div class="lbl">' + label + '</div><div class="num">' + num + '</div>'
+      + '<div class="sub">' + escapeHTML(subs.filter(Boolean).join(' · ') || 'нет') + '</div></button>';
+    const s = t.ship, r = t.receive, d = t.decide, x = t.exchange;
+    const ship = s.supplies + s.ready + s.onec;
+    const rec = r.arrivals + r.returns;
+    const dec = d.discrepancies + d.sellerRequests + d.recounts;
+    const exch = x.sync.length + (x.wbUnmapped > 0 ? 1 : 0);
+    box.innerHTML =
+      tile('Отгрузить', nfmt(ship), [n(s.supplies, 'поставка в сборке', 'поставки в сборке', 'поставок в сборке'),
+        n(s.ready, 'готова к отгрузке', 'готовы к отгрузке', 'готовы к отгрузке'),
+        n(s.onec, 'отгрузка из 1С', 'отгрузки из 1С', 'отгрузок из 1С')], 'supplies', ship ? '' : 'zero')
+      + tile('Принять', nfmt(rec), [r.arrived ? n(r.arrived, 'машина приехала', 'машины приехали', 'машин приехали') : (r.arrivals ? 'ждём ' + n(r.arrivals, 'привоз', 'привоза', 'привозов') : ''),
+        n(r.returns, 'возврат разобрать', 'возврата разобрать', 'возвратов разобрать')], 'receipts', rec ? '' : 'zero')
+      + tile('Ждут решения', nfmt(dec), [n(d.discrepancies, 'расхождение', 'расхождения', 'расхождений'),
+        n(d.sellerRequests, 'просьба продавца', 'просьбы продавцов', 'просьб продавцов'),
+        n(d.recounts, 'пересчёт', 'пересчёта', 'пересчётов')],
+        d.discrepancies ? 'journal' : d.recounts ? 'inv' : d.sellerRequests ? 'products' : 'journal', dec ? 'warn' : 'zero')
+      + tile('Обмен', exch ? nfmt(exch) : 'в порядке', [x.sync.length ? '1С: ' + n(x.sync.length, 'неполадка', 'неполадки', 'неполадок') : '',
+        x.wbUnmapped ? n(x.wbUnmapped, 'заказ WB не узнан', 'заказа WB не узнаны', 'заказов WB не узнаны') : '', exch ? '' : 'неполадок не видно'],
+        x.sync.length ? '1c' : 'mp', exch ? 'warn' : 'ok');
+    box.hidden = false;
+  }
+  window.loadToday = loadToday;
+
   async function loadChatHistory(){
     if(chatLoaded) return;
     chatLoaded = true;

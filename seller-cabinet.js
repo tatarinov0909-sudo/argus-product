@@ -368,7 +368,8 @@
   // ---------- Вход, запуск, меню ----------
   function renderNav() {
     const counts = { orders: state.data.orders ? new Set(state.data.orders.rows.filter(orderActive).map((r) => r.id)).size : 0,
-      defects: defectAttention() };
+      defects: defectAttention(),
+      documents: state.data.documents ? state.data.documents.rows.filter((r) => r.direction === 'in' && awaitsVerdict(r)).length : 0 };
     const current = PAGES[state.view]?.nav;
     document.querySelectorAll('[data-nav-list]').forEach((host) => {
       host.innerHTML = NAV.map(([key, title, ico]) => `<a href="#${key}" ${key === current ? 'aria-current="page"' : ''}>${icon(ico)}<span>${h(title)}</span>${counts[key] ? `<span class="nav-count">${n(counts[key])}</span>` : ''}</a>`).join('');
@@ -505,6 +506,10 @@
         state.fetchedAt[key] = new Date();
       }
       if (!state.data.orders && key !== 'orders') api(API_PATH.orders).then((o) => { state.data.orders = o; state.fetchedAt.orders = new Date(); renderNav(); }).catch(() => {});
+      // Приходы и брак — для «Нужен ваш ответ» и чисел в меню.
+      ['documents', 'defects'].forEach((k) => {
+        if (!state.data[k] && key !== k) api(API_PATH[k]).then((d) => { if (state.data[k]) return; state.data[k] = d; state.fetchedAt[k] = new Date(); renderNav(); refreshNeedAnswer(); }).catch(() => {});
+      });
       if (run !== state.viewRun) return;
       const ui = state.ui[state.view]; if (!ui.shown) ui.shown = state.prefs.rows;
       ({ products: renderProducts, returns: renderReturns, wb: renderWb, orders: renderOrders, supplies: renderSupplies, documents: renderDocuments, defects: renderDefects })[state.view]();
@@ -682,7 +687,7 @@
     const over = wbView() ? rows.filter(wbOver).length : 0;
     const ours = ourWb();
     const categories = [...new Set(rows.map((r) => meta(r.sku).category || 'Без категории'))].sort((a, b) => a.localeCompare(b, 'ru'));
-    $('view').innerHTML = segment('products') + vwNoticeHtml()
+    $('view').innerHTML = segment('products') + `<div id="needAnswer">${needAnswerHtml()}</div>` + vwNoticeHtml()
       + `<section class="stock-strip" aria-label="Состояние товаров">${stats.map(([label, value, note, cls]) => `<div class="stat ${cls || ''}"><div class="stat-label">${h(label)}</div><div class="stat-value">${value == null ? '—' : n(value) + '<small>шт.</small>'}</div><div class="stat-note">${h(note).replace('\n', '<br>')}</div></div>`).join('')}</section>`
       + (over ? `<button type="button" class="alert-line ${ui.extra.has('wbOver') ? 'on' : ''}" data-wb-over>${icon('alert')}<span><b>${counted(over, 'товар', 'товара', 'товаров')}:</b> на WB выставлено больше, чем доступно на складе — WB может продать то, чего нет. Обновите остатки на WB файлом «Остатки для WB».</span><span class="alert-action">${ui.extra.has('wbOver') ? 'Показаны только они' : 'Показать'}</span></button>` : '')
       + (short ? `<button type="button" class="alert-line ${ui.extra.has('shortage') ? 'on' : ''}" data-shortage>${icon('alert')}<span><b>${counted(short, 'товар', 'товара', 'товаров')}:</b> заказов больше, чем товара по учёту — склад проверяет, «Доступно» по ним ноль.</span><span class="alert-action">${ui.extra.has('shortage') ? 'Показаны только они' : 'Показать'}</span></button>` : '')
@@ -703,7 +708,7 @@
     const shortBtn = $('view').querySelector('[data-shortage]');
     if (shortBtn) shortBtn.onclick = () => { if (ui.extra.has('shortage')) ui.extra.delete('shortage'); else ui.extra.add('shortage'); ui.shown = state.prefs.rows; renderProducts(); };
     wireView(ui, renderProducts, renderProductRows, exportProducts);
-    wireVwNotices();
+    wireVwNotices(); wireNeedAnswer();
     const wbBtn = $('view').querySelector('[data-wb-stock]');
     wbBtn.onclick = () => runExport(wbBtn, exportWbStock);
     renderProductRows();
@@ -750,6 +755,43 @@
       api('/api/vwarehouses/transfers?open=1'), api('/api/vwarehouses/decisions?open=1')]);
     return { ...d, notes, transfers, decisions };
   }
+  // «Нужен ваш ответ» (рецензия 04.10, рекомендация 1): всё, что ждёт
+  // продавца, одним списком сверху — что, как давно и куда нажать. Сами
+  // ответы остаются, где были: переносы — ниже на этой странице, акты — в
+  // «Приходах», брак — в «Складе брака».
+  function needAnswerHtml() {
+    const v = state.vw || {}; const docs = state.data.documents?.rows || []; const def = state.data.defects;
+    const oldest = (list) => list.filter(Boolean).sort()[0];
+    const waited = (ts) => { const hrs = Math.floor((Date.now() - new Date(ts)) / 36e5);
+      return hrs < 1 ? 'меньше часа' : hrs < 48 ? counted(hrs, 'час', 'часа', 'часов') : counted(Math.floor(hrs / 24), 'день', 'дня', 'дней'); };
+    const asks = (v.transfers || []).filter((t) => t.status === 'waiting_seller');
+    const decisions = v.decisions || [];
+    const acts = docs.filter((r) => r.direction === 'in' && awaitsVerdict(r));
+    const defects = def ? def.balances.filter((b) => b.undecided > 0) : [];
+    const rows = [
+      [asks.length, counted(asks.length, 'просьба', 'просьбы', 'просьб') + ' склада перенести товар между вашими складами', oldest(asks.map((t) => t.requestedAt)), 'ask', 'Ответить ниже'],
+      [decisions.length, counted(decisions.length, 'спорный случай', 'спорных случая', 'спорных случаев') + ' по вашим складам: как записать', oldest(decisions.map((d) => d.createdAt)), 'decision', 'Решить ниже'],
+      [acts.length, counted(acts.length, 'приход', 'прихода', 'приходов') + (state.owner ? ' приняты не столько, сколько заявил продавец' : ' приняты не столько, сколько вы заявили: согласны?'), oldest(acts.map((r) => r.last_at || r.created_at)), 'acts', 'Открыть приходы'],
+      [defects.length, counted(defects.length, 'товар', 'товара', 'товаров') + ' в браке' + (state.owner ? ' без решения продавца' : ': решите, что делать с браком'), oldest(defects.map((b) => b.since)), 'defects', 'Открыть брак'],
+    ].filter((r) => r[0] > 0);
+    if (!rows.length) return '';
+    const total = rows.reduce((a, r) => a + r[0], 0);
+    return `<div class="notice warning need-answer">${icon('alert')}<div><strong>${state.owner ? 'Ждёт ответа продавца' : 'Нужен ваш ответ'} · ${n(total)}</strong>`
+      + rows.map(([, text, since, go, action]) => `<button type="button" class="na-row" data-na="${go}"><span>${h(text)}${since ? `<small>ждёт ${h(waited(since))}</small>` : ''}</span><span class="na-go">${h(action)} →</span></button>`).join('')
+      + '</div></div>';
+  }
+  function wireNeedAnswer() {
+    $('view').querySelectorAll('[data-na]').forEach((b) => { b.onclick = () => {
+      const go = b.dataset.na;
+      if (go === 'acts') { state.ui.documents.diff = 'answer'; location.hash = 'documents'; return; }
+      if (go === 'defects') { location.hash = 'defects'; return; }
+      $('view').querySelector(go === 'ask' ? '.vw-ask:not(.vw-decision)' : '.vw-decision')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }; });
+  }
+  function refreshNeedAnswer() {
+    const host = $('needAnswer'); if (!host || state.view !== 'products') return;
+    host.innerHTML = needAnswerHtml(); wireNeedAnswer();
+  }
   function vwNoticeHtml() {
     const v = state.vw; if (!v) return '';
     const mine = !state.owner;
@@ -780,7 +822,7 @@
     // отдельно и заметно: «обратите внимание» (владелец 02.10.2026).
     const unseen = (v.notes || []).filter((x) => x.unseen && !['vw_transfer_consent', 'vw_decision'].includes(x.kind));
     const block = (list, cls, ico, title, seenBtn) => (list.length ? `<div class="notice ${cls}">${icon(ico)}<div><strong>${title} · ${n(list.length)}</strong>`
-      + list.slice(0, 5).map((x) => `<p>${h(when(x.at))} — ${h(x.text)}</p>`).join('')
+      + list.slice(0, 5).map((x) => `<p class="note-line" title="Нажмите, чтобы прочитать целиком">${h(when(x.at))} — ${h(x.text)}</p>`).join('')
       + (list.length > 5 ? `<p>и ещё ${n(list.length - 5)}</p>` : '')
       + (mine ? `<div class="drawer-actions"><button class="button" type="button" data-vw-seen="${seenBtn}">Понятно</button></div>` : '') + '</div></div>' : '');
     const self = unseen.filter((x) => x.kind === 'ff_decided');
@@ -814,6 +856,8 @@
         sum.textContent = need + ' Сейчас: ' + n(got) + ' шт.';
       }; });
     });
+    // Длинные уведомления свёрнуты до двух строк — целиком по нажатию.
+    host.querySelectorAll('.note-line').forEach((p) => { p.onclick = () => p.classList.toggle('open'); });
     host.querySelectorAll('[data-vw-seen]').forEach((seen) => { seen.onclick = async () => {
       const self = seen.dataset.vwSeen === 'self';
       const list = state.vw.notes.filter((x) => x.unseen && !['vw_transfer_consent', 'vw_decision'].includes(x.kind) && (x.kind === 'ff_decided') === self);
@@ -1366,6 +1410,10 @@
       { title: 'Когда', cls: 'n', cell: (e) => h(when(e.at)) },
     ], rows.slice(0, ui.shown)) + moreFooter(ui, rows.length, ['документ', 'документа', 'документов'])
       : '<div class="table-wrap">' + empty('Ничего не найдено', state.data.defects.moves.length ? 'Под выбранные фильтры документов нет.' : 'Склад ещё не признавал ваш товар браком.', 'check') + '</div>';
+    wireDefectPhotos(host);
+    wireRows(host, ui, renderDefectRows);
+  }
+  function wireDefectPhotos(host) {
     host.querySelectorAll('[data-defect-photo]').forEach((b) => {
       b.onclick = async () => {
         // Окно открываем сразу, по нажатию: иначе браузер примет его за всплывающее.
@@ -1380,7 +1428,6 @@
         b.disabled = false;
       };
     });
-    wireRows(host, ui, renderDefectRows);
   }
   // Решение по браку: что сделать, сколько штук (можно часть), для уценки —
   // штрихкод карточки уценки на WB.
@@ -1416,11 +1463,14 @@
 
   // ---------- Карточки ----------
   function openDrawer(title, eyebrow) {
-    state.drawerRun += 1; $('drawerTitle').textContent = title; $('drawerEyebrow').textContent = eyebrow; $('drawerBody').innerHTML = loading;
+    state.drawerRun += 1; $('drawerTitle').textContent = title; $('drawerTitle').classList.remove('open'); $('drawerEyebrow').textContent = eyebrow; $('drawerBody').innerHTML = loading;
     if (!$('drawer').open) $('drawer').showModal();
     return state.drawerRun;
   }
   $('closeDrawer').onclick = () => $('drawer').close();
+  // Длинное название — три строки, целиком по нажатию: на телефоне числа
+  // карточки не должны уезжать под название (рецензия 04.10).
+  $('drawerTitle').onclick = () => $('drawerTitle').classList.toggle('open');
   $('drawer').addEventListener('close', () => { state.drawerRun += 1; });
   $('drawer').addEventListener('click', (e) => { if (e.target === $('drawer') && e.clientX < $('drawer').getBoundingClientRect().left) $('drawer').close(); });
   const mini = (label, value) => `<div><span>${h(label)}</span><strong>${value == null ? '—' : n(value)}</strong></div>`;
@@ -1434,6 +1484,18 @@
     { key: 'qty', title: 'Шт.', cls: 'n', cell: (x) => num(x.qty) },
   ];
 
+  // «Почему доступно именно столько» (рецензия 04.10, рекомендация 3): то же
+  // правило, что у сервера (sellers/stock.js), словами и с числами товара.
+  function whyAvailable(r) {
+    if (!('total' in r)) return '';
+    if (r.total == null) return '<p class="why-available">Доступно не посчитать: учёта по этому товару у склада пока нет.</p>';
+    const ord = Number(r.ordered || 0); const asm = Number(r.inAssembly || 0); const raw = Number(r.total) - ord - asm;
+    if (Math.max(0, raw) !== Number(r.available)) return '';
+    return `<p class="why-available"><b>Почему доступно ${n(r.available)}:</b> всего ${n(r.total)} − заказано ${n(ord)} − в сборке ${n(asm)}`
+      + (raw < 0 ? ` = ${n(raw)}. Заказов больше, чем товара, поэтому доступно 0 — склад сверяет.` : ` = ${n(raw)}.`)
+      + (Number(r.inTransit) ? ' «В пути» не вычитается: этот товар уже уехал со склада.' : '')
+      + (ord || asm ? ' Нажмите «Заказано» или «В сборке» — увидите сами заказы.' : '') + '</p>';
+  }
   async function openProduct(sku, bucket = null) {
     const r = (state.data.stock || []).find((x) => x.sku === sku)
       || (state.data.defects?.balances || []).find((x) => x.sku === sku) || { sku, name: sku };
@@ -1441,7 +1503,7 @@
     const ids = wbIds(sku);
     $('drawerBody').innerHTML = `<div class="drawer-meta"><span>Артикул WB <b>${h(ids.join(', ') || 'не передан')}</b></span><span>Штрихкод <b>${h(r.barcode || 'не указан')}</b></span>${vendorCodes(sku).length ? `<span>Артикул продавца <b>${h(vendorCodes(sku).join(', '))}</b></span>` : ''}</div>`
       + `<div class="mini-stats">${mini('Всего', r.total ?? null)}${miniBucket('ordered', Number(r.ordered || 0))}${miniBucket('assembly', Number(r.inAssembly || 0))}${miniBucket('transit', Number(r.inTransit || 0))}${mini('Доступно', r.available ?? null)}${mini('Брак', r.defective || 0)}</div>`
-      + productVwHtml(r)
+      + whyAvailable(r) + productVwHtml(r)
       + `<section class="detail-section" id="bucketSection"><h3>Какие заказы за этими числами</h3><div id="bucketOrders">${loading}</div></section>`
       + `<div class="drawer-actions"><button class="button" id="productOrders">Все заказы с этим товаром</button>${ids[0] ? `<a class="button ghost" href="${h(wbLink(ids[0]))}" target="_blank" rel="noopener">Карточка на WB</a>` : ''}</div>`
       + `<section class="detail-section"><h3>Движение товара</h3><div id="productHistory">${loading}</div></section>`
@@ -1617,7 +1679,8 @@
     const run = refresh ? state.drawerRun : openDrawer(row ? row.number : 'Приход', 'Приход');
     const scroll = $('drawerBody').scrollTop;
     try {
-      const [c, data] = await Promise.all([api('/api/inbound/' + encodeURIComponent(id)), api('/api/invoices/' + encodeURIComponent(id))]);
+      const [c, data] = await Promise.all([api('/api/inbound/' + encodeURIComponent(id)), api('/api/invoices/' + encodeURIComponent(id)),
+        state.data.defects ? null : api(API_PATH.defects).then((d) => { state.data.defects = d; }).catch(() => {})]);
       if (run !== state.drawerRun) return;
       $('drawerTitle').textContent = c.number;
       $('drawerBody').innerHTML = inboundCardHtml(c, data);
@@ -1670,6 +1733,57 @@
       }
     }
 
+    // Что дальше и от кого (рецензия 04.10, рекомендация 2): статус говорит,
+    // где приход сейчас, эта строка — кто его продолжит.
+    const you = !state.owner;
+    const next = c.status === 'open' && !c.arrivedAt ? 'склад ждёт машину.'
+      : c.status === 'open' ? 'склад начнёт приёмку.'
+      : c.status === 'in_progress' ? 'склад досчитает товар — расхождение, если будет, появится в конце.'
+      : c.discrepancy && !c.verdict ? (you ? 'ваш ответ на акт расхождений — согласны или нет. Без него вопрос по расхождению не закрыт.' : 'ответ продавца на акт расхождений.')
+      : c.verdict?.value === 'disputed' ? (you ? 'склад видит ваше несогласие и ответит в переписке ниже.' : 'продавец не согласен — ответьте ему в переписке ниже.')
+      : c.unplaced ? `склад разложит ${n(c.unplaced)} шт. по ячейкам.`
+      : null;
+    const nextHtml = `<p class="next-step">${next ? '<b>Дальше:</b> ' + h(next) : '<b>Готово:</b> товар на складе и учтён в остатках.'}</p>`;
+
+    // История расхождения одной лентой (рецензия 04.10, рекомендация 5): что
+    // ждали → что нашли → брак с фото → ответ на акт → решение и исполнение.
+    // Всё из уже существующих данных: приход, брак этого прихода, решения.
+    const def = state.data.defects;
+    const found = def ? def.moves.filter((m) => m.invoiceId === c.id) : [];
+    let storyHtml = '';
+    if ((c.status === 'completed' && c.discrepancy) || found.length) {
+      const story = [];
+      const li = (title, at, body, cls) => story.push(`<li class="${cls}"><strong>${h(title)}</strong>${at ? `<time>${h(when(at))}</time>` : ''}${body}</li>`);
+      li('Ожидали', c.createdAt, `<p>${you ? 'Вы заявили' : 'Продавец заявил'} ${n(c.declared)} шт.</p>`, 'done');
+      if (c.status === 'completed') {
+        const diffs = c.lines.filter((l) => l.accepted != null && l.accepted !== l.declared);
+        li('Нашли при приёмке', c.lastAt, `<p>Принято ${n(c.accepted)} шт.${c.discrepancy ? ` — на ${n(Math.abs(c.discrepancy))} ${c.discrepancy > 0 ? 'больше' : 'меньше'}` : ''}.</p>`
+          + diffs.slice(0, 5).map((l) => `<p>«${h(productName(l))}»: заявлено ${n(l.declared)}, принято ${n(l.accepted)}</p>`).join('')
+          + (diffs.length > 5 ? `<p>и ещё ${counted(diffs.length - 5, 'позиция', 'позиции', 'позиций')} — в списке ниже</p>` : ''), 'done');
+      }
+      if (found.length) {
+        li('Брак при приёмке', found[found.length - 1].at, found.map((m) => `<p>«${h(m.name || m.sku)}» — ${n(m.qty)} шт., ${h((BUCKET[m.bucket] || m.bucket).toLowerCase())}${m.note ? ': ' + h(m.note) : ''}`
+          + (m.hasPhoto ? ` <button class="link-button" type="button" data-defect-photo="${h(m.id)}">Фото</button>` : ' · без фото') + '</p>').join(''), 'done');
+      }
+      if (c.status === 'completed' && c.discrepancy) {
+        li('Ответ на акт', c.verdict?.at, `<p>${c.verdict ? (c.verdict.value === 'agreed' ? `${who} согласились` : `${who} не согласились${c.verdict.note ? ': ' + h(c.verdict.note) : ''}`)
+          : you ? 'Ждём вашего ответа — он выше.' : 'Ждём ответа продавца.'}</p>`, c.verdict ? 'done' : 'now');
+      }
+      if (found.length) {
+        const skus = [...new Set(found.map((m) => m.sku))];
+        const lines = skus.map((sku) => {
+          const ds = def.decisions.filter((d) => d.sku === sku);
+          const left = def.balances.filter((b) => b.sku === sku).reduce((a, b) => a + b.undecided, 0);
+          const name = found.find((m) => m.sku === sku).name || sku;
+          return `<p>«${h(name)}»: ` + (ds.map((d) => `${h(ACTIONS[d.action]?.title || d.action)}, ${n(d.qty)} шт. — ${d.status === 'done' ? h(DONE[d.action] || 'сделано') + ' ' + h(when(d.doneAt)) : 'ждёт склада'}`).join('; ')
+            + (left ? `${ds.length ? '; ' : ''}${n(left)} шт. ждут решения${you ? ' — в «Складе брака»' : ' продавца'}` : '') || 'решено') + '</p>';
+        });
+        const waiting = skus.some((sku) => def.balances.some((b) => b.sku === sku && b.undecided > 0) || def.decisions.some((d) => d.sku === sku && d.status !== 'done'));
+        li('Решение по браку этого товара', null, lines.join(''), waiting ? 'now' : 'done');
+      }
+      storyHtml = `<section class="detail-section"><h3>История расхождения</h3><ol class="steps story">${story.join('')}</ol></section>`;
+    }
+
     const items = data.items.map((r) => ({ ...r, finalized: r.accepted_qty != null, accepted: r.accepted_qty == null ? null : Number(r.accepted_qty) }));
     items.sort((a, b) => Number(b.finalized && b.accepted !== Number(b.declared_qty)) - Number(a.finalized && a.accepted !== Number(a.declared_qty)));
     const complete = items.every((r) => r.finalized);
@@ -1697,13 +1811,14 @@
       + `<div class="comment-form"><div class="field">${aboutPicker(c)}</div><label class="field"><span>Сообщение</span><textarea id="commentBody" rows="3" maxlength="1000"></textarea></label><div class="drawer-actions"><button class="button primary" type="button" id="commentSend">Отправить</button></div><p class="error-text" id="commentError"></p></div></section>`;
 
     return `<div class="drawer-meta">${badge(...inboundState({ status: c.status, arrived_at: c.arrivedAt, unplaced_qty: c.unplaced }))}<span>Оформлен ${h(when(c.createdAt))}</span></div>`
-      + verdict + stepsHtml + factsHtml + edit + `<div style="margin-top:24px">${lines}</div>` + docs + talk
+      + nextHtml + verdict + storyHtml + stepsHtml + factsHtml + edit + `<div style="margin-top:24px">${lines}</div>` + docs + talk
       + `<div class="drawer-actions"><a class="button" href="act_print.html?kind=receipt&id=${encodeURIComponent(c.id)}" target="_blank" rel="noopener">${icon('document')}Акт приёмки${c.discrepancy ? ' и расхождений' : ''}</a></div>`;
   }
   function wireInboundCard(c) {
     const again = () => { state.inboundDirty = true; return openInboundCard(c.id, true); };
     const busy = (btn, on) => { if (btn) btn.disabled = on; };
     if ($('inboundEdit')) $('inboundEdit').onclick = () => openInbound(c);
+    wireDefectPhotos($('drawerBody'));
     if ($('inboundCancel')) $('inboundCancel').onclick = () => {
       $('editActions').innerHTML = `<span class="help">Отменить привоз ${h(c.number)}? Склад перестанет его ждать.</span><button class="button" type="button" id="cancelYes">Да, отменить</button><button class="button ghost" type="button" id="cancelNo">Нет</button>`;
       $('cancelNo').onclick = () => openInboundCard(c.id, true);
