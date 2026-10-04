@@ -84,7 +84,11 @@ const stock = (companyId, extra) => [
         if (store.holdMixed) { store.holdMixed = false; await new Promise(resolve => { store.release = resolve; }); }
         data = { cells: 1 };
       }
-      if (p === '/api/cells/rows') data = rows;
+      if (p === '/api/cells/rows') data = store.largeMap ? Array.from({length:7}, (_, index) => ({
+        id:'large-row-' + index, row_num:index + 1, rack_count:81, tier_count:1,
+        blocks:Array.from({length:81}, (_, rack) => ({id:'large-block-' + index + '-' + rack,
+          rack_start:rack + 1,rack_end:rack + 1,tier_start:1,tier_end:1,state:'empty',stock:[]})),
+      })) : rows;
       if (p.endsWith('/contents')) data = { items: [] };
       if (p === '/api/dropzones') data = [{ id: 'test-zone', zone_num: 1, label: 'Тестовая зона', items: [] }];
       if (p === '/api/sync/status') data = {};
@@ -261,6 +265,48 @@ const stock = (companyId, extra) => [
         assert.equal(await page.locator('#view-1c').getAttribute('hidden'), null);
       }
       assert.ok(!managerStore.calls.some(call => ['/api/alerts/today', '/api/warehouses/me/readiness'].includes(call.path)));
+      await page.close();
+    }
+    // A long warehouse list must hand wheel scrolling to the page at its boundary.
+    // Merely checking scrollWidth misses an unreachable map below overflow:hidden.
+    for (const width of [375, 1440, 2048, 2560]) {
+      const {page, store: wheelStore} = await prepare('owner');
+      await page.setViewportSize({width, height:900});
+      wheelStore.largeMap = true;
+      wheelStore.warehouses[A] = Array.from({length:12}, (_, index) => ({
+        id:'fixture-vw-' + index,name:'Направление клиента ' + (index + 1),marketplace:'wb',keepSeparate:false,
+      }));
+      await page.locator('#nav-products').click(); await page.locator('#tab-warehouse').click();
+      await page.locator('#fpSvgWrap svg').waitFor();
+      await page.evaluate(() => renderWarehouseMap());
+      assert.equal(await page.locator('.wh-row-rect').count(), 7);
+      await page.locator('#warehouseVwWorkspace>summary').click();
+      await page.evaluate(id => setWarehouseVwCompany(id), A);
+      await page.waitForFunction(() => document.querySelector('#warehouseVwBody').textContent.includes('Направление клиента 12'));
+      const button = page.locator('#warehouseVwBody button.mp-act').first();
+      const style = await button.evaluate(el => {
+        const css = getComputedStyle(el), color = css.backgroundColor.match(/\d+/g).map(Number);
+        return {dark: Math.max(...color.slice(0,3)) < 100, height:el.getBoundingClientRect().height};
+      });
+      assert.ok(style.dark && style.height >= 44, 'VW action uses the dark theme and a usable target');
+      if(process.env.ARGUS_SCREENSHOT_DIR) await page.screenshot({animations:'disabled',path:path.join(process.env.ARGUS_SCREENSHOT_DIR,'warehouse-buttons-'+width+'.png')});
+      await page.locator('.stock-vw-content').evaluate(el => {el.scrollTop = el.scrollHeight;});
+      const content = await page.locator('.stock-vw-content').boundingBox();
+      await page.mouse.move(Math.min(width - 24, content.x + 100), Math.min(875, content.y + 160));
+      await page.mouse.wheel(0, 450);
+      await page.waitForFunction(() => document.querySelector('#view-warehouse').scrollTop > 100);
+      await page.locator('#view-warehouse').evaluate(el => {el.scrollTop = 0;});
+      const outer = await page.locator('#view-warehouse').boundingBox();
+      await page.mouse.move(outer.x + 3, Math.min(875, outer.y + 200));
+      await page.mouse.wheel(0, 450);
+      await page.waitForFunction(() => document.querySelector('#view-warehouse').scrollTop > 100);
+      await page.locator('#whMapWrap').scrollIntoViewIfNeeded();
+      assert.ok(await page.locator('#fpSvgWrap').isVisible(), 'warehouse map is reachable');
+      if(process.env.ARGUS_SCREENSHOT_DIR) await page.screenshot({animations:'disabled',path:path.join(process.env.ARGUS_SCREENSHOT_DIR,'warehouse-scroll-'+width+'.png')});
+      await page.evaluate(id => openSellerPanel(id), A);
+      await page.waitForFunction(() => document.querySelector('#wbWhBody button.mp-act'));
+      assert.ok(await page.locator('#wbWhBody button.mp-act').first().evaluate(el => Math.max(...getComputedStyle(el).backgroundColor.match(/\d+/g).slice(0,3).map(Number)) < 100), 'seller modal uses the same dark buttons');
+      if(process.env.ARGUS_SCREENSHOT_DIR) await page.screenshot({animations:'disabled',path:path.join(process.env.ARGUS_SCREENSHOT_DIR,'warehouse-modal-buttons-'+width+'.png')});
       await page.close();
     }
     assert.deepEqual(errors, []);
