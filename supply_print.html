@@ -325,6 +325,7 @@
     <button class="btn" type="button" id="printAllPick" hidden onclick="printOnly('pickall')">Сводный лист</button>
     <button class="btn" type="button" onclick="printOnly('pick')">Лист комплектации</button>
     <button class="btn ghost" type="button" onclick="printOnly('pack')">Упаковочный</button>
+    <button class="btn" type="button" onclick="printSupplyQr()">QR поставки 58×40</button>
     <button class="btn" type="button" onclick="printTape()">Этикетки WB на ленту 58×40</button>
     <button class="btn ghost" type="button" onclick="printOnly('stickers')">Этикетки WB на листе A4</button>
     <button class="btn ghost" type="button" onclick="printOnly(null)">Всё</button>
@@ -1024,20 +1025,64 @@
   function printTape(){
     const cards = [...document.querySelectorAll('.sheet[data-doc="stickers"] .sticker')].filter((c) => c.querySelector('img'));
     if(!cards.length){ alert('Этикеток от WB в этой поставке пока нет.'); return; }
-    const box = document.createElement('div');
-    box.id = 'tapeLabels';
+    const labels = [];
     cards.forEach((card) => {
       const label = document.createElement('div');
       label.className = 'tape';
       const copy = document.createElement('img');
       copy.src = card.querySelector('img').src; copy.alt = '';
       label.appendChild(copy);
-      [label, productLabel(card.dataset)].forEach((item) => {
-        const page = document.createElement('div');
-        page.className = 'tape-page';
-        page.appendChild(item);
-        box.appendChild(page);
-      });
+      labels.push(label, productLabel(card.dataset));
+    });
+    printLabels(labels);
+  }
+  window.printTape = printTape;
+
+  // На воротах сканируют QR всей поставки. Количество — число посылок
+  // всей поставки, независимо от отбора товаров для остальных документов.
+  function printSupplyQr(){
+    if(!LAST){ alert('Дождитесь загрузки поставки.'); return; }
+    const missing = LAST.filter((data) => !data.supply.mpBarcodeFile);
+    if(missing.length){
+      alert('QR от WB ещё не получен для поставки: ' + missing.map((data) => data.supply.number).join(', ')
+        + '. Если уже нажали «Уехала», обновите страницу документов и проверьте передачу в доставку на WB.');
+      return;
+    }
+    const labels = LAST.map((data) => {
+      const s = data.supply;
+      const label = document.createElement('div');
+      label.className = 'tape tape-supply';
+      const number = document.createElement('div');
+      number.className = 'supply-label-id';
+      number.textContent = s.mpSupplyId || s.mpBarcode || '';
+      const code = document.createElement('div');
+      code.className = 'supply-label-code';
+      const img = document.createElement('img');
+      img.src = 'data:image/svg+xml;base64,' + s.mpBarcodeFile;
+      img.alt = 'QR поставки WB';
+      code.appendChild(img);
+      const footer = document.createElement('div');
+      const count = document.createElement('div');
+      count.textContent = nf(data.totals.orders) + ' шт.';
+      const destination = document.createElement('div');
+      destination.className = 'supply-label-destination';
+      destination.textContent = s.destination || 'Направление не указано';
+      footer.append(count, destination);
+      label.append(number, code, footer);
+      return label;
+    });
+    printLabels(labels);
+  }
+  window.printSupplyQr = printSupplyQr;
+
+  function printLabels(labels){
+    const box = document.createElement('div');
+    box.id = 'tapeLabels';
+    labels.forEach((label) => {
+      const page = document.createElement('div');
+      page.className = 'tape-page';
+      page.appendChild(label);
+      box.appendChild(page);
     });
     const style = document.createElement('style');
     style.id = 'tapePage';
@@ -1053,14 +1098,18 @@
       + '.pl-bars{display:block;width:44mm;height:10mm;margin:0 auto;}'
       + '.pl-num{font-size:7pt;margin-bottom:.6mm;}'
       + '.pl-name{font-weight:700;}'
-      + '.pl-warn{font-weight:700;margin:3mm 0;}}'
+      + '.pl-warn{font-weight:700;margin:3mm 0;}'
+      + '.tape-supply{padding:1mm 2mm;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:.4mm;text-align:center;color:#000;font-family:var(--sans);font-size:7pt;line-height:1.1;}'
+      + '.supply-label-id{font-size:8pt;font-weight:700;white-space:nowrap;}'
+      + '.supply-label-code{min-height:0;display:flex;align-items:center;justify-content:center;}'
+      + '.supply-label-code img{width:auto;height:100%;max-width:30mm;max-height:30mm;aspect-ratio:1;object-fit:contain;}'
+      + '.supply-label-destination{font-size:6pt;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;overflow:hidden;}}'
       + '#tapeLabels{display:none;}';
     document.head.appendChild(style);
     document.body.appendChild(box);
     window.print();
     setTimeout(() => { box.remove(); style.remove(); }, 500);
   }
-  window.printTape = printTape;
 
   function printOnly(doc){
     const sheets = document.querySelectorAll('.sheet');
