@@ -460,7 +460,7 @@
           <div class="staff-date">${issued}</div>
           <div class="staff-state"><span class="staff-status ${s.active ? 'active' : 'revoked'}">${s.active ? 'активен' : 'отозван'}</span></div>
           <div class="staff-actions">
-            ${canPromote ? `<button type="button" class="staff-btn" onclick="makeManager('${escapeHTML(s.id)}', '${escapeHTML(s.name)}')">Сделать менеджером</button>` : ''}
+            ${canPromote ? `<button type="button" class="staff-btn" onclick="makeManager('${escapeHTML(s.id)}')">Сделать менеджером</button>` : ''}
             ${canEdit ? `<button type="button" class="staff-btn" onclick="editStaffGrants('${escapeHTML(s.id)}')">Права</button>` : ''}
             <button type="button" class="staff-btn ${s.active ? 'revoke' : 'restore'}" onclick="toggleStaffKey('${escapeHTML(s.id)}')">${s.active ? 'Отозвать' : 'Восстановить'}</button>
           </div>
@@ -620,7 +620,10 @@
 
   // Ключ выдали работнику, а человек оказался менеджером — так бывает.
   // Отзывать и выдавать новый незачем: код остаётся у человека, меняется роль.
-  async function makeManager(id, name){
+  // Имя — из загруженного списка, а не из кода кнопки: имя, вставленное в
+  // onclick, выполнялось как код в кабинете руководителя (проверка 05.10).
+  async function makeManager(id){
+    const name = ((staffMembers || []).find(s => s.id === id) || {}).name || '';
     if(!await askConfirm('Сделать «' + name + '» менеджером?\n\nКлюч останется прежним, '
       + 'кабинет с заказами откроется при следующем входе. Права можно отметить сразу после.')) return;
     try{
@@ -5181,6 +5184,12 @@
   function escapeHTML(str){
     return String(str == null ? '' : str).replace(/[&<>"']/g, (c) => ESCAPE_MAP[c]);
   }
+  // Значение для строки в одинарных кавычках внутри onclick="…": сначала
+  // экранируем для JavaScript, потом для HTML — браузер раскодирует атрибут
+  // до запуска кода, одного escapeHTML мало (проверка 05.10).
+  function jsArg(value){
+    return escapeHTML(JSON.stringify(String(value == null ? '' : value)).slice(1, -1).replace(/'/g, "\\'"));
+  }
 
   // Чат разговаривает с Оркестратором по-настоящему: вопрос уходит на
   // /api/agents/orchestrator/ask, тот зовёт Кладовщика, Кладовщик ищет товар
@@ -5360,7 +5369,7 @@
         n(s.ready, 'готова к отгрузке', 'готовы к отгрузке', 'готовы к отгрузке'), n(s.onec, 'отгрузка из 1С', 'отгрузки из 1С', 'отгрузок из 1С')]), view: 'supplies', action: 'Открыть поставки' },
       { title: 'Приёмка', value: nfmt(rec), detail: detail([r.arrived ? n(r.arrived, 'машина приехала', 'машины приехали', 'машин приехали')
         : n(r.arrivals, 'привоз ожидается', 'привоза ожидаются', 'привозов ожидаются'), n(r.returns, 'возврат разобрать', 'возврата разобрать', 'возвратов разобрать')]), view: 'receipts', action: 'Открыть приходы' },
-      { category: 'attention', title: 'Ждут решения', value: nfmt(dec), warn: dec > 0, detail: detail([n(d.discrepancies, 'расхождение', 'расхождения', 'расхождений'),
+      { category: 'attention', title: 'Ждут решения', value: nfmt(dec), warn: dec > 0, detail: detail([n(d.discrepancies, 'вопрос в журнале', 'вопроса в журнале', 'вопросов в журнале'),
         n(d.sellerRequests, 'заявка клиента на перенос', 'заявки клиентов на перенос', 'заявок клиентов на перенос'), n(d.recounts, 'пересчёт', 'пересчёта', 'пересчётов')]),
         view: d.discrepancies ? 'journal' : d.recounts ? 'inv' : d.sellerRequests ? 'products' : 'journal', action: 'Посмотреть решения' },
       { category: 'attention', title: 'Проблемы обмена', value: nfmt(exch), warn: exch > 0, detail: detail([x.sync.length ? '1С: ' + n(x.sync.length, 'неполадка', 'неполадки', 'неполадок') : '',
@@ -8243,7 +8252,7 @@
       const short = taken < r.qty && shortBy > 0
         ? '<div class="warn">не хватает ' + shortBy + ' шт</div>'
           + (d.supply && d.supply.virtualWarehouseName && d.supply.status === 'collecting'
-            ? '<span class="mp-act" onclick="takeFromOtherVw(\'' + id + '\', \'' + escapeHTML(r.sku).replace(/'/g, '&#39;') + '\', ' + shortBy + ')">Взять с другого склада продавца</span>' : '')
+            ? '<span class="mp-act" onclick="takeFromOtherVw(\'' + jsArg(id) + '\', \'' + jsArg(r.sku) + '\', ' + shortBy + ')">Взять с другого склада продавца</span>' : '')
         : '';
       return '<tr>'
         + '<td><div class="order-product-name">' + orderPhotoHtml(r.photo || p?.photo) + '<div>' + escapeHTML(r.name || '—')

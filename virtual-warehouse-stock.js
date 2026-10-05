@@ -234,9 +234,23 @@
         const buffer=await file.arrayBuffer();if(state.closed||run!==state.fileRun)return;let book;
         if(/\.csv$/i.test(file.name)){let text;try{text=new TextDecoder('utf-8',{fatal:true}).decode(buffer);}catch(_){text=new TextDecoder('windows-1251').decode(buffer);}book=window.XLSX.read(text.replace(/^\uFEFF/,''),{type:'string',raw:true});}
         else book=window.XLSX.read(new Uint8Array(buffer),{type:'array',cellDates:true,cellNF:true});
+        book.SheetNames.forEach(name=>fitRange(book.Sheets[name]));
         const valid=book.SheetNames.filter(name=>book.Sheets[name]?.['!ref']);if(!valid.length)throw new Error('В файле нет листа с данными.');
         book.SheetNames=valid;setSheet(valid[0],book);state.workbook=book;state.error='';render();
       }catch(error){state.error=error.message||'Не удалось прочитать файл.';notice();}
+    }
+    // Размер листа — по самим ячейкам, а не по служебной пометке файла
+    // (проверка 05.10): пометка меньше данных — строки молча терялись, больше
+    // (отформатированные пустые строки) — файл отвергался как «10 000 строк».
+    function fitRange(sheet){
+      if(!sheet)return;let r0=Infinity,c0=Infinity,r1=-1,c1=-1;
+      for(const key of Object.keys(sheet)){
+        if(key[0]==='!')continue;const cell=sheet[key];
+        if(!cell||((cell.v==null||cell.v==='')&&cell.f==null))continue;
+        const a=window.XLSX.utils.decode_cell(key);
+        if(a.r<r0)r0=a.r;if(a.c<c0)c0=a.c;if(a.r>r1)r1=a.r;if(a.c>c1)c1=a.c;
+      }
+      if(r1<0)delete sheet['!ref'];else sheet['!ref']=window.XLSX.utils.encode_range({s:{r:r0,c:c0},e:{r:r1,c:c1}});
     }
     function setSheet(name,book=state.workbook){
       const sheet=book.Sheets[name],range=window.XLSX.utils.decode_range(sheet['!ref']);

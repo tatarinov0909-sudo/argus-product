@@ -1323,12 +1323,14 @@
   // ---------- Персональный прайс, начисления и выставленные счета ----------
   let billMonth = null, billRun = 0, billInvoices = [], billNextCursor = null;
   const rub = (v) => v == null ? '—' : Number(v).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
+  // Сумма работы = количество × ставка строки, в копейках (проверка 05.10).
+  const workAmount = (qty, rate) => { if (qty == null || rate == null || !Number.isInteger(Number(qty))) return null; const c = BigInt(Math.round(Number(rate) * 100)) * BigInt(Number(qty)); return `${c / 100n}.${String(c % 100n).padStart(2, '0')}`; };
   const billDate = (v) => v ? String(v).slice(0,10).split('-').reverse().join('.') : '—';
   const BILL_STATUS = {unpaid:'Ожидает оплаты',partial:'Оплачен частично',paid:'Оплачен',overdue:'Просрочен'};
   const BILL_SERVICE = {receiving:'Приёмка',picking:'Сборка заказов',returns:'Возвраты',storage:'Хранение'};
   function billLinesTable(lines){
     return table([
-      {title:'Услуга',cell:l => '<span class="cell-main">' + h(l.title || BILL_SERVICE[l.service]) + '</span>' + ((l.details || []).length ? '<details class="bill-work"><summary>Работы и даты</summary>' + l.details.map(d => '<div>' + h(d.label || d.day || d.date || '') + ' · ' + n(d.qty) + ' · ' + h(rub(d.amount)) + '</div>').join('') + '</details>' : '')},
+      {title:'Услуга',cell:l => '<span class="cell-main">' + h(l.title || BILL_SERVICE[l.service]) + '</span>' + ((l.details || []).length ? '<details class="bill-work"><summary>Работы и даты</summary>' + l.details.map(d => '<div>' + h(d.label || d.day || d.date || '') + ' · ' + n(d.qty) + ' · ' + h(rub(d.amount ?? workAmount(d.qty, l.rate))) + '</div>').join('') + '</details>' : '')},
       {title:'Количество',cls:'n',cell:l => n(l.qty)},
       {title:'Единица',cell:l => h(l.unit)},
       {title:'Цена',cls:'n',cell:l => l.missingTariff ? 'Нет цены на дату работы' : l.rate == null ? 'По истории цен' : h(rub(l.rate))},

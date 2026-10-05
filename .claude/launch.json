@@ -4,8 +4,24 @@
     {
       "name": "argus-static",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8722"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8722"
+      ],
       "port": 8722
+    },
+    {
+      "name": "stand-web",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8099",
+        "--directory",
+        "C:/Users/tatar/Desktop/argus-handoff/stand/web"
+      ],
+      "port": 8099
     }
   ]
 }
