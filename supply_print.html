@@ -270,7 +270,9 @@
     /* Каждый документ — со своей страницы. */
     .sheet + .sheet{break-before:page;}
     .hide-on-print{display:none !important;}
-    @page{size:A4 portrait; margin:12mm;}
+    /* margin:0 убирает колонтитулы браузера; padding сохраняет отступы
+       документа на каждой странице, включая продолжение таблицы. */
+    @page{size:A4 portrait; margin:0; padding:12mm;}
     thead{display:table-header-group;} /* шапка таблицы повторяется на каждой странице */
   }
 </style>
@@ -990,6 +992,8 @@
   // Этикетки на ленту принтера этикеток (владелец 05.10.2026): каждая
   // этикетка — своя «страница» 58×40 мм без полей и без наших подписей,
   // ровно картинка WB. Размер тот, что Аргус просит у WB (wbWrite.orderStickers).
+  // Бумагу задаёт принтер: принудительный маленький @page на выбранном A4
+  // создаёт внешние поля, куда Chrome снова добавляет свои колонтитулы.
   // За этикеткой заказа — этикетка товара, как печатает кабинет WB
   // (владелец 05.10.2026): штрихкод товара, продавец, название, бренд, цвет,
   // размер, артикул. Бренда, цвета и размера Аргус не знает (ключам WB
@@ -1033,7 +1037,7 @@
     });
     const style = document.createElement('style');
     style.id = 'tapePage';
-    style.textContent = '@media print{@page{size:58mm 40mm;margin:0;}'
+    style.textContent = '@media print{@page{size:auto;margin:0;padding:0;}'
       + 'body>*:not(#tapeLabels){display:none !important;}'
       + '#tapeLabels{display:block !important;}'
       + '.tape{width:58mm;height:40mm;overflow:hidden;break-after:page;page-break-after:always;}'
