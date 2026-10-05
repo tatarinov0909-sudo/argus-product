@@ -1032,18 +1032,24 @@
       const copy = document.createElement('img');
       copy.src = card.querySelector('img').src; copy.alt = '';
       label.appendChild(copy);
-      box.appendChild(label);
-      box.appendChild(productLabel(card.dataset));
+      [label, productLabel(card.dataset)].forEach((item) => {
+        const page = document.createElement('div');
+        page.className = 'tape-page';
+        page.appendChild(item);
+        box.appendChild(page);
+      });
     });
     const style = document.createElement('style');
     style.id = 'tapePage';
     style.textContent = '@media print{@page{size:auto;margin:0;padding:0;}'
       + 'body>*:not(#tapeLabels){display:none !important;}'
       + '#tapeLabels{display:block !important;}'
-      + '.tape{width:58mm;height:40mm;overflow:hidden;break-after:page;page-break-after:always;}'
-      + '.tape:last-child{break-after:auto;page-break-after:auto;}'
+      + '.tape-page{width:100%;height:100vh;display:flex;align-items:center;justify-content:center;break-after:page;page-break-after:always;}'
+      + '.tape-page:last-child{break-after:auto;page-break-after:auto;}'
+      + '.tape{flex:none;width:58mm;height:40mm;overflow:hidden;}'
       + '.tape img{display:block;width:58mm;height:40mm;object-fit:contain;}'
-      + '.tape-product{box-sizing:border-box;padding:1.5mm 2.5mm;text-align:center;color:#000;font-family:Arial,sans-serif;font-size:6.6pt;line-height:1.18;}'
+      + '.tape-product{box-sizing:border-box;padding:1.5mm 2.5mm;display:flex;flex-direction:column;justify-content:center;text-align:center;color:#000;font-family:Arial,sans-serif;font-size:6.6pt;line-height:1.18;}'
+      + '.tape-product>*{flex-shrink:0;}'
       + '.pl-bars{display:block;width:44mm;height:10mm;margin:0 auto;}'
       + '.pl-num{font-size:7pt;margin-bottom:.6mm;}'
       + '.pl-name{font-weight:700;}'
