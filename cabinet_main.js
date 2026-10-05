@@ -5704,6 +5704,7 @@
     document.querySelectorAll('input[name="setSupplies"]').forEach(r => { r.checked = r.value === s.wb_supplies_by; });
     renderSettingsTimezone(s.timezone || 'Europe/Moscow');
     document.getElementById('setWbNames').value = (s.wb_names || []).join(', ');
+    document.getElementById('setWbSupplyLabel').value = s.wb_supply_label || '';
     document.getElementById('setVwReminders').checked = s.vw_reminders !== false;
     document.getElementById('setResult').textContent = s.setup_at ? '' : 'Ответьте на вопросы и нажмите «Сохранить».';
   }
@@ -5715,6 +5716,7 @@
       legalName: document.getElementById('setLegal').value.trim(),
       timezone: document.getElementById('setTz').value,
       wbNames: document.getElementById('setWbNames').value.split(',').map(x => x.trim()).filter(Boolean),
+      wbSupplyLabel: document.getElementById('setWbSupplyLabel').value.trim(),
       vwReminders: document.getElementById('setVwReminders').checked,
     };
     const stock = pick('setStock'), supplies = pick('setSupplies');
