@@ -274,6 +274,7 @@
     thead{display:table-header-group;} /* шапка таблицы повторяется на каждой странице */
   }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js" integrity="sha384-Kk5SjBOKprEnGfyBWfD2zROFd1Cu8kwOXxG2GIhYPcoDL2rBJS9P8Ud1ZMy4412a" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 </head>
 <style>
   .picker{background:#fff;border:1px solid #d6dbe0;border-radius:8px;margin:12px 16px;padding:12px 14px;}
@@ -501,7 +502,7 @@
         uniqueSkus: picking.length,
       };
       return pickingSheet(s, t, picking, packing.length > 0) + packingSheet(s, t, packing)
-        + stickersSheet(s, t, stickers);
+        + stickersSheet(s, t, stickers, packing);
     }).join('');
     renderPicker(list);
     paintModeButtons();
@@ -600,7 +601,10 @@
   // Без них посылку не примут: этикетка — это то, по чему WB узнаёт заказ.
   // QR поставки показывают на воротах. И то и другое приходит от площадки
   // при передаче поставки, здесь мы их только печатаем.
-  function stickersSheet(s, t, rows){
+  function stickersSheet(s, t, rows, packing = []){
+    // Товар заказа — для этикетки товара на ленте (printTape).
+    const goods = new Map(packing.map((r) => [r.orderNumber, r]));
+    const seller = s.sellerLegalName || s.companyName || '';
     if(!s.mpSupplyId && rows.length === 0) return '';
     // QR поставки WB отдаёт только после передачи в доставку — до этого
     // на его месте честная подсказка, а не пустая рамка.
@@ -618,14 +622,16 @@
       // Только картинка WB — в ней уже есть номер, штрихкод и QR (владелец
       // 05.10.2026: наши номера над ней лишние). Текст — лишь если WB
       // картинку не прислал, чтобы этикетка не вышла пустой.
-      ? '<div class="stickers">' + rows.map((x) => '<div class="sticker' + (x.file ? ' sticker-img' : '') + '">'
+      ? '<div class="stickers">' + rows.map((x) => { const g = goods.get(x.orderNumber) || {}; return '<div class="sticker' + (x.file ? ' sticker-img' : '') + '"'
+          + ' data-barcode="' + esc(g.barcode || '') + '" data-name="' + esc(g.name || '') + '"'
+          + ' data-article="' + esc(g.article || '') + '" data-seller="' + esc(seller) + '">'
           + (x.file
             ? '<img src="data:image/svg+xml;base64,' + esc(x.file) + '" alt="">'
             : '<div class="sticker-top"><span class="sticker-part">' + esc(x.partA || '') + '</span>'
               + '<span class="sticker-part">' + esc(x.partB || '') + '</span></div>'
               + '<div class="sticker-order">' + esc(x.orderNumber) + '</div>'
               + (x.barcode ? '<div class="sticker-code">' + esc(x.barcode) + '</div>' : ''))
-          + '</div>').join('') + '</div>'
+          + '</div>'; }).join('') + '</div>'
       : '<div class="doc-sub">Этикетки ещё не получены от площадки.</div>';
     return '<div class="sheet" data-doc="stickers">'
       + head(s, 'Этикетки площадки', rows.length + ' ' + plural(rows.length, 'этикетка', 'этикетки', 'этикеток'))
@@ -984,18 +990,46 @@
   // Этикетки на ленту принтера этикеток (владелец 05.10.2026): каждая
   // этикетка — своя «страница» 58×40 мм без полей и без наших подписей,
   // ровно картинка WB. Размер тот, что Аргус просит у WB (wbWrite.orderStickers).
+  // За этикеткой заказа — этикетка товара, как печатает кабинет WB
+  // (владелец 05.10.2026): штрихкод товара, продавец, название, бренд, цвет,
+  // размер, артикул. Бренда, цвета и размера Аргус не знает (ключам WB
+  // продавцов не открыты карточки) — строки пустые, как у WB без них.
+  function productLabel(d){
+    const label = document.createElement('div');
+    label.className = 'tape tape-product';
+    const line = (text, cls) => { const el = document.createElement('div'); if(cls) el.className = cls; el.textContent = text; label.appendChild(el); };
+    if(d.barcode && window.JsBarcode){
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      try {
+        window.JsBarcode(svg, d.barcode, { format: 'CODE128', displayValue: false, margin: 0, height: 60, width: 2 });
+        const w = svg.getAttribute('width'), h = svg.getAttribute('height');
+        if(!svg.getAttribute('viewBox')) svg.setAttribute('viewBox', '0 0 ' + parseFloat(w) + ' ' + parseFloat(h));
+        svg.setAttribute('preserveAspectRatio', 'none');
+        svg.removeAttribute('width'); svg.removeAttribute('height');
+        svg.setAttribute('class', 'pl-bars');
+        label.appendChild(svg);
+      } catch(e) { line('штрихкод не читается: ' + d.barcode, 'pl-warn'); }
+    } else line('штрихкода товара нет', 'pl-warn');
+    line(d.barcode || '', 'pl-num');
+    line(d.seller || '', 'pl-line');
+    line(String(d.name || '').replace(/\s*\d{8,14}\s*$/, ''), 'pl-name');
+    line('Бренд:', 'pl-line'); line('Цвет:', 'pl-line'); line('Размер:', 'pl-line'); line('Артикул:', 'pl-line');
+    line(d.article || '', 'pl-name');
+    return label;
+  }
   function printTape(){
-    const imgs = [...document.querySelectorAll('.sheet[data-doc="stickers"] .sticker img')];
-    if(!imgs.length){ alert('Этикеток от WB в этой поставке пока нет.'); return; }
+    const cards = [...document.querySelectorAll('.sheet[data-doc="stickers"] .sticker')].filter((c) => c.querySelector('img'));
+    if(!cards.length){ alert('Этикеток от WB в этой поставке пока нет.'); return; }
     const box = document.createElement('div');
     box.id = 'tapeLabels';
-    imgs.forEach((img) => {
+    cards.forEach((card) => {
       const label = document.createElement('div');
       label.className = 'tape';
       const copy = document.createElement('img');
-      copy.src = img.src; copy.alt = '';
+      copy.src = card.querySelector('img').src; copy.alt = '';
       label.appendChild(copy);
       box.appendChild(label);
+      box.appendChild(productLabel(card.dataset));
     });
     const style = document.createElement('style');
     style.id = 'tapePage';
@@ -1004,7 +1038,12 @@
       + '#tapeLabels{display:block !important;}'
       + '.tape{width:58mm;height:40mm;overflow:hidden;break-after:page;page-break-after:always;}'
       + '.tape:last-child{break-after:auto;page-break-after:auto;}'
-      + '.tape img{display:block;width:58mm;height:40mm;object-fit:contain;}}'
+      + '.tape img{display:block;width:58mm;height:40mm;object-fit:contain;}'
+      + '.tape-product{box-sizing:border-box;padding:1.5mm 2.5mm;text-align:center;color:#000;font-family:Arial,sans-serif;font-size:6.6pt;line-height:1.18;}'
+      + '.pl-bars{display:block;width:44mm;height:10mm;margin:0 auto;}'
+      + '.pl-num{font-size:7pt;margin-bottom:.6mm;}'
+      + '.pl-name{font-weight:700;}'
+      + '.pl-warn{font-weight:700;margin:3mm 0;}}'
       + '#tapeLabels{display:none;}';
     document.head.appendChild(style);
     document.body.appendChild(box);
