@@ -320,7 +320,8 @@
     <button class="btn" type="button" id="printAllPick" hidden onclick="printOnly('pickall')">Сводный лист</button>
     <button class="btn" type="button" onclick="printOnly('pick')">Лист комплектации</button>
     <button class="btn ghost" type="button" onclick="printOnly('pack')">Упаковочный</button>
-    <button class="btn ghost" type="button" onclick="printOnly('stickers')">Этикетки WB</button>
+    <button class="btn" type="button" onclick="printTape()">Этикетки WB на ленту 58×40</button>
+    <button class="btn ghost" type="button" onclick="printOnly('stickers')">Этикетки WB на листе A4</button>
     <button class="btn ghost" type="button" onclick="printOnly(null)">Всё</button>
   </div>
 </div>
@@ -974,6 +975,38 @@
   // Печать одного из двух документов: класс снимается сразу после печати,
   // чтобы страница не осталась наполовину спрятанной, если человек нажал
   // «отмена» в окне принтера.
+  // Этикетки на ленту принтера этикеток (владелец 05.10.2026): каждая
+  // этикетка — своя «страница» 58×40 мм без полей и без наших подписей,
+  // ровно картинка WB. Размер тот, что Аргус просит у WB (wbWrite.orderStickers).
+  function printTape(){
+    const imgs = [...document.querySelectorAll('.sheet[data-doc="stickers"] .sticker img')];
+    if(!imgs.length){ alert('Этикеток от WB в этой поставке пока нет.'); return; }
+    const box = document.createElement('div');
+    box.id = 'tapeLabels';
+    imgs.forEach((img) => {
+      const label = document.createElement('div');
+      label.className = 'tape';
+      const copy = document.createElement('img');
+      copy.src = img.src; copy.alt = '';
+      label.appendChild(copy);
+      box.appendChild(label);
+    });
+    const style = document.createElement('style');
+    style.id = 'tapePage';
+    style.textContent = '@media print{@page{size:58mm 40mm;margin:0;}'
+      + 'body>*:not(#tapeLabels){display:none !important;}'
+      + '#tapeLabels{display:block !important;}'
+      + '.tape{width:58mm;height:40mm;overflow:hidden;break-after:page;page-break-after:always;}'
+      + '.tape:last-child{break-after:auto;page-break-after:auto;}'
+      + '.tape img{display:block;width:58mm;height:40mm;object-fit:contain;}}'
+      + '#tapeLabels{display:none;}';
+    document.head.appendChild(style);
+    document.body.appendChild(box);
+    window.print();
+    setTimeout(() => { box.remove(); style.remove(); }, 500);
+  }
+  window.printTape = printTape;
+
   function printOnly(doc){
     const sheets = document.querySelectorAll('.sheet');
     sheets.forEach((el) => {
