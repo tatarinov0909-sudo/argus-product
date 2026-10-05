@@ -1212,7 +1212,7 @@
     { key: 'dest', title: 'Куда и когда', cell: (r) => `<span class="cell-main">${h(r.destination || 'пункт ещё не выбран')}</span>${r.shipDate ? `<span class="cell-sub">отгрузка ${h(day(dateOnly(r.shipDate)))}</span>` : ''}` },
     { key: 'units', title: 'Штук', cls: 'n', cell: (r) => num(r.units) },
     { key: 'status', title: 'Статус', cls: 'c', cell: (r) => badge(r.statusName, SUPPLY_STYLE[r.status] || '') },
-    { key: 'qr', title: 'QR', cls: 'c', cell: (r) => (r.mpBarcodeFile ? `<img class="qr-thumb" src="data:image/svg+xml;base64,${h(r.mpBarcodeFile)}" alt="QR поставки">` : `<span class="zero">${r.mpSupplyId ? 'после «Уехала»' : '—'}</span>`) },
+    { key: 'qr', title: 'QR', cls: 'c', cell: (r) => (r.mpBarcodeFile ? `<img class="qr-thumb" src="data:image/svg+xml;base64,${h(r.mpBarcodeFile)}" alt="QR поставки">` : `<span class="zero">${r.mpSupplyId ? 'после передачи в доставку' : '—'}</span>`) },
   ];
   function renderSupplies() {
     const ui = state.ui.supplies; const dests = [...new Set((state.data.supplies || []).map((r) => r.destination || '').filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru'));

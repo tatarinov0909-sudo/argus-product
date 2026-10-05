@@ -463,6 +463,7 @@
 
   /* Приход на телефоне: сначала список, форма — по «Новый приход» (рецензия 04.10). */
   .rc-new{display:none;}
+  .rc-dir{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px;}
   @media (max-width:640px){
     .rc-new{display:inline-flex;}
     .rc-form:not(.open){display:none;}
@@ -2744,13 +2745,17 @@
             <div class="staff-sub">Товар привезли на склад — заведите приход. Грузчик увидит его у себя в «Приёмке», примет по факту и разложит по ячейкам. Приходы из 1С появляются здесь сами.</div>
           </div>
           <button type="button" class="wh-onboarding-btn" onclick="exportInvoices()">Выгрузить в Excel</button>
-          <button type="button" class="wh-onboarding-btn primary rc-new" id="receiptNewBtn" onclick="toggleReceiptForm()">+ Новый приход</button>
+          <button type="button" class="wh-onboarding-btn primary rc-new" id="receiptNewBtn" onclick="toggleReceiptForm()">+ Приход / отгрузка</button>
         </div>
         <div class="rc-card rc-form" id="receiptForm" data-form>
+          <div class="rc-dir" role="group" aria-label="Что оформить">
+            <button type="button" class="jf-chip active" id="dirInBtn" aria-pressed="true" onclick="setReceiptDirection('in')">Приход</button>
+            <button type="button" class="jf-chip" id="dirOutBtn" aria-pressed="false" onclick="setReceiptDirection('out')">Отгрузка вручную</button>
+          </div>
           <div class="rc-top">
             <label class="rc-field"><span>Продавец</span>
               <select id="invoiceCompanySelect" class="mp-field" onchange="receiptCompanyChanged()"></select></label>
-            <label class="rc-field"><span>Номер прихода</span>
+            <label class="rc-field"><span id="invoiceNumberLabel">Номер прихода</span>
               <input type="text" id="invoiceNumberInput" class="mp-field" maxlength="60"
                      placeholder="Номер из документов поставщика или свой"></label>
           </div>
@@ -2762,7 +2767,12 @@
             <span class="grow"></span>
             <button type="button" class="wh-onboarding-btn primary" id="receiptSubmitBtn" onclick="submitInvoice()">Создать приход</button>
           </div>
+          <div class="ord-meta" id="outboundHint" hidden>Отгрузка товара не через маркетплейс — например, физлицу или продавцу на руки.
+            Грузчик увидит её у себя в сборке, соберёт из ячеек и нажмёт «Отгрузили — машина уехала»: товар уйдёт из ячеек.
+            «Всего» у продавца — число из 1С: оно изменится, когда отгрузку проведут в 1С.
+          </div>
         </div>
+        <div id="outboundList" hidden></div>
         <div>
           <div class="rc-list-head">
             <div class="staff-title" style="font-size:17px; margin:0;">Приходы</div>
@@ -3212,7 +3222,7 @@
 <script src="form-keys.js?v=cd462175" defer></script>
 <script src="billing-owner.js?v=4b78ada5" defer></script>
 <script src="virtual-warehouse-stock.js?v=d4ebc839" defer></script>
-<script src="cabinet_main.js?v=7db9518a" defer></script>
+<script src="cabinet_main.js?v=255d9d85" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->

@@ -988,15 +988,18 @@
     const field = document.getElementById('invoiceNumberInput');
     if(!field || field.value.trim()) return;
     const d = new Date();
-    const prefix = 'ПР-' + String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0')
+    const prefix = (receiptDirection === 'out' ? 'ОТГ-' : 'ПР-') + String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0')
       + String(d.getFullYear()).slice(2) + '-';
     let n = 1;
-    const taken = new Set((lastInvoices || []).map(inv => inv.number));
+    const taken = new Set((lastInvoices || []).concat(lastOutbound || []).map(inv => inv.number));
     while(taken.has(prefix + n)) n += 1;
     field.value = prefix + n;
   }
 
   let receiptBusy = false;
+  // Что оформляет форма: приход или отгрузку вручную — товар не через
+  // маркетплейс, например физлицу (владелец 05.10.2026).
+  let receiptDirection = 'in';
 
   async function submitInvoice(){
     if(receiptBusy) return;
@@ -1005,7 +1008,8 @@
     const rows = Array.from(document.querySelectorAll('#invoiceItemsInputs .rc-row'));
     rows.forEach(resolveReceiptRow);
     if(!companyId){ showWhToast('Выберите продавца.'); return; }
-    if(!number){ showWhToast('Впишите номер прихода.'); return; }
+    const out = receiptDirection === 'out';
+    if(!number){ showWhToast(out ? 'Впишите номер отгрузки.' : 'Впишите номер прихода.'); return; }
     // Строка без выбранного товара или без количества — не молча выбросить,
     // а сказать: иначе приход создавался бы без неё с сообщением «готово».
     const filled = rows.filter(r => r.querySelector('.rc-product').value.trim() || r.querySelector('.rc-qty').value.trim());
@@ -1028,16 +1032,18 @@
     const btn = document.getElementById('receiptSubmitBtn');
     btn.disabled = true;
     try{
-      await apiFetch('/api/invoices', {method:'POST', body:{companyId, number, items}});
+      await apiFetch('/api/invoices', {method:'POST', body:{companyId, number, items, direction: out ? 'out' : 'in'}});
       document.getElementById('invoiceNumberInput').value = '';
       document.getElementById('invoiceItemsInputs').innerHTML = '';
       addInvoiceItemRow();
       await loadInvoicesList();
       suggestReceiptNumber();
       toggleReceiptForm(false);
-      showWhToast('Приход ' + number + ' создан: ' + units + ' шт. Грузчик увидит его в «Приёмке».');
+      showWhToast(out
+        ? 'Отгрузка ' + number + ' создана: ' + units + ' шт. Грузчик увидит её в сборке и закроет «Отгрузили — машина уехала».'
+        : 'Приход ' + number + ' создан: ' + units + ' шт. Грузчик увидит его в «Приёмке».');
     } catch(e){
-      showWhToast('Приход не создан: ' + e.message);
+      showWhToast((out ? 'Отгрузка не создана: ' : 'Приход не создан: ') + e.message);
     }
     receiptBusy = false;
     btn.disabled = false;
@@ -1047,12 +1053,33 @@
   function toggleReceiptForm(open){
     const form = document.getElementById('receiptForm');
     const on = form.classList.toggle('open', open);
-    document.getElementById('receiptNewBtn').textContent = on ? 'Скрыть форму' : '+ Новый приход';
+    document.getElementById('receiptNewBtn').textContent = on ? 'Скрыть форму' : '+ Приход / отгрузка';
     if(on) form.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
   window.toggleReceiptForm = toggleReceiptForm;
 
+  // Приход или отгрузка вручную — одна форма, переключатель вверху.
+  function setReceiptDirection(dir){
+    if(dir !== receiptDirection){
+      receiptDirection = dir;
+      const field = document.getElementById('invoiceNumberInput');
+      if(field && /^(ПР|ОТГ)-\d{6}-\d+$/.test(field.value.trim())) field.value = '';
+      suggestReceiptNumber();
+    }
+    const outDir = dir === 'out';
+    document.getElementById('invoiceNumberLabel').textContent = outDir ? 'Номер отгрузки' : 'Номер прихода';
+    document.getElementById('receiptSubmitBtn').textContent = outDir ? 'Создать отгрузку' : 'Создать приход';
+    document.getElementById('outboundHint').hidden = !outDir;
+    for(const [id, on] of [['dirInBtn', !outDir], ['dirOutBtn', outDir]]){
+      const b = document.getElementById(id);
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-pressed', String(on));
+    }
+  }
+  window.setReceiptDirection = setReceiptDirection;
+
   let lastInvoices = [];
+  let lastOutbound = [];
 
   // Только приходы: заказы площадок и возвраты живут на своих экранах, а
   // здесь их тысячи — список прихода в них тонул.
@@ -1060,13 +1087,45 @@
     const wrap = document.getElementById('invoicesList');
     if(!wrap) return;
     try{
-      lastInvoices = await apiFetch('/api/invoices?direction=in');
+      [lastInvoices, lastOutbound] = await Promise.all([
+        apiFetch('/api/invoices?direction=in'),
+        apiFetch('/api/invoices?direction=out&source=1c').catch(() => []),
+      ]);
     } catch(e){
       wrap.innerHTML = '<div class="staff-empty">Не удалось загрузить приходы: ' + escapeHTML(e.message) + '</div>';
       return;
     }
     suggestReceiptNumber();
     renderReceiptsList();
+    renderOutboundList();
+  }
+
+  // Отгрузки не через маркетплейс — вручную и из 1С: в работе и уехавшие
+  // за две недели. Закрывает грузчик: «Отгрузили — машина уехала».
+  const OUT_STATE = { open: ['ждёт сборки', 'wait'], in_progress: ['собирается', 'busy'],
+    ready: ['собрана, ждёт машину', 'arrived'], shipped: ['уехала', 'active'] };
+  function renderOutboundList(){
+    const wrap = document.getElementById('outboundList');
+    if(!wrap) return;
+    const fresh = Date.now() - 14 * 864e5;
+    const rows = (lastOutbound || []).filter(i => i.source === '1c' && !i.supply_id
+      && (i.status !== 'shipped' || new Date(i.shipped_at || i.created_at).getTime() > fresh));
+    wrap.hidden = !rows.length;
+    wrap.innerHTML = rows.length
+      ? '<div class="rc-list-head"><div class="staff-title" style="font-size:17px; margin:0;">Отгрузки вручную и из 1С</div>'
+        + '<span class="ord-meta">в работе и уехавшие за 2 недели</span></div>'
+        + '<div class="staff-table rc-table"><div class="staff-row head rc-row-list"><div>Отгрузка</div><div>Продавец</div><div>Откуда и когда</div><div>Статус</div><div></div></div>'
+        + rows.map(inv => {
+          const [text, badge] = OUT_STATE[inv.status] || [inv.status, 'wait'];
+          return '<div class="staff-row rc-row-list">'
+            + '<div class="rc-cell-num"><span class="staff-key">' + escapeHTML(inv.number) + '</span></div>'
+            + '<div class="staff-name">' + escapeHTML(inv.company_name) + '</div>'
+            + '<div class="rc-cell-src"><div>' + (inv.external_id ? 'из 1С' : 'вручную') + ' · ' + escapeHTML(fmtDay(inv.created_at)) + '</div></div>'
+            + '<div class="rc-cell-state"><span class="staff-status ' + badge + '">' + escapeHTML(text) + '</span></div>'
+            + '<div class="rc-acts"><span class="staff-action" data-history-invoice="' + escapeHTML(inv.id) + '" data-history-label="' + escapeHTML(inv.number) + '">История</span></div>'
+            + '</div>';
+        }).join('') + '</div>'
+      : '';
   }
 
   /* Список приходов (владелец 27.09.2026): поиск по номеру, продавцу,
@@ -8389,14 +8448,19 @@
         +   (s.missing > 0 ? '<span class="sup-missing" title="Грузчик отметил на сборке — смотрите «Что внутри» и журнал">Нет товара: ' + s.missing + '</span>' : '')
         // Ещё до сборки: по учёту Аргуса товара на полках не хватит.
         +   (s.stockShort > 0 && !(s.missing > 0) ? '<span class="sup-missing sup-short" title="По учёту Аргуса на полках не хватает товара для этих заказов">Не хватит товара: ' + s.stockShort + '</span>' : '')
-        +   '<div class="sup-state ' + s.status + '">' + escapeHTML(s.statusName || s.status) + '</div>'
+        +   '<div class="sup-state ' + s.status + '">' + escapeHTML(supplyStateText(s)) + '</div>'
         + '</div>'
         + '<div class="sup-acts">'
         +   '<span class="mp-act" onclick="toggleSupplyInside(\'' + s.id + '\')">'
         +     (supplyOpen.has(s.id) ? 'Свернуть' : 'Что внутри') + '</span>'
         +   '<span class="mp-act" onclick="printSupply(\'' + s.id + '\')">Документы</span>'
+        // Сначала передать в доставку WB — получить QR поставки и грузить
+        // машину, потом «Уехала» (владелец 05.10.2026).
+        +   (s.status === 'ready' && s.mp_supply_id && !s.mp_delivered_at
+              ? '<span class="mp-act go" onclick="handoverWb(\'' + s.id + '\')">Передать в доставку WB</span>'
+              : '')
         +   (s.status === 'ready'
-              ? '<span class="mp-act go" onclick="shipSupply(\'' + s.id + '\')">Уехала</span>'
+              ? '<span class="mp-act' + (s.mp_supply_id && !s.mp_delivered_at ? '' : ' go') + '" onclick="shipSupply(\'' + s.id + '\')">Уехала</span>'
               : '')
         +   (s.status === 'collecting' && s.picked === 0
               ? '<span class="mp-act warn" onclick="disbandSupply(\'' + s.id + '\')">Разобрать</span>'
@@ -8483,6 +8547,38 @@
   }
   window.disbandSupply = disbandSupply;
 
+  // Состояние поставки словами, с шагами WB: передана в доставку (QR готов)
+  // → уехала → принята WB, когда WB принял все посылки (владелец 05.10.2026).
+  function supplyStateText(s){
+    if(s.status === 'shipped' && s.mp_supply_id && s.orders > 0){
+      if(s.accepted >= s.orders) return 'принята WB';
+      if(s.accepted > 0) return 'уехала · принято WB ' + s.accepted + ' из ' + s.orders;
+      return 'уехала, в пути';
+    }
+    if(s.status === 'ready' && s.mp_delivered_at) return 'передана в доставку · QR готов';
+    return s.statusName || s.status;
+  }
+
+  // Передать поставку в доставку на WB до отъезда: WB закрывает поставку и
+  // выдаёт её QR — его печатают и кладут в машину, потом «Уехала».
+  async function handoverWb(id){
+    const s = (supplyRows || []).find(x => x.id === id);
+    if(!s || !await askConfirm('Передать поставку «' + s.number + '» в доставку на WB?\n\n'
+      + 'WB закроет поставку и выдаст её QR — напечатайте его в «Документы» и положите в машину. '
+      + 'После этого заказы этой поставки на WB уже не поменять.')) return;
+    try{
+      const r = await apiFetch('/api/supplies/' + id + '/marketplace/deliver', { method: 'POST' });
+      showWhToast(r.delivered ? 'Поставка передана в доставку. QR поставки — в «Документы».'
+        : r.alreadyDelivered ? 'Она уже передана в доставку.'
+        : r.skipped === 'write_disabled' ? 'Статусы WB для этого продавца менять не разрешено — передайте поставку в кабинете WB.'
+        : 'WB не принял: ' + (r.error || 'без ответа'));
+      await loadSupplies();
+    } catch(e){
+      showWhToast('Не удалось передать: ' + e.message);
+    }
+  }
+  window.handoverWb = handoverWb;
+
   // Машина ушла — поставка и все её заказы становятся отгруженными. Назад
   // этого не отменить, поэтому спрашиваем.
   async function shipSupply(id){
@@ -8497,6 +8593,7 @@
       // Без этого всплывашка говорила только «уехала», а на WB поставка так и
       // висела «на сборке»: менеджер был уверен, что дело закрыто.
       const wb = mp.delivered ? ' На WB передана в доставку.'
+        : mp.alreadyDelivered ? ''
         : mp.error ? ' На WB передать не удалось: ' + mp.error
         : mp.skipped === 'write_disabled'
           ? ' На WB ничего не менялось: для этого продавца не разрешено «Менять статусы» — передайте поставку в кабинете WB руками.'

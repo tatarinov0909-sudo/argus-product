@@ -613,7 +613,7 @@
     // на его месте честная подсказка, а не пустая рамка.
     const qr = s.mpBarcodeFile
       ? '<img src="data:image/svg+xml;base64,' + esc(s.mpBarcodeFile) + '" alt="">'
-      : '<div class="qr-later">QR поставки появится после «Уехала» — WB выдаёт его при передаче в доставку</div>';
+      : '<div class="qr-later">QR поставки появится после «Передать в доставку WB» — WB выдаёт его только тогда</div>';
     const supplyBlock = s.mpSupplyId
       ? '<div class="supply-qr">' + qr
         + '<div><div>Поставка на площадке</div><b>' + esc(s.mpSupplyId) + '</b>'
