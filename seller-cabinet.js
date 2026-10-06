@@ -599,7 +599,7 @@
     { key: 'ordered', title: 'Заказано', cls: 'n', cell: (r) => bucketNum(r, 'ordered') },
     { key: 'assembly', title: 'В сборке', cls: 'n', cell: (r) => bucketNum(r, 'assembly') },
     { key: 'transit', title: 'В пути', cls: 'n', cell: (r) => bucketNum(r, 'transit') },
-    // Сколько WB уже принял из поставок за 14 дней (владелец 06.10.2026).
+    // Сколько WB принял за последние 3 дня (владелец 06.10.2026).
     { key: 'accepted', title: 'Принято WB', cls: 'n', cell: (r) => num(vwPart(r) ? null : Number(r.acceptedByWb || 0)) },
     { key: 'available', title: 'Доступно', cls: 'n', cell: (r) => num(availableQty(r), true) },
     { key: 'wbStock', title: 'На WB', cls: 'n', cell: wbStockCell },
@@ -683,7 +683,7 @@
       ['Заказано', s.ordered ?? sum(orderedQty), 'куплено на WB, ещё не в поставке'],
       ['В сборке', s.inAssembly ?? sum(assemblyQty), 'в поставке, склад собирает'],
       ['В пути', s.inTransit ?? sum(transitQty), 'уехало на WB, ещё не принято'],
-      ['Принято WB', s.acceptedByWb ?? 0, 'сортировочный центр принял, за 14 дней'],
+      ['Принято WB', s.acceptedByWb ?? 0, 'сортировочный центр принял, за 3 дня'],
       ['Доступно к продаже', s.available ?? (unknown ? null : sum(availableQty)), 'всего − заказано − в сборке − в пути' + (s.unknownCount ? ', по товарам с учётом' : ''), 'main'],
     ];
     const short = rows.filter(isShort).length;

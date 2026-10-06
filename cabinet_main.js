@@ -1657,7 +1657,7 @@
     const updated = (s) => (s.updatedAt ? (sellerStock.source === 'argus' ? 'пересчёт ' : '1С: ')
       + new Date(s.updatedAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
     box.innerHTML = '<div class="pr-scroll"><table class="pr-table pr-sellers"><colgroup><col class="stock-company-col"><col span="9" class="stock-summary-number-col"></colgroup><thead><tr><th>Клиент</th>'
-      + '<th class="num">Всего</th><th class="num">Заказано</th><th class="num">В сборке</th><th class="num">В пути</th><th class="num" title="Сортировочный центр WB принял, из поставок за 14 дней">Принято WB</th>'
+      + '<th class="num">Всего</th><th class="num">Заказано</th><th class="num">В сборке</th><th class="num">В пути</th><th class="num" title="Сортировочный центр WB принял за последние 3 дня">Принято WB</th>'
       + '<th class="num">Доступно</th><th class="num">Брак</th><th class="num">Не хватает</th><th class="num">В ячейках</th></tr></thead><tbody>'
       + rows.map(s => '<tr class="pr-click" tabindex="0" onclick="openSellerProducts(\'' + escapeHTML(s.companyId) + '\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();this.click()}">'
         + '<td><span class="pr-name">' + escapeHTML(s.name) + '</span><div class="sub">'
@@ -1966,7 +1966,7 @@
         + ':</b> на WB выставлено больше, чем свободно на складе — WB может продать то, чего нет. Где снять — под названием товара.</span>'
         + '<button type="button" class="home-link" onclick="setProductsFilter(\'wbOver\')">Показать только их</button></div>' : '')
       + '<div class="pr-scroll"><table class="pr-table pr-products"><colgroup><col class="stock-product-col"><col span="9" class="stock-product-number-col"><col class="stock-location-col"></colgroup><thead><tr><th>Товар</th>'
-      + '<th class="num">Всего</th><th class="num">Заказано</th><th class="num">В сборке</th><th class="num">В пути</th><th class="num" title="Сортировочный центр WB принял, из поставок за 14 дней">Принято WB</th>'
+      + '<th class="num">Всего</th><th class="num">Заказано</th><th class="num">В сборке</th><th class="num">В пути</th><th class="num" title="Сортировочный центр WB принял за последние 3 дня">Принято WB</th>'
       + '<th class="num">Доступно</th><th class="num">На WB</th><th class="num">Брак</th><th class="num">В ячейках</th><th>Где лежит</th></tr></thead><tbody>'
       + rows.map(r => {
         const cells = productCells(companyId, r.sku);
