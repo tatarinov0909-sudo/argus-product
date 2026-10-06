@@ -566,3 +566,14 @@ dialog::backdrop { background: rgba(8, 11, 18, .6); }
 .decide-option[aria-pressed="true"] { border-color: var(--accent); background: var(--hover); }
 .decide-option strong { display: block; font-size: 15px; font-weight: 500; }
 .decide-option span { display: block; font-size: 14px; color: var(--muted); margin-top: 3px; }
+
+/* Ноутбук (владелец 06.10.2026): правая часть таблицы товаров уезжала за
+   край. Подсказка под числом переносится, на ширине ноутбука — плотнее. */
+.grid .n .cell-sub { white-space: normal; min-width: 7em; max-width: 10em; margin-left: auto; margin-right: auto; }
+@media (min-width: 721px) and (max-width: 1600px) {
+  .grid { font-size: 16px; }
+  .grid th, .grid td { padding: 10px 10px; }
+  .grid th.n, .grid th.c { padding-left: 10px; padding-right: 10px; white-space: normal; min-width: 4.5em; }
+  .grid th { font-size: 14px; }
+  .grid .w-photo { width: 64px; }
+}

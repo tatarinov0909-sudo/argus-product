@@ -456,7 +456,7 @@
         <div class="staff-row ${s.active ? '' : 'revoked'}">
           <div class="staff-name">${escapeHTML(s.name)}
             ${rightsText ? `<div class="staff-rights">${escapeHTML(rightsText)}</div>` : ''}</div>
-          <div class="staff-key">${escapeHTML(s.key_code)}</div>
+          <div class="staff-key">${s.active ? keyCopyHtml(s.key_code) : escapeHTML(s.key_code)}</div>
           <div class="staff-date">${issued}</div>
           <div class="staff-state"><span class="staff-status ${s.active ? 'active' : 'revoked'}">${s.active ? 'активен' : 'отозван'}</span></div>
           <div class="staff-actions">
@@ -719,13 +719,13 @@
       const open = sellerRevokedOpen.has(c.id);
       const keyRow = (k) => `
         <div class="staff-row company-row company-key${k.active ? '' : ' revoked'}">
-          <div class="staff-date company-key-text">Ключ <span class="staff-key">${escapeHTML(k.keyCode)}</span>, выдан ${new Date(k.issuedAt).toLocaleDateString('ru-RU')}${k.active ? '' : ' · отозван'}</div>
+          <div class="staff-date company-key-text">Ключ <span class="staff-key">${k.active ? keyCopyHtml(k.keyCode) : escapeHTML(k.keyCode)}</span>, выдан ${new Date(k.issuedAt).toLocaleDateString('ru-RU')}${k.active ? '' : ' · отозван'}</div>
           <div class="staff-actions"><button type="button" class="staff-btn ${k.active ? 'revoke' : 'restore'}" onclick="toggleSellerKey('${k.id}')">${k.active ? 'Отозвать' : 'Восстановить'}</button></div>
         </div>`;
       return `
       <div class="staff-row company-row">
         <div class="staff-name">${escapeHTML(c.name)}</div>
-        <div class="staff-key">${active.length === 0 ? '<span class="staff-date">нет рабочего ключа</span>' : active.map(k => escapeHTML(k.keyCode)).join(', ')}</div>
+        <div class="staff-key">${active.length === 0 ? '<span class="staff-date">нет рабочего ключа</span>' : active.map(k => keyCopyHtml(k.keyCode)).join(' ')}</div>
         <button type="button" class="company-1c-link ${c.one_c_external_id ? 'linked' : ''}" onclick="openOneCMapping('${c.id}')">
           <span class="company-1c-dot" aria-hidden="true"></span>
           <span class="company-1c-name">${oneCName ? '1С: ' + escapeHTML(oneCName) : 'Связать с контрагентом 1С'}</span>
@@ -2834,6 +2834,7 @@
   // Сервер пишет так же (argus-api/src/cells/label.js). Имя ячейки из 1С
   // («01-01-001») не показываем — с картой оно не совпадает.
   function blockAddr(rowNum, block){
+    if(Number(rowNum) === 0) return 'Склад';   // общее место без ячеек (06.10.2026)
     const rackPart = block.r0 === block.r1 ? block.r0 : (block.r0 + '–' + block.r1);
     const tierPart = block.t0 === block.t1 ? block.t0 : (block.t0 + '–' + block.t1);
     return rowLabel(rowNum) + '.' + rackPart + '.' + tierPart;
@@ -2851,7 +2852,8 @@
   // Count existing addresses, not every slot in the enclosing rectangle:
   // imported layouts can have gaps, and a merged address remains one cell.
   function warehouseStats(){
-    const rows = Object.keys(rowMeta).map(Number).filter(n => (cellBlocks[n] || []).length).sort((a,b) => a-b);
+    // Ряд 0 — общее место «Склад», не ряд схемы (06.10.2026).
+    const rows = Object.keys(rowMeta).map(Number).filter(n => n !== 0 && (cellBlocks[n] || []).length).sort((a,b) => a-b);
     let rackTotal=0,cellTotal=0,occupiedUnits=0;
     const perRow=rows.map(rowNum=>{
       const blocks=cellBlocks[rowNum],total=blocks.length;
@@ -3392,11 +3394,27 @@
     populateCellStateFromApi(apiRows);
     populateDropzonesFromApi(apiZones);
 
-    const rowOrder = apiRows.map(r => r.row_num);
-    const aisleAfter = apiRows.map(r => r.aisle_after === true);
+    // Общее место «Склад» (адресное хранение выключено, 06.10.2026) — не ряд
+    // схемы: на карте его не рисуем, а говорим строкой над схемой.
+    const general = apiRows.find(r => r.general);
+    const drawRows = apiRows.filter(r => !r.general);
+    const rowOrder = drawRows.map(r => r.row_num);
+    const aisleAfter = drawRows.map(r => r.aisle_after === true);
     const zoneOrder = apiZones.map(z => ({id: z.id, label: zoneLabel(z.id)}));
     const svg = buildFloorplanSVGCustom(rowOrder, aisleAfter, zoneOrder);
-    const rowsHtml = apiRows.map(r => renderRackRowHtml(r.row_num)).join('');
+    const rowsHtml = drawRows.map(r => renderRackRowHtml(r.row_num)).join('');
+    const generalStock = general ? general.blocks.flatMap(b => b.stock || []) : [];
+    const generalUnits = generalStock.reduce((n, s) => n + Number(s.qty || 0), 0);
+    const generalSkus = new Set(generalStock.filter(s => Number(s.qty) !== 0).map(s => s.companyId + '|' + s.sku)).size;
+    const generalMinus = new Set(generalStock.filter(s => Number(s.qty) < 0).map(s => s.companyId + '|' + s.sku)).size;
+    const addressOff = whSettings ? whSettings.address_storage === false : Boolean(general);
+    const generalHtml = general && (addressOff || generalSkus)
+      ? '<div class="wh-search-banner wh-general-banner" role="status"><b>' + (addressOff ? 'Адресное хранение выключено.' : 'В общем месте «Склад» ещё лежит товар.') + '</b> '
+        + 'В общем месте «Склад»: ' + nfmt(generalUnits) + ' шт., ' + nfmt(generalSkus) + ' ' + pluralRu(generalSkus, 'товар', 'товара', 'товаров') + '. '
+        + (addressOff ? 'При приёмке и сборке ячейку не выбирают. ' : 'Разложите его по ячейкам. ')
+        + (generalMinus ? 'У ' + nfmt(generalMinus) + ' ' + pluralRu(generalMinus, 'товара', 'товаров', 'товаров') + ' собрано сверх учёта — минус, поправьте файлом остатков («Сверить с документом»). ' : '')
+        + '<a href="#" onclick="switchView(\'settings\'); return false;">Настройки</a></div>'
+      : '';
 
     document.getElementById('whMapWrap').innerHTML = `
       <div class="wh-map-shell">
@@ -3426,6 +3444,7 @@
             Настроить склад
           </button>
         </div>
+        ${generalHtml}
         <div class="wh-floorplan">
           <div class="wh-floorplan-head">
             <div class="wh-floorplan-title">Схема склада — ряды и проходы</div>
@@ -4608,8 +4627,8 @@
 
   // Строка работы: кто, что делает с каким документом и как идёт — «Джоник
   // принимает ПР-270926-1 · принято 5 из 8» → «Джоник принял ПР-270926-1 ·
-  // 8 из 8, расхождений нет»; строка состояния — этап и полоса. Внутри по
-  // порядку: начал, каждая позиция, паузы и выходы, комментарии, конец.
+  // 8 из 8, расхождений нет»; строка состояния — этап и полоса. Внутри —
+  // от последнего к первому: конец, позиции, паузы и выходы, начал.
   function journalWorkHtml(node, fresh, urgentIds){
     const w = node.work;
     const entries = node.entries;
@@ -4670,9 +4689,10 @@
       ? (sameDay ? times[times.length - 1] : firstAt.getDate() + ' ' + MONTHS_RU[firstAt.getMonth()] + ' ' + times[times.length - 1]) + ' – ' + times[0]
       : times[0];
     const bar = total > 0 ? '<span class="j-group-bar"><i style="width:' + Math.round(taken / total * 100) + '%"></i></span>' : '';
-    // Внутри — по порядку, от начала работы к концу. Ждущее решения — одной
-    // строкой-ссылкой: сама запись с кнопками стоит в ленте под работой.
-    const body = entries.slice().reverse().map(function(e){
+    // Внутри — последнее действие сверху, ниже — всё раньше, до начала работы
+    // (владелец 06.10.2026). Ждущее решения — одной строкой-ссылкой: сама
+    // запись с кнопками стоит в ленте под работой.
+    const body = entries.map(function(e){
       if(isWaiting(e)){
         return '<div class="j-step"><span class="j-step-time">' + formatEntryTime(e.created_at) + '</span>'
           + '<span>' + escapeHTML(e.urgent ? urgentText(e.action_text) : e.action_text) + '</span>'
@@ -5436,7 +5456,35 @@
     }
   }
   window.loadHome = loadHome;
+  // Полоса чисел, как у продавца (владелец 06.10.2026): товар всех продавцов
+  // склада — всего, заказано, в сборке, в пути, принято WB, доступно.
+  async function loadHomeStock(run = homeRun){
+    const host = document.getElementById('homeStockStrip');
+    if(!host) return;
+    let data;
+    try{ data = await apiFetch('/api/sellers/stock-summary'); } catch(e){ return; }
+    if(run !== homeRun) return;
+    const sellers = data.sellers || [];
+    if(!sellers.length){ host.hidden = true; return; }
+    const sum = (k) => sellers.reduce((n, s) => n + Number(s[k] || 0), 0);
+    const known = (k) => sellers.some(s => s[k] != null) ? sum(k) : null;
+    const tiles = [
+      ['Всего товара', known('total'), 'у ' + nfmt(sellers.length) + ' ' + pluralRu(sellers.length, 'продавца', 'продавцов', 'продавцов')],
+      ['Заказано', sum('ordered'), 'куплено на WB, ещё не в поставке'],
+      ['В сборке', sum('inAssembly'), 'в поставке, склад собирает'],
+      ['В пути', sum('inTransit'), 'уехало на WB, ещё не принято'],
+      ['Принято WB', sum('acceptedByWb'), 'сортировочный центр принял, за 3 дня'],
+      ['Доступно к продаже', known('available'), 'всего − заказано − в сборке − в пути', 'main'],
+    ];
+    host.innerHTML = tiles.map(([label, value, note, cls]) => '<div class="home-stat' + (cls ? ' ' + cls : '') + '">'
+      + '<div class="home-stat-label">' + escapeHTML(label) + '</div>'
+      + '<div class="home-stat-value">' + (value == null ? '—' : nfmt(value) + '<small>шт.</small>') + '</div>'
+      + '<div class="home-stat-note">' + escapeHTML(note) + '</div></div>').join('');
+    host.hidden = false;
+  }
+
   async function loadToday(run = homeRun){
+    loadHomeStock(run);
     const box = document.getElementById('todayStrip');
     if(!box) return;
     const t = await apiFetch('/api/alerts/today');
@@ -5796,6 +5844,7 @@
     document.getElementById('setWbNames').value = (s.wb_names || []).join(', ');
     document.getElementById('setWbSupplyLabel').value = s.wb_supply_label || '';
     document.getElementById('setVwReminders').checked = s.vw_reminders !== false;
+    document.getElementById('setAddressStorage').checked = s.address_storage !== false;
     document.getElementById('setResult').textContent = s.setup_at ? '' : 'Ответьте на вопросы и нажмите «Сохранить».';
   }
   async function saveSettings(){
@@ -5827,9 +5876,19 @@
           : 'Числа появятся после первого обмена с 1С.'));
       if(!ok) return;
     }
+    // Адресное хранение (06.10.2026): выключение переносит весь товар в «Склад».
+    const addressOn = document.getElementById('setAddressStorage').checked;
+    if(whSettings && (whSettings.address_storage !== false) !== addressOn){
+      const ok = await askConfirm(addressOn
+        ? 'Включить адресное хранение?\n\nТовар снова будут класть в ячейки и брать из ячеек. То, что лежит в общем месте «Склад», останется там, пока его не разложат по ячейкам.'
+        : 'Выключить адресное хранение?\n\nВесь товар склада перенесётся в одно общее место «Склад», ячейки станут пустыми. При приёмке и сборке ячейку выбирать не будут. Схему склада потом можно перестроить — товар в «Складе» не помешает.');
+      if(!ok) return;
+      body.addressStorage = addressOn;
+    }
     body.setupDone = true;
     try{
       whSettings = await apiFetch('/api/warehouses/me', { method: 'PATCH', body });
+      if(body.addressStorage !== undefined && typeof renderWarehouseMap === 'function') renderWarehouseMap().catch(() => {});
       document.getElementById('setResult').textContent = 'Сохранено.';
       document.getElementById('settingsBadge').classList.remove('show');
       loadWarehouseInfo();
@@ -6182,13 +6241,14 @@
   async function archiveVw(id){
     const context = sp, companyId = context.companyId;
     const w = (context.vw.warehouses || []).find(x => x.id === id); if(!w) return;
-    if(!await askConfirm('Убрать склад «' + w.name + '»?\n\nУбрать можно только пустой склад: товар с него сначала переносят на другой.')) return;
+    if(!await askConfirm('Убрать склад «' + w.name + '»?\n\nТовар никуда не перекладывают: он остаётся на тех же полках и просто числится в «Остальном товаре». '
+      + 'Незаконченные переносы и задания «переложить» по этому складу отменятся. Продавец получит уведомление.')) return;
     if(sp !== context) return;
     try{
-      await apiFetch('/api/vwarehouses/' + id + '?companyId=' + encodeURIComponent(companyId), { method: 'DELETE' });
+      const r = await apiFetch('/api/vwarehouses/' + id + '?companyId=' + encodeURIComponent(companyId), { method: 'DELETE' });
       delete vwCache[companyId];
       if(sp !== context) return;
-      showWhToast('Склад «' + w.name + '» убран.');
+      showWhToast('Склад «' + w.name + '» убран.' + (r && r.units ? ' Товар (' + nfmt(r.units) + ' шт.) остался на месте и теперь в «Остальном товаре».' : ''));
       await loadSellerVw();
     } catch(e){ showWhToast(e.message); }
   }
@@ -6210,6 +6270,13 @@
     catch(e){ showWhToast('Ключ: ' + code); }
   }
   window.copySellerKey = copySellerKey;
+  // Ключ сотрудника или продавца копируется нажатием (владелец 06.10.2026).
+  function keyCopyHtml(code){
+    return '<button type="button" class="key-copy" data-key="' + escapeHTML(code) + '" onclick="copySellerKey(this.dataset.key)"'
+      + ' title="Скопировать ключ" aria-label="Скопировать ключ ' + escapeHTML(code) + '">' + escapeHTML(code)
+      + '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="2" stroke="currentColor" stroke-width="1.5"/>'
+      + '<path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5" stroke="currentColor" stroke-width="1.5"/></svg></button>';
+  }
   function closeWbWarehouses(){ document.getElementById('wbWhModal').classList.remove('open'); }
   window.closeWbWarehouses = closeWbWarehouses;
   async function loadSellerPanelData(){
@@ -7786,7 +7853,9 @@
   function supplyVwChoices(companyId, isWb){
     const c = vwCache[companyId];
     if(!c){ vwOf(companyId).then(() => renderPartnerOrders(companyId)).catch(() => {}); return null; }
-    return isWb ? c.wbChoices : c.warehouses.concat([{ id: null, name: 'Остальной товар' }]);
+    const list = isWb ? c.wbChoices : c.warehouses.concat([{ id: null, name: 'Остальной товар' }]);
+    // «Весь товар продавца» — с любого его склада (владелец 06.10.2026).
+    return list.length > 1 ? [{ id: 'all', name: 'Весь товар продавца' }].concat(list) : list;
   }
   let pointsSearchTimer = null;
   const pointLabel = (p) => (p.officeType === 'sc' ? 'Сортировочный центр WB — ' : '')
@@ -8104,7 +8173,7 @@
         ${vwChoices.length > 1 ? `
         <select class="ord-place ord-vw" aria-label="Склад продавца, с которого собирать" onchange="setOrdersVw('${companyId}', this.value)">
           <option value=""${ordersVw ? '' : ' selected'} disabled>С какого склада продавца собирать</option>
-          ${vwChoices.map(c => `<option value="${c.id || 'main'}"${ordersVw === (c.id || 'main') ? ' selected' : ''}>Склад «${escapeHTML(c.name)}»</option>`).join('')}
+          ${vwChoices.map(c => `<option value="${c.id || 'main'}"${ordersVw === (c.id || 'main') ? ' selected' : ''}>${c.id === 'all' ? escapeHTML(c.name) : 'Склад «' + escapeHTML(c.name) + '»'}</option>`).join('')}
         </select>` : ''}
         <button class="wh-onboarding-btn${n > 0 && !needShipping && !mixedWh && !needVw ? ' primary' : ''}" type="button"
                 onclick="makeSupply('${companyId}')" ${n === 0 || needShipping || mixedWh || needVw ? 'disabled' : ''}>
@@ -8735,8 +8804,8 @@
     if(vwChoices.length > 1 && !vwPick){ showWhToast('Выберите, с какого склада продавца собирать поставку.'); return; }
     if(!await askConfirm(`Составить поставку: ${ready.length} ${pluralRu(ready.length, 'заказ', 'заказа', 'заказов')}`
       + ` продавца «${partner ? partner.companyName : ''}»` + (place ? ` — ${place}` : '') + (dayText ? `, отгрузка ${dayText}` : '')
-      + (vwPick ? `, со склада «${vwPick.name}»` : '')
-      + `?\n\nОна уйдёт на склад, грузчики начнут сборку` + (vwPick ? ' — только из товара этого склада.' : '.'))) return;
+      + (vwPick ? (vwPick.id === 'all' ? ', из всего товара продавца' : `, со склада «${vwPick.name}»`) : '')
+      + `?\n\nОна уйдёт на склад, грузчики начнут сборку` + (vwPick ? (vwPick.id === 'all' ? ' — с любого склада продавца.' : ' — только из товара этого склада.') : '.'))) return;
     supplyInFlight = true;
     const button = document.querySelector('.ord-actions button');
     if(button){ button.disabled = true; button.textContent = 'Составляем поставку…'; }
@@ -8869,6 +8938,7 @@
   }
 
   if(CAN_WAREHOUSE) apiFetch('/api/cells/rows').then(rows => {
+    // Общее место «Склад» — тоже повод показать карту: в нём лежит товар.
     if(rows.length > 0){
       document.getElementById('whOnboarding').style.display = 'none';
       renderWarehouseMap();

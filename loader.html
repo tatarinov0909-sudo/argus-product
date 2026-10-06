@@ -1914,7 +1914,9 @@
   // Адрес ячейки — «ряд.стеллаж.ярус», как на карте склада (решение владельца
   // 27.09.2026): «1.7.3» — ряд 1, стеллаж 7, ярус 3. Одна запись на весь
   // экран грузчика; сервер пишет так же (argus-api/src/cells/label.js).
+  // Ряд 0 — общее место «Склад»: адресное хранение выключено (06.10.2026).
   function formatBlockLabel(rowNum, block){
+    if(Number(rowNum) === 0) return 'Склад';
     const rackPart = block.rack_start === block.rack_end ? block.rack_start : (block.rack_start + '–' + block.rack_end);
     const tierPart = block.tier_start === block.tier_end ? block.tier_start : (block.tier_start + '–' + block.tier_end);
     return rowNum + '.' + rackPart + '.' + tierPart;
@@ -2433,7 +2435,11 @@
       wrap.innerHTML = '<div style="font-size:13px; color:var(--muted); text-align:center; padding:8px;">Свободных ячеек не нашлось — введите ячейку вручную или выберите на карте</div>';
       return;
     }
+    // Адресное хранение выключено: место одно — выбираем сразу, карта не нужна.
+    const generalOnly = options.length === 1 && options[0].reason === 'general';
+    document.getElementById('manualCellBtn').style.display = generalOnly ? 'none' : '';
     const noteText = {
+      general: 'общее место — без ячеек',
       same_sku: 'тот же товар уже здесь',
       near_company: 'рядом с товаром этого продавца',
       empty: 'свободно',
@@ -2450,6 +2456,7 @@
         <div class="cell-option-check"></div>
       </div>
     `).join('');
+    if(generalOnly) selectCellOption(options[0].blockId, options[0].label, 0);
   }
 
   /* ============================ Отбор ============================
@@ -2551,7 +2558,11 @@
         suggestion.item = { ...suggestion.item, id: item.id, remaining: item.left,
           alreadyPicked: item.declared_qty - item.left };
         suggestion.shortfall = Math.max(0, item.left - suggestion.totalAvailable);
+        // Без ячеек из «Склада» берут на все заказы товара сразу.
+        if(suggestion.addressOff && suggestion.cells[0]) suggestion.cells[0].available = Math.max(suggestion.cells[0].available, item.left);
       }
+      // Без ячеек нехватки нет: берут, сколько нужно, учёт уйдёт в минус.
+      if(suggestion.addressOff) suggestion.shortfall = 0;
       pickSuggestion = suggestion;
     } catch(e){
       const still = currentInvoice && currentInvoice.items[currentItemIndex];
@@ -2633,11 +2644,14 @@
       left -= take;
       if(take === 0 && !showAllPickCells){ hidden += 1; return ''; }
       const short = c.available < remaining;
+      // Без ячеек: по учёту в «Складе» меньше — берут всё равно, учёт уйдёт в минус.
+      const over = c.general && pickSuggestion.totalAvailable < remaining
+        ? ' · по учёту ' + Math.max(0, pickSuggestion.totalAvailable) + ', остальное сверх учёта' : '';
       return '<div class="cell-option" id="cell-' + i + '" onclick="selectPickCell(' + i + ')">'
-        + '<div><div class="cell-option-id">' + label + '</div>'
-        + '<div class="cell-option-note' + (short && take > 0 ? ' short' : '') + '">'
+        + '<div><div class="cell-option-id">' + escapeHTML(label) + '</div>'
+        + '<div class="cell-option-note' + (short && take > 0 || over ? ' short' : '') + '">'
         + (take > 0
-            ? 'взять ' + take + (short ? ' — здесь только ' + c.available + ' из ' + remaining : '')
+            ? 'взять ' + take + (short ? ' — здесь только ' + c.available + ' из ' + remaining : '') + over
             : 'здесь тоже есть: ' + c.available + ' шт')
         + '</div></div>'
         + cellInfoBtn(c.cellBlockId, label, 'pick', i)
@@ -2647,10 +2661,13 @@
           ? '<div class="cell-more" onclick="showAllPickCells = true; renderPickCells();">Ещё '
             + hidden + ' ' + pluralRu(hidden, 'ячейка', 'ячейки', 'ячеек') + ' с этим товаром</div>'
           : '');
+    // Место одно — выбрать сразу, не заставлять нажимать.
+    if(cells.length === 1 && !selectedCellBlockId) selectPickCell(0);
   }
   let showAllPickCells = false;
 
   function blockLabel(c){
+    if(c.label) return c.label;
     return formatBlockLabel(c.rowNum, { rack_start: c.rackStart, rack_end: c.rackEnd, tier_start: c.tierStart, tier_end: c.tierEnd });
   }
 
@@ -6740,7 +6757,7 @@
       picker.innerHTML = '<div style="font-size:13px; color:var(--muted);">Склад ещё не настроен</div>';
       return;
     }
-    picker.innerHTML = cellRows.map((row) =>
+    picker.innerHTML = cellRows.filter(row => !row.general).map((row) =>
       `<div class="map-row-bar" onclick="showMapRow(${row.row_num})">
          <div class="map-row-bar-num">${row.row_num}</div>
          <div class="map-row-bar-tag">ряд</div>
