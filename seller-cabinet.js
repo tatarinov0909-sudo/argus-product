@@ -599,6 +599,8 @@
     { key: 'ordered', title: 'Заказано', cls: 'n', cell: (r) => bucketNum(r, 'ordered') },
     { key: 'assembly', title: 'В сборке', cls: 'n', cell: (r) => bucketNum(r, 'assembly') },
     { key: 'transit', title: 'В пути', cls: 'n', cell: (r) => bucketNum(r, 'transit') },
+    // Сколько WB уже принял из поставок за 14 дней (владелец 06.10.2026).
+    { key: 'accepted', title: 'Принято WB', cls: 'n', cell: (r) => num(vwPart(r) ? null : Number(r.acceptedByWb || 0)) },
     { key: 'available', title: 'Доступно', cls: 'n', cell: (r) => num(availableQty(r), true) },
     { key: 'wbStock', title: 'На WB', cls: 'n', cell: wbStockCell },
     { key: 'defective', title: 'Брак', cls: 'n', hidden: true, cell: (r) => num(defectQty(r)) },
@@ -681,7 +683,8 @@
       ['Заказано', s.ordered ?? sum(orderedQty), 'куплено на WB, ещё не в поставке'],
       ['В сборке', s.inAssembly ?? sum(assemblyQty), 'в поставке, склад собирает'],
       ['В пути', s.inTransit ?? sum(transitQty), 'уехало на WB, ещё не принято'],
-      ['Доступно к продаже', s.available ?? (unknown ? null : sum(availableQty)), 'всего − заказано − в сборке' + (s.unknownCount ? ', по товарам с учётом' : ''), 'main'],
+      ['Принято WB', s.acceptedByWb ?? 0, 'сортировочный центр принял, за 14 дней'],
+      ['Доступно к продаже', s.available ?? (unknown ? null : sum(availableQty)), 'всего − заказано − в сборке − в пути' + (s.unknownCount ? ', по товарам с учётом' : ''), 'main'],
     ];
     const short = rows.filter(isShort).length;
     const over = wbView() ? rows.filter(wbOver).length : 0;
@@ -1592,11 +1595,13 @@
   function whyAvailable(r) {
     if (!('total' in r)) return '';
     if (r.total == null) return '<p class="why-available">Доступно не посчитать: учёта по этому товару у склада пока нет.</p>';
-    const ord = Number(r.ordered || 0); const asm = Number(r.inAssembly || 0); const raw = Number(r.total) - ord - asm;
+    const ord = Number(r.ordered || 0); const asm = Number(r.inAssembly || 0); const tr = Number(r.transitDeducted || 0);
+    const raw = Number(r.total) - ord - asm - tr;
     if (Math.max(0, raw) !== Number(r.available)) return '';
     return `<p class="why-available"><b>Почему доступно ${n(r.available)}:</b> всего ${n(r.total)} − заказано ${n(ord)} − в сборке ${n(asm)}`
+      + (tr ? ` − в пути ${n(tr)}` : '')
       + (raw < 0 ? ` = ${n(raw)}. Заказов больше, чем товара, поэтому доступно 0 — склад сверяет.` : ` = ${n(raw)}.`)
-      + (Number(r.inTransit) ? ' «В пути» не вычитается: этот товар уже уехал со склада.' : '')
+      + (tr ? ' Уехавшее на WB продать нельзя, пока WB его не принял.' : '')
       + (ord || asm ? ' Нажмите «Заказано» или «В сборке» — увидите сами заказы.' : '') + '</p>';
   }
   async function openProduct(sku, bucket = null) {

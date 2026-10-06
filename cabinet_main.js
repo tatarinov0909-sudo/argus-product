@@ -1656,8 +1656,8 @@
     const known = (f) => (rows.some(s => s[f] !== null) ? sum(f) : null);
     const updated = (s) => (s.updatedAt ? (sellerStock.source === 'argus' ? 'пересчёт ' : '1С: ')
       + new Date(s.updatedAt).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
-    box.innerHTML = '<div class="pr-scroll"><table class="pr-table pr-sellers"><colgroup><col class="stock-company-col"><col span="8" class="stock-summary-number-col"></colgroup><thead><tr><th>Клиент</th>'
-      + '<th class="num">Всего</th><th class="num">Заказано</th><th class="num">В сборке</th><th class="num">В пути</th>'
+    box.innerHTML = '<div class="pr-scroll"><table class="pr-table pr-sellers"><colgroup><col class="stock-company-col"><col span="9" class="stock-summary-number-col"></colgroup><thead><tr><th>Клиент</th>'
+      + '<th class="num">Всего</th><th class="num">Заказано</th><th class="num">В сборке</th><th class="num">В пути</th><th class="num" title="Сортировочный центр WB принял, из поставок за 14 дней">Принято WB</th>'
       + '<th class="num">Доступно</th><th class="num">Брак</th><th class="num">Не хватает</th><th class="num">В ячейках</th></tr></thead><tbody>'
       + rows.map(s => '<tr class="pr-click" tabindex="0" onclick="openSellerProducts(\'' + escapeHTML(s.companyId) + '\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();this.click()}">'
         + '<td><span class="pr-name">' + escapeHTML(s.name) + '</span><div class="sub">'
@@ -1669,13 +1669,14 @@
         + '<td class="num">' + nfmt(s.ordered) + '</td>'
         + '<td class="num">' + nfmt(s.inAssembly) + '</td>'
         + '<td class="num">' + nfmt(s.inTransit) + '</td>'
+        + '<td class="num">' + nfmt(s.acceptedByWb || 0) + '</td>'
         + '<td class="num strong">' + nfmt(s.available) + '</td>'
         + '<td class="num' + (s.defect ? ' warn' : '') + '">' + nfmt(s.defect) + '</td>'
         + '<td class="num' + (s.shortageCount ? ' warn' : '') + '">' + (s.shortageCount ? nfmt(s.shortageCount) + ' ' + pluralRu(s.shortageCount, 'товар', 'товара', 'товаров') : '—') + '</td>'
         + '<td class="num">' + nfmt(s.inCells) + '</td>'
         + '</tr>').join('')
       + (rows.length > 1 ? '<tr class="pr-total"><td>Итого</td><td class="num">' + nfmt(known('total')) + '</td><td class="num">' + nfmt(sum('ordered'))
-        + '</td><td class="num">' + nfmt(sum('inAssembly')) + '</td><td class="num">' + nfmt(sum('inTransit')) + '</td><td class="num">' + nfmt(known('available'))
+        + '</td><td class="num">' + nfmt(sum('inAssembly')) + '</td><td class="num">' + nfmt(sum('inTransit')) + '</td><td class="num">' + nfmt(sum('acceptedByWb')) + '</td><td class="num">' + nfmt(known('available'))
         + '</td><td class="num">' + nfmt(sum('defect')) + '</td><td class="num">' + (sum('shortageCount') ? nfmt(sum('shortageCount')) : '—') + '</td><td class="num">' + nfmt(sum('inCells')) + '</td></tr>' : '')
       + '</tbody></table></div>';
     labelStockTable(box);
@@ -1964,8 +1965,8 @@
       ? '<div class="pr-wb-alert" role="status"><span><b>' + nfmt(wbOverCount) + ' ' + pluralRu(wbOverCount, 'товар', 'товара', 'товаров')
         + ':</b> на WB выставлено больше, чем свободно на складе — WB может продать то, чего нет. Где снять — под названием товара.</span>'
         + '<button type="button" class="home-link" onclick="setProductsFilter(\'wbOver\')">Показать только их</button></div>' : '')
-      + '<div class="pr-scroll"><table class="pr-table pr-products"><colgroup><col class="stock-product-col"><col span="8" class="stock-product-number-col"><col class="stock-location-col"></colgroup><thead><tr><th>Товар</th>'
-      + '<th class="num">Всего</th><th class="num">Заказано</th><th class="num">В сборке</th><th class="num">В пути</th>'
+      + '<div class="pr-scroll"><table class="pr-table pr-products"><colgroup><col class="stock-product-col"><col span="9" class="stock-product-number-col"><col class="stock-location-col"></colgroup><thead><tr><th>Товар</th>'
+      + '<th class="num">Всего</th><th class="num">Заказано</th><th class="num">В сборке</th><th class="num">В пути</th><th class="num" title="Сортировочный центр WB принял, из поставок за 14 дней">Принято WB</th>'
       + '<th class="num">Доступно</th><th class="num">На WB</th><th class="num">Брак</th><th class="num">В ячейках</th><th>Где лежит</th></tr></thead><tbody>'
       + rows.map(r => {
         const cells = productCells(companyId, r.sku);
@@ -1995,6 +1996,7 @@
             + '<td class="num sub">—</td>'
             + '<td class="num">' + nfmt(w.inAssembly) + '</td>'
             + '<td class="num sub">—</td>'
+            + '<td class="num sub">—</td>'
             + '<td class="num strong">' + nfmt(w.available) + '</td>'
             + '<td class="num sub">—</td>'
             + '<td class="num' + (w.defect ? ' warn' : '') + '">' + nfmt(w.defect) + '</td>'
@@ -2007,6 +2009,7 @@
           + '<td class="num">' + nfmt(r.orderedNotInSupply) + '</td>'
           + '<td class="num">' + nfmt(r.inAssembly) + '</td>'
           + '<td class="num">' + nfmt(r.inTransit) + '</td>'
+          + '<td class="num">' + nfmt(r.acceptedByWb || 0) + '</td>'
           + '<td class="num strong">' + nfmt(r.sellerAvailable) + '</td>'
           + '<td class="num' + (r.wbOver > 0 ? ' warn' : '') + '">' + (r.wbListed == null ? '<span class="sub">—</span>' : nfmt(r.wbListed)) + '</td>'
           + '<td class="num' + (prDefect(r) ? ' warn' : '') + '">' + nfmt(prDefect(r)) + '</td>'
@@ -2033,13 +2036,13 @@
         'В сборке': w.inAssembly, 'Доступно': w.available, 'Брак': w.defect, 'Где лежит': where };
       return {
         'Товар': r.name, 'Артикул': r.sku, 'Штрихкод': r.barcode || '', 'Всего': r.totalKnown ? r.total : null,
-        'Заказано': r.orderedNotInSupply, 'В сборке': r.inAssembly, 'В пути': r.inTransit, 'Доступно': r.sellerAvailable,
+        'Заказано': r.orderedNotInSupply, 'В сборке': r.inAssembly, 'В пути': r.inTransit, 'Принято WB': r.acceptedByWb || 0, 'Доступно': r.sellerAvailable,
         'На WB': r.wbListed ?? null,
         'Брак': prDefect(r), 'В ячейках': prInCells(r), 'Не разложено': prNotPlaced(r),
         ...(hasVw ? { 'По складам': (r.byWarehouse || []).filter(x => x.onHand).map(x => x.name + ' ' + x.onHand).join(', ') } : {}),
         'Где лежит': where,
       };
-    }), vwLabel ? [40, 16, 16, 16, 11, 10, 10, 8, 30] : [40, 16, 16, 9, 10, 10, 9, 10, 9, 8, 11, 12].concat(hasVw ? [28] : [], [30]));
+    }), vwLabel ? [40, 16, 16, 16, 11, 10, 10, 8, 30] : [40, 16, 16, 9, 10, 10, 9, 11, 10, 9, 8, 11, 12].concat(hasVw ? [28] : [], [30]));
   }
   window.exportProducts = exportProducts;
 
