@@ -1662,7 +1662,9 @@
       + rows.map(s => '<tr class="pr-click" tabindex="0" onclick="openSellerProducts(\'' + escapeHTML(s.companyId) + '\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();this.click()}">'
         + '<td><span class="pr-name">' + escapeHTML(s.name) + '</span><div class="sub">'
         + escapeHTML([nfmt(s.productCount) + ' ' + pluralRu(s.productCount, 'товар', 'товара', 'товаров'), updated(s)].filter(Boolean).join(' · '))
-        + (s.unknownCount ? '<br>без числа учёта: ' + nfmt(s.unknownCount) : '') + '</div><span class="stock-row-action" aria-hidden="true">Открыть товары →</span></td>'
+        + (s.unknownCount ? '<br>без числа учёта: ' + nfmt(s.unknownCount) : '') + '</div>'
+        + (s.wbOver ? '<div class="stock-product-notes"><span>На WB больше, чем свободно: ' + nfmt(s.wbOver) + ' ' + pluralRu(s.wbOver, 'товар', 'товара', 'товаров') + '</span></div>' : '')
+        + '<span class="stock-row-action" aria-hidden="true">Открыть товары →</span></td>'
         + '<td class="num">' + nfmt(s.total) + '</td>'
         + '<td class="num">' + nfmt(s.ordered) + '</td>'
         + '<td class="num">' + nfmt(s.inAssembly) + '</td>'
@@ -1890,7 +1892,17 @@
     ['short', 'Заказов больше, чем товара', (r) => r.shortage],
     ['defect', 'Есть брак', (r) => prDefect(r) > 0],
     ['notPlaced', 'Не разложено по ячейкам', (r) => prNotPlaced(r) > 0],
+    ['wbOver', 'На WB больше, чем свободно', (r) => r.wbOver > 0],
   ];
+  // Где снять лишнее на WB: на складе WB, где выставлено больше всего
+  // (владелец 06.10.2026). Файл «Остатки для WB» ставит одно число на склад —
+  // при нескольких складах WB он только прибавит.
+  function wbAdvice(r){
+    const t = r.wbTop;
+    return 'На WB больше, чем свободно, на ' + nfmt(r.wbOver) + ' шт. '
+      + (t && t.amount >= r.wbOver ? 'Снимите на WB: «' + t.name + '» ' + nfmt(t.amount) + ' → ' + nfmt(t.amount - r.wbOver)
+        : 'Уменьшите количество на складах WB.');
+  }
 
   function productsShown(){
     const q = String(document.getElementById('productsSearch').value || '').trim().toLowerCase();
@@ -1907,7 +1919,8 @@
   function renderProducts(){
     const box = document.getElementById('productsList');
     const companyId = productsFor;
-    document.getElementById('productsFilters').innerHTML = PR_FILTERS.map(([key, label, test]) => {
+    document.getElementById('productsFilters').innerHTML = PR_FILTERS
+      .filter(([key, , test]) => key !== 'wbOver' || productsFilter === key || productRows.some(test)).map(([key, label, test]) => {
       const n = key === 'all' ? productRows.length : productRows.filter(test).length;
       return '<button type="button" class="jf-chip' + (productsFilter === key ? ' active' : '') + '" aria-pressed="' + (productsFilter === key) + '" onclick="setProductsFilter(\'' + key + '\')">'
         + escapeHTML(label) + (key === 'all' ? '' : ' · ' + nfmt(n)) + '</button>';
@@ -1946,9 +1959,14 @@
       ? nfmt(productRows.length) + ' ' + pluralRu(productRows.length, 'товар', 'товара', 'товаров') : '';
     if(productRows.length === 0){ box.innerHTML = '<div class="stock-empty"><b>У клиента пока нет товаров</b><span>Добавьте первый товар кнопкой «+ Добавить товар».</span></div>'; return; }
     if(rows.length === 0){ box.innerHTML = '<div class="stock-empty"><b>Товары не найдены</b><span>Измените поиск или выберите другой фильтр.</span></div>'; return; }
-    box.innerHTML = '<div class="pr-scroll"><table class="pr-table pr-products"><colgroup><col class="stock-product-col"><col span="7" class="stock-product-number-col"><col class="stock-location-col"></colgroup><thead><tr><th>Товар</th>'
+    const wbOverCount = productRows.filter(r => r.wbOver > 0).length;
+    box.innerHTML = (wbOverCount && productsFilter !== 'wbOver'
+      ? '<div class="pr-wb-alert" role="status"><span><b>' + nfmt(wbOverCount) + ' ' + pluralRu(wbOverCount, 'товар', 'товара', 'товаров')
+        + ':</b> на WB выставлено больше, чем свободно на складе — WB может продать то, чего нет. Где снять — под названием товара.</span>'
+        + '<button type="button" class="home-link" onclick="setProductsFilter(\'wbOver\')">Показать только их</button></div>' : '')
+      + '<div class="pr-scroll"><table class="pr-table pr-products"><colgroup><col class="stock-product-col"><col span="8" class="stock-product-number-col"><col class="stock-location-col"></colgroup><thead><tr><th>Товар</th>'
       + '<th class="num">Всего</th><th class="num">Заказано</th><th class="num">В сборке</th><th class="num">В пути</th>'
-      + '<th class="num">Доступно</th><th class="num">Брак</th><th class="num">В ячейках</th><th>Где лежит</th></tr></thead><tbody>'
+      + '<th class="num">Доступно</th><th class="num">На WB</th><th class="num">Брак</th><th class="num">В ячейках</th><th>Где лежит</th></tr></thead><tbody>'
       + rows.map(r => {
         const cells = productCells(companyId, r.sku);
         const where = cells.length
@@ -1957,7 +1975,7 @@
           : Number(r.cells) > 0 ? 'в ' + r.cells + ' ' + pluralRu(Number(r.cells), 'ячейке', 'ячейках', 'ячейках')
           : '<span class="sub">не в ячейках</span>';
         const notPlaced = prNotPlaced(r);
-        const short = r.shortage ? Number(r.orderedNotInSupply || 0) + Number(r.inAssembly || 0) - Number(r.total || 0) : 0;
+        const short = r.shortage ? Number(r.orderedNotInSupply || 0) + Number(r.inAssembly || 0) + Number(r.inTransit || 0) - Number(r.total || 0) : 0;
         const w = prVw(r);
         // Раскладка по складам — под названием, только ненулевые склады.
         const split = hasVw && !w && r.byWarehouse
@@ -1965,8 +1983,9 @@
         const name = '<td><div class="stock-product">' + productPhotoHtml(companyId, r.sku) + '<div class="stock-product-copy"><div class="stock-product-name">' + escapeHTML(r.name || '—') + '</div><div class="sub stock-product-identifiers">'
           + (r.sku ? '<span>Артикул: ' + escapeHTML(r.sku) + '</span>' : '') + (r.barcode ? '<span>Штрихкод: ' + escapeHTML(r.barcode) + '</span>' : '') + '</div>'
           + (split ? '<div class="sub pr-split">' + split + '</div>' : '')
-          + (!w && (short > 0 || notPlaced) ? '<div class="stock-product-notes">'
+          + (!w && (short > 0 || notPlaced || r.wbOver > 0) ? '<div class="stock-product-notes">'
             + (short > 0 ? '<span>Не хватает: ' + nfmt(short) + ' шт.</span>' : '')
+            + (r.wbOver > 0 ? '<span>' + escapeHTML(wbAdvice(r)) + '</span>' : '')
             + (notPlaced ? '<span>Не разложено по ячейкам: ' + nfmt(notPlaced) + ' шт.</span>' : '') + '</div>' : '')
           + (hasVw && r.byWarehouse && r.byWarehouse.some(x => x.onHand > 0) ? '<button type="button" class="stock-move" onclick="openTransfer('
             + escapeHTML(JSON.stringify(r.sku)) + ')">Перенести</button>' : '') + '</div></div></td>';
@@ -1977,6 +1996,7 @@
             + '<td class="num">' + nfmt(w.inAssembly) + '</td>'
             + '<td class="num sub">—</td>'
             + '<td class="num strong">' + nfmt(w.available) + '</td>'
+            + '<td class="num sub">—</td>'
             + '<td class="num' + (w.defect ? ' warn' : '') + '">' + nfmt(w.defect) + '</td>'
             + '<td class="num sub">—</td>'
             + '<td class="cells">' + where + '</td>'
@@ -1988,6 +2008,7 @@
           + '<td class="num">' + nfmt(r.inAssembly) + '</td>'
           + '<td class="num">' + nfmt(r.inTransit) + '</td>'
           + '<td class="num strong">' + nfmt(r.sellerAvailable) + '</td>'
+          + '<td class="num' + (r.wbOver > 0 ? ' warn' : '') + '">' + (r.wbListed == null ? '<span class="sub">—</span>' : nfmt(r.wbListed)) + '</td>'
           + '<td class="num' + (prDefect(r) ? ' warn' : '') + '">' + nfmt(prDefect(r)) + '</td>'
           + '<td class="num">' + nfmt(prInCells(r)) + '</td>'
           + '<td class="cells">' + where + '</td>'
@@ -2013,11 +2034,12 @@
       return {
         'Товар': r.name, 'Артикул': r.sku, 'Штрихкод': r.barcode || '', 'Всего': r.totalKnown ? r.total : null,
         'Заказано': r.orderedNotInSupply, 'В сборке': r.inAssembly, 'В пути': r.inTransit, 'Доступно': r.sellerAvailable,
+        'На WB': r.wbListed ?? null,
         'Брак': prDefect(r), 'В ячейках': prInCells(r), 'Не разложено': prNotPlaced(r),
         ...(hasVw ? { 'По складам': (r.byWarehouse || []).filter(x => x.onHand).map(x => x.name + ' ' + x.onHand).join(', ') } : {}),
         'Где лежит': where,
       };
-    }), vwLabel ? [40, 16, 16, 16, 11, 10, 10, 8, 30] : [40, 16, 16, 9, 10, 10, 9, 10, 8, 11, 12].concat(hasVw ? [28] : [], [30]));
+    }), vwLabel ? [40, 16, 16, 16, 11, 10, 10, 8, 30] : [40, 16, 16, 9, 10, 10, 9, 10, 9, 8, 11, 12].concat(hasVw ? [28] : [], [30]));
   }
   window.exportProducts = exportProducts;
 
@@ -5423,6 +5445,8 @@
     const rec = r.arrivals + r.returns;
     const dec = d.discrepancies + d.sellerRequests + d.recounts;
     const exch = x.sync.length + (x.wbUnmapped > 0 ? 1 : 0);
+    const wbOver = x.wbOver || [];
+    const wbOverItems = wbOver.reduce((sum, o) => sum + o.count, 0);
     renderHomeRows([
       { title: 'Отгрузки', value: nfmt(ship), detail: detail([n(s.supplies, 'поставка в сборке', 'поставки в сборке', 'поставок в сборке'),
         n(s.ready, 'готова к отгрузке', 'готовы к отгрузке', 'готовы к отгрузке'), n(s.onec, 'отгрузка из 1С', 'отгрузки из 1С', 'отгрузок из 1С')]), view: 'supplies', action: 'Открыть поставки' },
@@ -5434,6 +5458,10 @@
       { category: 'attention', title: 'Проблемы обмена', value: nfmt(exch), warn: exch > 0, detail: detail([x.sync.length ? '1С: ' + n(x.sync.length, 'неполадка', 'неполадки', 'неполадок') : '',
         x.wbUnmapped ? n(x.wbUnmapped, 'заказ WB не сопоставлен', 'заказа WB не сопоставлены', 'заказов WB не сопоставлены') : '', exch ? '' : 'Неполадок не видно']),
         view: x.sync.length ? '1c' : 'mp', action: 'Проверить обмен' },
+      // На WB выставлено больше, чем свободно (владелец 06.10.2026).
+      { category: 'attention', title: 'На WB больше, чем свободно', value: nfmt(wbOverItems), warn: wbOverItems > 0,
+        detail: wbOver.length ? wbOver.map(o => o.name + ': ' + n(o.count, 'товар', 'товара', 'товаров')).join(' · ') : 'Расхождений нет',
+        view: 'products', action: 'Посмотреть товары' },
       { title: 'Переписка с клиентами', value: '—', detail: 'Комментарии и документы по каждому приходу', view: 'receipts', action: 'Открыть приходы' },
     ]);
   }
@@ -8455,12 +8483,13 @@
         +     (supplyOpen.has(s.id) ? 'Свернуть' : 'Что внутри') + '</span>'
         +   '<span class="mp-act" onclick="printSupply(\'' + s.id + '\')">Документы</span>'
         // Сначала передать в доставку WB — получить QR поставки и грузить
-        // машину, потом «Уехала» (владелец 05.10.2026).
-        +   (s.status === 'ready' && s.mp_supply_id && !s.mp_delivered_at
+        // машину; «Уехала» — только после (владелец 05–06.10.2026). Запись
+        // на WB выключена — передают в кабинете WB, «Уехала» сразу.
+        +   (s.status === 'ready' && s.mp_supply_id && !s.mp_delivered_at && s.mp_write
               ? '<span class="mp-act go" onclick="handoverWb(\'' + s.id + '\')">Передать в доставку WB</span>'
               : '')
-        +   (s.status === 'ready'
-              ? '<span class="mp-act' + (s.mp_supply_id && !s.mp_delivered_at ? '' : ' go') + '" onclick="shipSupply(\'' + s.id + '\')">Уехала</span>'
+        +   (s.status === 'ready' && !(s.mp_supply_id && !s.mp_delivered_at && s.mp_write)
+              ? '<span class="mp-act go" onclick="shipSupply(\'' + s.id + '\')">Уехала</span>'
               : '')
         +   (s.status === 'collecting' && s.picked === 0
               ? '<span class="mp-act warn" onclick="disbandSupply(\'' + s.id + '\')">Разобрать</span>'

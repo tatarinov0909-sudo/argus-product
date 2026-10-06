@@ -157,3 +157,7 @@
   .stock-vw-content .rc-actions>.grow{display:none;}
   .stock-vw-content .rc-actions>button{flex:1 1 100%;}
 }
+
+/* «На WB больше, чем свободно» над товарами клиента (владелец 06.10.2026). */
+.stock-workspace .pr-wb-alert{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;margin:0 0 12px;padding:10px 14px;border:1px solid var(--terracotta);border-radius:10px;background:var(--terracotta-soft);font:15px/1.5 var(--sans);}
+.stock-workspace .pr-wb-alert b{color:var(--terracotta);}

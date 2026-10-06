@@ -108,7 +108,7 @@ const stock = (companyId, extra) => [
     const homeCounts = await owner.locator('.home-table tbody tr').evaluateAll(rows => Object.fromEntries(
       rows.map(row => [row.querySelector('td b').textContent, row.querySelector('.home-num').textContent]),
     ));
-    assert.deepEqual(homeCounts, {'Отгрузки':'6','Приёмка':'6','Ждут решения':'4','Проблемы обмена':'2','Переписка с клиентами':'—'});
+    assert.deepEqual(homeCounts, {'Отгрузки':'6','Приёмка':'6','Ждут решения':'4','Проблемы обмена':'2','На WB больше, чем свободно':'0','Переписка с клиентами':'—'});
     assert.equal(await owner.locator('#view-chat #readyCard,#view-chat #todayStrip').count(), 0);
     await owner.locator('#logoLink').click();
     await owner.locator('#view-warehouse.active').waitFor();

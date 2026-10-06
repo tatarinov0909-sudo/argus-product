@@ -689,7 +689,7 @@
     const categories = [...new Set(rows.map((r) => meta(r.sku).category || 'Без категории'))].sort((a, b) => a.localeCompare(b, 'ru'));
     $('view').innerHTML = segment('products') + `<div id="needAnswer">${needAnswerHtml()}</div>` + vwNoticeHtml()
       + `<section class="stock-strip" aria-label="Состояние товаров">${stats.map(([label, value, note, cls]) => `<div class="stat ${cls || ''}"><div class="stat-label">${h(label)}</div><div class="stat-value">${value == null ? '—' : n(value) + '<small>шт.</small>'}</div><div class="stat-note">${h(note).replace('\n', '<br>')}</div></div>`).join('')}</section>`
-      + (over ? `<button type="button" class="alert-line ${ui.extra.has('wbOver') ? 'on' : ''}" data-wb-over>${icon('alert')}<span><b>${counted(over, 'товар', 'товара', 'товаров')}:</b> на WB выставлено больше, чем доступно на складе — WB может продать то, чего нет. Обновите остатки на WB файлом «Остатки для WB».</span><span class="alert-action">${ui.extra.has('wbOver') ? 'Показаны только они' : 'Показать'}</span></button>` : '')
+      + (over ? `<button type="button" class="alert-line ${ui.extra.has('wbOver') ? 'on' : ''}" data-wb-over>${icon('alert')}<span><b>${counted(over, 'товар', 'товара', 'товаров')}:</b> на WB выставлено больше, чем доступно на складе — WB может продать то, чего нет. ${ourWb().length > 1 ? 'Где снять — под числом в столбце «На WB».' : 'Обновите остатки на WB файлом «Остатки для WB».'}</span><span class="alert-action">${ui.extra.has('wbOver') ? 'Показаны только они' : 'Показать'}</span></button>` : '')
       + (short ? `<button type="button" class="alert-line ${ui.extra.has('shortage') ? 'on' : ''}" data-shortage>${icon('alert')}<span><b>${counted(short, 'товар', 'товара', 'товаров')}:</b> заказов больше, чем товара по учёту — склад проверяет, «Доступно» по ним ноль.</span><span class="alert-action">${ui.extra.has('shortage') ? 'Показаны только они' : 'Показать'}</span></button>` : '')
       + toolbar(searchBox('Название, артикул WB, штрихкод', ui.q),
         dropdown('p-stock', { label: 'Наличие', value: ui.stock, options: STOCK_FILTER, onPick: (v) => { ui.stock = v; ui.shown = state.prefs.rows; renderProducts(); } })
@@ -945,10 +945,19 @@
   const wbOver = (r) => { const v = wbStockOf(r.sku, 'all'); const a = wbAvailable(r); return v != null && a != null && v > a; };
   // Выбран склад не для WB (Озон) — про остатки WB не пугаем (проверка 03.10.2026).
   const wbView = () => !vwOn() || (state.vw?.wbChoices || []).some((c) => vwKey(c.id) === state.ui.products.vw);
+  // Где снять лишнее: на нашем складе WB, где выставлено больше всего
+  // (владелец 06.10.2026). Файл «Остатки для WB» ставит одно число на склад —
+  // при нескольких складах WB он только прибавит.
+  function wbFix(r) {
+    const s = state.data.wb?.stock?.[r.sku] || {};
+    const extra = wbStockOf(r.sku, 'all') - wbAvailable(r);
+    const top = ourWb().map((w) => ({ name: w.name, amount: s[w.id] || 0 })).sort((a, b) => b.amount - a.amount)[0];
+    return top && top.amount >= extra ? `снимите ${n(extra)}: «${top.name}» ${n(top.amount)} → ${n(top.amount - extra)}` : `снимите ${n(extra)} на складах WB`;
+  }
   function wbStockCell(r) {
     const v = wbStockOf(r.sku);
     if (v == null) return num(null);
-    return wbOver(r) && wbView() ? `<span class="warn-num" title="На WB выставлено больше, чем доступно на складе">${n(v)}</span>` : num(v);
+    return wbOver(r) && wbView() ? `<span class="warn-num" title="На WB выставлено больше, чем свободно на складе">${n(v)}</span><span class="cell-sub">${h(wbFix(r))}</span>` : num(v);
   }
   async function markWb(id, ours) {
     const path = state.owner ? `/api/marketplaces/${encodeURIComponent(state.companyId)}/wb/warehouses/${encodeURIComponent(id)}`
@@ -1047,7 +1056,8 @@
       manyCodes.length && `несколько баркодов WB — ${names(manyCodes)}`,
       noQty.length && `остаток ещё не получен — ${names(noQty)}`,
     ].filter(Boolean);
-    toast(`В файле ${counted(lines.length, 'товар', 'товара', 'товаров')}.` + (left.length ? ' Не вошли: ' + left.join('; ') + '.' : ''));
+    toast(`В файле ${counted(lines.length, 'товар', 'товара', 'товаров')}.` + (left.length ? ' Не вошли: ' + left.join('; ') + '.' : '')
+      + (ourWb().length > 1 ? ' Файл ставит это число на один склад WB целиком. Товар, выставленный на нескольких складах WB, после загрузки станет на WB больше — его меняйте руками.' : ''));
   }
 
   // ---------- Товары: возвраты ----------
@@ -1207,11 +1217,20 @@
       ship: (a, b) => String(a.shipDate || '9').localeCompare(String(b.shipDate || '9')) };
     return rows.sort(by[ui.sort]);
   }
+  // Что с уехавшей поставкой на WB (владелец 06.10.2026): сколько посылок
+  // сортировочный центр уже принял и сколько ещё едет.
+  function supplyWbCell(r) {
+    if (!r.mpSupplyId) return '<span class="zero">—</span>';
+    if (r.status !== 'shipped') return `<span class="zero">${r.mpBarcodeFile ? 'ждёт отправки' : '—'}</span>`;
+    const subs = [r.ordersInTransit ? `ещё в пути ${n(r.ordersInTransit)}` : '', r.ordersCanceled ? `отменено ${n(r.ordersCanceled)}` : ''].filter(Boolean);
+    return `<span class="cell-main">принято ${n(r.ordersAccepted)} из ${n(r.orders)}</span>${subs.map((s) => `<span class="cell-sub">${s}</span>`).join('')}`;
+  }
   const SUPPLY_COLUMNS = [
     { key: 'num', title: 'Поставка', cell: (r) => `<button class="link-button nowrap" data-supply="${h(r.id)}">${h(r.number)}</button> ${sellerOrderMarketplace(r.marketplace || (r.mpSupplyId ? 'wb' : ''))}<span class="cell-sub">составлена ${h(when(r.createdAt))}</span>` },
     { key: 'dest', title: 'Куда и когда', cell: (r) => `<span class="cell-main">${h(r.destination || 'пункт ещё не выбран')}</span>${r.shipDate ? `<span class="cell-sub">отгрузка ${h(day(dateOnly(r.shipDate)))}</span>` : ''}` },
     { key: 'units', title: 'Штук', cls: 'n', cell: (r) => num(r.units) },
     { key: 'status', title: 'Статус', cls: 'c', cell: (r) => badge(r.statusName, SUPPLY_STYLE[r.status] || '') },
+    { key: 'wb', title: 'Приёмка WB', cls: 'c', cell: supplyWbCell },
     { key: 'qr', title: 'QR', cls: 'c', cell: (r) => (r.mpBarcodeFile ? `<img class="qr-thumb" src="data:image/svg+xml;base64,${h(r.mpBarcodeFile)}" alt="QR поставки">` : `<span class="zero">${r.mpSupplyId ? 'после передачи в доставку' : '—'}</span>`) },
   ];
   function renderSupplies() {
