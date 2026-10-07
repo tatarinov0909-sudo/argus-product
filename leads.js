@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   const base='https://api.argus-ai.online/api/leads/manage';
-  const token=localStorage.getItem('argus_token');
+  const token=((window.ArgusAuth&&ArgusAuth.get(['owner']))||{}).token||null;
   const $=id=>document.getElementById(id);
   let offset=0,hasMore=false,connected=false,busy=false;
   const labels={new:'Новая',contacted:'Связались',closed:'Закрыта'};

@@ -101,12 +101,14 @@
 
 <div id="sheet"></div>
 
+<script src="auth.js?v=84f56b4f"></script>
 <script src="qrcode.min.js?v=e259e455"></script>
 <script>
 (function(){
   'use strict';
   const API_BASE = 'https://api.argus-ai.online';
-  const TOKEN = localStorage.getItem('argus_token');
+  // Вход — того кабинета, из которого открыли печать (auth.js).
+  const TOKEN = ((window.ArgusAuth && ArgusAuth.get(['worker', 'owner', 'manager'])) || {}).token || null;
   const params = new URLSearchParams(location.search);
 
   const ESCAPE_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };

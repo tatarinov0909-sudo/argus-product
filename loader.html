@@ -1824,16 +1824,16 @@
 
   <div class="toast" id="toast"></div>
 
-<script src="back.js?v=4901b838"></script>
+<script src="auth.js?v=84f56b4f"></script>
+<script src="back.js?v=91794218"></script>
 <script>
   const API_BASE = 'https://api.argus-ai.online';
-  let TOKEN = localStorage.getItem('argus_token');
-  const ROLE = localStorage.getItem('argus_role');
-  // Роль в самом входе должна совпадать с подписью: до 27.09.2026 соседняя
-  // вкладка могла положить сюда вход владельца под подписью «работник».
-  if(!TOKEN || ROLE !== 'worker' || (function(){
-    try{ return JSON.parse(atob(TOKEN.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).role; } catch(e){ return null; }
-  })() !== 'worker'){
+  // Вход работника — на своём месте (auth.js): вход владельца или продавца
+  // в соседней вкладке его не затирает.
+  const AUTH = window.ArgusAuth ? ArgusAuth.get(['worker']) : null;
+  let TOKEN = AUTH ? AUTH.token : null;
+  const ROLE = AUTH ? AUTH.role : null;
+  if(!AUTH){
     // Скан QR листа до входа: адрес с поставкой дождётся входа.
     try{ if(location.hash) sessionStorage.setItem('argus_after_login', location.hash); } catch(e){}
     window.location.href = 'login.html';
@@ -1870,12 +1870,11 @@
     // в заголовке — берём его, и выкидывать каждые 45 минут перестаёт.
     const renewed = res.headers.get('X-Argus-Token');
     if(renewed && sameUser(renewed, TOKEN)){
-      if(sameUser(localStorage.getItem('argus_token'), TOKEN)) localStorage.setItem('argus_token', renewed);
+      ArgusAuth.renew(ROLE, TOKEN, renewed);
       TOKEN = renewed;
     }
     if(res.status === 401){
-      localStorage.removeItem('argus_token');
-      localStorage.removeItem('argus_role');
+      ArgusAuth.clear(ROLE, TOKEN);
       window.location.href = 'login.html';
       throw new Error('сессия истекла');
     }
@@ -1885,8 +1884,7 @@
   }
 
   function logout(){
-    localStorage.removeItem('argus_token');
-    localStorage.removeItem('argus_role');
+    ArgusAuth.clear(ROLE, TOKEN);
     window.location.href = 'login.html';
   }
 

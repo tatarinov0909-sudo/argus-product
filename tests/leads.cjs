@@ -21,7 +21,7 @@ const root=path.resolve(__dirname,'..');
    else throw Error('Unmocked endpoint '+endpoint);
    return route.fulfill({json:data});
   });
-  await page.addInitScript(()=>localStorage.setItem('argus_token','offline-test-token'));
+  await page.addInitScript(()=>localStorage.setItem('argus_auth_owner','offline.'+btoa(JSON.stringify({role:'owner',ownerId:'test',warehouseId:'test'})).replace(/=+$/,'')+'.test'));
   await page.goto('http://argus.test/leads.html');await page.getByText('Тестовая заявка',{exact:true}).waitFor();
   assert.equal(await page.locator('tbody img').count(),0);
   await page.getByRole('button',{name:'Подключить Telegram',exact:true}).click();
