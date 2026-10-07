@@ -754,6 +754,8 @@
       { header: 'Заказано, шт.', type: 'num', total: true, get: orderedQty },
       { header: 'В сборке, шт.', type: 'num', total: true, get: assemblyQty },
       { header: 'В пути, шт.', type: 'num', total: true, get: transitQty },
+      // Как на экране: по складу продавца «Принято WB» не делится (07.10, Н11).
+      { header: 'Принято WB, шт.', type: 'num', total: true, get: (r) => (vwPart(r) ? null : Number(r.acceptedByWb || 0)) },
       { header: 'Доступно к продаже, шт.', type: 'num', total: true, get: availableQty },
       { header: 'Выставлено на WB, шт.', type: 'num', total: true, get: (r) => wbStockOf(r.sku) },
       { header: 'Брак на складе, шт.', type: 'num', total: true, get: defectQty },

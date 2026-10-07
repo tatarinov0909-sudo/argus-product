@@ -1646,10 +1646,10 @@
   function exportSellerStock(){
     saveXlsx('Остатки продавцов', 'Продавцы', sellerStockRows().map(s => ({
       'Продавец': s.name, 'Товаров': s.productCount, 'Всего': s.total, 'Заказано': s.ordered,
-      'В сборке': s.inAssembly, 'В пути': s.inTransit, 'Доступно': s.available, 'Брак': s.defect,
+      'В сборке': s.inAssembly, 'В пути': s.inTransit, 'Принято WB': s.acceptedByWb || 0, 'Доступно': s.available, 'Брак': s.defect,
       'Товаров, где заказов больше остатка': s.shortageCount, 'В ячейках': s.inCells,
       'Товаров без числа учёта': s.unknownCount,
-    })), [28, 9, 11, 11, 10, 9, 11, 8, 18, 11, 14]);
+    })), [28, 9, 11, 11, 10, 9, 11, 11, 8, 18, 11, 14]);
   }
   window.exportSellerStock = exportSellerStock;
 
@@ -1936,7 +1936,9 @@
           : Number(r.cells) > 0 ? 'в ' + r.cells + ' ' + pluralRu(Number(r.cells), 'ячейке', 'ячейках', 'ячейках')
           : '<span class="sub">не в ячейках</span>';
         const notPlaced = prNotPlaced(r);
-        const short = r.shortage ? Number(r.orderedNotInSupply || 0) + Number(r.inAssembly || 0) + Number(r.inTransit || 0) - Number(r.total || 0) : 0;
+        // «В пути» — сколько вычтено из «Доступно» (transitCounted): уехавшее,
+        // которое 1С уже списала, во «Всего» не входит — не вычитать дважды (07.10, Н6).
+        const short = r.shortage ? Number(r.orderedNotInSupply || 0) + Number(r.inAssembly || 0) + Number(r.transitCounted ?? r.inTransit ?? 0) - Number(r.total || 0) : 0;
         const w = prVw(r);
         // Раскладка по складам — под названием, только ненулевые склады.
         const split = hasVw && !w && r.byWarehouse
