@@ -14,7 +14,7 @@
   };
   const sameScope = (a,b) => !!a&&!!b&&a.role===b.role&&a.principalId===b.principalId&&a.warehouseId===b.warehouseId;
   function currentScope(){
-    const token=localStorage.getItem('argus_token');if(!token)return null;
+    const token=(typeof TOKEN==='string'&&TOKEN)||((window.ArgusAuth&&ArgusAuth.get(['owner','manager']))||{}).token||null;if(!token)return null;
     try{
       const bytes=Uint8Array.from(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
       return normalizeScope(JSON.parse(new TextDecoder().decode(bytes)));

@@ -1,16 +1,15 @@
   const API_BASE = 'https://api.argus-ai.online';
-  let TOKEN = localStorage.getItem('argus_token');
-  const ROLE = localStorage.getItem('argus_role');
+  // Вход — свой у каждой роли (auth.js): вход продавца или грузчика в
+  // соседней вкладке больше не выбивает отсюда.
+  const AUTH = window.ArgusAuth ? ArgusAuth.get(['owner', 'manager']) : null;
+  let TOKEN = AUTH ? AUTH.token : null;
+  const ROLE = AUTH ? AUTH.role : null;
   // Кабинет один на владельца и менеджера — по просьбе владельца: у него
   // должны быть те же удобства, а у менеджера урезанные. Урезание делаем
   // здесь ЛИШЬ визуально: то, чего ему нельзя, сервер всё равно не отдаст.
   // Прятать в интерфейсе и не проверять на сервере — вот это было бы дырой.
   const IS_MANAGER = ROLE === 'manager';
-  // Роль в самом входе должна совпадать с подписью: до 27.09.2026 соседняя
-  // вкладка могла положить сюда чужой вход.
-  if(!TOKEN || (ROLE !== 'owner' && !IS_MANAGER) || (function(){
-    try{ return JSON.parse(atob(TOKEN.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).role; } catch(e){ return null; }
-  })() !== ROLE){
+  if(!AUTH){
     window.location.href = 'login.html';
     throw new Error('not authenticated');
   }
@@ -45,12 +44,12 @@
     // в заголовке — берём его, и выкидывать каждые 45 минут перестаёт.
     const renewed = res.headers.get('X-Argus-Token');
     if(renewed && sameUser(renewed, TOKEN)){
-      if(sameUser(localStorage.getItem('argus_token'), TOKEN)) localStorage.setItem('argus_token', renewed);
+      ArgusAuth.renew(ROLE, TOKEN, renewed);
       TOKEN = renewed;
     }
     if(res.status === 401){
-      localStorage.removeItem('argus_token');
-      localStorage.removeItem('argus_role');
+      // Стираем только свой вход: кабинеты других ролей в этом браузере живут дальше.
+      ArgusAuth.clear(ROLE, TOKEN);
       window.location.href = 'login.html';
       const error = new Error('сессия истекла');
       error.status = 401;
@@ -67,8 +66,7 @@
   }
 
   function logout(){
-    localStorage.removeItem('argus_token');
-    localStorage.removeItem('argus_role');
+    ArgusAuth.clear(ROLE, TOKEN);
     window.location.href = 'login.html';
   }
 

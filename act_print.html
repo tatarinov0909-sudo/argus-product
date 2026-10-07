@@ -64,12 +64,15 @@
   </div>
   <div class="sheet" id="sheet"><div class="empty">Загружаем…</div></div>
 
+<script src="auth.js?v=84f56b4f"></script>
 <script>
 (function(){
   'use strict';
   const API_BASE = 'https://api.argus-ai.online';
-  const TOKEN = localStorage.getItem('argus_token');
-  const ROLE = localStorage.getItem('argus_role');
+  // Вход — того кабинета, из которого открыли печать (auth.js).
+  const AUTH = window.ArgusAuth ? ArgusAuth.get(['owner', 'manager', 'seller']) : null;
+  const TOKEN = AUTH ? AUTH.token : null;
+  const ROLE = AUTH ? AUTH.role : null;
   const params = new URLSearchParams(location.search);
   const KIND = ['shipment', 'defect'].includes(params.get('kind')) ? params.get('kind') : 'receipt';
   const ID = params.get('id') || '';

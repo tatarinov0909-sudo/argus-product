@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   const API='https://api.argus-ai.online';
-  const token=localStorage.getItem('argus_token');
+  const token=((window.ArgusAuth&&ArgusAuth.get(['owner']))||{}).token||null;
   const $=id=>document.getElementById(id);
   const tbody=$('orders').querySelector('tbody');
   let next=null, current=null, pending=false;

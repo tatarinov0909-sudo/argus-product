@@ -20,7 +20,7 @@ const root=path.resolve(__dirname,'..');
    if(url.pathname.endsWith('/reconciliation'))return route.fulfill({json:{rows:resolved?[]:[{id:'test-id',number:'WB-TEST',company:'Тестовый продавец — длинное название компании для проверки отображения',mp_close_reason:'fulfilled',picked_qty:'2'}],next:null}});
    return route.fulfill({json:{id:'test-id',number:'WB-TEST',company:'Тестовый продавец',reason:'fulfilled',version:'test-version',action:'confirm_departed',canResolve:true,lines:[{name:'Тестовый товар с длинным названием для проверки таблицы',sku:'TEST-SKU',cell:'1.1.1',qty:2}]}});
   });
-  await page.addInitScript(()=>localStorage.setItem('argus_token','synthetic-only-test-token'));
+  await page.addInitScript(()=>localStorage.setItem('argus_auth_owner','synthetic.'+btoa(JSON.stringify({role:'owner',ownerId:'test',warehouseId:'test'})).replace(/=+$/,'')+'.test'));
   await page.goto('http://argus.test/marketplace-reconciliation.html');
   await page.getByRole('button',{name:'Проверить',exact:true}).click();
   if(process.env.ARGUS_TEST_SCREENSHOT_DIR)await page.screenshot({path:path.join(process.env.ARGUS_TEST_SCREENSHOT_DIR,'wb-reconciliation-desktop.png'),fullPage:true});

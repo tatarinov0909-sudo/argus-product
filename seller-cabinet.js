@@ -54,9 +54,18 @@
     documents: '/api/sellers/documents', defects: '/api/sellers/defects', wb: '/api/sellers/wb-warehouses' };
 
   const blankUi = () => ({ q: '', shown: 0 });
+  // Кабинет продавца открывает и сам продавец, и владелец склада «его
+  // глазами» — ссылки из кабинета склада несут ?companyId=. У каждого свой
+  // вход (auth.js): владелец, вошедший здесь по ключу продавца, больше не
+  // теряет вход в кабинет склада, а продавец — свой.
+  const pageParams = new URLSearchParams(location.search);
+  const viaWarehouse = pageParams.has('companyId');
+  const AUTH = pageParams.get('as') === 'seller' ? ArgusAuth.get(['seller'])
+    : viaWarehouse ? (ArgusAuth.get(['owner', 'manager']) || ArgusAuth.get(['seller']))
+      : (ArgusAuth.get(['seller']) || ArgusAuth.get(['owner', 'manager']));
   const state = {
-    token: localStorage.getItem('argus_token'), role: localStorage.getItem('argus_role'),
-    owner: ['owner', 'manager'].includes(localStorage.getItem('argus_role')),
+    token: AUTH ? AUTH.token : null, role: AUTH ? AUTH.role : null,
+    owner: Boolean(AUTH) && ['owner', 'manager'].includes(AUTH.role),
     companyId: null, profile: null, catalog: {}, companies: [],
     prefs: { rows: 30, textSize: 'normal' },
     data: {}, summary: null, fetchedAt: {}, view: 'products', viewRun: 0, drawerRun: 0,
@@ -96,12 +105,13 @@
     const data = await response.json().catch(() => null);
     const renewed = response.headers.get('X-Argus-Token');
     if (renewed && sameUser(renewed, state.token)) {
-      if (sameUser(localStorage.getItem('argus_token'), state.token)) localStorage.setItem('argus_token', renewed);
+      ArgusAuth.renew(state.role, state.token, renewed);
       state.token = renewed;
     }
     if (response.status === 401 && !path.includes('/auth/')) {
+      // Стираем только свой вход: кабинеты других ролей в этом браузере живут дальше.
+      ArgusAuth.clear(state.role, state.token);
       state.viewRun += 1; state.drawerRun += 1; state.token = null;
-      localStorage.removeItem('argus_token'); localStorage.removeItem('argus_role');
       document.querySelectorAll('dialog[open]').forEach((d) => d.close());
       $('app').hidden = true; $('loginScreen').hidden = false; $('loginError').textContent = 'Сессия завершилась. Войдите ещё раз.';
     }
@@ -376,11 +386,8 @@
     });
   }
   async function boot() {
-    // Роль в самом входе должна совпадать с подписью (27.09.2026): иначе
-    // кабинет работал бы чужим входом из соседней вкладки.
-    if (state.token && jwtOf(state.token).role !== (state.owner ? state.role : 'seller')) {
-      state.token = null; localStorage.removeItem('argus_token'); localStorage.removeItem('argus_role');
-    }
+    // Роль в самом входе совпадает с ролью места, где он лежит, — это
+    // проверяет auth.js, чужой вход сюда не попадёт.
     if (!state.token) { $('loginScreen').hidden = false; return; }
     $('loginScreen').hidden = true; $('app').hidden = false; $('view').innerHTML = loading;
     try {
@@ -420,14 +427,18 @@
     e.preventDefault(); $('loginError').textContent = ''; $('loginSubmit').disabled = true;
     try {
       const data = await api('/api/auth/seller/login', { method: 'POST', body: { name: $('loginName').value.trim(), keyCode: $('loginKey').value.trim() } });
-      localStorage.setItem('argus_token', data.token); localStorage.setItem('argus_role', 'seller');
+      ArgusAuth.set('seller', data.token);
       localStorage.setItem('argus_company_name', data.companyName || ''); localStorage.setItem('argus_wh_name', data.warehouseName || '');
       history.replaceState(null, '', 'client_access.html#products'); location.reload();
     } catch (error) { $('loginError').textContent = error.message; $('loginSubmit').disabled = false; }
   });
   function logout() {
-    for (const k of ['argus_token', 'argus_role', 'argus_company_name', 'argus_seller_name', 'argus_wh_name']) localStorage.removeItem(k);
-    history.replaceState(null, '', 'client_access.html'); location.reload();
+    ArgusAuth.clear(state.role, state.token);
+    if (state.owner) { location.href = 'login.html'; return; }
+    for (const k of ['argus_company_name', 'argus_seller_name', 'argus_wh_name']) localStorage.removeItem(k);
+    // ?as=seller — после выхода продавца показать вход продавца, а не открыть
+    // кабинет «глазами владельца», если владелец вошёл в этом же браузере.
+    history.replaceState(null, '', 'client_access.html?as=seller'); location.reload();
   }
   $('logoutButton').onclick = logout;
   let accountTrigger = $('accountButton');
@@ -1470,7 +1481,7 @@
     ? `<span class="cell-sub">${x.status === 'done' ? 'выполнено' : 'сделано'} ${n(x.doneQty)} из ${n(x.qty)} шт.${x.status === 'done' ? ' — брака оказалось меньше' : ''}</span>`
     : x.status === 'done' && Number(x.doneQty) === 0 && x.doneQty != null ? '<span class="cell-sub">брака на складе не оказалось</span>' : '');
   const actLink = (x) => (x.status === 'done' && (x.action === 'return_to_seller' || x.action === 'dispose')
-    ? `<a class="link-button" href="act_print.html?kind=defect&id=${encodeURIComponent(x.id)}" target="_blank" rel="noopener">${x.action === 'dispose' ? 'Акт утилизации' : 'Акт выдачи'}</a>` : '');
+    ? `<a class="link-button" href="act_print.html?kind=defect&id=${encodeURIComponent(x.id)}&as=${state.owner ? state.role : 'seller'}" target="_blank" rel="noopener">${x.action === 'dispose' ? 'Акт утилизации' : 'Акт выдачи'}</a>` : '');
   function renderDefects() {
     const ui = state.ui.defects; const d = state.data.defects;
     const total = d.balances.reduce((s, r) => s + r.qty, 0);
@@ -1935,7 +1946,7 @@
 
     return `<div class="drawer-meta">${badge(...inboundState({ status: c.status, arrived_at: c.arrivedAt, unplaced_qty: c.unplaced }))}<span>Оформлен ${h(when(c.createdAt))}</span></div>`
       + nextHtml + verdict + storyHtml + stepsHtml + factsHtml + edit + `<div style="margin-top:24px">${lines}</div>` + docs + talk
-      + `<div class="drawer-actions"><a class="button" href="act_print.html?kind=receipt&id=${encodeURIComponent(c.id)}" target="_blank" rel="noopener">${icon('document')}Акт приёмки${c.discrepancy ? ' и расхождений' : ''}</a></div>`;
+      + `<div class="drawer-actions"><a class="button" href="act_print.html?kind=receipt&id=${encodeURIComponent(c.id)}&as=${state.owner ? state.role : 'seller'}" target="_blank" rel="noopener">${icon('document')}Акт приёмки${c.discrepancy ? ' и расхождений' : ''}</a></div>`;
   }
   function wireInboundCard(c) {
     const again = () => { state.inboundDirty = true; return openInboundCard(c.id, true); };

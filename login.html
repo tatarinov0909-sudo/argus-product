@@ -403,12 +403,14 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="auth.js?v=84f56b4f"></script>
 <script>
   const API_BASE = 'https://api.argus-ai.online';
   let ownerMode = 'login';
   // Какую дверь выбрали: «Работник склада» или «Менеджер». Сервер пускает
   // в неё только свои ключи.
   let staffDoor = 'worker';
+  let staffRole = 'worker';   // кем вошёл сотрудник — куда вести после входа
 
   function hideAll(){
     document.getElementById('landing').classList.remove('show');
@@ -461,9 +463,11 @@
         errorEl.classList.add('show');
         return;
       }
-      localStorage.setItem('argus_token', data.token);
-      // Роль — из ответа сервера (совпадает с дверью, проверено выше).
-      localStorage.setItem('argus_role', data.role);
+      // Роль — из ответа сервера (совпадает с дверью, проверено выше). Вход
+      // ложится на место своей роли: кабинеты других ролей в этом браузере
+      // не трогаются (auth.js).
+      ArgusAuth.set(data.role, data.token);
+      staffRole = data.role;
       hideAll();
       document.getElementById('workerNameOut').textContent = data.name
         + (data.role === 'manager' ? ' · менеджер' : '');
@@ -508,8 +512,7 @@
         });
         const data = await res.json();
         if(!res.ok){ errorEl.textContent = data.error || 'Не удалось войти.'; errorEl.classList.add('show'); return; }
-        localStorage.setItem('argus_token', data.token);
-        localStorage.setItem('argus_role', 'owner');
+        ArgusAuth.set('owner', data.token);
         window.location.href = 'cabinet_main.html';
       } catch(e){
         errorEl.textContent = 'Не удалось подключиться к серверу. Проверьте интернет-соединение.';
@@ -530,8 +533,7 @@
       });
       const data = await res.json();
       if(!res.ok){ errorEl.textContent = data.error || 'Не удалось создать кабинет.'; errorEl.classList.add('show'); return; }
-      localStorage.setItem('argus_token', data.token);
-      localStorage.setItem('argus_role', 'owner');
+      ArgusAuth.set('owner', data.token);
       hideAll();
       document.getElementById('setupTz').textContent = zoneLabel(browserZone()) + ' — по часам этого компьютера. Поменять можно в «Настройки склада».';
       document.getElementById('successOwner').classList.add('show');
@@ -561,7 +563,7 @@
     if(!stock || !supplies){ err.textContent = 'Ответьте на оба вопроса — или нажмите «Ответить позже».'; err.classList.add('show'); return; }
     try{
       const res = await fetch(API_BASE + '/api/warehouses/me', {
-        method:'PATCH', headers:{'Content-Type':'application/json', Authorization: 'Bearer ' + localStorage.getItem('argus_token')},
+        method:'PATCH', headers:{'Content-Type':'application/json', Authorization: 'Bearer ' + ((ArgusAuth.get(['owner']) || {}).token || '')},
         body: JSON.stringify({ stockSource: stock, wbSuppliesBy: supplies, timezone: browserZone(), setupDone: true }),
       });
       if(!res.ok){ const d = await res.json().catch(() => ({})); err.textContent = d.error || 'Не сохранилось.'; err.classList.add('show'); return; }
@@ -584,8 +586,7 @@
       });
       const data = await res.json();
       if(!res.ok){ errorEl.textContent = data.error || 'Не удалось войти.'; errorEl.classList.add('show'); return; }
-      localStorage.setItem('argus_token', data.token);
-      localStorage.setItem('argus_role', 'seller');
+      ArgusAuth.set('seller', data.token);
       hideAll();
       document.getElementById('sellerNameOut').textContent = name;
       document.getElementById('sellerCompanyOut').textContent = data.companyName;
@@ -598,8 +599,7 @@
 
   function goToLoader(){
     // Менеджеру лист приёмки не нужен — ему в кабинет с заказами.
-    const role = localStorage.getItem('argus_role');
-    window.location.href = role === 'manager' ? 'cabinet_main.html' : 'loader.html';
+    window.location.href = staffRole === 'manager' ? 'cabinet_main.html' : 'loader.html';
   }
 
   function copyText(text, message){
