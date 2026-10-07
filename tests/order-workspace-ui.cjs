@@ -73,7 +73,10 @@ const type = (name) => ({ '.html': 'text/html; charset=utf-8', '.js': 'text/java
     await owner.waitForFunction(() => typeof window.switchView === 'function');
     await owner.evaluate(() => switchView('supplies'));
     await owner.locator('#suppliesList .sup-row').waitFor();
+    // «Новая поставка» открывает товары продавца (поставка физлицу, 06.10.2026);
+    // поставка на WB — из заказов, по ссылке «к заказам WB».
     await owner.getByRole('button', { name: 'Новая поставка', exact: true }).click();
+    await owner.getByRole('button', { name: 'к заказам WB →' }).click();
     await owner.locator('.ord-partner').click();
     await owner.locator('#ordersDetail .ord-table tbody tr').first().waitFor();
     assert.equal(await owner.locator('#ordersDetail .ord-table tbody tr').count(), 3);
@@ -132,6 +135,7 @@ const type = (name) => ({ '.html': 'text/html; charset=utf-8', '.js': 'text/java
     await manager.locator('#suppliesList .sup-row').waitFor();
     assert.ok(await manager.getByRole('button', { name: 'Новая поставка', exact: true }).isVisible());
     await manager.getByRole('button', { name: 'Новая поставка', exact: true }).click();
+    await manager.getByRole('button', { name: 'к заказам WB →' }).click();
     await manager.locator('.ord-partner').click();
     await manager.locator('#ordersDetail .order-warehouse-filter').waitFor();
     await manager.locator('.order-warehouse-filter summary').click();

@@ -279,6 +279,24 @@
   .product-row.done{opacity:0.45; cursor:default;}
   .product-row-name{font-size:14px; font-weight:600;}
   .product-row-sub{font-size:12px; color:var(--muted); margin-top:3px; font-family:var(--mono);}
+  /* Сканер QR листа сборки (06.10.2026). */
+  .scan-open{display:flex; align-items:center; justify-content:center; gap:8px; width:100%; margin-top:12px; padding:13px 14px; border:1px solid var(--accent); border-radius:12px; background:transparent; color:var(--accent); font:600 15px/1.2 var(--sans); cursor:pointer;}
+  .scan-open span{font-size:18px; line-height:1;}
+  .scan-overlay{position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(8,10,12,0.94);}
+  .scan-overlay[hidden]{display:none;}
+  .scan-box{display:flex; flex-direction:column; align-items:center; gap:14px; width:100%; max-width:440px;}
+  .scan-title{font:600 17px/1.35 var(--sans); color:var(--text); text-align:center;}
+  .scan-view{position:relative; width:100%; aspect-ratio:1/1; border-radius:16px; overflow:hidden; background:#000;}
+  .scan-view video{position:absolute; inset:0; width:100%; height:100%; object-fit:cover;}
+  .scan-frame{position:absolute; inset:14%; border:3px solid var(--accent-2); border-radius:16px; box-shadow:0 0 0 999px rgba(0,0,0,0.25);}
+  .scan-status{min-height:40px; font-size:14px; line-height:1.4; color:var(--muted); text-align:center;}
+  .scan-close{width:100%; padding:14px; border:1px solid var(--line); border-radius:12px; background:var(--panel); color:var(--text); font:600 16px/1.2 var(--sans); cursor:pointer;}
+  /* Коды строки «Все товары» — как в карточке (06.10.2026). */
+  .product-row-codes{display:flex; flex-wrap:wrap; gap:4px 12px; align-items:baseline; margin-top:4px; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums;}
+  .product-row-codes b{color:var(--text); font-weight:600;}
+  .product-row-codes .prc-bc{font-size:14px;}
+  .product-row-codes .prc-bc .bc-head{color:var(--muted); font-weight:400;}
+  .product-row-codes .prc-bc .bc-tail{color:var(--accent-2); font-size:18px; font-weight:700;}
   .product-row-need{font-family:var(--mono); font-size:18px; font-weight:700; color:var(--accent); white-space:nowrap;}
   .cell-more{font-size:13px; color:var(--muted); text-align:center; padding:10px; cursor:pointer; text-decoration:underline;}
   .cell-option-check{
@@ -1222,6 +1240,16 @@
 
   <div class="phone">
 
+    <!-- Сканер QR листа сборки прямо в кабинете (владелец 06.10.2026). -->
+    <div class="scan-overlay" id="scanOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="scanTitle">
+      <div class="scan-box">
+        <div class="scan-title" id="scanTitle">Наведите камеру на QR листа сборки</div>
+        <div class="scan-view"><video id="scanVideo" playsinline muted></video><div class="scan-frame" aria-hidden="true"></div></div>
+        <div class="scan-status" id="scanStatus" role="status"></div>
+        <button type="button" class="scan-close" onclick="closeScanner()">Закрыть</button>
+      </div>
+    </div>
+
     <!-- Главный экран: сначала человек выбирает, чем занимается. -->
     <div class="job-screen show" id="homeScreen">
       <div class="job-head">
@@ -1232,6 +1260,7 @@
           </div>
           <div class="job-logout" onclick="logout()">Выйти</div>
         </div>
+        <button type="button" class="scan-open" onclick="openScanner()"><span aria-hidden="true">⌗</span> Сканировать QR листа сборки</button>
       </div>
       <div class="job-body" id="homeBody"></div>
     </div>
@@ -1241,6 +1270,7 @@
         <div class="job-back" onclick="showHome()">← Что делаем?</div>
         <div class="job-title">Сборка поставок</div>
         <div class="job-sub" id="suppliesSub">—</div>
+        <button type="button" class="scan-open" onclick="openScanner()"><span aria-hidden="true">⌗</span> Сканировать QR листа сборки</button>
       </div>
       <div class="job-body" id="suppliesBody"></div>
     </div>
@@ -1922,6 +1952,128 @@
     return rowNum + '.' + rackPart + '.' + tierPart;
   }
 
+  // ---------- Сканер QR листа сборки (владелец 06.10.2026) ----------
+  // Кнопка в кабинете грузчика: камера открывается здесь же, без стороннего
+  // приложения и повторного входа. Понимаем только QR Аргуса — ссылку на лист
+  // сборки поставки (…/loader.html#paper=<поставка>); чужие ссылки не открываем.
+  // Распознаёт сам браузер (BarcodeDetector), а где его нет (iPhone) — jsQR
+  // с jsDelivr, с проверкой подлинности файла.
+  let scanStream = null, scanTimer = null, scanBusy = false;
+  const scanStatus = (text) => { document.getElementById('scanStatus').textContent = text; };
+  function loadJsQr(){
+    return new Promise((resolve, reject) => {
+      if(window.jsQR) return resolve();
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+      s.integrity = 'sha256-vEDIoVGWI2sjFNsIVvcsoLSZgM1UE7jIUqc0n1/uCFk=';
+      s.crossOrigin = 'anonymous';
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error('Не загрузился распознаватель QR — проверьте интернет'));
+      document.head.appendChild(s);
+    });
+  }
+  async function makeQrReader(){
+    if('BarcodeDetector' in window){
+      try{
+        const formats = await window.BarcodeDetector.getSupportedFormats();
+        if(formats.includes('qr_code')){
+          const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+          return async (video) => { const found = await detector.detect(video); return found[0] ? found[0].rawValue : null; };
+        }
+      } catch(e){}
+    }
+    await loadJsQr();
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    return async (video) => {
+      const w = video.videoWidth, h = video.videoHeight;
+      if(!w || !h) return null;
+      const k = Math.min(1, 800 / Math.max(w, h));
+      canvas.width = Math.round(w * k); canvas.height = Math.round(h * k);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = window.jsQR(img.data, img.width, img.height, { inversionAttempts: 'attemptBoth' });
+      return code ? code.data : null;
+    };
+  }
+  async function openScanner(){
+    const overlay = document.getElementById('scanOverlay');
+    const video = document.getElementById('scanVideo');
+    overlay.hidden = false;
+    scanStatus('Включаю камеру…');
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      scanStatus('Камера в этом браузере недоступна. Откройте кабинет в Chrome или Safari.');
+      return;
+    }
+    try{
+      scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+    } catch(e){
+      const why = {
+        NotAllowedError: 'Нет доступа к камере. Разрешите камеру для этого сайта в настройках браузера и нажмите кнопку ещё раз.',
+        SecurityError: 'Нет доступа к камере. Разрешите камеру для этого сайта в настройках браузера и нажмите кнопку ещё раз.',
+        NotFoundError: 'Камера не найдена. На этом устройстве нет камеры или она отключена.',
+        OverconstrainedError: 'Камера не найдена. На этом устройстве нет подходящей камеры.',
+        NotReadableError: 'Камера занята другим приложением. Закройте его и нажмите кнопку ещё раз.',
+      }[e && e.name];
+      scanStatus(why || 'Камера не включилась. Закройте окно и попробуйте ещё раз.');
+      return;
+    }
+    if(overlay.hidden){ closeScanner(); return; }   // закрыли, пока камера включалась
+    video.srcObject = scanStream;
+    try{ await video.play(); } catch(e){}
+    let read;
+    try{ read = await makeQrReader(); }
+    catch(e){ scanStatus(e.message); return; }
+    scanStatus('Ищу QR…');
+    scanTimer = setInterval(async () => {
+      if(scanBusy || !scanStream) return;
+      scanBusy = true;
+      try{ const text = await read(video); if(text) onQrScanned(text); }
+      catch(e){}
+      finally{ scanBusy = false; }
+    }, 250);
+  }
+  function onQrScanned(text){
+    const m = /\/loader\.html#paper=([0-9a-f-]{36})$/i.exec(String(text || '').trim());
+    if(!m){ scanStatus('Это не QR листа сборки Аргуса. Наведите камеру на QR в углу листа.'); return; }
+    closeScanner();
+    if(navigator.vibrate) navigator.vibrate(80);
+    // Скан QR листа — это и есть «начал сборку по листу» (владелец 27.09.2026).
+    refreshWork().catch(() => {}).then(() => openPaper(m[1], { start: true }));
+  }
+  function closeScanner(){
+    clearInterval(scanTimer); scanTimer = null;
+    if(scanStream){ scanStream.getTracks().forEach(t => t.stop()); scanStream = null; }
+    const video = document.getElementById('scanVideo');
+    if(video) video.srcObject = null;
+    document.getElementById('scanOverlay').hidden = true;
+  }
+  Object.assign(window, { openScanner, closeScanner });
+  // Ушёл со вкладки — камеру выключить.
+  document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'hidden' && scanStream) closeScanner(); });
+
+  // ---------- Автообновление (владелец 06.10.2026) ----------
+  // Грузчик не должен сам обновлять страницу: раз в 30 секунд списки
+  // перечитываются — только на экранах-списках, когда вкладка открыта, нет
+  // окна поверх и человек ничего не вводит. Экран работы (сборка, приёмка) не трогаем.
+  setInterval(() => {
+    if(document.visibilityState !== 'visible' || !TOKEN) return;
+    const a = document.activeElement;
+    if(a && a.matches && a.matches('input, textarea, select, [contenteditable]')) return;
+    if(!document.getElementById('scanOverlay').hidden) return;
+    if(document.querySelector('#sheetOverlay.show, .overlay.show, .modal.show')) return;
+    const shown = document.querySelector('.job-screen.show');
+    const id = shown && shown.id;
+    const y = window.scrollY;
+    const again = id === 'homeScreen' ? showHome()
+      : id === 'suppliesScreen' ? openSupplies()
+      : id === 'supplyScreen' && backTarget && backTarget.kind === 'supply' ? openSupply(backTarget.id)
+      : id === 'docsScreen' && backTarget && backTarget.kind === 'docs' ? openDocs(backTarget.dir)
+      : id === 'receiptScreen' && backTarget && backTarget.kind === 'receipt' ? openReceipt(backTarget.id)
+      : null;
+    if(again) Promise.resolve(again).then(() => window.scrollTo(0, y)).catch(() => {});
+  }, 30000);
+
   async function init(){
     try{
       cellRows = await apiFetch('/api/cells/rows');
@@ -2063,6 +2215,8 @@
     (d.picking || []).forEach(x => {
       const p = bySku.get(x.sku);
       if(!p) return;
+      // Где лежит — для списка «Все товары» (владелец 06.10.2026).
+      if(!p.where && x.cells && x.cells.length) p.where = x.cells.map(c => c.label).join(', ');
       if(!p.article && x.article) p.article = x.article;
       if(!p.barcode && x.barcode) p.barcode = x.barcode;
       if(!p.nmId && x.nmId) p.nmId = x.nmId;
@@ -2121,6 +2275,9 @@
     renderCurrentItem();
     // Сборка на паузе (вышел и вернулся) — сразу «Вы вышли — сборка на паузе».
     if(runState && runState.status === 'paused') showRunPaused();
+    // Начало сборки — со списка всех товаров: грузчик сам выбирает, с какого
+    // начать (владелец 06.10.2026). Кнопка «Все товары» остаётся на экране.
+    else if(!sku && currentInvoice.items.some(i => !i.closed)) openProductsSheet();
   }
   window.openProductRun = openProductRun;
 
@@ -2152,6 +2309,19 @@
     if(!on) screen.classList.remove('legacy');
   }
 
+  // Коды строки «Все товары» — те же, что в карточке товара (владелец
+  // 06.10.2026): штрихкод с крупным концом, артикул фулфилмента, где лежит.
+  function productRowCodes(p, where){
+    const tail = tailLength(currentInvoice.items.flatMap(x => String(x.barcode || '').split(',').map(b => b.trim())));
+    const bc = String(p.barcode || '').split(',').map(b => b.trim()).filter(Boolean)[0];
+    const place = where !== undefined ? where : p.where;
+    return '<div class="product-row-codes">'
+      + (bc ? '<span class="prc-bc">' + barcodeHtml(bc, tail || 4) + '</span>' : '<span class="bc-head">штрихкод не передан</span>')
+      + '<span>Арт. ФФ <b>' + escapeHTML(p.sku) + '</b></span>'
+      + (place ? '<span>Где: <b>' + escapeHTML(place) + '</b></span>' : '')
+      + '</div>';
+  }
+
   function openProductsSheet(){
     if(recvRun && currentInvoice) return openReceivingItemsSheet();
     if(!productRun || !currentInvoice) return;
@@ -2162,7 +2332,7 @@
       '<div class="product-row' + (p.closed ? ' done' : '') + (current && p.sku === current.sku ? ' current' : '') + '"'
       + (p.closed ? '' : ' onclick="pickProductNow(' + i + ')"') + '>'
       + '<div><div class="product-row-name">' + escapeHTML(p.name) + '</div>'
-      + '<div class="product-row-sub">' + escapeHTML(p.sku) + (p.closed ? ' · собрано' : '') + '</div></div>'
+      + productRowCodes(p) + (p.closed ? '<div class="product-row-sub">собрано</div>' : '') + '</div>'
       + (p.closed ? '' : '<div class="product-row-need">' + p.left + ' шт</div>')
       + '</div>').join('');
     document.getElementById('sheetOverlay').classList.add('show');
@@ -2185,8 +2355,9 @@
       return '<div class="product-row' + (done ? ' done' : '') + (current && p.id === current.id ? ' current' : '') + '"'
         + ' onclick="pickReceivingItemNow(' + i + ')">'
         + '<div><div class="product-row-name">' + escapeHTML(p.name) + '</div>'
-        + '<div class="product-row-sub">' + escapeHTML(p.sku)
-        + (p.receiving_id ? ' · принято ' + Number(p.accepted_qty) + ' из ' + Number(p.declared_qty) + (cell ? ' → ' + escapeHTML(cell) : '') : '')
+        + productRowCodes(p, cell || '')
+        + '<div class="product-row-sub">'
+        + (p.receiving_id ? 'принято ' + Number(p.accepted_qty) + ' из ' + Number(p.declared_qty) : '')
         + (left > 0 ? ' · <b style="color:var(--yellow)">осталось разложить ' + left + ' шт.</b>' : '')
         + (done && Number(p.accepted_qty) > 0 ? ' · нажмите — переложить' : '')
         + '</div></div>'
@@ -2613,11 +2784,14 @@
     const tail = tailLength(currentInvoice.items.flatMap(p => String(p.barcode || '').split(',').map(b => b.trim())));
     const code = (label, value, cls) => '<div class="run-code' + (cls ? ' ' + cls : '') + '"><i>' + label + '</i><b>'
       + (value || '<span class="bc-head">не передан</span>') + '</b></div>';
-    const article = recv ? item.sku : item.article;
+    // Те же коды, что в списке «Все товары» (владелец 06.10.2026): артикул
+    // фулфилмента (PB…) — всегда; у сборки ещё артикул продавца на WB.
+    const article = recv ? null : item.article;
     const wb = recv ? item.wb_article : item.nmId;
     document.getElementById('runCodes').innerHTML =
       code(barcodes.length > 1 ? 'Штрихкоды' : 'Штрихкод', barcodes.map(b => barcodeHtml(b, tail || 4)).join('<br>'), 'bc')
-      + code('Артикул продавца', article ? escapeHTML(article) : '')
+      + code('Артикул ФФ', item.sku ? escapeHTML(item.sku) : '')
+      + (recv ? '' : code('Артикул продавца', article ? escapeHTML(article) : ''))
       + code('Артикул WB', wb ? escapeHTML(wb) : '');
     const open = currentInvoice.items.filter(p => recv ? !recvDone(p) : !p.closed).length;
     document.getElementById('runAllCount').textContent = 'осталось ' + open + ' ›';
@@ -4533,6 +4707,8 @@
     renderCurrentItem();
     // Приёмка на паузе (вышел и вернулся) — сразу «Вы вышли — приёмка на паузе».
     if(runState && runState.status === 'paused') showRunPaused();
+    // Начало приёмки — со списка всех товаров прихода (владелец 06.10.2026).
+    else if(!itemId && !recvRun.legacy && currentInvoice.items.some(i => !recvDone(i))) openProductsSheet();
   }
   window.openReceivingRun = openReceivingRun;
 

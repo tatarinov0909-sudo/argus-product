@@ -160,3 +160,12 @@ button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid 
 @media(max-width:1100px){.staff-columns{grid-template-columns:1fr;gap:24px;}.staff-managers{border-left:0;padding-left:0;border-top:1px solid var(--line);padding-top:24px;}.staff-column .staff-head{min-height:0;}}
 @media(max-width:760px){.workspace-grid{grid-template-columns:1fr;}.staff-workspace{padding:18px 16px;}.workspace-filters>.rc-field{flex-basis:100%;}.workspace-invoice>summary{gap:8px;}.connected-agent{margin-left:0;}.wh-panel-back,.workspace-back{width:auto;}.workspace-filters .workspace-actions{width:100%;}}
 @media(max-width:640px){.workspace-table{display:block;}.workspace-table thead{display:none;}.workspace-table tbody{display:grid;gap:12px;}.workspace-table tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);border:1px solid var(--line);border-radius:8px;overflow:hidden;}.workspace-table tr>td{padding:10px;border:0;min-width:0;overflow-wrap:anywhere;}.workspace-table tr>td:first-child{grid-column:1/-1;background:var(--panel);}.workspace-table td+td{border-left:0;}.workspace-table .num{text-align:left;white-space:normal;font-size:17px;}.workspace-table td[data-label]:before{content:attr(data-label);display:block;font-size:14px;color:var(--muted);margin-bottom:5px;}.workspace-invoice-body{padding:0 12px 12px;}}
+/* Новая поставка из товаров продавца (06.10.2026). */
+.direct-supply{margin:0 0 28px;}
+.direct-supply-head{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-bottom:18px;}
+.direct-supply-head .staff-title{font-size:22px;}
+.direct-supply-link{padding:0;border:0;background:none;color:var(--accent);font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:3px;}
+.direct-supply .direct-supply-where{flex:2;}
+.direct-supply .vws-panel{margin:4px 0 0;}
+#receiptPicker{--pp-bg:var(--panel-2);margin-bottom:12px;}
+@media(max-width:760px){.direct-supply-head{flex-direction:column;}.direct-supply-head>.wh-onboarding-btn{width:100%;}}

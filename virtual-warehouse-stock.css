@@ -26,7 +26,7 @@
 .vws-choice[open]>summary:after{content:'⌃';}
 .vws-choice>summary span{font:16px/1.35 var(--sans);color:var(--muted);}
 .vws-choice>summary b{font:500 18px/1.4 var(--sans);overflow-wrap:anywhere;}
-.vws-choice-menu{position:absolute;left:0;top:calc(100% + 6px);z-index:90;min-width:100%;max-width:min(600px,80vw);max-height:320px;overflow:auto;padding:6px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:var(--shadow-md);}
+.vws-choice-menu{position:absolute;left:0;top:calc(100% + 6px);z-index:90;min-width:100%;max-width:min(600px,80vw);max-height:320px;overflow:auto;padding:6px;border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:var(--shadow-md,0 12px 32px rgba(0,0,0,.34));}
 .vws-choice-menu .vws-button{width:100%;justify-content:flex-start;border:0;background:none;text-align:left;overflow-wrap:anywhere;}
 .vws-choice-menu .vws-button:hover{background:var(--panel-2);}
 .vws-instruction{margin:0 0 16px;}
@@ -53,7 +53,7 @@
 .vws-selection b{font-weight:600;font-variant-numeric:tabular-nums;}
 .vws-notice{padding:16px 18px;margin-bottom:20px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2);font:16px/1.5 var(--sans);}
 .vws-notice[hidden]{display:none;}
-.vws-error{color:var(--terracotta);}
+.vws-error{color:var(--terracotta,var(--red));}
 .vws-empty{padding:28px;border:1px solid var(--line);border-radius:10px;font:18px/1.5 var(--sans);}
 .vws-empty p{font:16px/1.5 var(--sans);color:var(--muted);margin:10px 0 0;}
 .vws-import-mapping{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px;align-items:start;margin:20px 0;}
@@ -72,3 +72,15 @@
   .vws-panel{margin:16px 12px 24px;padding:18px 14px;}.vws-panel h2{font-size:24px;}.vws-toolbar,.vws-import-mapping{grid-template-columns:1fr;gap:12px;}.vws-toolbar>.vws-actions{grid-column:auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));}.vws-toolbar>.vws-actions .vws-button{padding-inline:8px;}.vws-heading,.vws-import-head,.vws-review-head{gap:16px;}.vws-heading>.vws-button{width:100%;}.vws-heading{margin-bottom:18px;}.vws-heading .vws-sub{font-size:16px;}.vws-choice>summary{min-height:68px;}.vws-search>span,.vws-instruction,.vws-selection .vws-sub{display:none;}
   .vws-choice-menu{max-width:100%;width:100%;}.vws-table-wrap{overflow:visible;border:0;border-radius:0;}.vws-table,.vws-table tbody,.vws-table tr,.vws-table td{display:block;width:100%;}.vws-table colgroup,.vws-table thead{display:none;}.vws-table tr{margin-bottom:16px;padding:16px;border:1px solid var(--line);border-radius:10px;background:var(--panel);}.vws-table tr.vws-selected{background:var(--panel-2);border-color:var(--accent);}.vws-table td{padding:8px 0;border:0!important;text-align:left!important;}.vws-table td:before{content:attr(data-label);display:block;margin-bottom:4px;color:var(--muted);font:16px/1.45 var(--sans);}.vws-table td[data-label=Товар]:before{display:none;}.vws-table input[type=checkbox]{width:26px;height:26px;}.vws-quantity{max-width:none;text-align:left;}.vws-table td[data-label=Выбрать]{display:flex;align-items:center;gap:12px;}.vws-table td[data-label=Выбрать]:before{margin:0;}.vws-identifiers{flex-direction:column;gap:3px;}.vws-selection{padding:12px 0;gap:12px;margin-bottom:16px;}.vws-selection>.vws-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));}.vws-selection>.vws-actions .vws-button{padding-inline:8px;}.vws-import-head>.vws-actions{display:grid;grid-template-columns:1fr;}.vws-pager{gap:10px;}.vws-pager>span{order:3;flex-basis:100%;text-align:center;}.vws-pager>.vws-button{flex:1;}.vws-import-summary{margin-top:20px;}.vws-empty{padding:20px;}
 }
+/* Панель выбора товаров (product-picker.js) — тот же вид, что у переноса (06.10.2026). */
+.vws-panel.pp-flat{margin:0;padding:0;border:0;background:none;}
+.pp-flat .vws-table-wrap{background:var(--panel);}
+.pp-flat .vws-selection{background:var(--pp-bg,var(--panel));}
+.pp-num-col{width:120px;}.pp-qty-col{width:150px;}
+.pp-table th{overflow-wrap:anywhere;}
+.vws-toolbar.pp-toolbar{grid-template-columns:minmax(0,1fr) auto;}
+.vws-toolbar.pp-toolbar>.vws-actions{grid-column:auto;}
+.vws-button[data-action=submit]{border-color:var(--accent);background:var(--accent);color:var(--bg);}
+.pp-warn{margin-top:6px;color:var(--terracotta,var(--red));font:14px/1.35 var(--sans);}
+.pp-warn:empty{display:none;}
+@media(max-width:640px){.vws-toolbar.pp-toolbar{grid-template-columns:1fr;}.vws-selection>.vws-actions [data-action=submit]{grid-column:1/-1;}}

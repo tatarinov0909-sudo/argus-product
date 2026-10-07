@@ -478,7 +478,7 @@
   };
 
   // ---------- Переходы ----------
-  async function navigate(refresh = false) {
+  async function navigate(refresh = false, quiet = false) {
     if (!state.profile || !state.token) return;
     document.querySelectorAll('dialog[open]').forEach((d) => d.close());
     closeMenus();
@@ -488,7 +488,8 @@
     renderNav();
     $('view').setAttribute('aria-busy', 'true'); $('refreshButton').disabled = true;
     if (!page.data) { renderBilling(); $('view').setAttribute('aria-busy', 'false'); $('refreshButton').disabled = false; return; }
-    if (refresh || !state.data[page.data]) $('view').innerHTML = '<div class="skeleton skeleton-strip"></div>' + '<div class="skeleton skeleton-row"></div>'.repeat(5);
+    // Тихое автообновление — без заглушки: экран не мигает (06.10.2026).
+    if (!quiet && (refresh || !state.data[page.data])) $('view').innerHTML = '<div class="skeleton skeleton-strip"></div>' + '<div class="skeleton skeleton-row"></div>'.repeat(5);
     try {
       const key = page.data;
       if (refresh) { try { const c = await api('/api/sellers/catalog'); if (run !== state.viewRun) return; state.catalog = Object.fromEntries(c.products.map((r) => [r.sku, r])); } catch { toast('Каталог не обновился — показаны прошлые данные.'); } }
@@ -521,6 +522,18 @@
   }
   window.addEventListener('hashchange', () => navigate());
   $('refreshButton').onclick = () => navigate(true);
+  // Автообновление (владелец 06.10.2026): раз в минуту — товары, заказы и
+  // поставки, пока вкладка открыта, нет окна поверх и человек ничего не вводит.
+  setInterval(() => {
+    if (document.visibilityState !== 'visible' || !state.token || !['products', 'orders', 'supplies'].includes(state.view)) return;
+    const a = document.activeElement;
+    if (a && a.matches && a.matches('input, textarea, select, [contenteditable="true"]')) return;
+    let popover = false; try { popover = Boolean(document.querySelector('[popover]:popover-open')); } catch { popover = false; }
+    if (popover || document.querySelector('dialog[open], .dd.open') || ($('vwMoveForm') && $('vwMoveForm').innerHTML.trim())) return;
+    if (String(window.getSelection && window.getSelection()).trim()) return;   // человек выделяет текст
+    const y = window.scrollY;
+    navigate(true, true).then(() => window.scrollTo(0, y)).catch(() => {});
+  }, 60000);
 
   // Общая обвязка раздела: поиск перерисовывает только строки (курсор не
   // прыгает), «Показать ещё», Excel, сброс фильтров.
@@ -2001,6 +2014,8 @@
     const v = (x) => h(x ?? '');
     $('drawerBody').innerHTML = `<form class="inbound-form" id="inboundForm"><p class="help">${edit ? 'Поменяйте, что изменилось. Список товаров меняется новым файлом — без файла останется прежний.' : 'Загрузите таблицу, по которой собираете товар: шаблон поставки WB, свою таблицу или выгрузку из 1С. Нужны количество и штрихкод, артикул или название.'}</p>
       <div class="field"><span>${edit ? 'Новый список товаров — если поменялся' : 'Файл Excel или CSV'}</span><label class="file-pick"><input type="file" id="inboundFile" accept=".xlsx,.xls,.csv"><span class="button">${icon('document')}Выбрать файл</span><span class="help" id="inboundFileName">Файл не выбран</span></label></div>
+      <div class="field"><span>Или отметьте товары в каталоге — галочками, как у складов</span><div><button class="button" type="button" id="inboundPickOpen">Выбрать из каталога</button></div></div>
+      <div id="inboundPicker" hidden></div>
       <div class="three"><label class="field"><span>Когда привезёте</span><input type="date" id="inboundDate" value="${edit ? v(edit.plannedDate) : tomorrow}"></label><label class="field"><span>Время выгрузки: с</span><input type="time" id="inboundFrom" value="${v(edit?.plannedFrom)}"></label><label class="field"><span>до</span><input type="time" id="inboundTo" value="${v(edit?.plannedTo)}"></label></div>
       <div class="three"><label class="field"><span>Коробов</span><input id="inboundBoxes" inputmode="numeric" maxlength="6" value="${v(edit?.boxes)}"></label><label class="field"><span>Паллет</span><input id="inboundPallets" inputmode="numeric" maxlength="6" value="${v(edit?.pallets)}"></label><label class="field"><span>Вес всего, кг</span><input id="inboundWeight" inputmode="decimal" maxlength="10" value="${v(edit?.weightKg)}"></label></div>
       <div class="two"><label class="field"><span>Кто везёт — транспортная компания или водитель</span><input id="inboundCarrier" maxlength="120" placeholder="ТК «Деловые линии» или Иван, +7 900 …" value="${v(edit?.carrier)}"></label><label class="field"><span>Номер машины</span><input id="inboundVehicle" maxlength="20" placeholder="А123ВС 77" value="${v(edit?.vehicle)}"></label></div>
@@ -2069,6 +2084,27 @@
       } catch (e) { f.error = e.message; f.errorTitle = apply ? 'Не отправилось' : 'Файл не принят'; }
       f.busy = false; draw();
     }
+    // Товары привоза панелью выбора (владелец 06.10.2026: «везде, где
+    // выбирают товар»). Выбор превращается в ту же таблицу, что и файл, и
+    // проходит ту же проверку склада перед отправкой.
+    $('inboundPickOpen').onclick = () => {
+      $('drawer').classList.add('drawer-wide'); $('inboundPickOpen').disabled = true;
+      const picker = window.ArgusProductPicker.open({
+        host: $('inboundPicker'), request: api, companyId: state.companyId, flat: true, maxItems: 1000,
+        templateName: 'Товары привоза', submitLabel: 'Готово — проверить список',
+        loadRows: async () => (await api('/api/sellers/stock' + (state.owner ? '?view=seller' : ''))).rows,
+        columns: [{ title: 'На складе', value: (r) => r.total }],
+        onSubmit: async (items) => {
+          if (run !== state.drawerRun) return;
+          f.grid = [['Артикул', 'Количество'], ...items.map((i) => [i.sku, i.qty])];
+          f.name = 'Выбрано в каталоге: ' + counted(items.length, 'товар', 'товара', 'товаров') + ', ' + n(items.reduce((s, i) => s + i.qty, 0)) + ' шт.';
+          f.preview = null; f.error = ''; f.byRow = {};
+          picker.close(); $('drawer').classList.remove('drawer-wide'); $('inboundPickOpen').disabled = false;
+          send(false);
+        },
+      });
+    };
+    $('drawer').addEventListener('close', () => $('drawer').classList.remove('drawer-wide'), { once: true });
     $('inboundFile').onchange = (e) => {
       const file = e.target.files[0]; e.target.value = ''; if (!file) return; f.preview = null; f.error = ''; f.name = file.name; f.byRow = {};
       if (typeof XLSX === 'undefined') { f.error = 'Не загрузился модуль чтения Excel. Обновите страницу.'; f.errorTitle = 'Файл не принят'; draw(); return; }

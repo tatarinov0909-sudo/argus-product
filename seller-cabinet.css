@@ -327,6 +327,8 @@ main { padding: 28px var(--page-x) 64px; }
 dialog { color: var(--text); background: var(--panel); border: 1px solid var(--line-2); padding: 0; }
 dialog::backdrop { background: rgba(8, 11, 18, .6); }
 .drawer { width: 620px; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0 0 0 auto; border-width: 0 0 0 1px; }
+/* Выбор товаров привоза панелью — шире (06.10.2026). */
+.drawer.drawer-wide { width: min(1180px, 100vw); }
 .drawer[open], .modal[open] { display: flex; flex-direction: column; }
 .drawer-head { flex: none; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 22px 24px 18px; border-bottom: 1px solid var(--line); }
 .drawer-head .eyebrow { font-size: 13px; color: var(--muted); margin-bottom: 4px; }

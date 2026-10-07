@@ -266,11 +266,9 @@
       el.classList.toggle('active', active);
       if(active) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current');
     });
-    // Приход: свежий список (грузчик мог принять), каталог выбранного продавца.
-    if(view === 'receipts'){
-      loadInvoicesList();
-      loadReceiptCatalog(document.getElementById('invoiceCompanySelect').value);
-    }
+    // Приход: свежий список (грузчик мог принять) и панель товаров — на
+    // компьютере форма видна сразу, без «+ Приход».
+    if(view === 'receipts'){ loadInvoicesList(); openReceiptPicker(); }
     if(view==='journal'){
       journalUnread = 0;
       document.getElementById('navBadge').classList.remove('show');
@@ -293,6 +291,27 @@
       if(badge) badge.classList.remove('show');
     }
   }
+
+  // Автообновление (владелец 06.10.2026): раз в минуту — экраны-списки, пока
+  // вкладка открыта, нет окна поверх и человек ничего не вводит. Журнал
+  // обновляется сам, формы (настройки, сотрудники, расчёты) не трогаем.
+  setInterval(() => {
+    if(document.visibilityState !== 'visible') return;
+    const a = document.activeElement;
+    if(a && a.matches && a.matches('input, textarea, select, [contenteditable="true"]')) return;
+    if(document.querySelector('.ask-overlay, [id$="Modal"].open, #lightbox.open, dialog[open]')) return;
+    const y = window.scrollY;
+    let again = null;
+    if(currentView === 'home') again = loadHome();
+    else if(currentView === 'supplies' && document.getElementById('directSupply').hidden) again = loadSupplies();
+    else if(currentView === 'orders') again = loadMpOrders();
+    else if(currentView === 'receipts') again = loadInvoicesList();
+    else if(currentView === 'mp') again = loadMarketplaces();
+    else if(currentView === 'acts') again = loadActs();
+    else if(currentView === 'products' && !warehouseVwStockSession
+      && document.getElementById('productForm')?.hidden !== false) again = productsFor ? loadProducts() : loadSellerStock();
+    if(again) Promise.resolve(again).then(() => window.scrollTo(0, y)).catch(() => {});
+  }, 60000);
 
   argusBackButton({
     buttons: '.wh-panel-back, .pr-back',
@@ -864,7 +883,7 @@
     }
     select.innerHTML = companies.map(c => `<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('');
     if(keep && companies.some(c => c.id === keep)) select.value = keep;
-    loadReceiptCatalog(select.value);
+    if(currentView === 'receipts') openReceiptPicker();
   }
 
   async function addCompany(){
@@ -904,83 +923,27 @@
 
   /* ===================== Приход товара ===================== */
 
-  // Каталог продавца для выбора товара в строке. Товар выбирают, а не
-  // вписывают: артикул с опечаткой принимался бы как есть, ложился в ячейку
-  // и никогда не подбирался под заказ.
-  const receiptCatalog = {};   // companyId → [{sku, name}] | 'loading' | 'error'
-  const productLabel = (p) => p.name + ' · ' + p.sku;
-
-  async function loadReceiptCatalog(companyId){
-    const list = document.getElementById('receiptProducts');
-    if(!companyId || !list) return;
-    if(!receiptCatalog[companyId]){
-      receiptCatalog[companyId] = 'loading';
-      try{
-        const rows = await apiFetch('/api/products?companyId=' + encodeURIComponent(companyId));
-        receiptCatalog[companyId] = rows.map(p => ({ sku: p.sku, name: p.name }));
-      } catch(e){
-        receiptCatalog[companyId] = 'error';
-        showWhToast('Не удалось загрузить каталог продавца: ' + e.message);
-      }
-    }
-    // Ответ мог прийти, когда уже выбрали другого продавца.
-    if(document.getElementById('invoiceCompanySelect').value !== companyId) return;
-    const cat = receiptCatalog[companyId];
-    list.innerHTML = Array.isArray(cat)
-      ? cat.map(p => '<option value="' + escapeHTML(productLabel(p)) + '">').join('') : '';
-    document.querySelectorAll('#invoiceItemsInputs .rc-row').forEach(resolveReceiptRow);
+  // Товары прихода — панелью выбора, как у виртуального склада (владелец
+  // 06.10.2026): поиск, галочки, протягивание мышью, Excel. Товар выбирают
+  // из каталога продавца, а не вписывают: артикул с опечаткой ложился бы
+  // в ячейку и никогда не подбирался под заказ.
+  let receiptPicker = null, receiptPickerFor = null;
+  function openReceiptPicker(){
+    const companyId = document.getElementById('invoiceCompanySelect').value;
+    if(receiptPicker && receiptPickerFor === companyId) return;
+    receiptPicker?.close();
+    receiptPicker = null; receiptPickerFor = companyId;
+    if(!companyId) return;
+    receiptPicker = window.ArgusProductPicker.open({
+      host: document.getElementById('receiptPicker'), request: apiFetch, companyId, flat: true,
+      maxItems: 1000, templateName: 'Товары прихода', submitLabel: 'Создать приход',
+      loadRows: async () => (await apiFetch('/api/sellers/stock?view=seller&companyId=' + encodeURIComponent(companyId))).rows,
+      columns: [{ title: 'Всего на складе', value: r => r.total }],
+      onSubmit: items => submitReceipt(companyId, items),
+    });
   }
-
-  function receiptCompanyChanged(){
-    loadReceiptCatalog(document.getElementById('invoiceCompanySelect').value);
-  }
+  function receiptCompanyChanged(){ openReceiptPicker(); }
   window.receiptCompanyChanged = receiptCompanyChanged;
-
-  // Что выбрано в строке: подпись из списка, артикул или точное название.
-  function findReceiptProduct(text){
-    const cat = receiptCatalog[document.getElementById('invoiceCompanySelect').value];
-    if(!Array.isArray(cat)) return undefined;
-    const t = String(text || '').trim();
-    if(!t) return null;
-    const low = t.toLowerCase();
-    return cat.find(p => productLabel(p) === t)
-      || cat.find(p => p.sku.toLowerCase() === low)
-      || (cat.filter(p => p.name.toLowerCase() === low).length === 1
-        ? cat.find(p => p.name.toLowerCase() === low) : null);
-  }
-
-  function resolveReceiptRow(row){
-    const input = row.querySelector('.rc-product');
-    const note = row.querySelector('.rc-note');
-    const found = findReceiptProduct(input.value);
-    row.dataset.sku = found ? found.sku : '';
-    row.dataset.name = found ? found.name : '';
-    if(found){
-      note.className = 'rc-note';
-      note.textContent = 'артикул ' + found.sku;
-    } else if(found === null && input.value.trim()){
-      note.className = 'rc-note bad';
-      note.textContent = 'Нет в каталоге продавца — выберите из списка или заведите товар во вкладке «Товары».';
-    } else {
-      note.className = 'rc-note';
-      note.textContent = found === undefined && input.value.trim() ? 'каталог загружается…' : '';
-    }
-  }
-  window.resolveReceiptRow = resolveReceiptRow;
-
-  function addInvoiceItemRow(){
-    const wrap = document.getElementById('invoiceItemsInputs');
-    const row = document.createElement('div');
-    row.className = 'rc-row';
-    row.innerHTML = `
-      <input type="text" class="rc-product" list="receiptProducts" autocomplete="off"
-             placeholder="Начните вводить название или артикул" oninput="resolveReceiptRow(this.parentElement)">
-      <input type="text" class="rc-qty" inputmode="numeric" placeholder="Кол-во" aria-label="Количество">
-      <button type="button" class="rc-del" onclick="this.parentElement.remove()" aria-label="Убрать строку">✕</button>
-      <div class="rc-note"></div>
-    `;
-    wrap.appendChild(row);
-  }
 
   // Номер по умолчанию: ПР-ДДММГГ-N, следующий свободный за сегодня. Свой номер
   // (из документов поставщика) можно вписать поверх.
@@ -988,7 +951,7 @@
     const field = document.getElementById('invoiceNumberInput');
     if(!field || field.value.trim()) return;
     const d = new Date();
-    const prefix = (receiptDirection === 'out' ? 'ОТГ-' : 'ПР-') + String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0')
+    const prefix = 'ПР-' + String(d.getDate()).padStart(2, '0') + String(d.getMonth() + 1).padStart(2, '0')
       + String(d.getFullYear()).slice(2) + '-';
     let n = 1;
     const taken = new Set((lastInvoices || []).concat(lastOutbound || []).map(inv => inv.number));
@@ -996,87 +959,84 @@
     field.value = prefix + n;
   }
 
-  let receiptBusy = false;
-  // Что оформляет форма: приход или отгрузку вручную — товар не через
-  // маркетплейс, например физлицу (владелец 05.10.2026).
-  let receiptDirection = 'in';
-
-  async function submitInvoice(){
-    if(receiptBusy) return;
-    const companyId = document.getElementById('invoiceCompanySelect').value;
-    const number = document.getElementById('invoiceNumberInput').value.trim();
-    const rows = Array.from(document.querySelectorAll('#invoiceItemsInputs .rc-row'));
-    rows.forEach(resolveReceiptRow);
-    if(!companyId){ showWhToast('Выберите продавца.'); return; }
-    const out = receiptDirection === 'out';
-    if(!number){ showWhToast(out ? 'Впишите номер отгрузки.' : 'Впишите номер прихода.'); return; }
-    // Строка без выбранного товара или без количества — не молча выбросить,
-    // а сказать: иначе приход создавался бы без неё с сообщением «готово».
-    const filled = rows.filter(r => r.querySelector('.rc-product').value.trim() || r.querySelector('.rc-qty').value.trim());
-    const bad = filled.filter(r => {
-      const q = Number(String(r.querySelector('.rc-qty').value).replace(/\s/g, ''));
-      return !r.dataset.sku || !Number.isInteger(q) || q < 1;
-    });
-    if(filled.length === 0){ showWhToast('Добавьте хотя бы один товар.'); return; }
-    if(bad.length){
-      showWhToast(bad.length + ' ' + pluralRu(bad.length, 'строка', 'строки', 'строк')
-        + ': товар не выбран из каталога или количество не целое больше нуля.');
-      bad[0].querySelector(bad[0].dataset.sku ? '.rc-qty' : '.rc-product').focus();
-      return;
-    }
-    const items = filled.map(r => ({ name: r.dataset.name, sku: r.dataset.sku,
-      declaredQty: Number(String(r.querySelector('.rc-qty').value).replace(/\s/g, '')) }));
-    const units = items.reduce((s, it) => s + it.declaredQty, 0);
-
-    receiptBusy = true;
-    const btn = document.getElementById('receiptSubmitBtn');
-    btn.disabled = true;
-    try{
-      await apiFetch('/api/invoices', {method:'POST', body:{companyId, number, items, direction: out ? 'out' : 'in'}});
-      document.getElementById('invoiceNumberInput').value = '';
-      document.getElementById('invoiceItemsInputs').innerHTML = '';
-      addInvoiceItemRow();
-      await loadInvoicesList();
-      suggestReceiptNumber();
-      toggleReceiptForm(false);
-      showWhToast(out
-        ? 'Отгрузка ' + number + ' создана: ' + units + ' шт. Грузчик увидит её в сборке и закроет «Отгрузили — машина уехала».'
-        : 'Приход ' + number + ' создан: ' + units + ' шт. Грузчик увидит его в «Приёмке».');
-    } catch(e){
-      showWhToast((out ? 'Отгрузка не создана: ' : 'Приход не создан: ') + e.message);
-    }
-    receiptBusy = false;
-    btn.disabled = false;
+  // Отгрузка вручную ушла в «Поставки» → «Новая поставка» (владелец
+  // 06.10.2026): одна дорога для товара, уезжающего не на WB.
+  async function submitReceipt(companyId, items){
+    const field = document.getElementById('invoiceNumberInput');
+    const number = field.value.trim();
+    if(!number){ field.focus(); throw new Error('Впишите номер прихода.'); }
+    await apiFetch('/api/invoices', { method: 'POST', body: { companyId, number, direction: 'in',
+      items: items.map(i => ({ name: i.name, sku: i.sku, declaredQty: i.qty })) } });
+    const units = items.reduce((s, i) => s + i.qty, 0);
+    field.value = '';
+    receiptPicker?.close(); receiptPicker = null; receiptPickerFor = null;
+    toggleReceiptForm(false);
+    openReceiptPicker();   // на компьютере форма на виду — сразу чистая панель для следующего
+    await loadInvoicesList();
+    showWhToast('Приход ' + number + ' создан: ' + units + ' шт. Грузчик увидит его в «Приёмке».');
   }
-  window.submitInvoice = submitInvoice;
-  window.addInvoiceItemRow = addInvoiceItemRow;
   function toggleReceiptForm(open){
     const form = document.getElementById('receiptForm');
     const on = form.classList.toggle('open', open);
-    document.getElementById('receiptNewBtn').textContent = on ? 'Скрыть форму' : '+ Приход / отгрузка';
-    if(on) form.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    document.getElementById('receiptNewBtn').textContent = on ? 'Скрыть форму' : '+ Приход';
+    if(on){ openReceiptPicker(); form.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
   }
   window.toggleReceiptForm = toggleReceiptForm;
 
-  // Приход или отгрузка вручную — одна форма, переключатель вверху.
-  function setReceiptDirection(dir){
-    if(dir !== receiptDirection){
-      receiptDirection = dir;
-      const field = document.getElementById('invoiceNumberInput');
-      if(field && /^(ПР|ОТГ)-\d{6}-\d+$/.test(field.value.trim())) field.value = '';
-      suggestReceiptNumber();
-    }
-    const outDir = dir === 'out';
-    document.getElementById('invoiceNumberLabel').textContent = outDir ? 'Номер отгрузки' : 'Номер прихода';
-    document.getElementById('receiptSubmitBtn').textContent = outDir ? 'Создать отгрузку' : 'Создать приход';
-    document.getElementById('outboundHint').hidden = !outDir;
-    for(const [id, on] of [['dirInBtn', !outDir], ['dirOutBtn', outDir]]){
-      const b = document.getElementById(id);
-      b.classList.toggle('active', on);
-      b.setAttribute('aria-pressed', String(on));
-    }
+  /* ---------- Поставка физлицу из товаров продавца (владелец 06.10.2026) ----------
+     «Поставки» → «Новая поставка» → продавец → панель выбора его товаров →
+     «Куда / кому». Поставка на WB по-прежнему составляется из заказов. */
+  let directSupplyPicker = null;
+  function openDirectSupply(){
+    const select = document.getElementById('directSupplyCompany');
+    const keep = select.value;
+    select.innerHTML = companies.length
+      ? companies.map(c => '<option value="' + escapeHTML(c.id) + '">' + escapeHTML(c.name) + '</option>').join('')
+      : '<option value="">Сначала добавьте продавца</option>';
+    if(keep && companies.some(c => c.id === keep)) select.value = keep;
+    document.getElementById('directSupply').hidden = false;
+    document.getElementById('suppliesList').hidden = true;
+    if(!directSupplyPicker || directSupplyPicker.companyId !== select.value) openDirectSupplyPicker();
+    document.getElementById('directSupply').scrollIntoView({ block: 'start' });
   }
-  window.setReceiptDirection = setReceiptDirection;
+  function closeDirectSupply(){
+    directSupplyPicker?.close(); directSupplyPicker = null;
+    document.getElementById('directSupply').hidden = true;
+    document.getElementById('suppliesList').hidden = false;
+  }
+  function openDirectSupplyPicker(){
+    const companyId = document.getElementById('directSupplyCompany').value;
+    directSupplyPicker?.close(); directSupplyPicker = null;
+    if(!companyId) return;
+    directSupplyPicker = window.ArgusProductPicker.open({
+      host: document.getElementById('directSupplyPicker'), request: apiFetch, companyId,
+      maxItems: 500, templateName: 'Товары поставки', submitLabel: 'Создать поставку',
+      loadRows: async () => (await apiFetch('/api/sellers/stock?view=seller&companyId=' + encodeURIComponent(companyId))).rows,
+      columns: [{ title: 'Всего', value: r => r.total }, { title: 'Доступно', value: r => r.available }],
+      limit: r => r.available, defaultQty: () => '1',
+      onSubmit: items => submitDirectSupply(companyId, items),
+    });
+    directSupplyPicker.companyId = companyId;
+  }
+  async function submitDirectSupply(companyId, items){
+    const where = document.getElementById('directSupplyWhere');
+    const destination = where.value.trim();
+    if(!destination){ where.focus(); throw new Error('Впишите, куда и кому едет поставка.'); }
+    // Больше доступного по учёту — можно (учёт бывает неточным), но сначала спросить.
+    const over = items.filter(i => i.limit != null && i.qty > i.limit);
+    if(over.length && !await askConfirm('Больше, чем доступно по учёту: '
+      + over.slice(0, 5).map(i => '«' + i.name + '» — ' + i.qty + ' из ' + i.limit).join(', ')
+      + (over.length > 5 ? ' и ещё ' + (over.length - 5) : '') + '.\n\nСоздать поставку всё равно? Если товара на полке не окажется, грузчик отметит нехватку.')) return;
+    const date = document.getElementById('directSupplyDate');
+    const created = await apiFetch('/api/supplies/direct', { method: 'POST', body: { companyId, destination,
+      shipDate: date.value || null, items: items.map(i => ({ sku: i.sku, qty: i.qty })) } });
+    const units = items.reduce((s, i) => s + i.qty, 0);
+    where.value = ''; date.value = '';
+    closeDirectSupply();
+    await loadSupplies();
+    showWhToast('Поставка ' + created.number + ' создана: ' + units + ' шт. — ' + destination + '. Грузчик увидит её в «Сборке поставок».');
+  }
+  Object.assign(window, { openDirectSupply, closeDirectSupply, openDirectSupplyPicker });
 
   let lastInvoices = [];
   let lastOutbound = [];
@@ -2075,9 +2035,8 @@
       await apiFetch('/api/products', { method: 'POST', body: { companyId, sku, name, barcode: barcode || undefined } });
       ['productFormSku', 'productFormName', 'productFormBarcode'].forEach(id => { document.getElementById(id).value = ''; });
       toggleProductForm(false);
-      // Новый товар сразу доступен в приходе: каталог продавца перечитается.
-      delete receiptCatalog[companyId];
-      if(document.getElementById('invoiceCompanySelect').value === companyId) loadReceiptCatalog(companyId);
+      // Новый товар сразу доступен в приходе: панель перечитает каталог, выбор останется.
+      if(receiptPickerFor === companyId) receiptPicker?.reload();
       sellerStock = null;
       openSellerProducts(companyId);
       showWhToast('Товар «' + name + '» заведён. Его можно выбирать в приходе.');
@@ -8698,7 +8657,8 @@
         : mp.error ? ' На WB передать не удалось: ' + mp.error
         : mp.skipped === 'write_disabled'
           ? ' На WB ничего не менялось: для этого продавца не разрешено «Менять статусы» — передайте поставку в кабинете WB руками.'
-        : mp.skipped === 'no_mp_supply'
+        // Поставка не на WB (физлицу) — про WB молчим (06.10.2026).
+        : mp.skipped === 'no_mp_supply' && (s.marketplace === 'wb' || s.mp_supply_id)
           ? ' На WB поставки нет — передайте её в кабинете WB руками.'
         : '';
       showWhToast('Поставка ' + r.number + ' уехала.' + wb);
@@ -8924,7 +8884,6 @@
   switchView('home');
   renderLogoTargets();
 
-  addInvoiceItemRow();
   loadWarehouseInfo();
   loadCompanies().then(loadInvoicesList);
   loadJournal(true).then(startJournalPolling);
