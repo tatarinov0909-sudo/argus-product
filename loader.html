@@ -2314,7 +2314,7 @@
     const bc = String(p.barcode || '').split(',').map(b => b.trim()).filter(Boolean)[0];
     const place = where !== undefined ? where : p.where;
     return '<div class="product-row-codes">'
-      + (bc ? '<span class="prc-bc">' + barcodeHtml(bc, tail || 4) + '</span>' : '<span class="bc-head">штрихкод не передан</span>')
+      + (bc ? '<span class="prc-bc">' + barcodeHtml(bc, tail) + '</span>' : '<span class="bc-head">штрихкод не передан</span>')
       + '<span>Арт. ФФ <b>' + escapeHTML(p.sku) + '</b></span>'
       + (place ? '<span>Где: <b>' + escapeHTML(place) + '</b></span>' : '')
       + '</div>';
@@ -2787,7 +2787,7 @@
     const article = recv ? null : item.article;
     const wb = recv ? item.wb_article : item.nmId;
     document.getElementById('runCodes').innerHTML =
-      code(barcodes.length > 1 ? 'Штрихкоды' : 'Штрихкод', barcodes.map(b => barcodeHtml(b, tail || 4)).join('<br>'), 'bc')
+      code(barcodes.length > 1 ? 'Штрихкоды' : 'Штрихкод', barcodes.map(b => barcodeHtml(b, tail)).join('<br>'), 'bc')
       + code('Артикул ФФ', item.sku ? escapeHTML(item.sku) : '')
       + (recv ? '' : code('Артикул продавца', article ? escapeHTML(article) : ''))
       + code('Артикул WB', wb ? escapeHTML(wb) : '');

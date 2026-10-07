@@ -1025,8 +1025,14 @@
     return label;
   }
   function printTape(){
-    const cards = [...document.querySelectorAll('.sheet[data-doc="stickers"] .sticker')].filter((c) => c.querySelector('img'));
+    const all = [...document.querySelectorAll('.sheet[data-doc="stickers"] .sticker')];
+    const cards = all.filter((c) => c.querySelector('img'));
     if(!cards.length){ alert('Этикеток от WB в этой поставке пока нет.'); return; }
+    // Без картинки WB этикетку на ленту не напечатать — сказать сколько, а не
+    // пропустить молча: упаковщик искал бы недостающие (проверка 07.10, зам. 8).
+    const lost = all.length - cards.length;
+    if(lost && !confirm('Для ' + lost + ' ' + (lost % 10 === 1 && lost % 100 !== 11 ? 'заказа' : 'заказов')
+      + ' WB не прислал картинку этикетки — на ленту они не попадут. Возьмите их в кабинете WB или напечатайте листом A4.\n\nПечатать остальные?')) return;
     const labels = [];
     cards.forEach((card) => {
       const label = document.createElement('div');

@@ -994,11 +994,18 @@
     if(keep && companies.some(c => c.id === keep)) select.value = keep;
     document.getElementById('directSupply').hidden = false;
     document.getElementById('suppliesList').hidden = true;
+    // Номер операции окна: повтор запроса (двойное нажатие, обрыв связи,
+    // второй человек с тем же окном) не создаст вторую поставку.
+    // randomUUID есть только на https; без него — тот же вид номера из getRandomValues.
+    if(!directSupplyRequest) directSupplyRequest = crypto.randomUUID ? crypto.randomUUID()
+      : '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
     if(!directSupplyPicker || directSupplyPicker.companyId !== select.value) openDirectSupplyPicker();
     document.getElementById('directSupply').scrollIntoView({ block: 'start' });
   }
+  let directSupplyRequest = null;
   function closeDirectSupply(){
     directSupplyPicker?.close(); directSupplyPicker = null;
+    directSupplyRequest = null;
     document.getElementById('directSupply').hidden = true;
     document.getElementById('suppliesList').hidden = false;
   }
@@ -1027,7 +1034,7 @@
       + (over.length > 5 ? ' и ещё ' + (over.length - 5) : '') + '.\n\nСоздать поставку всё равно? Если товара на полке не окажется, грузчик отметит нехватку.')) return;
     const date = document.getElementById('directSupplyDate');
     const created = await apiFetch('/api/supplies/direct', { method: 'POST', body: { companyId, destination,
-      shipDate: date.value || null, items: items.map(i => ({ sku: i.sku, qty: i.qty })) } });
+      shipDate: date.value || null, items: items.map(i => ({ sku: i.sku, qty: i.qty })), requestId: directSupplyRequest } });
     const units = items.reduce((s, i) => s + i.qty, 0);
     where.value = ''; date.value = '';
     closeDirectSupply();
@@ -5433,7 +5440,10 @@
       ['В сборке', sum('inAssembly'), 'в поставке, склад собирает'],
       ['В пути', sum('inTransit'), 'уехало на WB, ещё не принято'],
       ['Принято WB', sum('acceptedByWb'), 'сортировочный центр принял, за 3 дня'],
-      ['Доступно к продаже', known('available'), 'всего − заказано − в сборке − в пути', 'main'],
+      // Как у продавца: «в пути» — сколько вычтено, нехватка — ноль (07.10, замечание 6).
+      ['Доступно к продаже', known('available'), 'всего − заказано − в сборке − в пути'
+        + (sum('inTransit') > sum('transitDeducted') && sellers.some(s => s.transitDeducted != null) ? ' (в пути — ещё не списанное 1С: ' + nfmt(sum('transitDeducted')) + ')' : '')
+        + (sum('shortageCount') ? '; где заказов больше товара — 0' : ''), 'main'],
     ];
     host.innerHTML = tiles.map(([label, value, note, cls]) => '<div class="home-stat' + (cls ? ' ' + cls : '') + '">'
       + '<div class="home-stat-label">' + escapeHTML(label) + '</div>'

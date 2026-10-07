@@ -36,14 +36,14 @@
   const icon = (name, cls = '') => `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${PATHS[name] || PATHS.box}"/></svg>`;
   const paintIcons = (root = document) => root.querySelectorAll('[data-icon]').forEach((el) => { el.innerHTML = icon(el.dataset.icon); });
 
-  const NAV = [['products', 'Товары', 'box'], ['orders', 'Заказы', 'orders'], ['supplies', 'Поставки на WB', 'truck'],
+  const NAV = [['products', 'Товары', 'box'], ['orders', 'Заказы', 'orders'], ['supplies', 'Поставки', 'truck'],
     ['documents', 'Приходы', 'inbox'], ['defects', 'Склад брака', 'alert'], ['billing', 'Расчёты', 'wallet']];
   const PAGES = {
     products: { title: 'Товары', subtitle: 'Сколько вашего товара на складе и сколько можно продавать.', data: 'stock', nav: 'products' },
     returns: { title: 'Товары', subtitle: 'Что вернулось на склад и в каком состоянии.', data: 'documents', nav: 'products' },
     wb: { title: 'Товары', subtitle: 'Все ваши склады на Wildberries — отметьте, товар для каких лежит у этого фулфилмента.', data: 'wb', nav: 'products' },
     orders: { title: 'Заказы', subtitle: 'Как склад готовит ваши заказы с Wildberries.', data: 'orders', nav: 'orders' },
-    supplies: { title: 'Поставки на WB', subtitle: 'Склад собирает их из ваших заказов и везёт на Wildberries.', data: 'supplies', nav: 'supplies' },
+    supplies: { title: 'Поставки', subtitle: 'Склад собирает их из ваших заказов и везёт на Wildberries или покупателю.', data: 'supplies', nav: 'supplies' },
     documents: { title: 'Приходы', subtitle: 'Товар, который вы привозите на склад на хранение.', data: 'documents', nav: 'documents' },
     defects: { title: 'Склад брака', subtitle: 'Ваш брак лежит отдельно от товара в продаже. Решите, что с ним делать, — склад выполнит.', data: 'defects', nav: 'defects' },
     // Заглушка (владелец 27.09.2026): расчёт за хранение и упаковку появится,
@@ -708,7 +708,12 @@
       ['В сборке', s.inAssembly ?? sum(assemblyQty), 'в поставке, склад собирает'],
       ['В пути', s.inTransit ?? sum(transitQty), 'уехало на WB, ещё не принято'],
       ['Принято WB', s.acceptedByWb ?? 0, 'сортировочный центр принял, за 3 дня'],
-      ['Доступно к продаже', s.available ?? (unknown ? null : sum(availableQty)), 'всего − заказано − в сборке − в пути' + (s.unknownCount ? ', по товарам с учётом' : ''), 'main'],
+      // Числа плитки сходятся: «в пути» — сколько вычтено (часть 1С могла уже
+      // списать), а товары с нехваткой дают ноль (проверка 07.10, замечание 6).
+      ['Доступно к продаже', s.available ?? (unknown ? null : sum(availableQty)), 'всего − заказано − в сборке − в пути'
+        + (s.transitDeducted != null && Number(s.inTransit) > Number(s.transitDeducted) ? ` (в пути — ещё не списанное 1С: ${n(s.transitDeducted)})` : '')
+        + (s.shortageCount ? '; где заказов больше товара — 0' : '')
+        + (s.unknownCount ? ', по товарам с учётом' : ''), 'main'],
     ];
     const short = rows.filter(isShort).length;
     const over = wbView() ? rows.filter(wbOver).length : 0;
@@ -1186,7 +1191,7 @@
   const sellerOrderMarketplace = (source) => {
     const key = String(source || '').toLowerCase();
     if (!key) return '';
-    return `<span class="workspace-marketplace ${key === '1c' ? 'onec' : ['wb', 'ozon'].includes(key) ? key : ''}">${h({ wb: 'WB', ozon: 'Ozon', '1c': '1С' }[key] || key.toUpperCase())}</span>`;
+    return `<span class="workspace-marketplace ${key === '1c' ? 'onec' : ['wb', 'ozon'].includes(key) ? key : ''}">${h({ wb: 'WB', ozon: 'Ozon', '1c': '1С', direct: 'Физлицу' }[key] || key.toUpperCase())}</span>`;
   };
   function renderOrders() {
     const ui = state.ui.orders; const supplies = [...new Set(state.data.orders.rows.map((r) => r.supply_number).filter(Boolean))].sort().reverse();
