@@ -8074,16 +8074,31 @@
   // этим заказам вместе с поставками, которые уже собираются. Считает сервер
   // (stockLevel) — тем же правилом, что «не хватит товара» у поставки.
   const orderShortLevel = (o) => (o.stockLevel === 'none' || o.stockLevel === 'short') ? o.stockLevel : null;
-  let ordersShortOnly = false;
-  function setOrdersShortOnly(companyId, on){
-    ordersShortOnly = Boolean(on);
+  // Фильтр по наличию (владелец 05.10.2026): «нет на складе совсем», «есть,
+  // но меньше, чем нужно», «не сопоставлены с номенклатурой». Раньше это были
+  // только цвет строки, подпись под кнопками и серые строки без галочки.
+  const ORDER_STOCK_FILTERS = {
+    none: (o) => orderShortLevel(o) === 'none',
+    short: (o) => orderShortLevel(o) === 'short',
+    unmapped: (o) => o.mapped === false,
+  };
+  let ordersStockFilter = '';
+  function setOrdersStockFilter(companyId, value){
+    ordersStockFilter = ORDER_STOCK_FILTERS[value] && ordersStockFilter !== value ? value : '';
     renderPartnerOrders(companyId);
   }
-  window.setOrdersShortOnly = setOrdersShortOnly;
-  // Видна ли строка: поиск и «Только с нехваткой». Галка «выбрать все» стоит
-  // над видимым списком и обязана означать ровно его.
-  const orderVisible = (o) => matchesOrderSearch(o) && (!ordersShortOnly || Boolean(orderShortLevel(o)))
+  window.setOrdersStockFilter = setOrdersStockFilter;
+  // Видна ли строка: поиск, фильтр по наличию и склад WB. Галка «выбрать все»
+  // стоит над видимым списком и обязана означать ровно его.
+  const orderVisible = (o) => matchesOrderSearch(o) && (!ordersStockFilter || ORDER_STOCK_FILTERS[ordersStockFilter](o))
     && (!ordersWbWh.size || ordersWbWh.has(String(o.wbWarehouseId || 'none')));
+  // Сопоставить артикулы — там, где это делается: «Клиенты» → «нельзя собрать».
+  function openUnmappedFix(){
+    switchView('mp');
+    unmOpen = true;
+    loadUnresolved().then(() => document.getElementById('mpUnresolved')?.scrollIntoView({ block: 'start' }));
+  }
+  window.openUnmappedFix = openUnmappedFix;
   // Склад продавца на WB: поставка WB берёт заказы только одного склада.
   let ordersWbWh = new Set();
   let ordersWhOpen = false;
@@ -8220,9 +8235,20 @@
     const shown = ordersRows.filter(orderVisible);
     const cols = orderColumns();
     const withStock = cols.has('stock');
-    // Сколько заказов с нехваткой — по всему списку продавца, без поиска:
-    // цифра на кнопке фильтра не должна прыгать от набранной буквы.
-    const shortCount = new Set(ordersRows.filter(o => orderShortLevel(o)).map(o => o.id)).size;
+    // Сколько заказов в каждом фильтре — по всему списку продавца, без поиска:
+    // цифра на кнопке не должна прыгать от набранной буквы. Подтверждённые в
+    // кабинете WB не считаем — их собирают по поставке WB.
+    const countOf = (test) => new Set(ordersRows.filter(o => !o.wbConfirmed && test(o)).map(o => o.id)).size;
+    const filterCounts = { all: countOf(() => true), none: countOf(ORDER_STOCK_FILTERS.none),
+      short: countOf(ORDER_STOCK_FILTERS.short), unmapped: countOf(ORDER_STOCK_FILTERS.unmapped) };
+    const stockChip = (key, label, swatch) => {
+      const on = key === 'all' ? !ordersStockFilter : ordersStockFilter === key;
+      const n = filterCounts[key];
+      return '<button type="button" class="ord-chip' + (on ? ' on' : '') + '" aria-pressed="' + on + '"'
+        + ' onclick="setOrdersStockFilter(\'' + companyId + '\', \'' + (key === 'all' ? '' : key) + '\')"'
+        + (n || on || key === 'all' ? '' : ' disabled') + '>'
+        + (swatch ? '<i class="ord-sw ' + swatch + '"></i>' : '') + label + ' · ' + n + '</button>';
+    };
     const fresh = sortOrders(shown.filter(o => !o.wbConfirmed));
     const confirmed = sortOrders(shown.filter(o => o.wbConfirmed));
     const ready = fresh.filter(o => o.ready);
@@ -8271,7 +8297,8 @@
         <td class="ord-mono ord-no">${escapeHTML(o.number)} ${orderMarketplaceBadge(o.marketplace)}${o.rid
           ? `<div class="ord-sub" title="${escapeHTML(o.rid)}">${escapeHTML(String(o.rid).slice(0, 14))}…</div>` : ''}</td>
         <td class="ord-when">${orderWhen(o)}</td>
-        <td><div class="order-product-name">${orderCatalogPhoto(companyId, o)}<div>${escapeHTML(o.name || '—')}<div class="ord-mono">${escapeHTML(o.sku || 'не сопоставлен')}</div>${lineVw(o)}</div></div></td>
+        <td><div class="order-product-name">${orderCatalogPhoto(companyId, o)}<div>${escapeHTML(o.name || '—')}<div class="ord-mono">${escapeHTML(o.sku || 'не сопоставлен')}</div>${o.mapped === false
+          ? '<div class="ord-sub ord-warn">нет в номенклатуре склада — сопоставьте артикул</div>' : ''}${lineVw(o)}</div></div></td>
         <td class="ord-mono">${escapeHTML(o.article || '—')}${o.nmId ? `<div class="ord-sub">WB ${escapeHTML(o.nmId)}</div>` : ''}</td>
         <td class="ord-mono">${escapeHTML(o.barcode || '—')}</td>
         <td>${(o.offices || []).length ? escapeHTML(o.offices.join(', ')) : '<span class="ord-sub">—</span>'}${o.wbWarehouse
@@ -8333,7 +8360,7 @@
           (${pickedWh.map(id => '«' + escapeHTML(whNames.get(id) || id) + '»').join(', ')}) — WB принимает в поставку заказы только одного склада.
           Отберите их фильтром «Склад WB».</span>` : ''}
         ${stuck > 0 ? `<span class="ord-meta ord-warn">${stuck} ${
-          pluralRu(stuck, 'заказ', 'заказа', 'заказов')} не сопоставить с номенклатурой — свяжите артикул: «Клиенты» → «нельзя собрать», и они починятся</span>` : ''}
+          pluralRu(stuck, 'заказ', 'заказа', 'заказов')} нельзя собрать — <button type="button" class="link-button" onclick="openUnmappedFix()">сопоставьте артикулы</button>, и они починятся</span>` : ''}
         <span class="ord-tools">
           <input class="ord-search" type="search" placeholder="Товар, артикул WB, штрихкод или номер заказа"
                  value="${escapeHTML(ordersSearch)}" oninput="setOrdersSearch('${companyId}', this.value)">
@@ -8343,9 +8370,6 @@
             <option value="number"${ordersSort === 'number' ? ' selected' : ''}>По номеру заказа</option>
             <option value="date"${ordersSort === 'date' ? ' selected' : ''}>По дате</option>
           </select>
-          <button type="button" class="ord-chip${ordersShortOnly ? ' on' : ''}" aria-pressed="${ordersShortOnly}"
-                  onclick="setOrdersShortOnly('${companyId}', ${!ordersShortOnly})" ${shortCount || ordersShortOnly ? '' : 'disabled'}>
-            Только с нехваткой · ${shortCount}</button>
           <span class="ord-cols">
             <button type="button" class="ord-chip ord-cols-btn" aria-haspopup="true" aria-expanded="${ordersColsOpen}"
                     onclick="toggleOrderColsMenu('${companyId}')">Столбцы ▾</button>
@@ -8357,14 +8381,20 @@
           </span>
         </span>
       </div>
-      <div class="ord-legend">
-        <span><i class="ord-sw st-none"></i>товара на складе нет совсем</span>
-        <span><i class="ord-sw st-short"></i>есть, но меньше, чем нужно этим заказам (вместе с поставками, которые уже собираются)</span>
-        <span class="ord-sub">по годному остатку в ячейках Аргуса</span>
+      <div class="ord-legend ord-filters" role="group" aria-label="Отбор заказов по наличию товара">
+        ${stockChip('all', 'Все')}
+        ${stockChip('none', 'Нет на складе', 'st-none')}
+        ${stockChip('short', 'Меньше, чем нужно', 'st-short')}
+        ${stockChip('unmapped', 'Не сопоставлены')}
+        <span class="ord-sub">«Нет» и «меньше» — по годному остатку в ячейках Аргуса, вместе с поставками, которые уже собираются</span>
       </div>
+      ${ordersStockFilter === 'unmapped' && filterCounts.unmapped ? `<div class="ord-meta ord-warn" style="margin:0 0 10px;">
+        Товара этих заказов нет в номенклатуре склада — собрать их нечем. Свяжите артикул продавца с товаром склада, и заказы починятся сразу.
+        <button type="button" class="wh-onboarding-btn" style="margin-left:8px;" onclick="openUnmappedFix()">Сопоставить артикулы →</button></div>` : ''}
       <div class="ord-scroll">
         <table class="ord-table ord-cards">${head(true)}<tbody>${fresh.map(o => row(o, o.ready)).join('')
-          || emptyRow(ordersShortOnly ? 'Заказов с нехваткой нет.' : 'Под поиск ничего не подходит.')}</tbody></table>
+          || emptyRow({ none: 'Заказов, товара которых нет на складе, нет.', short: 'Заказов, где товара меньше, чем нужно, нет.',
+            unmapped: 'Несопоставленных заказов нет.' }[ordersStockFilter] || 'Под поиск ничего не подходит.')}</tbody></table>
       </div>
       ${confirmed.length ? `
         <div class="ord-meta" style="margin:24px 0 10px;">

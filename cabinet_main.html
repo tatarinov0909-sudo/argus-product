@@ -845,6 +845,9 @@
   .ord-chip:hover:not(:disabled){border-color:var(--accent-soft);}
   .ord-chip.on{border-color:var(--yellow); color:var(--yellow); background:var(--yellow-soft);}
   .ord-chip:disabled{opacity:0.5; cursor:default;}
+  /* Фильтр по наличию в «Заказах» (05.10.2026): цветная отметка — как у строки. */
+  .ord-filters .ord-chip{display:inline-flex; align-items:center; gap:7px;}
+  .link-button{background:none; border:0; padding:0; color:var(--accent); font:inherit; text-decoration:underline; cursor:pointer;}
   /* Ход сборки у поставки: кто собирает, пауза, «свободна», комментарий. */
   .sup-asm{font-size:14px; margin-top:4px; color:var(--accent-2); line-height:1.45;}
   .sup-asm.paused{color:var(--yellow);}
@@ -3234,7 +3237,7 @@
 <script src="virtual-warehouse-stock.js?v=0ba9776a" defer></script>
 <script src="product-picker.js?v=a138dab6" defer></script>
 <script src="auth.js?v=84f56b4f" defer></script>
-<script src="cabinet_main.js?v=d15db0ab" defer></script>
+<script src="cabinet_main.js?v=06fc3a88" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->
