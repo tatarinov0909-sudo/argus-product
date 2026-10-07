@@ -1090,6 +1090,16 @@
   .rc-list-head{display:flex; align-items:baseline; gap:12px; margin-bottom:10px; flex-wrap:wrap;}
   .rc-src{font-size:13px; color:var(--muted); line-height:1.45; margin-top:3px; font-family:var(--sans); font-variant-numeric:tabular-nums;}
   .rc-acts{display:flex; gap:14px; justify-content:flex-end; flex-wrap:wrap;}
+  /* Наборы продавца (08.10.2026): состав, готовые и сколько собрать. */
+  .kits-panel{margin:12px 0;}
+  .kit-edit{border:1px solid var(--line); border-radius:10px; padding:12px; margin:12px 0; background:var(--panel-2);}
+  .kit-parts{display:grid; gap:8px; margin:10px 0;}
+  .kit-part{display:grid; grid-template-columns:minmax(0,1fr) 90px auto; gap:8px; align-items:center;}
+  .kit-errors{margin:8px 0 8px 18px; font-size:14px; color:var(--yellow);}
+  .kit-tag{display:inline-block; margin-left:6px; padding:1px 6px; border:1px solid var(--line); border-radius:6px; font-size:12px; color:var(--muted); font-weight:500;}
+  .kits-table td{vertical-align:top;}
+  @media (max-width:640px){ .kit-part{grid-template-columns:minmax(0,1fr) 70px auto;} }
+
   /* Расчёты с продавцами (04.10.2026): прайс и начисления за месяц. */
   .bill-month{max-width:200px;}
   .bill-prices{display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin:12px 0;}
@@ -2959,7 +2969,9 @@
             <b class="pr-seller" id="productsSellerName"></b>
             <a class="stock-context-button" id="productsSellerCabinet" href="client_access.html">Кабинет этого продавца</a>
             <button type="button" class="stock-context-button" id="productsWarehouseSettings" onclick="openProductsWarehouses()">Настроить склады продавца</button>
+            <button type="button" class="stock-context-button" id="productsKits" onclick="openKits()">Наборы</button>
           </div>
+          <div id="kitsPanel" hidden></div>
           <div class="pr-bar">
             <input type="search" id="productsSearch" class="mp-field" placeholder="Название, артикул или штрихкод" oninput="renderProducts()">
             <span class="ord-meta" id="productsMeta"></span>
@@ -3222,7 +3234,7 @@
 <script src="virtual-warehouse-stock.js?v=0ba9776a" defer></script>
 <script src="product-picker.js?v=a138dab6" defer></script>
 <script src="auth.js?v=84f56b4f" defer></script>
-<script src="cabinet_main.js?v=f5c93b0e" defer></script>
+<script src="cabinet_main.js?v=d15db0ab" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->

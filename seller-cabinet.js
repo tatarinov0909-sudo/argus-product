@@ -593,7 +593,16 @@
   const splitText = (r) => (r.warehouses || []).filter((w) => w.onHand).map((w) => w.name + ' ' + n(w.onHand)).join(' · ');
   // Доступно для WB: только «Основной» и склады WB — товар склада Озон на WB
   // не продаётся. Заказы WB без поставки ждут как раз этого товара.
+  // Набор — плюс сколько можно собрать из свободных частей (08.10.2026), как
+  // у склада (wbListing.js): иначе «на WB больше, чем свободно» по каждому набору.
+  const kitExtra = (r) => (r.kitParts ? (r.kitBuildable == null ? null : Number(r.kitBuildable)) : 0);
   const wbAvailable = (r) => {
+    const kit = kitExtra(r);
+    if (kit == null) return null;
+    const base = wbBase(r);
+    return base == null ? null : base + kit;
+  };
+  const wbBase = (r) => {
     if (!r.warehouses || !state.vw?.wbChoices) return r.available == null ? null : Number(r.available);
     const ids = new Set(state.vw.wbChoices.map((c) => vwKey(c.id)));
     const parts = r.warehouses.filter((w) => ids.has(vwKey(w.id)));
@@ -625,7 +634,8 @@
     { key: 'transit', title: 'В пути', cls: 'n', cell: (r) => bucketNum(r, 'transit') },
     // Сколько WB принял за последние 3 дня (владелец 06.10.2026).
     { key: 'accepted', title: 'Принято WB', cls: 'n', cell: (r) => num(vwPart(r) ? null : Number(r.acceptedByWb || 0)) },
-    { key: 'available', title: 'Доступно', cls: 'n', cell: (r) => num(availableQty(r), true) },
+    { key: 'available', title: 'Доступно', cls: 'n', cell: (r) => num(availableQty(r), true)
+      + (r.kitParts && !vwPart(r) ? `<span class="cell-sub" title="Набор: столько ещё можно собрать из свободных частей">+ собрать ${r.kitBuildable == null ? '—' : n(r.kitBuildable)}</span>` : '') },
     { key: 'wbStock', title: 'На WB', cls: 'n', cell: wbStockCell },
     { key: 'defective', title: 'Брак', cls: 'n', hidden: true, cell: (r) => num(defectQty(r)) },
     { key: 'vwsplit', title: 'По складам', cell: (r) => (splitText(r) ? h(splitText(r)) : '<span class="zero">—</span>') },
@@ -1633,7 +1643,9 @@
       + (tr ? ` − в пути ${n(tr)}` : '')
       + (raw < 0 ? ` = ${n(raw)}. Заказов больше, чем товара, поэтому доступно 0 — склад сверяет.` : ` = ${n(raw)}.`)
       + (tr ? ' Уехавшее на WB продать нельзя, пока WB его не принял.' : '')
-      + (ord || asm ? ' Нажмите «Заказано» или «В сборке» — увидите сами заказы.' : '') + '</p>';
+      + (ord || asm ? ' Нажмите «Заказано» или «В сборке» — увидите сами заказы.' : '')
+      + (r.kitParts ? ` Это набор: из свободных частей склад соберёт ещё ${r.kitBuildable == null ? '— (у части нет учёта)' : n(r.kitBuildable)}. `
+        + 'Части продаются и поштучно — собранный набор уменьшит их «Доступно».' : '') + '</p>';
   }
   async function openProduct(sku, bucket = null) {
     const r = (state.data.stock || []).find((x) => x.sku === sku)

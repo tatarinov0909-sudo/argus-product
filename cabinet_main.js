@@ -1662,6 +1662,7 @@
     const scroller = document.querySelector('#view-products > .stock-workspace');
     if(!productsFor) productsSummaryScroll = scroller?.scrollTop || 0;
     productsFor = companyId;
+    closeKits();
     productsFilter = 'all';
     productsVw = 'all';
     document.getElementById('productsSearch').value = '';
@@ -1948,7 +1949,7 @@
         // Раскладка по складам — под названием, только ненулевые склады.
         const split = hasVw && !w && r.byWarehouse
           ? r.byWarehouse.filter(x => x.onHand).map(x => escapeHTML(x.name) + ' ' + nfmt(x.onHand)).join(' · ') : '';
-        const name = '<td><div class="stock-product">' + productPhotoHtml(companyId, r.sku) + '<div class="stock-product-copy"><div class="stock-product-name">' + escapeHTML(r.name || '—') + '</div><div class="sub stock-product-identifiers">'
+        const name = '<td><div class="stock-product">' + productPhotoHtml(companyId, r.sku) + '<div class="stock-product-copy"><div class="stock-product-name">' + escapeHTML(r.name || '—') + (r.kitParts ? '<span class="kit-tag">набор</span>' : '') + '</div><div class="sub stock-product-identifiers">'
           + (r.sku ? '<span>Артикул: ' + escapeHTML(r.sku) + '</span>' : '') + (r.barcode ? '<span>Штрихкод: ' + escapeHTML(r.barcode) + '</span>' : '') + '</div>'
           + (split ? '<div class="sub pr-split">' + split + '</div>' : '')
           + (!w && (short > 0 || notPlaced || r.wbOver > 0) ? '<div class="stock-product-notes">'
@@ -1977,7 +1978,9 @@
           + '<td class="num">' + nfmt(r.inAssembly) + '</td>'
           + '<td class="num">' + nfmt(r.inTransit) + '</td>'
           + '<td class="num">' + nfmt(r.acceptedByWb || 0) + '</td>'
-          + '<td class="num strong">' + nfmt(r.sellerAvailable) + '</td>'
+          + '<td class="num strong">' + nfmt(r.sellerAvailable)
+          // Набор: сколько ещё соберут из свободных частей (08.10.2026).
+          + (r.kitParts ? '<div class="sub" title="Можно собрать из свободных частей">+ собрать ' + (r.kitBuildable == null ? '—' : nfmt(r.kitBuildable)) + '</div>' : '') + '</td>'
           + '<td class="num' + (r.wbOver > 0 ? ' warn' : '') + '">' + (r.wbListed == null ? '<span class="sub">—</span>' : nfmt(r.wbListed)) + '</td>'
           + '<td class="num' + (prDefect(r) ? ' warn' : '') + '">' + nfmt(prDefect(r)) + '</td>'
           + '<td class="num">' + nfmt(prInCells(r)) + '</td>'
@@ -7650,6 +7653,171 @@
     });
     saveXlsx('Приходы', 'Приходы', rows, [18, 24, 18, 12, 14, 18, 22, 24, 26, 18]);
   }
+
+
+  /* ===================== Наборы продавца ===================== */
+
+  // Состав набора — из каких товаров его собирают (владелец 08.10.2026).
+  // «Свободно» набора — готовые плюс сколько можно собрать из свободных
+  // частей (сервер, kitBuildable). Правка — здесь, файлом — «Набор, Часть,
+  // Сколько» (артикул или штрихкод).
+  let kitsList = [];
+  let kitEdit = null;     // { kitSku, parts: [{ sku, qty }], isNew }
+  let kitImport = null;   // { rows, preview, fileName }
+
+  async function openKits(){
+    const box = document.getElementById('kitsPanel');
+    box.hidden = false;
+    box.innerHTML = '<div class="staff-empty">Загружаем наборы…</div>';
+    try{ kitsList = await apiFetch('/api/kits/company/' + encodeURIComponent(productsFor)); }
+    catch(e){ box.innerHTML = '<div class="staff-empty">Наборы не загрузились: ' + escapeHTML(e.message) + '</div>'; return; }
+    renderKits();
+  }
+  function closeKits(){
+    kitEdit = null; kitImport = null;
+    const box = document.getElementById('kitsPanel');
+    box.hidden = true; box.innerHTML = '';
+  }
+  function kitRow(sku){ return productRows.find(r => r.sku === sku) || null; }
+  function kitName(sku){ const r = kitRow(sku); return r ? r.name : sku; }
+
+  function renderKits(){
+    const box = document.getElementById('kitsPanel');
+    const options = productRows.map(r => '<option value="' + escapeHTML(r.sku) + '">' + escapeHTML(r.name || r.sku) + '</option>').join('');
+    const edit = kitEdit ? '<div class="kit-edit">'
+      + '<div class="staff-title" style="font-size:15px;margin:0 0 8px">' + (kitEdit.isNew ? 'Новый набор' : 'Состав набора') + '</div>'
+      + '<label class="rc-field"><span>Набор — артикул или штрихкод</span><input class="mp-field" id="kitEditSku" list="kitProducts" value="' + escapeHTML(kitEdit.kitSku) + '"' + (kitEdit.isNew ? '' : ' readonly') + '></label>'
+      + '<div class="kit-parts">' + kitEdit.parts.map((p, i) => '<div class="kit-part">'
+        + '<input class="mp-field" data-kit-part="' + i + '" list="kitProducts" placeholder="Часть — артикул или штрихкод" value="' + escapeHTML(p.sku) + '">'
+        + '<input class="mp-field" data-kit-qty="' + i + '" type="number" min="1" max="1000" value="' + escapeHTML(String(p.qty)) + '" aria-label="Сколько в наборе">'
+        + '<button type="button" class="wh-onboarding-btn" onclick="removeKitPart(' + i + ')" aria-label="Убрать часть">×</button></div>').join('') + '</div>'
+      + '<div class="rc-actions"><button type="button" class="wh-onboarding-btn" onclick="addKitPart()">+ Часть</button><span class="grow"></span>'
+      + (kitEdit.isNew ? '' : '<button type="button" class="wh-onboarding-btn" onclick="dropKit()">Это не набор</button>')
+      + '<button type="button" class="wh-onboarding-btn" onclick="cancelKit()">Отмена</button>'
+      + '<button type="button" class="wh-onboarding-btn primary" id="kitSave" onclick="saveKit()">Сохранить</button></div></div>' : '';
+    const imp = kitImport ? '<div class="kit-edit">'
+      + '<div class="staff-title" style="font-size:15px;margin:0 0 6px">Файл «' + escapeHTML(kitImport.fileName) + '»</div>'
+      + '<div>Можно загрузить: ' + nfmt(kitImport.preview.ok) + ' ' + pluralRu(kitImport.preview.ok, 'набор', 'набора', 'наборов')
+      + (kitImport.preview.errors.length ? '. Не загрузятся: ' + nfmt(kitImport.preview.errors.length) : '') + '.</div>'
+      + (kitImport.preview.errors.length ? '<ul class="kit-errors">' + kitImport.preview.errors.slice(0, 15).map(e => '<li>'
+        + escapeHTML((e.kit ? 'Набор ' + e.kit + ': ' : 'Строка ' + e.row + ': ') + e.error) + '</li>').join('')
+        + (kitImport.preview.errors.length > 15 ? '<li>и ещё ' + (kitImport.preview.errors.length - 15) + '</li>' : '') + '</ul>' : '')
+      + '<div class="ord-meta">Состав набора из файла заменяет прежний целиком; наборы, которых в файле нет, не меняются.</div>'
+      + '<div class="rc-actions"><span class="grow"></span><button type="button" class="wh-onboarding-btn" onclick="cancelKitImport()">Отмена</button>'
+      + (kitImport.preview.ok ? '<button type="button" class="wh-onboarding-btn primary" id="kitImportGo" onclick="applyKitImport()">Загрузить</button>' : '')
+      + '</div></div>' : '';
+    const rows = kitsList.map(k => {
+      const r = kitRow(k.kitSku);
+      const ready = r ? r.sellerAvailable : null;
+      const build = r ? r.kitBuildable : null;
+      return '<tr><td><b>' + escapeHTML(k.name) + '</b><div class="sub">' + escapeHTML(k.kitSku) + '</div></td>'
+        + '<td>' + k.components.map(p => escapeHTML(p.name) + ' <span class="sub">× ' + nfmt(p.qty) + '</span>').join('<br>') + '</td>'
+        + '<td class="num">' + (ready == null ? '<span class="sub">—</span>' : nfmt(ready)) + '</td>'
+        + '<td class="num strong">' + (build == null ? '<span class="sub" title="У части нет числа учёта">—</span>' : nfmt(build)) + '</td>'
+        + '<td><button type="button" class="wh-onboarding-btn" onclick="editKit(\'' + jsArg(k.kitSku) + '\')">Изменить</button></td></tr>';
+    }).join('');
+    box.innerHTML = '<div class="rc-card kits-panel">'
+      + '<div class="pr-bar"><div class="staff-title" style="font-size:17px;margin:0">Наборы · ' + nfmt(kitsList.length) + '</div><span class="grow"></span>'
+      + '<button type="button" class="wh-onboarding-btn" onclick="exportKits()">Скачать составы</button>'
+      + '<label class="wh-onboarding-btn">Загрузить файлом<input type="file" accept=".xlsx,.xls,.csv" hidden onchange="onKitsFile(this)"></label>'
+      + '<button type="button" class="wh-onboarding-btn primary" onclick="editKit(\'\')">+ Набор</button>'
+      + '<button type="button" class="wh-onboarding-btn" onclick="closeKits()">Закрыть</button></div>'
+      + '<div class="ord-meta">Набор собирают из частей. «Можно собрать» — сколько ещё наборов выйдет из свободных частей; '
+      + 'вместе с готовыми это и есть «свободно» набора для WB. Части продаются и поштучно — в итоги продавца это не прибавляется. '
+      + 'Файл: столбцы «Набор», «Часть», «Сколько» — артикул или штрихкод, по строке на часть.</div>'
+      + imp + edit
+      + (kitsList.length ? '<div class="bill-wrap"><table class="ord-table kits-table"><thead><tr><th>Набор</th><th>Состав</th><th class="num">Готовых</th><th class="num">Можно собрать</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        : '<div class="staff-empty">Наборов пока нет. Добавьте набор или загрузите составы файлом.</div>')
+      + '<datalist id="kitProducts">' + options + '</datalist></div>';
+  }
+
+  function readKitInputs(){
+    if(!kitEdit) return;
+    const sku = document.getElementById('kitEditSku');
+    if(sku) kitEdit.kitSku = sku.value.trim();
+    kitEdit.parts = kitEdit.parts.map((p, i) => ({
+      sku: (document.querySelector('[data-kit-part="' + i + '"]')?.value || '').trim(),
+      qty: document.querySelector('[data-kit-qty="' + i + '"]')?.value || '',
+    }));
+  }
+  function editKit(sku){
+    kitImport = null;
+    const k = kitsList.find(x => x.kitSku === sku);
+    kitEdit = k ? { kitSku: k.kitSku, parts: k.components.map(p => ({ sku: p.sku, qty: p.qty })), isNew: false }
+      : { kitSku: '', parts: [{ sku: '', qty: 1 }, { sku: '', qty: 1 }], isNew: true };
+    renderKits();
+    document.querySelector('.kit-edit')?.scrollIntoView({ block: 'nearest' });
+  }
+  function addKitPart(){ readKitInputs(); kitEdit.parts.push({ sku: '', qty: 1 }); renderKits(); }
+  function removeKitPart(i){ readKitInputs(); kitEdit.parts.splice(i, 1); renderKits(); }
+  function cancelKit(){ kitEdit = null; renderKits(); }
+  async function saveKit(empty){
+    readKitInputs();
+    const parts = empty ? [] : kitEdit.parts.filter(p => p.sku).map(p => ({ sku: p.sku, qty: Number(p.qty) }));
+    if(!kitEdit.kitSku){ showWhToast('Укажите набор.'); return; }
+    if(!empty && !parts.length){ showWhToast('Добавьте хотя бы одну часть.'); return; }
+    const btn = document.getElementById('kitSave'); if(btn) btn.disabled = true;
+    try{
+      await apiFetch('/api/kits/company/' + encodeURIComponent(productsFor) + '/kit', { method: 'PUT', body: { kitSku: kitEdit.kitSku, components: parts } });
+      showWhToast(empty ? 'Состав убран — это больше не набор.' : 'Состав набора сохранён.');
+      kitEdit = null;
+      await loadProducts();
+      await openKits();
+    } catch(e){ showWhToast('Не сохранилось: ' + e.message); if(btn) btn.disabled = false; }
+  }
+  async function dropKit(){
+    if(!await askConfirm('Убрать состав набора ' + kitEdit.kitSku + '? Грузчик больше не сможет собрать его из частей.')) return;
+    saveKit(true);
+  }
+
+  function exportKits(){
+    const rows = [];
+    kitsList.forEach(k => k.components.forEach(p => rows.push({ 'Набор': k.kitSku, 'Название набора': k.name, 'Часть': p.sku, 'Название части': p.name, 'Сколько': p.qty })));
+    saveXlsx('Составы наборов', 'Наборы', rows, [18, 40, 18, 40, 10]);
+  }
+  function onKitsFile(input){
+    const file = input.files && input.files[0];
+    input.value = '';
+    if(!file) return;
+    if(typeof XLSX === 'undefined'){ showWhToast('Модуль Excel ещё загружается — попробуйте через пару секунд'); return; }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      let grid;
+      try{
+        const wb = readBook(reader.result, file.name, { type: 'array' });
+        grid = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: null });
+      } catch(e){ showWhToast('Файл не читается: ' + e.message); return; }
+      // Шапка — «Набор», «Часть», «Сколько» (как в «Скачать составы»); нет
+      // шапки — первые три столбца по порядку.
+      const head = grid.findIndex(r => (r || []).some(c => /^набор/i.test(String(c || '').trim())));
+      const cols = head < 0 ? [0, 1, 2] : [/^набор/i, /^(часть|компонент)/i, /^(сколько|кол)/i]
+        .map(re => grid[head].findIndex(c => re.test(String(c || '').trim())));
+      if(cols.some(c => c < 0)){ showWhToast('В шапке нужны столбцы «Набор», «Часть» и «Сколько».'); return; }
+      const rows = grid.slice(head + 1).filter(r => r && r.some(c => c != null && String(c).trim() !== ''))
+        .map(r => ({ kit: String(r[cols[0]] ?? '').trim(), component: String(r[cols[1]] ?? '').trim(), qty: String(r[cols[2]] ?? '').trim() }));
+      if(!rows.length){ showWhToast('В файле нет строк с наборами.'); return; }
+      try{
+        const preview = await apiFetch('/api/kits/company/' + encodeURIComponent(productsFor) + '/import', { method: 'POST', body: { rows } });
+        kitEdit = null;
+        kitImport = { rows, preview, fileName: file.name };
+        renderKits();
+      } catch(e){ showWhToast('Файл не принят: ' + e.message); }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+  function cancelKitImport(){ kitImport = null; renderKits(); }
+  async function applyKitImport(){
+    const btn = document.getElementById('kitImportGo'); if(btn) btn.disabled = true;
+    try{
+      const out = await apiFetch('/api/kits/company/' + encodeURIComponent(productsFor) + '/import', { method: 'POST', body: { rows: kitImport.rows, apply: true } });
+      showWhToast('Загружено наборов: ' + out.ok + (out.errors.length ? ', с ошибками не загружено: ' + out.errors.length : '') + '.');
+      kitImport = null;
+      await loadProducts();
+      await openKits();
+    } catch(e){ showWhToast('Не загрузилось: ' + e.message); if(btn) btn.disabled = false; }
+  }
+  Object.assign(window, { openKits, closeKits, editKit, addKitPart, removeKitPart, cancelKit, saveKit, dropKit,
+    exportKits, onKitsFile, cancelKitImport, applyKitImport });
 
 
   /* ===================== Расчёты с продавцами ===================== */
