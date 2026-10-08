@@ -140,13 +140,15 @@
         try {
         const outstanding = all.result.filter(x => x.actor === actor && pending(x));
         if(path === '/api/journal/pause' && body.workSessionId){
-          if(body.exit && !body.resumed){
+          if(body.exit || body.resumed){
             // Logout and a native departure can arrive together. Reuse inside
             // this transaction, not only after the earlier asynchronous read.
             const latest = all.result.filter(x => x.actor === actor && x.path === path && x.body.workSessionId === body.workSessionId &&
               x.status !== 'resolved' && Number(x.body.eventSequence || 0) >= Number(body.eventSequence || 1))
               .sort((a, b) => b.body.eventSequence - a.body.eventSequence)[0];
-            if(latest && !latest.body.resumed){ result = latest; return; }
+            const sameExit = body.exit && !body.resumed && latest && !latest.body.resumed;
+            const pendingResume = body.resumed && latest && latest.body.resumed && pending(latest);
+            if(sameExit || pendingResume){ result = latest; return; }
           }
           const previous = all.result.find(x => x.actor === actor && x.path === path && x.body.workSessionId === body.workSessionId && x.body.eventAt === body.eventAt && Boolean(x.body.resumed) === Boolean(body.resumed));
           if(previous){ result = previous; return; }
@@ -215,7 +217,7 @@
         cachedAt = cached.data.at; await renderStatus(); return cached.data.result;
       }
     }
-    if (needsRefresh && path !== '/api/journal/pause') throw new Error('Действие принято сервером. Нажмите «Обновить данные» перед следующим шагом.');
+    if (needsRefresh && (path !== '/api/journal/pause' || options.body && options.body.resumed)) throw new Error('Действие принято сервером. Нажмите «Обновить данные» перед следующим шагом.');
     if (locallyPaused && path !== '/api/journal/pause' && !/\/start$/.test(path)) throw new Error('Работа на паузе. Дождитесь передачи паузы и нажмите «Продолжить».');
     await saveDraft();
     const offline = !navigator.onLine || !connected;

@@ -236,7 +236,10 @@ test('repeated native departure reuses durable pause until an explicit resume', 
     await page.evaluate(() => ArgusWorker.sync());
     await page.evaluate(() => ArgusWorker.lifecycle({ id: 'third-exit', state: 'background', at: Date.now() }));
     assert.equal((await page.evaluate(() => ArgusWorker.inspect())).length, 1, 'A confirmed pause is also reused before resume.');
+    await page.reload();
+    await page.waitForFunction(() => document.querySelector('#workerStatus')?.textContent.includes('Подключено'));
     await page.evaluate(async () => {
+      ctx.eventSequence = 1; ctx.status = 'paused'; durablePause = true;
       await ArgusWorker.recordPause({ invoiceId: 'doc-1', resumed: true, at: new Date().toISOString() });
       ctx.status = 'active'; ctx.pauseLocal = false;
     });
@@ -244,7 +247,7 @@ test('repeated native departure reuses durable pause until an explicit resume', 
     const rows = await page.evaluate(() => ArgusWorker.inspect());
     assert.deepEqual(rows.map(row => row.body.eventSequence), [1, 2, 3]);
     assert.deepEqual(rows.map(row => Boolean(row.body.resumed)), [false, true, false]);
-    assert.equal((await page.evaluate(() => pauses)).length, 2);
+    assert.equal((await page.evaluate(() => pauses)).length, 1);
     assert.deepEqual(errors, []);
     await context.close();
   } finally { await browser.close(); }
@@ -413,6 +416,49 @@ test('native task and paper resume keep real work controls locked until confirme
       assert.deepEqual(errors, []);
       await context.close();
     }
+  } finally { await browser.close(); }
+});
+
+test('repeated queued resume keeps its ID/body and requires fresh state after background confirmation', async () => {
+  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  try {
+    const { context, page, state, errors } = await harness(browser, { nativeHttp: true });
+    state.offline = true;
+    await page.evaluate(async () => {
+      ctx.status = 'paused';
+      const at = Date.now();
+      await Promise.allSettled([
+        ArgusWorker.recordPause({ invoiceId: 'doc-1', resumed: true, comment: 'Первый ввод', at: new Date(at).toISOString() }),
+        ArgusWorker.recordPause({ invoiceId: 'doc-1', resumed: true, comment: 'Повтор нажатия', at: new Date(at + 5).toISOString() })
+      ]);
+      try { await ArgusWorker.recordPause({ invoiceId: 'doc-1', resumed: true, comment: 'Поздний повтор', at: new Date(at + 10).toISOString() }); } catch (_) {}
+    });
+    const original = await page.evaluate(() => ArgusWorker.inspect());
+    assert.equal(original.length, 1);
+    assert.equal(original[0].body.comment, 'Первый ввод');
+    assert.equal(original[0].body.eventSequence, 1);
+    state.offline = false;
+    await page.evaluate(() => ArgusWorker.sync());
+    assert.equal(state.effects, 1);
+    assert.equal(state.requests[0].headers['x-argus-operation-id'], original[0].id);
+    assert.deepEqual(state.requests[0].body, original[0].body);
+    const blocked = await page.evaluate(async () => { try { await ArgusWorker.recordPause({ invoiceId: 'doc-1', resumed: true }); } catch (error) { return error.message; } });
+    assert.match(blocked, /Обновить данные/);
+    assert.equal((await page.evaluate(() => ArgusWorker.inspect())).length, 1);
+    await page.reload();
+    await page.waitForFunction(() => document.querySelector('#workerStatus')?.textContent.includes('Подключено'));
+    await page.evaluate(async () => {
+      ctx.eventSequence = 1;
+      await ArgusWorker.recordPause({ invoiceId: 'doc-1', exit: true, at: new Date().toISOString() });
+      ctx.eventSequence = 2; ctx.status = 'paused';
+      await ArgusWorker.recordPause({ invoiceId: 'doc-1', resumed: true, at: new Date().toISOString() });
+    });
+    const final = await page.evaluate(() => ArgusWorker.inspect());
+    assert.deepEqual(final.map(row => Boolean(row.body.resumed)), [true, false, true]);
+    assert.deepEqual(final.map(row => row.body.eventSequence), [1, 2, 3]);
+    assert.notEqual(final[2].id, original[0].id, 'An intervening pause allows a new resume.');
+    assert.deepEqual(errors, []);
+    await context.close();
   } finally { await browser.close(); }
 });
 
