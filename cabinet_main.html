@@ -2348,9 +2348,9 @@
 <link rel="stylesheet" href="cabinet-workspace.css?v=75457eb0">
 <link rel="stylesheet" href="cabinet-layout.css?v=1cd6d19a">
 <link rel="stylesheet" href="cabinet-stock-layout.css?v=c5758517">
-<link rel="stylesheet" href="virtual-warehouse-stock.css?v=9bea5ab2">
+<link rel="stylesheet" href="virtual-warehouse-stock.css?v=9f806063">
 <link rel="stylesheet" href="cabinet-finance-layout.css?v=75172d0d">
-<link rel="stylesheet" href="cabinet-order-filters.css?v=c9f1b06e">
+<link rel="stylesheet" href="cabinet-order-filters.css?v=48f185ac">
 </head>
 <body>
 
@@ -2859,31 +2859,31 @@
             </div>
             <button type="button" class="wh-onboarding-btn" onclick="closeDirectOrder()">Закрыть</button>
           </div>
-          <div class="rc-top">
+          <!-- Форма в один столбец (правила владельца 08.10): поле под полем,
+               «(необязательно)» у необязательных, кнопка «Создать заказ» — внизу,
+               под товарами. -->
+          <div class="do-form">
             <label class="rc-field"><span>Продавец</span>
               <select id="directOrderCompany" class="mp-field" onchange="directOrderCompanyChanged()"></select></label>
             <label class="rc-field" id="directOrderVwField" hidden><span>С какого склада продавца</span>
               <select id="directOrderVw" class="mp-field" onchange="openDirectOrderPicker()"></select></label>
-          </div>
-          <div class="rc-top">
             <label class="rc-field"><span>Кому</span>
               <input type="text" id="directOrderTo" class="mp-field" maxlength="120" placeholder="Фамилия и имя"></label>
-            <label class="rc-field direct-supply-where"><span>Куда</span>
+            <label class="rc-field"><span>Куда</span>
               <input type="text" id="directOrderAddress" class="mp-field" maxlength="300" placeholder="Город, улица, дом, квартира или пункт выдачи"></label>
-            <label class="rc-field"><span>Телефон</span>
+            <label class="rc-field"><span>Телефон (необязательно)</span>
               <input type="tel" id="directOrderPhone" class="mp-field" maxlength="40" placeholder="+7…"></label>
-          </div>
-          <div class="rc-top">
-            <label class="rc-field"><span>Служба доставки</span>
+            <label class="rc-field"><span>Служба доставки (необязательно)</span>
               <select id="directOrderService" class="mp-field" onchange="directOrderServiceChanged()"></select></label>
             <label class="rc-field" id="directOrderServiceOtherField" hidden><span>Какая служба</span>
               <input type="text" id="directOrderServiceOther" class="mp-field" maxlength="60" placeholder="Название службы доставки"></label>
-            <label class="rc-field"><span>Когда отгрузить — если известно</span>
+            <label class="rc-field"><span>Когда отгрузить (необязательно)</span>
               <input type="date" id="directOrderDate" class="mp-field"></label>
-            <label class="rc-field direct-supply-where"><span>Комментарий</span>
+            <label class="rc-field"><span>Комментарий (необязательно)</span>
               <input type="text" id="directOrderComment" class="mp-field" maxlength="500" placeholder="Например: позвонить за час"></label>
+            <label class="sp-check"><input type="checkbox" id="directOrderToSupply"><span>Создать и сразу на сборку<small>Поставка из одного этого заказа уйдёт грузчикам. Без галочки заказ ждёт в «Заказах» — в поставку можно взять несколько.</small></span></label>
           </div>
-          <label class="sp-check" style="margin:0 0 12px;"><input type="checkbox" id="directOrderToSupply"><span>Создать и сразу на сборку<small>Поставка из одного этого заказа уйдёт грузчикам. Без галочки заказ ждёт в «Заказах» — в поставку можно взять несколько.</small></span></label>
+          <div class="rc-label">Товары заказа</div>
           <div id="directOrderPicker"></div>
         </div>
         <div id="ordersContent"><div class="staff-empty">Загружаем…</div></div>
@@ -3260,9 +3260,9 @@
 <script src="form-keys.js?v=02a92e0e" defer></script>
 <script src="billing-owner.js?v=fa877d98" defer></script>
 <script src="virtual-warehouse-stock.js?v=0ba9776a" defer></script>
-<script src="product-picker.js?v=a138dab6" defer></script>
-<script src="auth.js?v=84f56b4f" defer></script>
-<script src="cabinet_main.js?v=54b68e2d" defer></script>
+<script src="product-picker.js?v=e2de6ce3" defer></script>
+<script src="auth.js?v=36b93e56" defer></script>
+<script src="cabinet_main.js?v=3280ab2b" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->

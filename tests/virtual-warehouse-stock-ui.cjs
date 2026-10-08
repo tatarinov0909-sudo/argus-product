@@ -49,7 +49,7 @@ const preview = (body, store) => {
     page.setDefaultNavigationTimeout(25000);
     const store = options.store || {calls:[],applied:0,receipts:new Map(),loseReply:false,status:'done',hold:false,release:null};
     page.on('pageerror',e=>errors.push(e.message));
-    await page.addInitScript(token=>{localStorage.setItem('argus_role','owner');localStorage.setItem('argus_token',token);},
+    await page.addInitScript(token=>{localStorage.setItem('argus_auth_owner',token);sessionStorage.setItem('argus_tab_role','owner');},
       'test.'+Buffer.from(JSON.stringify({role:'owner',warehouseId:options.warehouseId || 'fixture',ownerId:options.principalId || 'fixture'})).toString('base64url')+'.test');
     await page.route('**/*',async route=>{
       const req = route.request(), u = new URL(req.url()), p = u.pathname;

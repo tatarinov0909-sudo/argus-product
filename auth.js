@@ -34,14 +34,17 @@
   };
 
   // Старый общий вход переезжает на место своей роли — при первом открытии
-  // любой страницы после обновления сайта. Он всегда свежее того, что уже
-  // лежит на месте: новые страницы старое место не пишут, значит, туда вошли
-  // только что.
+  // любой страницы после обновления сайта. Только живой и только если на месте
+  // нет входа свежее: человек, не открывавший кабинет с 07.10, входит заново,
+  // и истёкший старый вход затирал новый — снова форма входа, а у продавца
+  // кабинет открывался глазами руководителя (проверка 08.10, Н4).
   function migrate() {
     const old = safe(() => localStorage.getItem('argus_token'));
     if (old) {
       const role = payload(old).role;
-      if (ROLES.includes(role)) safe(() => localStorage.setItem(slot(role), old));
+      const cur = ROLES.includes(role) ? safe(() => localStorage.getItem(slot(role))) : null;
+      const fresher = !cur || !alive(cur, role) || (payload(cur).iat || 0) < (payload(old).iat || 0);
+      if (ROLES.includes(role) && alive(old, role) && fresher) safe(() => localStorage.setItem(slot(role), old));
     }
     safe(() => { localStorage.removeItem('argus_token'); localStorage.removeItem('argus_role'); });
   }

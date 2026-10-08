@@ -42,7 +42,7 @@
     products: { title: 'Товары', subtitle: 'Сколько вашего товара на складе и сколько можно продавать.', data: 'stock', nav: 'products' },
     returns: { title: 'Товары', subtitle: 'Что вернулось на склад и в каком состоянии.', data: 'documents', nav: 'products' },
     wb: { title: 'Товары', subtitle: 'Все ваши склады на Wildberries — отметьте, товар для каких лежит у этого фулфилмента.', data: 'wb', nav: 'products' },
-    orders: { title: 'Заказы', subtitle: 'Как склад готовит ваши заказы с Wildberries.', data: 'orders', nav: 'orders' },
+    orders: { title: 'Заказы', subtitle: 'Как склад готовит ваши заказы — с Wildberries и физлицам.', data: 'orders', nav: 'orders' },
     supplies: { title: 'Поставки', subtitle: 'Склад собирает их из ваших заказов и везёт на Wildberries или покупателю.', data: 'supplies', nav: 'supplies' },
     documents: { title: 'Приходы', subtitle: 'Товар, который вы привозите на склад на хранение.', data: 'documents', nav: 'documents' },
     defects: { title: 'Склад брака', subtitle: 'Ваш брак лежит отдельно от товара в продаже. Решите, что с ним делать, — склад выполнит.', data: 'defects', nav: 'defects' },
@@ -595,7 +595,11 @@
   // не продаётся. Заказы WB без поставки ждут как раз этого товара.
   // Набор — плюс сколько можно собрать из свободных частей (08.10.2026), как
   // у склада (wbListing.js): иначе «на WB больше, чем свободно» по каждому набору.
-  const kitExtra = (r) => (r.kitParts ? (r.kitBuildable == null ? null : Number(r.kitBuildable)) : 0);
+  const kitExtra = (r) => {
+    if (!r.kitParts) return 0;
+    const k = r.kitBuildableWb === undefined ? r.kitBuildable : r.kitBuildableWb;
+    return k == null ? null : Number(k);
+  };
   const wbAvailable = (r) => {
     const kit = kitExtra(r);
     if (kit == null) return null;
@@ -606,8 +610,11 @@
     if (!r.warehouses || !state.vw?.wbChoices) return r.available == null ? null : Number(r.available);
     const ids = new Set(state.vw.wbChoices.map((c) => vwKey(c.id)));
     const parts = r.warehouses.filter((w) => ids.has(vwKey(w.id)));
-    if (parts.some((w) => w.available == null)) return null;
-    return Math.max(0, parts.reduce((a, w) => a + w.available, 0) - Number(r.ordered || 0));
+    // own — «свободно» склада без поправки на общее «Доступно» (сервер,
+    // splitOf): заказы вне поставки вычитаем здесь, один раз.
+    const own = (w) => (w.own === undefined ? w.available : w.own);
+    if (parts.some((w) => own(w) == null)) return null;
+    return Math.max(0, parts.reduce((a, w) => a + own(w), 0) - Number(r.ordered || 0));
   };
   const isShort = (r) => r.shortage === true || (total(r) != null && orderedQty(r) + assemblyQty(r) > Number(total(r)));
   // Что стоит за числами (владелец 27.09.2026): нажал на «Заказано», «В сборке»
@@ -1192,7 +1199,7 @@
     { key: 'order', title: 'Заказ', cell: (r) => `<button class="link-button nowrap" data-order="${h(r.id)}">${h(r.number)}</button> ${sellerOrderMarketplace(r.source)}${r.mp_rid ? `<span class="cell-sub nowrap">${h(r.mp_rid)}</span>` : ''}${r.recipient ? `<span class="cell-sub">${h(r.recipient)}</span>` : ''}` },
     { key: 'wb', title: 'Артикул WB', cell: (r) => idCell(r.mp_nm_id ? [r.mp_nm_id] : wbIds(r.sku), r.mp_barcode) },
     { key: 'qty', title: 'Кол-во', cls: 'n', cell: (r) => num(r.qty) },
-    { key: 'at', title: 'Оформлен на WB', cls: 'n', cell: (r) => h(when(orderAt(r))) },
+    { key: 'at', title: 'Оформлен', cls: 'n', cell: (r) => h(when(orderAt(r))) },
     { key: 'wbwh', title: 'Склад WB', cell: (r) => (r.mp_warehouse_id ? h(r.mp_warehouse_name || 'склад WB ' + r.mp_warehouse_id) : '<span class="zero">—</span>') },
     { key: 'supply', title: 'Поставка', cell: (r) => (r.supply_number ? `<span class="cell-main nowrap">${h(r.supply_number)}</span>${r.supply_destination ? `<span class="cell-sub">${h(r.supply_destination)}</span>` : ''}` : '<span class="zero">—</span>') },
     { key: 'status', title: 'Статус', cls: 'c', cell: (r) => badge(orderStatus(r), orderStyle(r)) + (r.stock_conflict ? '<span class="row-note warn">Склад сверяет заказ</span>' : '') },
@@ -1233,10 +1240,10 @@
         { header: 'Артикул WB', type: 'text', get: (r) => r.mp_nm_id || wbIds(r.sku).join(', ') },
         { header: 'Штрихкод', type: 'text', get: (r) => r.mp_barcode || '', min: 15 },
         { header: 'Кол-во, шт.', type: 'num', total: true, get: (r) => r.qty },
-        { header: 'Оформлен на WB', type: 'date', get: orderAt },
+        { header: 'Оформлен', type: 'date', get: orderAt },
         { header: 'Склад WB', type: 'text', get: (r) => r.mp_warehouse_name || '' },
         { header: 'Поставка', type: 'text', get: (r) => r.supply_number || '' },
-        { header: 'Куда', type: 'text', get: (r) => (r.recipient ? r.recipient + ', ' + r.address : r.supply_destination || '') },
+        { header: 'Куда', type: 'text', get: (r) => (r.recipient ? [r.recipient, r.address !== r.recipient ? r.address : ''].filter(Boolean).join(', ') : r.supply_destination || '') },
         { header: 'Трек-номер', type: 'text', get: (r) => r.track_number || '' },
         { header: 'Статус', type: 'text', get: (r) => orderStatus(r) + (r.stock_conflict ? ' · склад сверяет' : ''), min: 18 },
       ],
@@ -1301,7 +1308,7 @@
     wireRows(host, ui, renderSupplyRows);
   }
   function openSupply(id) {
-    const r = (state.data.supplies || []).find((x) => x.id === id); if (!r) return; openDrawer(r.number, 'Поставка на WB');
+    const r = (state.data.supplies || []).find((x) => x.id === id); if (!r) return; openDrawer(r.number, r.marketplace === 'direct' ? 'Поставка физлицу' : 'Поставка на WB');
     $('drawerBody').innerHTML = `<div class="drawer-meta"><span>${h(r.destination || 'Пункт ещё не выбран')}</span>${r.shipDate ? `<span>отгрузка <b>${h(day(dateOnly(r.shipDate)))}</b></span>` : ''}${badge(r.statusName, SUPPLY_STYLE[r.status] || '')}</div>`
       + `<div class="mini-stats"><div><span>Заказов</span><strong>${n(r.orders)}</strong></div><div><span>Штук</span><strong>${n(r.units)}</strong></div><div><span>Составлена</span><strong style="font-size:15px">${h(when(r.createdAt))}</strong></div></div>`
       + (r.mpBarcodeFile ? `<div class="supply-qr-big"><img src="data:image/svg+xml;base64,${h(r.mpBarcodeFile)}" alt="QR поставки"><div><div class="help">Поставка на WB</div><b>${h(r.mpSupplyId || '')}</b></div></div>` : '')
@@ -1780,7 +1787,7 @@
   const TRACK_URLS = { 'СДЭК': 'https://www.cdek.ru/ru/tracking?order_id=', 'Почта России': 'https://www.pochta.ru/tracking?barcode=',
     'Boxberry': 'https://boxberry.ru/tracking-page?id=' };
   const trackLink = (service, track) => (track && TRACK_URLS[service]
-    ? `<a href="${h(TRACK_URLS[service] + encodeURIComponent(track))}" target="_blank" rel="noopener noreferrer">${h(track)}</a>` : h(track || ''));
+    ? `<a class="track-link" href="${h(TRACK_URLS[service] + encodeURIComponent(track))}" target="_blank" rel="noopener noreferrer">${h(track)}</a>` : h(track || ''));
   const DIRECT_STATUS = { new: ['Новый', 'waiting'], assembly: ['Собирается', 'working'], ready: ['Собран', 'ready'], shipped: ['Уехал', ''],
     in_transit: ['В пути', 'working'], delivered: ['Доставлен', 'ready'], refused: ['Отказ / возврат', 'issue'] };
   const AFTER_SHIP = ['shipped', 'in_transit', 'delivered', 'refused'];
@@ -1794,15 +1801,18 @@
     const f = { vw: '', service: '', requestId: newRequestId(), picker: null };
     const today = new Date().toLocaleDateString('sv-SE', { timeZone: state.profile?.timezone || 'Europe/Moscow' });
     $('drawer').classList.add('drawer-wide');
-    $('drawerBody').innerHTML = `<form class="inbound-form" id="doForm" novalidate><p class="help">Склад соберёт заказ и отправит получателю. Заказать можно не больше, чем свободно.</p>
+    // Форма в один столбец, «(необязательно)» у необязательных, «Создать
+    // заказ» — внизу, под товарами (правила владельца 08.10).
+    $('drawerBody').innerHTML = `<form class="inbound-form do-form-seller" id="doForm" novalidate><p class="help">Склад соберёт заказ и отправит получателю. Заказать можно не больше, чем свободно.</p>
       ${vws.length ? '<div class="field"><span>С какого вашего склада</span><div id="doVwBox"></div></div>' : ''}
-      <div class="two"><label class="field"><span>Кому</span><input id="doTo" maxlength="120" placeholder="Фамилия и имя" autocomplete="off"></label>
-        <label class="field"><span>Телефон</span><input id="doPhone" type="tel" maxlength="40" placeholder="+7…" autocomplete="off"></label></div>
+      <label class="field"><span>Кому</span><input id="doTo" maxlength="120" placeholder="Фамилия и имя" autocomplete="off"></label>
       <label class="field"><span>Куда</span><input id="doAddress" maxlength="300" placeholder="Город, улица, дом, квартира или пункт выдачи" autocomplete="off"></label>
-      <div class="two"><div class="field"><span>Служба доставки</span><div id="doServiceBox"></div></div>
-        <label class="field"><span>Когда отгрузить — если важно</span><input type="date" id="doDate" min="${today}"></label></div>
+      <label class="field"><span>Телефон (необязательно)</span><input id="doPhone" type="tel" maxlength="40" placeholder="+7…" autocomplete="off"></label>
+      <div class="field"><span>Служба доставки (необязательно)</span><div id="doServiceBox"></div></div>
       <label class="field" id="doServiceOtherField" hidden><span>Какая служба</span><input id="doServiceOther" maxlength="60"></label>
-      <label class="field"><span>Комментарий складу</span><input id="doComment" maxlength="500" placeholder="Например: позвонить получателю за час"></label>
+      <label class="field"><span>Когда отгрузить (необязательно)</span><input type="date" id="doDate" min="${today}"></label>
+      <label class="field"><span>Комментарий складу (необязательно)</span><input id="doComment" maxlength="500" placeholder="Например: позвонить получателю за час"></label>
+      <div class="field"><span>Товары заказа</span></div>
       <div id="doPicker"></div></form>`;
     const drawVw = () => { if ($('doVwBox')) $('doVwBox').innerHTML = dropdown('do-vw', { value: f.vw, neutral: true,
       options: [{ value: '', text: 'Весь мой товар' }, ...vws.map((w) => ({ value: w.id, text: 'Склад «' + w.name + '»' }))],
@@ -1815,7 +1825,7 @@
       f.picker?.close();
       f.picker = window.ArgusProductPicker.open({
         host: $('doPicker'), request: api, companyId: state.companyId, maxItems: 500,
-        templateName: 'Товары заказа', submitLabel: 'Создать заказ',
+        templateName: 'Товары заказа', submitLabel: 'Создать заказ', submitAtEnd: true,
         loadRows: async () => (await api('/api/sellers/stock' + (state.owner ? '?view=seller' : ''))).rows,
         columns: [{ title: f.vw ? 'Свободно на складе' : 'Доступно', value: free }],
         limit: free, defaultQty: () => '1',
@@ -1846,14 +1856,14 @@
   function directOrderSection(r) {
     const status = r.direct_status || 'new';
     return `<section class="detail-section" style="margin-top:0"><h3>Получатель</h3>`
-      + `<p><strong>${h(r.recipient)}</strong><br>${h(r.address)}${r.phone ? '<br>' + h(r.phone) : ''}</p>`
+      + `<p><strong>${h(r.recipient)}</strong>${r.address !== r.recipient ? '<br>' + h(r.address) : ''}${r.phone ? '<br>' + h(r.phone) : ''}</p>`
       + `<p class="help">Доставка: ${h(r.delivery_service || 'не выбрана')}${r.planned_date ? ' · отгрузить ' + h(day(dateOnly(r.planned_date))) : ''}${r.direct_comment ? '<br>' + h(r.direct_comment) : ''}</p>`
-      + `<div class="two" style="margin-top:12px"><label class="field"><span>Трек-номер</span><input id="doTrack" maxlength="60" value="${h(r.track_number || '')}" placeholder="Номер от службы доставки"></label>`
+      + `<div class="do-card-fields"><label class="field"><span>Трек-номер (необязательно)</span><input id="doTrack" maxlength="60" value="${h(r.track_number || '')}" placeholder="Номер от службы доставки"></label>`
       + (AFTER_SHIP.includes(status) ? `<div class="field"><span>Статус после отъезда</span><div id="doStatusBox"></div></div>` : '')
       + `</div>${r.track_number && TRACK_URLS[r.delivery_service] ? `<p class="help">Отследить: ${trackLink(r.delivery_service, r.track_number)}</p>` : ''}`
       + `<div class="drawer-actions" id="doActions"><button class="button" type="button" id="doTrackSave">Сохранить трек-номер</button>`
       + (status === 'new' ? `<button class="button ghost" type="button" id="doCancel">Отменить заказ</button>` : '') + '</div>'
-      + '<p class="help" id="doMsg"></p></section>';
+      + '<p class="help do-msg" id="doMsg"></p></section>';
   }
   function wireDirectOrder(r) {
     const done = (text) => { toast(text); state.data.orders = null; state.data.stock = null; $('drawer').close(); navigate(true); };

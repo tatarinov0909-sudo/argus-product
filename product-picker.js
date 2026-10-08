@@ -22,7 +22,9 @@
   // o: host, request(path, {method, body}), companyId, loadRows() → [{sku, name, barcode}],
   //    columns [{title, value(row)}], limit(row) → число или null (больше — с предупреждением),
   //    defaultQty(row), submitLabel, onSubmit(items) — бросает Error, если не получилось,
-  //    eyebrow, title, subtitle, closeLabel, onClose, flat, maxItems, templateName.
+  //    eyebrow, title, subtitle, closeLabel, onClose, flat, maxItems, templateName,
+  //    submitAtEnd — главная кнопка под списком, в конце формы (правила 08.10:
+  //    «главная кнопка под последним полем»), а не в строке выбора.
   function open(o){
     const host = o.host;
     mounted.get(host)?.close();
@@ -86,7 +88,10 @@
       return '<div class="vws-selection"><div><b data-role="selected-total"></b><p class="vws-sub">Выбор сохраняется между страницами и при поиске.</p></div><div class="vws-actions">'
         + button('only', state.onlySelected ? 'Показать все' : 'Только выбранные', 'data-role="only"')
         + button('clear', 'Снять выбор', 'data-role="clear"')
-        + button('submit', esc(state.busy ? 'Отправляем…' : o.submitLabel || 'Готово'), 'data-role="submit"') + '</div></div>';
+        + (o.submitAtEnd ? '' : submitButton()) + '</div></div>';
+    }
+    function submitButton(){
+      return button('submit', esc(state.busy ? 'Отправляем…' : o.submitLabel || 'Готово'), 'data-role="submit"');
     }
     function pickHtml(){
       const list = visible();
@@ -106,7 +111,8 @@
               + '<div class="pp-warn" data-warn="' + esc(r.sku) + '"></div></td></tr>';
           }).join('') + '</tbody></table></div>'
           : '<div class="vws-empty"><b>' + (state.search ? 'Товар не найден' : state.onlySelected ? 'Ничего не выбрано' : 'В каталоге продавца нет товаров') + '</b><p>Измените поиск. Новый товар заводят в «Товары» → «Добавить товар».</p></div>')
-        + pager(list.length, state.page, 'page');
+        + pager(list.length, state.page, 'page')
+        + (o.submitAtEnd ? '<div class="pp-end">' + submitButton() + '</div>' : '');
     }
     function importHtml(){
       let html = '<div class="vws-import-head"><div><h3>Загрузка из Excel</h3><p class="vws-sub">Файл остаётся в браузере. Нужны артикул или штрихкод и целое количество. Каждый столбец выбирается явно.</p></div><div class="vws-actions">'
