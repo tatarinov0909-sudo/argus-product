@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Аргус — рабочее место</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Аргус · Грузчик">
 <link rel="stylesheet" href="fonts.css?v=f77584bf">
 <link rel="stylesheet" href="seller-fonts.css?v=d1da12bc">
 <style>
@@ -282,15 +284,22 @@
   /* Сканер QR листа сборки (06.10.2026). */
   .scan-open{display:flex; align-items:center; justify-content:center; gap:8px; width:100%; margin-top:12px; padding:13px 14px; border:1px solid var(--accent); border-radius:12px; background:transparent; color:var(--accent); font:600 15px/1.2 var(--sans); cursor:pointer;}
   .scan-open span{font-size:18px; line-height:1;}
-  .scan-overlay{position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(8,10,12,0.94);}
+  .scan-overlay{position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center; padding:16px; overflow-y:auto; background:rgba(8,10,12,0.94);}
   .scan-overlay[hidden]{display:none;}
-  .scan-box{display:flex; flex-direction:column; align-items:center; gap:14px; width:100%; max-width:440px;}
+  .scan-box{display:flex; flex-direction:column; align-items:center; gap:14px; width:100%; max-width:440px; margin:auto;}
   .scan-title{font:600 17px/1.35 var(--sans); color:var(--text); text-align:center;}
-  .scan-view{position:relative; width:100%; aspect-ratio:1/1; border-radius:16px; overflow:hidden; background:#000;}
-  .scan-view video{position:absolute; inset:0; width:100%; height:100%; object-fit:cover;}
-  .scan-frame{position:absolute; inset:14%; border:3px solid var(--accent-2); border-radius:16px; box-shadow:0 0 0 999px rgba(0,0,0,0.25);}
-  .scan-status{min-height:40px; font-size:14px; line-height:1.4; color:var(--muted); text-align:center;}
-  .scan-close{width:100%; padding:14px; border:1px solid var(--line); border-radius:12px; background:var(--panel); color:var(--text); font:600 16px/1.2 var(--sans); cursor:pointer;}
+  .scan-view{position:relative; width:100%; aspect-ratio:1/1; max-height:50vh; max-height:50dvh; border-radius:16px; overflow:hidden; background:#000;}
+  .scan-view video{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0; pointer-events:none;}
+  .scan-view[data-ready="true"] video{opacity:1;}
+  .scan-hint{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:24px; color:var(--text); font-size:16px; line-height:1.5; text-align:center;}
+  .scan-frame{display:none; position:absolute; inset:14%; border:3px solid var(--accent-2); border-radius:16px; box-shadow:0 0 0 999px rgba(0,0,0,0.25);}
+  .scan-view[data-ready="true"] .scan-frame{display:block;}
+  .scan-view[data-ready="true"] .scan-hint{display:none;}
+  .scan-status{min-height:42px; font-size:15px; line-height:1.4; color:var(--text); text-align:center;}
+  .scan-actions{display:flex; gap:10px; width:100%;}
+  .scan-close,.scan-retry{flex:1; min-height:48px; padding:12px; border:1px solid var(--line); border-radius:12px; background:var(--panel); color:var(--text); font:600 16px/1.2 var(--sans); cursor:pointer;}
+  .scan-retry{border-color:var(--accent); color:var(--accent);}
+  .scan-retry[hidden]{display:none;}
   /* Коды строки «Все товары» — как в карточке (06.10.2026). */
   .product-row-codes{display:flex; flex-wrap:wrap; gap:4px 12px; align-items:baseline; margin-top:4px; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums;}
   .product-row-codes b{color:var(--text); font-weight:600;}
@@ -1244,9 +1253,9 @@
     <div class="scan-overlay" id="scanOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="scanTitle">
       <div class="scan-box">
         <div class="scan-title" id="scanTitle">Наведите камеру на QR листа сборки</div>
-        <div class="scan-view"><video id="scanVideo" playsinline muted></video><div class="scan-frame" aria-hidden="true"></div></div>
+        <div class="scan-view" id="scanView"><video id="scanVideo" autoplay playsinline muted disablepictureinpicture aria-hidden="true"></video><div class="scan-hint" id="scanHint">Ожидаем изображение камеры…</div><div class="scan-frame" aria-hidden="true"></div></div>
         <div class="scan-status" id="scanStatus" role="status"></div>
-        <button type="button" class="scan-close" onclick="closeScanner()">Закрыть</button>
+        <div class="scan-actions"><button type="button" class="scan-retry" id="scanRetry" onclick="retryScanner()" hidden>Повторить</button><button type="button" class="scan-close" onclick="closeScanner()">Закрыть</button></div>
       </div>
     </div>
 
@@ -1828,6 +1837,12 @@
 <script src="back.js?v=4901b838"></script>
 <script>
   const API_BASE = window.ArgusWorker ? ArgusWorker.apiBase : 'https://api.argus-ai.online';
+  const WORKER_LOGIN = window.ArgusWorker ? 'login.html' : 'worker-login.html';
+  if(!window.ArgusWorker){
+    const manifest = document.createElement('link');
+    manifest.rel = 'manifest'; manifest.href = 'worker-web.webmanifest';
+    document.head.appendChild(manifest);
+  }
   // Вход работника — на своём месте (auth.js): вход владельца или продавца
   // в соседней вкладке его не затирает.
   const AUTH = window.ArgusAuth ? ArgusAuth.get(['worker']) : null;
@@ -1836,7 +1851,7 @@
   if(!AUTH){
     // Скан QR листа до входа: адрес с поставкой дождётся входа.
     try{ if(location.hash) sessionStorage.setItem('argus_after_login', location.hash); } catch(e){}
-    window.location.href = 'login.html';
+    window.location.href = WORKER_LOGIN;
     throw new Error('not authenticated');
   }
 
@@ -1868,6 +1883,15 @@
           : await ArgusWorker.request(path, options);
       } finally { TOKEN = AUTH.token; }
     }
+    // Другая вкладка могла продлить вход, пока эта была закрыта или заморожена.
+    const savedAuth = ArgusAuth.get(['worker']);
+    if(!savedAuth || !sameUser(savedAuth.token, TOKEN)){
+      window.location.href = WORKER_LOGIN;
+      throw new Error('войдите ключом работника');
+    }
+    TOKEN = savedAuth.token;
+    AUTH.token = TOKEN;
+    const requestToken = TOKEN;
     const res = await fetch(API_BASE + path, {
       method: options.method || 'GET',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN },
@@ -1876,13 +1900,16 @@
     // Сервер продлевает вход, пока человек работает: свежий токен приходит
     // в заголовке — берём его, и выкидывать каждые 45 минут перестаёт.
     const renewed = res.headers.get('X-Argus-Token');
-    if(renewed && sameUser(renewed, TOKEN)){
-      ArgusAuth.renew(ROLE, TOKEN, renewed);
+    if(renewed && sameUser(renewed, requestToken)){
+      ArgusAuth.renew(ROLE, requestToken, renewed);
       TOKEN = renewed;
+      AUTH.token = renewed;
     }
     if(res.status === 401){
-      ArgusAuth.clear(ROLE, TOKEN);
-      window.location.href = 'login.html';
+      // Старый ответ не удаляет более свежий вход из соседней вкладки.
+      const current = ArgusAuth.get(['worker']);
+      if(!current || current.token === requestToken) ArgusAuth.clear(ROLE, requestToken);
+      window.location.href = WORKER_LOGIN;
       throw new Error('сессия истекла');
     }
     const data = await res.json().catch(() => null);
@@ -1900,7 +1927,7 @@
         await ArgusWorker.beforeLogout();
       }
       ArgusAuth.clear(ROLE, TOKEN);
-      window.location.href = 'login.html';
+      window.location.href = WORKER_LOGIN;
     } catch(error){ showToast(error.message); }
     finally { logoutPending = false; }
   }
@@ -1973,7 +2000,8 @@
   // сборки поставки (…/loader.html#paper=<поставка>); чужие ссылки не открываем.
   // Распознаёт сам браузер (BarcodeDetector), а где его нет (iPhone) — jsQR
   // с jsDelivr, с проверкой подлинности файла.
-  let scanStream = null, scanTimer = null, scanBusy = false;
+  let scanStream = null, scanTimer = null, scanDeadline = null, scanCancelFrame = null, scanGeneration = 0, scanKind = 'paper';
+  const workerBackButtons = '.job-back, .done-back, .sheet-back, .sheet-back-btn, .map-back, #invoiceSwitch';
   const scanStatus = (text) => { document.getElementById('scanStatus').textContent = text; };
   function loadJsQr(){
     return new Promise((resolve, reject) => {
@@ -2011,41 +2039,99 @@
       return code ? code.data : null;
     };
   }
-  async function openScanner(){
+  function stopScannerCapture(){
+    clearInterval(scanTimer); scanTimer = null;
+    clearTimeout(scanDeadline); scanDeadline = null;
+    if(scanCancelFrame){ scanCancelFrame(); scanCancelFrame = null; }
+    if(scanStream){ scanStream.getTracks().forEach(t => t.stop()); scanStream = null; }
+    const video = document.getElementById('scanVideo');
+    video.pause(); video.srcObject = null;
+    document.getElementById('scanView').dataset.ready = 'false';
+  }
+  function failScanner(generation, message){
+    if(generation !== scanGeneration) return;
+    ++scanGeneration;
+    stopScannerCapture();
+    document.getElementById('scanHint').textContent = 'Камера не запущена';
+    document.getElementById('scanRetry').hidden = false;
+    scanStatus(message);
+  }
+  function firstScannerFrame(video){
+    return new Promise((resolve, reject) => {
+      let frame = null, timeout = null;
+      const finish = error => {
+        clearTimeout(timeout);
+        video.removeEventListener('loadeddata', check);
+        video.removeEventListener('playing', check);
+        if(frame !== null && video.cancelVideoFrameCallback) video.cancelVideoFrameCallback(frame);
+        scanCancelFrame = null;
+        error ? reject(error) : resolve();
+      };
+      const check = () => { if(video.readyState >= 2 && video.videoWidth > 0) finish(); };
+      scanCancelFrame = () => finish(new Error('scanner_closed'));
+      timeout = setTimeout(() => finish(new Error('camera_no_frame')), 10000);
+      if(video.requestVideoFrameCallback) frame = video.requestVideoFrameCallback(() => finish());
+      else {
+        video.addEventListener('loadeddata', check); video.addEventListener('playing', check); check();
+      }
+    });
+  }
+  async function openScanner(options = {}){
     const overlay = document.getElementById('scanOverlay');
     const video = document.getElementById('scanVideo');
+    const generation = ++scanGeneration;
+    stopScannerCapture();
+    scanKind = options.kind === 'cell' ? 'cell' : 'paper';
+    document.getElementById('scanTitle').textContent = scanKind === 'cell' ? 'Наведите камеру на QR ячейки' : 'Наведите камеру на QR листа сборки';
+    document.getElementById('scanHint').textContent = 'Ожидаем изображение камеры…';
+    document.getElementById('scanRetry').hidden = true;
+    video.autoplay = true; video.muted = true; video.defaultMuted = true; video.playsInline = true; video.controls = false;
+    video.removeAttribute('controls'); video.removeAttribute('poster');
     overlay.hidden = false;
+    if(window.argusBackButton) argusBackButton({ buttons: '#scanOverlay .scan-close' });
     scanStatus('Включаю камеру…');
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-      scanStatus('Камера в этом браузере недоступна. Откройте кабинет в Chrome или Safari.');
+      failScanner(generation, 'Камера в этом браузере недоступна. Откройте кабинет в Chrome или Safari.');
       return;
     }
+    scanDeadline = setTimeout(() => failScanner(generation, 'Камера не ответила. Проверьте разрешение на камеру и нажмите «Повторить».'), 20000);
     try{
-      scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+      // A closed or retried permission request may still return a live camera later.
+      if(generation !== scanGeneration){ stream.getTracks().forEach(t => t.stop()); return; }
+      clearTimeout(scanDeadline); scanDeadline = null;
+      scanStream = stream;
+      stream.getVideoTracks().forEach(track => track.addEventListener('ended', () => failScanner(generation, 'Камера отключилась. Нажмите «Повторить», чтобы включить её снова.'), { once: true }));
+      video.srcObject = stream;
+      await Promise.all([Promise.resolve(video.play()).catch(() => { const error = new Error('video_play_failed'); error.name = 'PlaybackError'; throw error; }), firstScannerFrame(video)]);
+      if(generation !== scanGeneration) return;
+      document.getElementById('scanView').dataset.ready = 'true';
     } catch(e){
+      if(generation !== scanGeneration) return;
       const why = {
-        NotAllowedError: 'Нет доступа к камере. Разрешите камеру для этого сайта в настройках браузера и нажмите кнопку ещё раз.',
-        SecurityError: 'Нет доступа к камере. Разрешите камеру для этого сайта в настройках браузера и нажмите кнопку ещё раз.',
+        NotAllowedError: 'Нет доступа к камере. Разрешите камеру в настройках приложения или сайта и нажмите «Повторить».',
+        SecurityError: 'Нет доступа к камере. Разрешите камеру в настройках приложения или сайта и нажмите «Повторить».',
         NotFoundError: 'Камера не найдена. На этом устройстве нет камеры или она отключена.',
         OverconstrainedError: 'Камера не найдена. На этом устройстве нет подходящей камеры.',
         NotReadableError: 'Камера занята другим приложением. Закройте его и нажмите кнопку ещё раз.',
+        PlaybackError: 'Не удалось запустить изображение камеры. Нажмите «Повторить».',
       }[e && e.name];
-      scanStatus(why || 'Камера не включилась. Закройте окно и попробуйте ещё раз.');
+      failScanner(generation, e.message === 'camera_no_frame' ? 'Камера не передаёт изображение. Закройте другие приложения с камерой и нажмите «Повторить».' : why || 'Камера не включилась. Нажмите «Повторить» или закройте окно.');
       return;
     }
-    if(overlay.hidden){ closeScanner(); return; }   // закрыли, пока камера включалась
-    video.srcObject = scanStream;
-    try{ await video.play(); } catch(e){}
     let read;
+    scanStatus('Готовлю распознавание QR…');
     try{ read = await makeQrReader(); }
-    catch(e){ scanStatus(e.message); return; }
+    catch(e){ failScanner(generation, e.message); return; }
+    if(generation !== scanGeneration) return;
     scanStatus('Ищу QR…');
+    let busy = false;
     scanTimer = setInterval(async () => {
-      if(scanBusy || !scanStream) return;
-      scanBusy = true;
-      try{ const text = await read(video); if(text) onQrScanned(text); }
+      if(busy || !scanStream || generation !== scanGeneration) return;
+      busy = true;
+      try{ const text = await read(video); if(text && generation === scanGeneration) onQrScanned(text); }
       catch(e){}
-      finally{ scanBusy = false; }
+      finally{ busy = false; }
     }, 250);
   }
   function onQrScanned(text){
@@ -2058,16 +2144,17 @@
     refreshWork().catch(() => {}).then(() => openPaper(m[1], { start: true }));
   }
   function closeScanner(){
+    ++scanGeneration;
     if(window.ArgusWorker) ArgusWorker.cancelScan();
-    clearInterval(scanTimer); scanTimer = null;
-    if(scanStream){ scanStream.getTracks().forEach(t => t.stop()); scanStream = null; }
-    const video = document.getElementById('scanVideo');
-    if(video) video.srcObject = null;
+    stopScannerCapture();
     document.getElementById('scanOverlay').hidden = true;
+    if(window.argusBackButton) argusBackButton({ buttons: workerBackButtons });
   }
-  Object.assign(window, { openScanner, closeScanner });
+  function retryScanner(){ return openScanner({ kind: scanKind }); }
+  Object.assign(window, { openScanner, closeScanner, retryScanner });
   // Ушёл со вкладки — камеру выключить.
-  document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'hidden' && scanStream) closeScanner(); });
+  document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'hidden' && !document.getElementById('scanOverlay').hidden) closeScanner(); });
+  window.addEventListener('pagehide', closeScanner);
 
   // ---------- Автообновление (владелец 06.10.2026) ----------
   // Грузчик не должен сам обновлять страницу: раз в 30 секунд списки
@@ -7180,7 +7267,7 @@
 
   startTaskTimer();
   // «Назад» браузера — то же, что стрелка «←» на экране (back.js).
-  argusBackButton({ buttons: '.job-back, .done-back, .sheet-back, .sheet-back-btn, .map-back, #invoiceSwitch' });
+  argusBackButton({ buttons: workerBackButtons });
 
   if(window.ArgusWorker){
     ArgusWorker.bind(AUTH, {

@@ -183,7 +183,7 @@ test('actual loader native logout retains key on failed persistence/offline and 
   try {
     const { context, page, state, errors } = await harness(browser, { nativeHttp: true });
     const loader = fs.readFileSync(path.join(root, 'loader.html'), 'utf8');
-    const logoutSource = loader.slice(loader.indexOf('  let logoutPending = false;'), loader.indexOf('  let invoices = []'));
+    const logoutSource = loader.match(/  const WORKER_LOGIN = [^\n]+/)[0] + '\n' + loader.slice(loader.indexOf('  let logoutPending = false;'), loader.indexOf('  let invoices = []'));
     assert.match(logoutSource, /await ArgusWorker.beforeLogout\(\)/);
     await context.route('https://worker.test/login.html', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><p>Logged out</p>' }));
     await page.evaluate(source => {

@@ -12,7 +12,7 @@ Android-проект для Android Studio: эта папка `android`. Наж�
 - `npm run build` собирает веб-просмотр с тестовым API `http://127.0.0.1:3110`.
 - `npm run sync` собирает Android-вариант с тестовым API `http://10.0.2.2:3110` и копирует его в Android-проект.
 - Из папки `android`: `./gradlew.bat :app:assembleDebug`.
-- На подготовленном компьютере все шаги выполняет `./build-android.ps1`; итог копируется в `output/argus-worker-0.1.0-stand.apk`.
+- На подготовленном компьютере все шаги выполняет `./build-android.ps1`; итог копируется в `output/argus-worker-0.1.1-stand.apk`.
 - APK: `android/app/build/outputs/apk/debug/app-debug.apk`. Минимальная версия Android — 7.0 (API 24).
 
 Адрес API задаётся переменной `ARGUS_API_BASE` **до** сборки. Разрешён только адрес сервера без пути, параметров и учётных данных. `10.0.2.2` — адрес компьютера только из Android-эмулятора; для физического телефона нужен доступный ему тестовый сервер. Не вводить рабочие ключи в тестовый стенд.

@@ -377,7 +377,7 @@
     const cellArea = document.getElementById('cellBlock');
     if (cellArea) {
       const scan = dom('button', 'Сканировать QR ячейки', 'worker-scan'); scan.type = 'button'; scan.id = 'workerCellScan';
-      scan.onclick = () => { scanning = true; if (hooks.openScanner) hooks.openScanner(); };
+      scan.onclick = () => { scanning = true; if (hooks.openScanner) hooks.openScanner({ kind: 'cell' }); };
       const input = dom('input'); input.id = 'workerScanInput'; input.placeholder = 'Сканер ТСД: код и Enter'; input.setAttribute('aria-label', 'QR ячейки со сканера ТСД'); input.autocomplete = 'off';
       input.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); scanning = true; handleQr(input.value); input.value = ''; } });
       const note = dom('p', 'Отсканируйте ячейку, положите товар и подтвердите. Если сканер недоступен, выберите ячейку вручную при наличии связи.'); note.id = 'workerCellStatus'; note.setAttribute('aria-live', 'polite');
