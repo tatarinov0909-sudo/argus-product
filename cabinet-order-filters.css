@@ -21,3 +21,21 @@
 .workspace-marketplace.ozon{color:#9abfff;border-color:#385c98;background:#1c2b44;}
 .workspace-marketplace.onec{color:#e3c75a;border-color:#71683b;background:#302d20;}
 @media(max-width:640px){.order-warehouse-filter{width:100%;}.order-warehouse-menu{left:0;right:auto;width:100%;max-width:100%;}.order-supply-actions{width:100%;}.order-product-name{gap:8px;}.order-product-photo{width:40px;height:40px;}}
+/* Заказы физлицам (08.10.2026): значок и статусы. */
+.workspace-marketplace.direct{color:#9fe0c9;border-color:#2f6b58;background:#17302a;}
+.do-status{display:inline-block;font-weight:700;}
+.do-status.do-shipped,.do-status.do-in_transit{color:var(--accent);}
+.do-status.do-delivered{color:#8fd19e;}
+.do-status.do-refused{color:#f0a37a;}
+.do-mark{display:block;margin-top:6px;max-width:100%;min-width:0;}
+.do-track{margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline;}
+/* На телефоне — карточками, подписи из data-label (без прокрутки вбок). */
+@media(max-width:640px){
+  .do-table thead{display:none;}
+  .do-table,.do-table tbody{display:block;width:100%;}
+  .do-table tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 12px;padding:12px;border-bottom:1px solid var(--line);}
+  .do-table td{display:block;padding:0;border:0;min-width:0;overflow-wrap:anywhere;white-space:normal;text-align:left;}
+  .do-table td[data-label]::before{content:attr(data-label);display:block;font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;}
+  .do-table td.do-wide{grid-column:1 / -1;}
+  .do-table td:empty{display:none;}
+}

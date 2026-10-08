@@ -301,7 +301,7 @@
     const y = window.scrollY;
     let again = null;
     if(currentView === 'home') again = loadHome();
-    else if(currentView === 'supplies' && document.getElementById('directSupply').hidden) again = loadSupplies();
+    else if(currentView === 'supplies') again = loadSupplies();
     else if(currentView === 'orders') again = loadMpOrders();
     else if(currentView === 'receipts') again = loadInvoicesList();
     else if(currentView === 'mp') again = loadMarketplaces();
@@ -939,6 +939,19 @@
       columns: [{ title: 'Всего на складе', value: r => r.total }],
       onSubmit: items => submitReceipt(companyId, items),
     });
+    fillReceiptVw(companyId);
+  }
+  // На какой склад продавца приходит товар — если склады у него заведены.
+  async function fillReceiptVw(companyId){
+    const field = document.getElementById('receiptVwField');
+    const select = document.getElementById('receiptVw');
+    let list = [];
+    try{ list = (await vwOf(companyId)).warehouses || []; } catch(e){ list = []; }
+    if(document.getElementById('invoiceCompanySelect').value !== companyId) return;
+    select.innerHTML = '<option value="">Остальной товар</option>'
+      + list.map(w => '<option value="' + escapeHTML(w.id) + '">Склад «' + escapeHTML(w.name) + '»</option>').join('');
+    field.hidden = !list.length;
+    document.getElementById('receiptVwHint').hidden = !canOpenView('warehouse');
   }
   function receiptCompanyChanged(){ openReceiptPicker(); }
   window.receiptCompanyChanged = receiptCompanyChanged;
@@ -963,8 +976,9 @@
     const field = document.getElementById('invoiceNumberInput');
     const number = field.value.trim();
     if(!number){ field.focus(); throw new Error('Впишите номер прихода.'); }
+    const vw = document.getElementById('receiptVw').value || null;
     await apiFetch('/api/invoices', { method: 'POST', body: { companyId, number, direction: 'in',
-      items: items.map(i => ({ name: i.name, sku: i.sku, declaredQty: i.qty })) } });
+      items: items.map(i => ({ name: i.name, sku: i.sku, declaredQty: i.qty, virtualWarehouseId: vw })) } });
     const units = items.reduce((s, i) => s + i.qty, 0);
     field.value = '';
     receiptPicker?.close(); receiptPicker = null; receiptPickerFor = null;
@@ -981,67 +995,178 @@
   }
   window.toggleReceiptForm = toggleReceiptForm;
 
-  /* ---------- Поставка физлицу из товаров продавца (владелец 06.10.2026) ----------
-     «Поставки» → «Новая поставка» → продавец → панель выбора его товаров →
-     «Куда / кому». Поставка на WB по-прежнему составляется из заказов. */
-  let directSupplyPicker = null;
-  function openDirectSupply(){
-    const select = document.getElementById('directSupplyCompany');
-    const keep = select.value;
+  /* ---------- Заказ физлицу (схема 06.10, владелец 08.10.2026) ----------
+     «Заказы» → «+ Заказ физлицу» → продавец, его склад, получатель, товары.
+     Заказ встаёт в «Заказы» продавца; поставку из таких заказов составляют
+     как обычно, несколько получателей в одной. Или сразу на сборку. */
+  const DELIVERY_SERVICES = ['СДЭК', 'Почта России', 'Boxberry', 'Яндекс Доставка', 'DPD', 'Деловые Линии', 'ПЭК', 'Курьер склада', 'Самовывоз'];
+  // Отслеживание по трек-номеру — у служб, где ссылка известна.
+  const TRACK_URLS = { 'СДЭК': 'https://www.cdek.ru/ru/tracking?order_id=', 'Почта России': 'https://www.pochta.ru/tracking?barcode=',
+    'Boxberry': 'https://boxberry.ru/tracking-page?id=' };
+  const trackLink = (service, track) => (track && TRACK_URLS[service]
+    ? '<a href="' + escapeHTML(TRACK_URLS[service] + encodeURIComponent(track)) + '" target="_blank" rel="noopener noreferrer">' + escapeHTML(track) + '</a>'
+    : escapeHTML(track || ''));
+  // Номер операции окна: повтор запроса (двойное нажатие, обрыв связи) не
+  // создаст второй заказ. randomUUID есть только на https.
+  const newRequestId = () => (crypto.randomUUID ? crypto.randomUUID()
+    : '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)));
+  let directOrderPicker = null;
+  let directOrderRequest = null;
+  async function openDirectOrder(companyId){
+    if(currentView !== 'orders') switchView('orders');
+    const select = document.getElementById('directOrderCompany');
+    const keep = companyId || select.value || ordersPicked;
     select.innerHTML = companies.length
       ? companies.map(c => '<option value="' + escapeHTML(c.id) + '">' + escapeHTML(c.name) + '</option>').join('')
       : '<option value="">Сначала добавьте продавца</option>';
     if(keep && companies.some(c => c.id === keep)) select.value = keep;
-    document.getElementById('directSupply').hidden = false;
-    document.getElementById('suppliesList').hidden = true;
-    // Номер операции окна: повтор запроса (двойное нажатие, обрыв связи,
-    // второй человек с тем же окном) не создаст вторую поставку.
-    // randomUUID есть только на https; без него — тот же вид номера из getRandomValues.
-    if(!directSupplyRequest) directSupplyRequest = crypto.randomUUID ? crypto.randomUUID()
-      : '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16));
-    if(!directSupplyPicker || directSupplyPicker.companyId !== select.value) openDirectSupplyPicker();
-    document.getElementById('directSupply').scrollIntoView({ block: 'start' });
+    const service = document.getElementById('directOrderService');
+    if(!service.options.length){
+      service.innerHTML = '<option value="">Не выбрана</option>' + DELIVERY_SERVICES.map(n => '<option>' + escapeHTML(n) + '</option>').join('')
+        + '<option value="other">Другая…</option>';
+    }
+    document.getElementById('directOrder').hidden = false;
+    document.getElementById('directOrderDate').min = moscowToday();
+    if(!directOrderRequest) directOrderRequest = newRequestId();
+    document.getElementById('directOrder').scrollIntoView({ block: 'start' });
+    await directOrderCompanyChanged(true);
   }
-  let directSupplyRequest = null;
-  function closeDirectSupply(){
-    directSupplyPicker?.close(); directSupplyPicker = null;
-    directSupplyRequest = null;
-    document.getElementById('directSupply').hidden = true;
-    document.getElementById('suppliesList').hidden = false;
+  function closeDirectOrder(){
+    directOrderPicker?.close(); directOrderPicker = null;
+    directOrderRequest = null;
+    document.getElementById('directOrder').hidden = true;
   }
-  function openDirectSupplyPicker(){
-    const companyId = document.getElementById('directSupplyCompany').value;
-    directSupplyPicker?.close(); directSupplyPicker = null;
+  function directOrderServiceChanged(){
+    const other = document.getElementById('directOrderService').value === 'other';
+    document.getElementById('directOrderServiceOtherField').hidden = !other;
+    if(other) document.getElementById('directOrderServiceOther').focus();
+  }
+  // Склады продавца: «Весь товар» — собрать с любого, или его отдельный склад.
+  async function directOrderCompanyChanged(keepPicker){
+    const companyId = document.getElementById('directOrderCompany').value;
+    const field = document.getElementById('directOrderVwField');
+    const select = document.getElementById('directOrderVw');
+    let list = [];
+    if(companyId){ try{ list = (await vwOf(companyId)).warehouses || []; } catch(e){ list = []; } }
+    select.innerHTML = '<option value="">Весь товар продавца</option>'
+      + list.map(w => '<option value="' + escapeHTML(w.id) + '">Склад «' + escapeHTML(w.name) + '»</option>').join('');
+    field.hidden = !list.length;
+    if(!(keepPicker === true && directOrderPicker && directOrderPicker.companyId === companyId)) openDirectOrderPicker();
+  }
+  function openDirectOrderPicker(){
+    const companyId = document.getElementById('directOrderCompany').value;
+    const vw = document.getElementById('directOrderVw').value || null;
+    directOrderPicker?.close(); directOrderPicker = null;
     if(!companyId) return;
-    directSupplyPicker = window.ArgusProductPicker.open({
-      host: document.getElementById('directSupplyPicker'), request: apiFetch, companyId,
-      maxItems: 500, templateName: 'Товары поставки', submitLabel: 'Создать поставку',
+    const free = (r) => (vw ? ((r.warehouses || []).find(w => w.id === vw) || {}).available : r.available);
+    directOrderPicker = window.ArgusProductPicker.open({
+      host: document.getElementById('directOrderPicker'), request: apiFetch, companyId,
+      maxItems: 500, templateName: 'Товары заказа', submitLabel: 'Создать заказ',
       loadRows: async () => (await apiFetch('/api/sellers/stock?view=seller&companyId=' + encodeURIComponent(companyId))).rows,
-      columns: [{ title: 'Всего', value: r => r.total }, { title: 'Доступно', value: r => r.available }],
-      limit: r => r.available, defaultQty: () => '1',
-      onSubmit: items => submitDirectSupply(companyId, items),
+      columns: [{ title: 'Всего', value: r => r.total }, { title: vw ? 'Свободно на складе' : 'Доступно', value: free }],
+      limit: free, defaultQty: () => '1',
+      onSubmit: items => submitDirectOrder(companyId, vw, items),
     });
-    directSupplyPicker.companyId = companyId;
+    directOrderPicker.companyId = companyId;
   }
-  async function submitDirectSupply(companyId, items){
-    const where = document.getElementById('directSupplyWhere');
-    const destination = where.value.trim();
-    if(!destination){ where.focus(); throw new Error('Впишите, куда и кому едет поставка.'); }
+  async function submitDirectOrder(companyId, vwId, items){
+    const val = (id) => document.getElementById(id).value.trim();
+    if(!val('directOrderTo')){ document.getElementById('directOrderTo').focus(); throw new Error('Впишите, кому заказ.'); }
+    if(!val('directOrderAddress')){ document.getElementById('directOrderAddress').focus(); throw new Error('Впишите, куда везти.'); }
+    const serviceValue = document.getElementById('directOrderService').value;
+    const service = serviceValue === 'other' ? val('directOrderServiceOther') : serviceValue;
+    if(serviceValue === 'other' && !service){ document.getElementById('directOrderServiceOther').focus(); throw new Error('Впишите службу доставки.'); }
     // Больше доступного по учёту — можно (учёт бывает неточным), но сначала спросить.
     const over = items.filter(i => i.limit != null && i.qty > i.limit);
     if(over.length && !await askConfirm('Больше, чем доступно по учёту: '
       + over.slice(0, 5).map(i => '«' + i.name + '» — ' + i.qty + ' из ' + i.limit).join(', ')
-      + (over.length > 5 ? ' и ещё ' + (over.length - 5) : '') + '.\n\nСоздать поставку всё равно? Если товара на полке не окажется, грузчик отметит нехватку.')) return;
-    const date = document.getElementById('directSupplyDate');
-    const created = await apiFetch('/api/supplies/direct', { method: 'POST', body: { companyId, destination,
-      shipDate: date.value || null, items: items.map(i => ({ sku: i.sku, qty: i.qty })), requestId: directSupplyRequest } });
+      + (over.length > 5 ? ' и ещё ' + (over.length - 5) : '') + '.\n\nСоздать заказ всё равно? Если товара на полке не окажется, грузчик отметит нехватку.')) return;
+    const toSupply = document.getElementById('directOrderToSupply').checked;
+    const created = await apiFetch('/api/direct-orders', { method: 'POST', body: { companyId, vwId,
+      recipient: val('directOrderTo'), address: val('directOrderAddress'), phone: val('directOrderPhone'),
+      deliveryService: service || null, plannedDate: val('directOrderDate') || null, comment: val('directOrderComment'),
+      toSupply, items: items.map(i => ({ sku: i.sku, qty: i.qty })), requestId: directOrderRequest } });
     const units = items.reduce((s, i) => s + i.qty, 0);
-    where.value = ''; date.value = '';
-    closeDirectSupply();
-    await loadSupplies();
-    showWhToast('Поставка ' + created.number + ' создана: ' + units + ' шт. — ' + destination + '. Грузчик увидит её в «Сборке поставок».');
+    ['directOrderTo', 'directOrderAddress', 'directOrderPhone', 'directOrderDate', 'directOrderComment', 'directOrderServiceOther']
+      .forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('directOrderService').value = '';
+    document.getElementById('directOrderServiceOtherField').hidden = true;
+    closeDirectOrder();
+    await loadMpOrders();
+    showWhToast('Заказ ' + created.number + ' создан: ' + units + ' шт. '
+      + (created.supply ? '— поставка ' + created.supply.number + ' ушла грузчикам.' : '— он в «Заказах» продавца, составьте поставку, когда будете готовы.'));
   }
-  Object.assign(window, { openDirectSupply, closeDirectSupply, openDirectSupplyPicker });
+  Object.assign(window, { openDirectOrder, closeDirectOrder, openDirectOrderPicker, directOrderCompanyChanged, directOrderServiceChanged });
+
+  // Заказы физлицам — история со статусами: после отъезда склад ставит
+  // «в пути», «доставлен», «отказ / возврат» и трек-номер.
+  let directOrdersRows = [];
+  async function loadDirectOrders(){
+    const host = document.getElementById('directOrdersList');
+    if(!host) return;
+    try{ directOrdersRows = (await apiFetch('/api/direct-orders')).rows || []; }
+    catch(e){ host.innerHTML = '<div class="ord-meta ord-warn">Заказы физлицам не загрузились: ' + escapeHTML(e.message) + '</div>'; return; }
+    renderDirectOrders();
+  }
+  function renderDirectOrders(){
+    const host = document.getElementById('directOrdersList');
+    if(!host) return;
+    if(!directOrdersRows.length){ host.innerHTML = ''; return; }
+    const statusCell = (o) => '<span class="do-status do-' + o.status + '">' + escapeHTML(o.statusName) + '</span>'
+      + (o.supplyNumber ? '<div class="ord-sub">поставка ' + escapeHTML(o.supplyNumber) + '</div>' : '')
+      + (o.canMark ? '<select class="ord-sort do-mark" aria-label="Статус после отъезда" onchange="markDirectOrder(\'' + o.id + '\', this.value, this)">'
+        + [['', 'Уехал'], ['in_transit', 'В пути'], ['delivered', 'Доставлен'], ['refused', 'Отказ / возврат']]
+          .map(([v, t]) => '<option value="' + v + '"' + ((['in_transit', 'delivered', 'refused'].includes(o.status) ? o.status : '') === v ? ' selected' : '') + '>' + t + '</option>').join('')
+        + '</select>' : '');
+    host.innerHTML = '<div class="rc-list-head" style="margin-top:32px;"><div class="staff-title" style="font-size:17px; margin:0;">Заказы физлицам</div>'
+      + '<span class="ord-meta">последние ' + directOrdersRows.length + '</span></div>'
+      + '<div class="ord-scroll"><table class="ord-table do-table"><thead><tr><th>Заказ</th><th>Продавец</th><th>Кому и куда</th><th>Товары</th>'
+      + '<th>Доставка и трек</th><th>Статус</th><th></th></tr></thead><tbody>'
+      + directOrdersRows.map(o => '<tr>'
+        + '<td class="ord-mono ord-no" data-label="Заказ">' + escapeHTML(o.number) + '<div class="ord-sub">' + escapeHTML(fmtDay(o.createdAt))
+          + (o.createdRole === 'seller' ? ' · от продавца' : '') + '</div></td>'
+        + '<td data-label="Продавец">' + escapeHTML(o.companyName) + (o.vwName ? '<div class="ord-sub">склад «' + escapeHTML(o.vwName) + '»</div>' : '') + '</td>'
+        + '<td class="do-wide" data-label="Кому и куда"><b>' + escapeHTML(o.recipient) + '</b><div class="ord-sub">' + escapeHTML(o.address) + '</div>'
+          + (o.phone ? '<div class="ord-sub">' + escapeHTML(o.phone) + '</div>' : '')
+          + (o.comment ? '<div class="ord-sub">' + escapeHTML(o.comment) + '</div>' : '') + '</td>'
+        + '<td class="do-wide" data-label="Товары">' + (o.items || []).map(i => escapeHTML(i.name) + ' × ' + Number(i.qty)).join('<br>') + '</td>'
+        + '<td data-label="Доставка и трек">' + escapeHTML(o.deliveryService || '—') + (o.plannedDate ? '<div class="ord-sub">отгрузить ' + escapeHTML(fmtDay(o.plannedDate)) + '</div>' : '')
+          + '<div class="do-track">' + (o.trackNumber ? trackLink(o.deliveryService, o.trackNumber) + ' ' : '')
+          + '<button type="button" class="link-button" onclick="editDirectTrack(\'' + o.id + '\')">' + (o.trackNumber ? 'изменить' : 'трек-номер') + '</button></div></td>'
+        + '<td data-label="Статус">' + statusCell(o) + '</td>'
+        + '<td class="do-wide">' + (o.canCancel ? '<button type="button" class="wh-onboarding-btn" onclick="cancelDirectOrder(\'' + o.id + '\')">Отменить</button>' : '') + '</td>'
+        + '</tr>').join('')
+      + '</tbody></table></div>';
+  }
+  async function markDirectOrder(id, value, el){
+    el.disabled = true;
+    try{
+      await apiFetch('/api/direct-orders/' + id, { method: 'PATCH', body: { deliveryStatus: value || null } });
+      showWhToast('Статус заказа поменян — продавец видит его у себя.');
+    } catch(e){ showWhToast(e.message); }
+    loadDirectOrders();
+  }
+  async function editDirectTrack(id){
+    const o = directOrdersRows.find(x => x.id === id);
+    const value = await askText('Трек-номер заказа ' + (o ? o.number : ''), 'Трек-номер ' + (o && o.deliveryService ? o.deliveryService : 'службы доставки')
+      + ' — пусто, чтобы убрать', 'Например: 10012345678', { value: (o && o.trackNumber) || '', ok: 'Сохранить' });
+    if(value === null) return;
+    try{
+      await apiFetch('/api/direct-orders/' + id, { method: 'PATCH', body: { trackNumber: value.trim() } });
+      showWhToast(value.trim() ? 'Трек-номер сохранён — продавец видит его у себя.' : 'Трек-номер убран.');
+    } catch(e){ showWhToast(e.message); }
+    loadDirectOrders();
+  }
+  async function cancelDirectOrder(id){
+    const o = directOrdersRows.find(x => x.id === id);
+    if(!await askConfirm('Отменить заказ ' + (o ? o.number + ' — ' + o.recipient : '') + '? Товар снова станет свободным.')) return;
+    try{
+      await apiFetch('/api/direct-orders/' + id, { method: 'DELETE' });
+      showWhToast('Заказ отменён.');
+    } catch(e){ showWhToast(e.message); }
+    loadMpOrders();
+  }
+  Object.assign(window, { markDirectOrder, editDirectTrack, cancelDirectOrder });
 
   let lastInvoices = [];
   let lastOutbound = [];
@@ -1811,7 +1936,7 @@
   window.decideTransfer = decideTransfer;
 
   // Вопрос с полем ввода: строка — ответ, null — отмена.
-  function askText(title, label, placeholder){
+  function askText(title, label, placeholder, { value = '', ok = 'Отправить' } = {}){
     return new Promise((resolve) => {
       const overlay = document.createElement('div');
       overlay.className = 'ask-overlay';
@@ -1821,7 +1946,8 @@
         + '<button type="button" class="wh-onboarding-btn primary ask-ok">Отправить</button></div></div>';
       overlay.querySelector('.ask-title').textContent = title;
       overlay.querySelector('.ask-text').textContent = label;
-      const input = overlay.querySelector('input'); input.placeholder = placeholder || '';
+      const input = overlay.querySelector('input'); input.placeholder = placeholder || ''; input.value = value;
+      overlay.querySelector('.ask-ok').textContent = ok;
       const done = (v) => { overlay.remove(); resolve(v); };
       overlay.addEventListener('click', (e) => { if(e.target === overlay) done(null); });
       overlay.querySelector('.ask-cancel').onclick = () => done(null);
@@ -5816,6 +5942,7 @@
     document.getElementById('setWbNames').value = (s.wb_names || []).join(', ');
     document.getElementById('setWbSupplyLabel').value = s.wb_supply_label || '';
     document.getElementById('setVwReminders').checked = s.vw_reminders !== false;
+    document.getElementById('setSellersDirectOrders').checked = s.sellers_direct_orders !== false;
     document.getElementById('setAddressStorage').checked = s.address_storage !== false;
     document.getElementById('setResult').textContent = s.setup_at ? '' : 'Ответьте на вопросы и нажмите «Сохранить».';
   }
@@ -5829,6 +5956,7 @@
       wbNames: document.getElementById('setWbNames').value.split(',').map(x => x.trim()).filter(Boolean),
       wbSupplyLabel: document.getElementById('setWbSupplyLabel').value.trim(),
       vwReminders: document.getElementById('setVwReminders').checked,
+      sellersDirectOrders: document.getElementById('setSellersDirectOrders').checked,
     };
     const stock = pick('setStock'), supplies = pick('setSupplies');
     if(stock) body.stockSource = stock;
@@ -7839,8 +7967,8 @@
   const ordersPhotoCatalog = new Map();
   const orderMarketplaceBadge = (value) => {
     const source = String(value || '').toLowerCase();
-    const label = { wb: 'WB', ozon: 'Ozon', '1c': '1С' }[source];
-    return source ? '<span class="workspace-marketplace ' + (source === '1c' ? 'onec' : source === 'wb' || source === 'ozon' ? source : '')
+    const label = { wb: 'WB', ozon: 'Ozon', '1c': '1С', direct: 'Физлицу' }[source];
+    return source ? '<span class="workspace-marketplace ' + (source === '1c' ? 'onec' : ['wb', 'ozon', 'direct'].includes(source) ? source : '')
       + '">' + escapeHTML(label || source.toUpperCase()) + '</span>' : '';
   };
   function orderPhotoHtml(url){
@@ -7889,6 +8017,7 @@
       renderMpOrders();
       if(ordersPicked) loadPartnerOrders(ordersPicked);
       loadSupplies();
+      loadDirectOrders();
     } catch(e){
       // Отрисовка внутри того же try, что и запрос. Раньше она была снаружи,
       // и её падение оставляло экран на «Загружаем…» навсегда: запрос-то
@@ -8261,10 +8390,15 @@
     const allOn = ready.length > 0 && ready.every(o => ordersSelected.has(o.id));
     const isWb = partner && partner.marketplace === 'wb';
     if(isWb) loadShippingPoints(companyId);
-    const points = isWb && Array.isArray(ordersPoints[companyId]) ? ordersPoints[companyId] : null;
+    // Заказы физлицам (08.10.2026) — своей поставкой: без пункта WB, склад
+    // продавца выбран в самом заказе.
+    const pickedKinds = new Set(ordersRows.filter(o => ordersSelected.has(o.id)).map(o => o.marketplace === 'direct'));
+    const pickedDirect = pickedKinds.has(true) && !pickedKinds.has(false);
+    const mixedKind = pickedKinds.size > 1;
+    const points = isWb && !pickedDirect && Array.isArray(ordersPoints[companyId]) ? ordersPoints[companyId] : null;
     const needShipping = !!points && (!ordersPointId || !ordersShipDate);
-    const vwChoices = supplyVwChoices(companyId, isWb) || [];
-    if(ordersVw && !vwChoices.some(c => (c.id || 'main') === ordersVw)) ordersVw = '';
+    const vwChoices = pickedDirect ? [] : supplyVwChoices(companyId, isWb) || [];
+    if(ordersVw && !pickedDirect && !vwChoices.some(c => (c.id || 'main') === ordersVw)) ordersVw = '';
     const needVw = vwChoices.length > 1 && !ordersVw;
     // WB не примет в одну поставку заказы разных складов продавца.
     const whNames = new Map(ordersRows.filter(o => o.wbWarehouseId).map(o => [o.wbWarehouseId, o.wbWarehouse]));
@@ -8295,13 +8429,17 @@
           ? `<input type="checkbox" ${ordersSelected.has(o.id) ? 'checked' : ''} onchange="toggleOrderPick('${companyId}', '${o.id}')" aria-label="Выбрать заказ">`
           : ''}</td>
         <td class="ord-mono ord-no">${escapeHTML(o.number)} ${orderMarketplaceBadge(o.marketplace)}${o.rid
-          ? `<div class="ord-sub" title="${escapeHTML(o.rid)}">${escapeHTML(String(o.rid).slice(0, 14))}…</div>` : ''}</td>
+          ? `<div class="ord-sub" title="${escapeHTML(o.rid)}">${escapeHTML(String(o.rid).slice(0, 14))}…</div>` : ''}${o.direct && o.direct.fromSeller
+          ? '<div class="ord-sub">от продавца</div>' : ''}</td>
         <td class="ord-when">${orderWhen(o)}</td>
         <td><div class="order-product-name">${orderCatalogPhoto(companyId, o)}<div>${escapeHTML(o.name || '—')}<div class="ord-mono">${escapeHTML(o.sku || 'не сопоставлен')}</div>${o.mapped === false
           ? '<div class="ord-sub ord-warn">нет в номенклатуре склада — сопоставьте артикул</div>' : ''}${lineVw(o)}</div></div></td>
         <td class="ord-mono">${escapeHTML(o.article || '—')}${o.nmId ? `<div class="ord-sub">WB ${escapeHTML(o.nmId)}</div>` : ''}</td>
         <td class="ord-mono">${escapeHTML(o.barcode || '—')}</td>
-        <td>${(o.offices || []).length ? escapeHTML(o.offices.join(', ')) : '<span class="ord-sub">—</span>'}${o.wbWarehouse
+        <td>${o.direct ? `<b>${escapeHTML(o.direct.recipient)}</b><div class="ord-sub">${escapeHTML(o.direct.address)}</div>${
+            [o.direct.deliveryService, o.direct.phone, o.direct.vwName ? 'склад «' + o.direct.vwName + '»' : ''].filter(Boolean).length
+              ? `<div class="ord-sub">${escapeHTML([o.direct.deliveryService, o.direct.phone, o.direct.vwName ? 'склад «' + o.direct.vwName + '»' : ''].filter(Boolean).join(' · '))}</div>` : ''}`
+          : (o.offices || []).length ? escapeHTML(o.offices.join(', ')) : '<span class="ord-sub">—</span>'}${o.wbWarehouse
           ? `<div class="ord-sub">склад WB: ${escapeHTML(o.wbWarehouse)}</div>` : ''}</td>
         <td class="num">${o.qty === null ? '—' : o.qty}${o.salePriceKopecks != null
           ? `<div class="ord-sub">${(o.salePriceKopecks / 100).toLocaleString('ru-RU')} ₽</div>` : ''}</td>
@@ -8330,7 +8468,7 @@
                aria-label="Дата отгрузки" title="Дата отгрузки">`
         : `
         <input class="ord-place" id="ordPlace" list="ordPlaceList" maxlength="120"
-               placeholder="${isWb && ordersPoints[companyId] === 'loading' ? 'Загружаю пункты WB…' : 'Куда везём: склад WB или город'}"
+               placeholder="${pickedDirect ? 'Куда — не обязательно: подставим получателя' : isWb && ordersPoints[companyId] === 'loading' ? 'Загружаю пункты WB…' : 'Куда везём: склад WB или город'}"
                value="${escapeHTML(ordersPlace)}" oninput="setOrdersPlace(this.value)">
         <datalist id="ordPlaceList">${[...new Set((supplyRows || []).map(s => s.destination).filter(Boolean))]
           .map(d => `<option value="${escapeHTML(d)}">`).join('')}</datalist>`}
@@ -8339,15 +8477,16 @@
           <option value=""${ordersVw ? '' : ' selected'} disabled>С какого склада продавца собирать</option>
           ${vwChoices.map(c => `<option value="${c.id || 'main'}"${ordersVw === (c.id || 'main') ? ' selected' : ''}>${c.id === 'all' ? escapeHTML(c.name) : 'Склад «' + escapeHTML(c.name) + '»'}</option>`).join('')}
         </select>` : ''}
-        <button class="wh-onboarding-btn${n > 0 && !needShipping && !mixedWh && !needVw ? ' primary' : ''}" type="button"
-                onclick="makeSupply('${companyId}')" ${n === 0 || needShipping || mixedWh || needVw ? 'disabled' : ''}>
+        <button class="wh-onboarding-btn${n > 0 && !needShipping && !mixedWh && !needVw && !mixedKind ? ' primary' : ''}" type="button"
+                onclick="makeSupply('${companyId}')" ${n === 0 || needShipping || mixedWh || needVw || mixedKind ? 'disabled' : ''}>
           ${n === 0 ? 'Выберите заказы для поставки'
+            : mixedKind ? 'Заказы физлицам — отдельной поставкой'
             : mixedWh ? 'Выберите заказы одного склада WB'
             : needShipping ? 'Выберите пункт WB и дату отгрузки'
             : needVw ? 'Выберите склад продавца'
-            : `Составить поставку — ${n} ${pluralRu(n, 'заказ', 'заказа', 'заказов')}`}
+            : `Составить поставку — ${n} ${pluralRu(n, 'заказ', 'заказа', 'заказов')}${pickedDirect ? ' физлицам' : ''}`}
         </button>
-        ${isWb && ordersPoints[companyId] === 'error' ? `<span class="ord-meta ord-warn">Список пунктов WB не загрузился —
+        ${isWb && !pickedDirect && ordersPoints[companyId] === 'error' ? `<span class="ord-meta ord-warn">Список пунктов WB не загрузился —
           поставку можно составить, но передать её в доставку на WB без пункта не выйдет</span>` : ''}
         ${(() => {
           // Сколько из выбранного, по учёту, собрать не из чего — видно до
@@ -8961,13 +9100,15 @@
     const ready = [...new Set(ordersRows.filter(o => o.ready && ordersSelected.has(o.id)).map(o => o.id))];
     if(ready.length === 0){ showWhToast('Отметьте заказы, которые войдут в поставку.'); return; }
     const partner = ordersPartners.find(p => p.companyId === companyId);
-    const points = Array.isArray(ordersPoints[companyId]) ? ordersPoints[companyId] : null;
-    const point = ordersPoint && String(ordersPoint.id) === ordersPointId ? ordersPoint : null;
+    // Только заказы физлицам — поставка не на площадку: пункт и склад не нужны.
+    const direct = ordersRows.filter(o => ready.includes(o.id)).every(o => o.marketplace === 'direct');
+    const points = !direct && Array.isArray(ordersPoints[companyId]) ? ordersPoints[companyId] : null;
+    const point = !direct && ordersPoint && String(ordersPoint.id) === ordersPointId ? ordersPoint : null;
     if(points && (!point || !ordersShipDate)){ showWhToast('Выберите пункт WB и дату отгрузки.'); return; }
     const place = (point ? point.label : ordersPlace.trim()).slice(0, 120);
     const dayText = ordersShipDate
       ? new Date(ordersShipDate + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : '';
-    const vwChoices = supplyVwChoices(companyId, partner && partner.marketplace === 'wb') || [];
+    const vwChoices = direct ? [] : supplyVwChoices(companyId, partner && partner.marketplace === 'wb') || [];
     const vwPick = vwChoices.length > 1 ? vwChoices.find(c => (c.id || 'main') === ordersVw) : null;
     if(vwChoices.length > 1 && !vwPick){ showWhToast('Выберите, с какого склада продавца собирать поставку.'); return; }
     if(!await askConfirm(`Составить поставку: ${ready.length} ${pluralRu(ready.length, 'заказ', 'заказа', 'заказов')}`
@@ -8981,8 +9122,8 @@
       const supply = await apiFetch('/api/supplies', {
         method: 'POST',
         body: {
-          invoiceIds: ready, marketplace: partner ? partner.marketplace : null, destination: place || null,
-          shippingPointId: point ? point.id : null, shipDate: ordersShipDate || null,
+          invoiceIds: ready, marketplace: direct ? null : partner ? partner.marketplace : null, destination: place || null,
+          shippingPointId: point ? point.id : null, shipDate: direct ? null : ordersShipDate || null,
           ...(vwPick ? { virtualWarehouseId: vwPick.id } : {}),
         },
       });

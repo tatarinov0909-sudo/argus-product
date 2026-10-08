@@ -1158,10 +1158,10 @@
   const statusClass = { open: 'waiting', in_progress: 'working', ready: 'ready', shipped: '' };
   const orderActive = (r) => r.status !== 'shipped' && (!r.mp_closed_at || !!r.stock_conflict);
   const inWork = { in_progress: 'Собирается', ready: 'Собран, ждёт отгрузки' };
-  const orderStatus = (r) => (r.status === 'shipped' ? (r.mp_closed_at ? (r.mp_close_reason === 'canceled' ? 'Отменён на WB' : 'Принят WB') : 'Отгружен, в пути на WB')
+  const orderStatus = (r) => (r.source === 'direct' ? (DIRECT_STATUS[r.direct_status] || DIRECT_STATUS.new)[0] : r.status === 'shipped' ? (r.mp_closed_at ? (r.mp_close_reason === 'canceled' ? 'Отменён на WB' : 'Принят WB') : r.source === 'wb' ? 'Отгружен, в пути на WB' : 'Отгружен')
     : r.mp_closed_at ? (r.mp_close_reason === 'canceled' ? 'Отменён на WB' : 'Завершён на WB')
       : inWork[r.status] || (r.in_supply ? 'В сборке' : r.mp_supplier_status === 'confirm' ? 'Подтверждён в кабинете WB' : 'Заказан, ждёт поставки'));
-  const orderStyle = (r) => (r.stock_conflict ? 'issue' : r.mp_closed_at ? (r.mp_close_reason === 'canceled' ? 'issue' : 'ready') : r.in_supply && r.status === 'open' ? 'working' : statusClass[r.status] ?? '');
+  const orderStyle = (r) => (r.source === 'direct' ? (DIRECT_STATUS[r.direct_status] || DIRECT_STATUS.new)[1] : r.stock_conflict ? 'issue' : r.mp_closed_at ? (r.mp_close_reason === 'canceled' ? 'issue' : 'ready') : r.in_supply && r.status === 'open' ? 'working' : statusClass[r.status] ?? '');
   const ORDER_STATUS = [{ value: 'all', text: 'Все' }, { value: 'active', text: 'В работе' }, { value: 'queued', text: 'Ждут поставки' }, { value: 'assembly', text: 'В сборке' }, { value: 'ready', text: 'Собраны' }, { value: 'transit', text: 'В пути на WB' }, { value: 'shipped', text: 'Отгружены' }, { value: 'canceled', text: 'Отменены' }, { value: 'conflict', text: 'Склад сверяет' }];
   function orderMatchesStatus(r, s) {
     if (s === 'all') return true;
@@ -1169,7 +1169,7 @@
     if (s === 'queued') return !r.in_supply && r.status === 'open' && !r.mp_closed_at;
     if (s === 'assembly') return !r.mp_closed_at && r.status !== 'shipped' && (r.in_supply || ['in_progress', 'ready'].includes(r.status));
     if (s === 'ready') return r.status === 'ready' && !r.mp_closed_at;
-    if (s === 'transit') return r.status === 'shipped' && !r.mp_closed_at;
+    if (s === 'transit') return r.status === 'shipped' && !r.mp_closed_at && r.source === 'wb';
     if (s === 'shipped') return r.status === 'shipped';
     if (s === 'canceled') return r.mp_close_reason === 'canceled';
     if (s === 'conflict') return !!r.stock_conflict;
@@ -1178,7 +1178,7 @@
   const orderAt = (r) => r.mp_created_at || r.created_at;
   function filteredOrders() {
     const ui = state.ui.orders;
-    const rows = state.data.orders.rows.filter((r) => matches(ui.q, [r.number, r.name, r.sku, r.mp_rid, r.mp_nm_id, r.mp_article, r.mp_barcode, r.supply_number, ...wbIds(r.sku)])
+    const rows = state.data.orders.rows.filter((r) => matches(ui.q, [r.number, r.name, r.sku, r.mp_rid, r.mp_nm_id, r.mp_article, r.mp_barcode, r.supply_number, r.recipient, r.track_number, ...wbIds(r.sku)])
       && orderMatchesStatus(r, ui.status) && inPeriod(orderAt(r), ui.period)
       && (ui.supply === 'all' || (ui.supply === 'none' ? !r.supply_number : r.supply_number === ui.supply))
       && (!ui.wbwh.size || ui.wbwh.has(String(r.mp_warehouse_id || 'none'))));
@@ -1189,7 +1189,7 @@
   const ORDER_COLUMNS = [
     { key: 'photo', title: 'Фото', cls: 'w-photo', cell: (r) => photo(r.sku, r.mp_nm_id) },
     { key: 'product', title: 'Товар', locked: true, main: true, cell: (r) => `<span class="cell-main">${h(productName(r))}</span>${r.mp_article ? `<span class="cell-sub">Артикул продавца: ${h(r.mp_article)}</span>` : ''}` },
-    { key: 'order', title: 'Заказ', cell: (r) => `<button class="link-button nowrap" data-order="${h(r.id)}">${h(r.number)}</button> ${sellerOrderMarketplace(r.source)}${r.mp_rid ? `<span class="cell-sub nowrap">${h(r.mp_rid)}</span>` : ''}` },
+    { key: 'order', title: 'Заказ', cell: (r) => `<button class="link-button nowrap" data-order="${h(r.id)}">${h(r.number)}</button> ${sellerOrderMarketplace(r.source)}${r.mp_rid ? `<span class="cell-sub nowrap">${h(r.mp_rid)}</span>` : ''}${r.recipient ? `<span class="cell-sub">${h(r.recipient)}</span>` : ''}` },
     { key: 'wb', title: 'Артикул WB', cell: (r) => idCell(r.mp_nm_id ? [r.mp_nm_id] : wbIds(r.sku), r.mp_barcode) },
     { key: 'qty', title: 'Кол-во', cls: 'n', cell: (r) => num(r.qty) },
     { key: 'at', title: 'Оформлен на WB', cls: 'n', cell: (r) => h(when(orderAt(r))) },
@@ -1218,8 +1218,10 @@
           onPick: (v) => { if (v === 'all') ui.wbwh.clear(); else if (ui.wbwh.has(v)) ui.wbwh.delete(v); else ui.wbwh.add(v); ui.shown = state.prefs.rows; renderOrders(); } }) : '')
         + dropdown('o-sort', { label: 'Сортировка', value: ui.sort, options: [{ value: 'new', text: 'Сначала новые' }, { value: 'old', text: 'Сначала старые' }, { value: 'product', text: 'По товару' }, { value: 'qty', text: 'Больше штук' }], onPick: (v) => { ui.sort = v; renderOrders(); } })
         + resetLink('orders'),
-        columnChooser('orders', ORDER_COLUMNS, renderOrders) + excelButton)
+        columnChooser('orders', ORDER_COLUMNS, renderOrders) + excelButton
+        + (canDirectOrder() ? `<button class="button primary" type="button" id="directOrderButton">${icon('truck')}Создать заказ</button>` : ''))
       + '<div id="rows"></div>';
+    if ($('directOrderButton')) $('directOrderButton').onclick = () => openNewDirectOrder();
     wireView(ui, renderOrders, renderOrderRows, () => exportExcel({
       file: 'Заказы', sheet: 'Заказы', title: `Заказы — ${state.profile.name}`, filterText: ui.status !== 'all' ? 'статус: ' + ORDER_STATUS.find((o) => o.value === ui.status).text.toLowerCase() : '', rows: filteredOrders(),
       columns: [
@@ -1234,7 +1236,8 @@
         { header: 'Оформлен на WB', type: 'date', get: orderAt },
         { header: 'Склад WB', type: 'text', get: (r) => r.mp_warehouse_name || '' },
         { header: 'Поставка', type: 'text', get: (r) => r.supply_number || '' },
-        { header: 'Куда', type: 'text', get: (r) => r.supply_destination || '' },
+        { header: 'Куда', type: 'text', get: (r) => (r.recipient ? r.recipient + ', ' + r.address : r.supply_destination || '') },
+        { header: 'Трек-номер', type: 'text', get: (r) => r.track_number || '' },
         { header: 'Статус', type: 'text', get: (r) => orderStatus(r) + (r.stock_conflict ? ' · склад сверяет' : ''), min: 18 },
       ],
     }));
@@ -1742,6 +1745,7 @@
       items.sort((a, b) => Number(b.finalized && b.accepted !== Number(b.declared_qty)) - Number(a.finalized && a.accepted !== Number(a.declared_qty)));
       $('drawerBody').innerHTML = `<div class="drawer-meta"><span>Загружено ${h(when(data.created_at))}</span>${statusBadge}</div>`
         + (order && detail.stock_conflict ? notice('Заказ закрыт на Wildberries', detail.mp_close_reason === 'fulfilled' ? 'WB сообщил о завершении, а отгрузка в Аргусе ещё не подтверждена. До сверки количество остаётся в сборке.' : 'Товар уже был собран. Склад возвращает его на полку; до этого он учтён в сборке.', true) : '')
+        + (order && selected.source === 'direct' ? directOrderSection(selected) : '')
         + `<div class="mini-stats">${mini('Заявлено', declared)}${mini(doneWord, items.some((r) => r.accepted !== null) ? done : null)}${mini('Расхождение', complete ? done - declared : null)}</div>`
         + (!complete ? '<p class="help" style="margin-bottom:16px">Работа ещё идёт: показано уже сделанное, расхождение появится в конце.</p>' : '')
         + `<section class="detail-section" style="margin-top:0"><h3>Позиции · ${items.length}</h3><div class="receipt-lines">${items.map((r) => {
@@ -1751,6 +1755,7 @@
             + (r.buckets || []).map((b) => `<p class="row-note ${b.qualityBucket === 'good' ? '' : 'bad'}">${h(BUCKET[b.qualityBucket] || b.qualityBucket)}: ${n(b.qty)} шт.${b.defectNote ? ' — ' + h(b.defectNote) : ''}</p>`).join('') + '</article>';
         }).join('')}</div></section>`
         + `<div class="drawer-actions">${!order && data.direction === 'return' ? `<button class="button" id="exportDocument">${icon('download')}Excel этого возврата</button>` : ''}</div>`;
+      if (order && selected.source === 'direct') wireDirectOrder(selected);
       const xl = $('exportDocument');
       if (xl) xl.onclick = () => runExport(xl, () => exportExcel({
         file: 'Возврат ' + selected.number, sheet: 'Возврат', title: `Возврат ${selected.number} — ${state.profile.name}`, filterText: '', rows: items,
@@ -1765,6 +1770,111 @@
         ],
       }));
     } catch (e) { if (run === state.drawerRun) $('drawerBody').innerHTML = empty('Не удалось открыть', e.message); }
+  }
+
+  // ---------- Заказ физлицу (схема 06.10, владелец 08.10.2026) ----------
+  // Продавец сам заводит заказ из своего свободного товара (если склад это
+  // разрешил); склад видит его в «Заказах» с пометкой «от продавца» и
+  // составляет поставку. После отъезда — трек-номер и статусы.
+  const DELIVERY_SERVICES = ['СДЭК', 'Почта России', 'Boxberry', 'Яндекс Доставка', 'DPD', 'Деловые Линии', 'ПЭК', 'Курьер склада', 'Самовывоз'];
+  const TRACK_URLS = { 'СДЭК': 'https://www.cdek.ru/ru/tracking?order_id=', 'Почта России': 'https://www.pochta.ru/tracking?barcode=',
+    'Boxberry': 'https://boxberry.ru/tracking-page?id=' };
+  const trackLink = (service, track) => (track && TRACK_URLS[service]
+    ? `<a href="${h(TRACK_URLS[service] + encodeURIComponent(track))}" target="_blank" rel="noopener noreferrer">${h(track)}</a>` : h(track || ''));
+  const DIRECT_STATUS = { new: ['Новый', 'waiting'], assembly: ['Собирается', 'working'], ready: ['Собран', 'ready'], shipped: ['Уехал', ''],
+    in_transit: ['В пути', 'working'], delivered: ['Доставлен', 'ready'], refused: ['Отказ / возврат', 'issue'] };
+  const AFTER_SHIP = ['shipped', 'in_transit', 'delivered', 'refused'];
+  // Номер операции окна: повтор (двойное нажатие, обрыв связи) не создаст второй заказ.
+  const newRequestId = () => (crypto.randomUUID ? crypto.randomUUID()
+    : '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, (c) => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)));
+  const canDirectOrder = () => state.profile?.directOrders !== false;
+  function openNewDirectOrder() {
+    const run = openDrawer('Заказ физлицу', 'Новый заказ');
+    const vws = state.vw?.warehouses || [];
+    const f = { vw: '', service: '', requestId: newRequestId(), picker: null };
+    const today = new Date().toLocaleDateString('sv-SE', { timeZone: state.profile?.timezone || 'Europe/Moscow' });
+    $('drawer').classList.add('drawer-wide');
+    $('drawerBody').innerHTML = `<form class="inbound-form" id="doForm" novalidate><p class="help">Склад соберёт заказ и отправит получателю. Заказать можно не больше, чем свободно.</p>
+      ${vws.length ? '<div class="field"><span>С какого вашего склада</span><div id="doVwBox"></div></div>' : ''}
+      <div class="two"><label class="field"><span>Кому</span><input id="doTo" maxlength="120" placeholder="Фамилия и имя" autocomplete="off"></label>
+        <label class="field"><span>Телефон</span><input id="doPhone" type="tel" maxlength="40" placeholder="+7…" autocomplete="off"></label></div>
+      <label class="field"><span>Куда</span><input id="doAddress" maxlength="300" placeholder="Город, улица, дом, квартира или пункт выдачи" autocomplete="off"></label>
+      <div class="two"><div class="field"><span>Служба доставки</span><div id="doServiceBox"></div></div>
+        <label class="field"><span>Когда отгрузить — если важно</span><input type="date" id="doDate" min="${today}"></label></div>
+      <label class="field" id="doServiceOtherField" hidden><span>Какая служба</span><input id="doServiceOther" maxlength="60"></label>
+      <label class="field"><span>Комментарий складу</span><input id="doComment" maxlength="500" placeholder="Например: позвонить получателю за час"></label>
+      <div id="doPicker"></div></form>`;
+    const drawVw = () => { if ($('doVwBox')) $('doVwBox').innerHTML = dropdown('do-vw', { value: f.vw, neutral: true,
+      options: [{ value: '', text: 'Весь мой товар' }, ...vws.map((w) => ({ value: w.id, text: 'Склад «' + w.name + '»' }))],
+      onPick: (v) => { f.vw = v; drawVw(); openPicker(); } }); };
+    const drawService = () => { $('doServiceBox').innerHTML = dropdown('do-service', { value: f.service, neutral: true,
+      options: [{ value: '', text: 'Не выбрана' }, ...DELIVERY_SERVICES.map((x) => ({ value: x, text: x })), { value: 'other', text: 'Другая…' }],
+      onPick: (v) => { f.service = v; drawService(); $('doServiceOtherField').hidden = v !== 'other'; if (v === 'other') $('doServiceOther').focus(); } }); };
+    const free = (r) => (f.vw ? ((r.warehouses || []).find((w) => w.id === f.vw) || {}).available : r.available);
+    function openPicker() {
+      f.picker?.close();
+      f.picker = window.ArgusProductPicker.open({
+        host: $('doPicker'), request: api, companyId: state.companyId, maxItems: 500,
+        templateName: 'Товары заказа', submitLabel: 'Создать заказ',
+        loadRows: async () => (await api('/api/sellers/stock' + (state.owner ? '?view=seller' : ''))).rows,
+        columns: [{ title: f.vw ? 'Свободно на складе' : 'Доступно', value: free }],
+        limit: free, defaultQty: () => '1',
+        onSubmit: (items) => submit(items),
+      });
+    }
+    async function submit(items) {
+      if (run !== state.drawerRun) return;
+      const val = (id) => $(id).value.trim();
+      if (!val('doTo')) { $('doTo').focus(); throw new Error('Впишите, кому заказ.'); }
+      if (!val('doAddress')) { $('doAddress').focus(); throw new Error('Впишите, куда везти.'); }
+      const service = f.service === 'other' ? val('doServiceOther') : f.service;
+      if (f.service === 'other' && !service) { $('doServiceOther').focus(); throw new Error('Впишите службу доставки.'); }
+      const over = items.filter((i) => i.limit != null && i.qty > i.limit);
+      if (over.length) throw new Error('Больше, чем свободно: ' + over.slice(0, 3).map((i) => '«' + i.name + '» — ' + i.qty + ' из ' + i.limit).join(', ') + '.');
+      const r = await api('/api/direct-orders', { method: 'POST', body: { ...(state.owner ? { companyId: state.companyId } : {}),
+        vwId: f.vw || null, recipient: val('doTo'), address: val('doAddress'), phone: val('doPhone'), deliveryService: service || null,
+        plannedDate: val('doDate') || null, comment: val('doComment'), items: items.map((i) => ({ sku: i.sku, qty: i.qty })), requestId: f.requestId } });
+      state.data.orders = null; state.data.stock = null;
+      $('drawer').close();
+      toast('Заказ ' + r.number + ' отправлен складу. Его статус — в «Заказах».');
+      navigate(true);
+    }
+    drawVw(); drawService(); openPicker();
+    $('drawer').addEventListener('close', () => { f.picker?.close(); $('drawer').classList.remove('drawer-wide'); }, { once: true });
+  }
+  // Карточка заказа физлицу: получатель, доставка, трек и статус после отъезда.
+  function directOrderSection(r) {
+    const status = r.direct_status || 'new';
+    return `<section class="detail-section" style="margin-top:0"><h3>Получатель</h3>`
+      + `<p><strong>${h(r.recipient)}</strong><br>${h(r.address)}${r.phone ? '<br>' + h(r.phone) : ''}</p>`
+      + `<p class="help">Доставка: ${h(r.delivery_service || 'не выбрана')}${r.planned_date ? ' · отгрузить ' + h(day(dateOnly(r.planned_date))) : ''}${r.direct_comment ? '<br>' + h(r.direct_comment) : ''}</p>`
+      + `<div class="two" style="margin-top:12px"><label class="field"><span>Трек-номер</span><input id="doTrack" maxlength="60" value="${h(r.track_number || '')}" placeholder="Номер от службы доставки"></label>`
+      + (AFTER_SHIP.includes(status) ? `<div class="field"><span>Статус после отъезда</span><div id="doStatusBox"></div></div>` : '')
+      + `</div>${r.track_number && TRACK_URLS[r.delivery_service] ? `<p class="help">Отследить: ${trackLink(r.delivery_service, r.track_number)}</p>` : ''}`
+      + `<div class="drawer-actions" id="doActions"><button class="button" type="button" id="doTrackSave">Сохранить трек-номер</button>`
+      + (status === 'new' ? `<button class="button ghost" type="button" id="doCancel">Отменить заказ</button>` : '') + '</div>'
+      + '<p class="help" id="doMsg"></p></section>';
+  }
+  function wireDirectOrder(r) {
+    const done = (text) => { toast(text); state.data.orders = null; state.data.stock = null; $('drawer').close(); navigate(true); };
+    const fail = (e) => { $('doMsg').textContent = e.message; };
+    const patch = (body) => api('/api/direct-orders/' + encodeURIComponent(r.id), { method: 'PATCH', body });
+    if ($('doStatusBox')) {
+      const cur = ['in_transit', 'delivered', 'refused'].includes(r.direct_status) ? r.direct_status : '';
+      $('doStatusBox').innerHTML = dropdown('do-status', { value: cur, neutral: true,
+        options: [{ value: '', text: 'Уехал' }, { value: 'in_transit', text: 'В пути' }, { value: 'delivered', text: 'Доставлен' }, { value: 'refused', text: 'Отказ / возврат' }],
+        onPick: (v) => { if (v !== cur) patch({ deliveryStatus: v || null }).then(() => done('Статус заказа ' + r.number + ' поменян.')).catch(fail); } });
+    }
+    $('doTrackSave').onclick = () => patch({ trackNumber: $('doTrack').value.trim() })
+      .then(() => done($('doTrack').value.trim() ? 'Трек-номер сохранён — склад его видит.' : 'Трек-номер убран.')).catch(fail);
+    if ($('doCancel')) $('doCancel').onclick = () => {
+      $('doActions').innerHTML = `<span class="help">Отменить заказ ${h(r.number)}? Товар снова станет свободным.</span><button class="button" type="button" id="doCancelYes">Да, отменить</button><button class="button ghost" type="button" id="doCancelNo">Нет</button>`;
+      $('doCancelNo').onclick = () => openDocument(r.id, true);
+      $('doCancelYes').onclick = async () => {
+        $('doCancelYes').disabled = true;
+        try { await api('/api/direct-orders/' + encodeURIComponent(r.id), { method: 'DELETE' }); done('Заказ ' + r.number + ' отменён.'); } catch (e) { fail(e); $('doCancelYes').disabled = false; }
+      };
+    };
   }
 
   // ---------- Карточка привоза ----------

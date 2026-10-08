@@ -1,4 +1,4 @@
-// Панель выбора товаров (product-picker.js) в «Поставки» → «Новая поставка»:
+// Панель выбора товаров (product-picker.js) в «Заказы» → «+ Заказ физлицу»:
 // протягивание мышью, количество у строки, выбор между страницами и поиском,
 // Excel, предупреждение «больше доступного», создание поставки физлицу, телефон.
 // Все запросы к API — синтетические, без записей в рабочую базу.
@@ -52,24 +52,25 @@ const catalog = Array.from({ length: 120 }, (_, i) => ({ sku: 'PP' + String(i + 
           return found.length === 1 ? { row: i + 1, sku: found[0].sku, name: found[0].name } : { row: i + 1, error: 'Артикул не найден в каталоге продавца' };
         }) };
       }
-      if (p === '/api/supplies/direct') return route.fulfill({ status: 201, json: { id: 'supply', number: 'ПС-TEST-01' } });
+      if (p === '/api/direct-orders' && req.method() === 'POST') return route.fulfill({ status: 201, json: { id: 'order', number: 'ЗФ-TEST-1', supply: null } });
+      if (p === '/api/direct-orders') data = { rows: [] };
       return route.fulfill({ json: data });
     });
     await page.goto(ORIGIN + '/cabinet_main.html');
     await page.locator('#view-home.active').waitFor();
     await page.evaluate(() => switchView('supplies'));
     await page.locator('#newSupplyButton').click();
-    await page.locator('#directSupplyPicker .vws-row').first().waitFor();
+    await page.locator('#directOrderPicker .vws-row').first().waitFor();
     return { page, calls };
   };
-  const act = (page, name) => page.locator('#directSupplyPicker [data-action="' + name + '"]');
-  const total = (page) => page.locator('#directSupplyPicker [data-role=selected-total]').innerText();
-  const row = (page, sku) => page.locator('#directSupplyPicker .vws-row[data-sku="' + sku + '"]');
+  const act = (page, name) => page.locator('#directOrderPicker [data-action="' + name + '"]');
+  const total = (page) => page.locator('#directOrderPicker [data-role=selected-total]').innerText();
+  const row = (page, sku) => page.locator('#directOrderPicker .vws-row[data-sku="' + sku + '"]');
   try {
     const { page, calls } = await prepare(1440);
-    assert.equal(await page.locator('#suppliesList').isVisible(), false, 'список поставок спрятан, пока открыта новая');
-    assert.equal(await page.locator('#directSupplyPicker .vws-row').count(), 50, 'по 50 строк на странице');
-    const wrap = await page.locator('#directSupplyPicker .vws-table-wrap').evaluate((el) => [el.scrollWidth, el.clientWidth]);
+    assert.equal(await page.locator('#view-orders').evaluate((el) => el.classList.contains('active')), true, '«+ Заказ физлицу» из «Поставок» ведёт в «Заказы»');
+    assert.equal(await page.locator('#directOrderPicker .vws-row').count(), 50, 'по 50 строк на странице');
+    const wrap = await page.locator('#directOrderPicker .vws-table-wrap').evaluate((el) => [el.scrollWidth, el.clientWidth]);
     assert.ok(wrap[0] <= wrap[1], 'таблица не шире своего места: ' + wrap);
 
     // Протягивание мышью: три строки, количество по умолчанию — 1.
@@ -77,7 +78,7 @@ const catalog = Array.from({ length: 120 }, (_, i) => ({ sku: 'PP' + String(i + 
     const a = await row(page, 'PP001').locator('td').nth(1).boundingBox(), b = await row(page, 'PP003').locator('td').nth(1).boundingBox();
     await page.mouse.move(a.x + 20, a.y + 20); await page.mouse.down();
     await page.mouse.move(b.x + 20, b.y + 20, { steps: 12 }); await page.mouse.up();
-    assert.equal(await page.locator('#directSupplyPicker .vws-row [data-action=row-select]:checked').count(), 3, 'протягивание выбрало три строки');
+    assert.equal(await page.locator('#directOrderPicker .vws-row [data-action=row-select]:checked').count(), 3, 'протягивание выбрало три строки');
     assert.equal(await row(page, 'PP002').locator('[data-action=qty]').inputValue(), '1', 'у выбранной строки видно количество');
     // Вписали количество — строка отметилась сама.
     await row(page, 'PP005').locator('[data-action=qty]').fill('4');
@@ -93,13 +94,13 @@ const catalog = Array.from({ length: 120 }, (_, i) => ({ sku: 'PP' + String(i + 
     await act(page, 'page').first().click(); await row(page, 'PP001').waitFor();
     assert.equal(await row(page, 'PP001').locator('[data-action=row-select]').isChecked(), true);
     await act(page, 'search').fill('товар 77');
-    await page.waitForFunction(() => document.querySelectorAll('#directSupplyPicker .vws-row').length === 1);
+    await page.waitForFunction(() => document.querySelectorAll('#directOrderPicker .vws-row').length === 1);
     await row(page, 'PP077').locator('[data-action=row-select]').check();
     await act(page, 'search').fill('');
-    await page.waitForFunction(() => document.querySelectorAll('#directSupplyPicker .vws-row').length === 50);
+    await page.waitForFunction(() => document.querySelectorAll('#directOrderPicker .vws-row').length === 50);
     assert.equal(await total(page), 'Выбрано 6 позиций · 14 шт.');
     await act(page, 'only').click();
-    assert.equal(await page.locator('#directSupplyPicker .vws-row').count(), 6, '«Только выбранные»');
+    assert.equal(await page.locator('#directOrderPicker .vws-row').count(), 6, '«Только выбранные»');
     await act(page, 'only').click();
 
     // Excel: строки узнаёт сервер; неизвестную исключили — остальные в выборе.
@@ -111,40 +112,44 @@ const catalog = Array.from({ length: 120 }, (_, i) => ({ sku: 'PP' + String(i + 
         ['pp010', '', 2], ['', '0000000000011', 3], ['НЕТ-ТАКОГО', '', 1]]), 'Товары');
       return Array.from(new Uint8Array(XLSX.write(book, { type: 'array', bookType: 'xlsx' })));
     });
-    await page.locator('#directSupplyPicker input[type=file]').setInputFiles({ name: 'synthetic.xlsx',
+    await page.locator('#directOrderPicker input[type=file]').setInputFiles({ name: 'synthetic.xlsx',
       mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from(bytes) });
-    await page.locator('#directSupplyPicker .vws-import-mapping').waitFor();
+    await page.locator('#directOrderPicker .vws-import-mapping').waitFor();
     for (const [name, letter] of [['sku', 'A'], ['barcode', 'B'], ['qty', 'C']]) {
       const option = act(page, 'map-' + name).filter({ hasText: new RegExp('^' + letter + ' —') });
-      if (!(await option.isVisible())) await page.locator('#directSupplyPicker .vws-import-mapping details').nth(2 + ['sku', 'barcode', 'qty'].indexOf(name)).locator('summary').click();
+      if (!(await option.isVisible())) await page.locator('#directOrderPicker .vws-import-mapping details').nth(2 + ['sku', 'barcode', 'qty'].indexOf(name)).locator('summary').click();
       await option.click();
     }
-    await act(page, 'parse').click(); await page.locator('#directSupplyPicker .vws-import-summary').waitFor();
-    await page.waitForFunction(() => document.querySelector('#directSupplyPicker [data-status-line="4"]')?.textContent.includes('не найден'));
+    await act(page, 'parse').click(); await page.locator('#directOrderPicker .vws-import-summary').waitFor();
+    await page.waitForFunction(() => document.querySelector('#directOrderPicker [data-status-line="4"]')?.textContent.includes('не найден'));
     assert.equal(await act(page, 'apply-import').isDisabled(), true, 'неизвестный товар не даёт добавить файл');
-    await page.locator('#directSupplyPicker [data-action=exclude][data-line="4"]').click();
-    await page.waitForFunction(() => !document.querySelector('#directSupplyPicker [data-action=apply-import]').disabled);
+    await page.locator('#directOrderPicker [data-action=exclude][data-line="4"]').click();
+    await page.waitForFunction(() => !document.querySelector('#directOrderPicker [data-action=apply-import]').disabled);
     await act(page, 'apply-import').click();
-    assert.equal(await page.locator('#directSupplyPicker .vws-row').count(), 8, 'после файла видны только выбранные');
+    assert.equal(await page.locator('#directOrderPicker .vws-row').count(), 8, 'после файла видны только выбранные');
     assert.equal(await row(page, 'PP011').locator('[data-action=qty]').inputValue(), '3', 'штрихкод из файла узнан');
     assert.equal(await total(page), 'Выбрано 8 позиций · 19 шт.');
 
-    // Без «куда / кому» не создаётся; больше доступного — с подтверждением.
+    // Без получателя не создаётся; больше доступного — с подтверждением.
     await act(page, 'submit').click();
-    assert.match(await page.locator('#directSupplyPicker [data-role=notice]').innerText(), /куда и кому/);
-    assert.equal(calls.filter((c) => c.path === '/api/supplies/direct').length, 0);
-    await page.locator('#directSupplyWhere').fill('Иванов, Казань, СДЭК');
+    assert.match(await page.locator('#directOrderPicker [data-role=notice]').innerText(), /кому/);
+    assert.equal(calls.filter((c) => c.path === '/api/direct-orders' && c.method === 'POST').length, 0);
+    await page.locator('#directOrderTo').fill('Иванов Иван');
+    await page.locator('#directOrderAddress').fill('Казань, ул. Баумана, 1');
+    await page.locator('#directOrderService').selectOption('СДЭК');
     await act(page, 'submit').click();
     await page.locator('.ask-overlay').waitFor();
     assert.match(await page.locator('.ask-overlay').innerText(), /Тестовый товар 5» — 9 из 6/);
     await page.locator('.ask-overlay button', { hasText: 'Да' }).click();
-    await page.locator('#directSupply').waitFor({ state: 'hidden' });
-    const sent = calls.find((c) => c.path === '/api/supplies/direct').body;
+    await page.locator('#directOrder').waitFor({ state: 'hidden' });
+    const sent = calls.find((c) => c.path === '/api/direct-orders' && c.method === 'POST').body;
     assert.equal(sent.companyId, COMPANY);
-    assert.equal(sent.destination, 'Иванов, Казань, СДЭК');
+    assert.equal(sent.recipient, 'Иванов Иван');
+    assert.equal(sent.address, 'Казань, ул. Баумана, 1');
+    assert.equal(sent.deliveryService, 'СДЭК');
+    assert.equal(sent.toSupply, false);
     assert.equal(sent.items.length, 8);
     assert.deepEqual(sent.items.find((i) => i.sku === 'PP005'), { sku: 'PP005', qty: 9 });
-    assert.equal(await page.locator('#suppliesList').isVisible(), true);
 
     // «Приход» на компьютере: форма видна сразу — и панель в ней тоже.
     await page.evaluate(() => switchView('receipts'));
@@ -155,14 +160,14 @@ const catalog = Array.from({ length: 120 }, (_, i) => ({ sku: 'PP' + String(i + 
       && document.querySelector('#receiptPicker .vws-row'));
     const receipt = calls.find((c) => c.path === '/api/invoices' && c.method === 'POST').body;
     assert.equal(receipt.direction, 'in');
-    assert.deepEqual(receipt.items, [{ name: 'Тестовый товар 2', sku: 'PP002', declaredQty: 12 }]);
+    assert.deepEqual(receipt.items, [{ name: 'Тестовый товар 2', sku: 'PP002', declaredQty: 12, virtualWarehouseId: null }]);
     assert.ok(receipt.number, 'номер прихода подставлен');
     await page.close();
 
     // Телефон: без прокрутки вбок, строки — карточками.
     const phone = await prepare(375);
     assert.equal(await phone.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'страница не шире телефона');
-    assert.equal(await phone.page.locator('#directSupplyPicker .vws-table thead').isVisible(), false);
+    assert.equal(await phone.page.locator('#directOrderPicker .vws-table thead').isVisible(), false);
     await phone.page.close();
     assert.deepEqual(errors, []);
     console.log('product picker UI: OK');

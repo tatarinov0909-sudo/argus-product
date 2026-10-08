@@ -904,6 +904,22 @@
       + '</div>';
   }
 
+  // Заказы физлицам (08.10.2026): кому, куда и чем отправить — по заказу
+  // строка, чтобы подписать посылку и сдать её в службу доставки.
+  function recipientsTable(rows){
+    const seen = new Map();
+    rows.forEach((r) => { if(r.to && !seen.has(r.orderNumber)) seen.set(r.orderNumber, r.to); });
+    if(!seen.size) return '';
+    return '<table style="margin-top:14px">' + cols([14, 0, 14, 16])
+      + '<thead><tr><th>Заказ</th><th>Кому и куда</th><th>Телефон</th><th>Доставка</th></tr></thead><tbody>'
+      + [...seen].map(([no, to]) => '<tr><td>' + esc(no) + '</td>'
+        + '<td class="goods"><div class="goods-line"><b>' + esc(to.recipient) + '</b>, ' + esc(to.address)
+        + (to.comment ? '<br><i>' + esc(to.comment) + '</i>' : '') + '</div></td>'
+        + '<td>' + esc(to.phone || '—') + '</td>'
+        + '<td>' + esc(to.service || '—') + (to.track ? '<br>' + esc(to.track) : '') + '</td></tr>').join('')
+      + '</tbody></table>';
+  }
+
   // ---------- Упаковочный лист ----------
   //
   // Построчно, по заказам: здесь одинаковые артикулы НЕ складываются. У
@@ -936,7 +952,7 @@
               : '')
         + '<td class="pair">'
         +   '<span>' + esc(r.orderNumber) + '</span>'
-        +   (r.rid ? '<b>' + esc(r.rid) + '</b>' : '<b class="short">нет отправления</b>')
+        +   (r.rid ? '<b>' + esc(r.rid) + '</b>' : r.to ? '<b>' + esc(r.to.recipient) + '</b>' : '<b class="short">нет отправления</b>')
         + '</td>'
         + '<td>'
         +   '<div class="goods-art">'
@@ -981,6 +997,7 @@
       +   '<th class="bc">Штрихкод</th><th class="num">Кол-во</th>'
       +   (withStick ? '<th class="mid">№ стикера</th>' : '') + '<th class="mid">Факт</th>'
       + '</tr></thead><tbody>' + body + '</tbody></table>'
+      + recipientsTable(rows)
       + '<div class="sign">'
       +   '<div><div class="sign-line"></div><div class="sign-label">Упаковал — фамилия, подпись</div></div>'
       +   '<div><div class="sign-line"></div><div class="sign-label">Передал водителю — подпись</div></div>'
