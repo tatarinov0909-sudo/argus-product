@@ -1201,7 +1201,7 @@
   const sellerOrderMarketplace = (source) => {
     const key = String(source || '').toLowerCase();
     if (!key) return '';
-    return `<span class="workspace-marketplace ${key === '1c' ? 'onec' : ['wb', 'ozon'].includes(key) ? key : ''}">${h({ wb: 'WB', ozon: 'Ozon', '1c': '1С', direct: 'Физлицу' }[key] || key.toUpperCase())}</span>`;
+    return `<span class="workspace-marketplace ${key === '1c' ? 'onec' : ['wb', 'ozon', 'direct'].includes(key) ? key : ''}">${h({ wb: 'WB', ozon: 'Ozon', '1c': '1С', direct: 'Физлицу' }[key] || key.toUpperCase())}</span>`;
   };
   function renderOrders() {
     const ui = state.ui.orders; const supplies = [...new Set(state.data.orders.rows.map((r) => r.supply_number).filter(Boolean))].sort().reverse();
