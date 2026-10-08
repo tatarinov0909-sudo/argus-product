@@ -1,0 +1,11 @@
+Options -Indexes
+AddType application/vnd.android.package-archive .apk
+<IfModule mod_headers.c>
+  <FilesMatch "\.apk$">
+    Header set X-Content-Type-Options "nosniff"
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  <FilesMatch "\.(json|sha256)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>

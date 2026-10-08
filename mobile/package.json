@@ -1,0 +1,20 @@
+{
+  "name": "argus-worker-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Приложение грузчика Аргус — Android и web",
+  "scripts": {
+    "build": "node build.cjs",
+    "sync": "node build.cjs --android && cap sync android",
+    "test": "node --test ../tests/worker*.test.cjs"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/core": "8.5.3",
+    "jsqr": "1.4.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3",
+    "@playwright/test": "^1.64.0"
+  }
+}

@@ -70,6 +70,9 @@
   }
 
   .wrap{width:100%; max-width:920px; position:relative; z-index:1;}
+  .worker-app-link{display:flex;align-items:center;justify-content:center;min-height:48px;width:fit-content;max-width:100%;margin:22px auto 0;padding:10px 16px;border:1px solid var(--line);border-radius:10px;color:var(--accent-2);font-size:15px;line-height:1.4;text-align:center;text-decoration:none;}
+  .worker-app-link:hover{border-color:var(--accent);background:var(--accent-soft);}
+  .worker-app-link:focus-visible{outline:3px solid var(--accent-2);outline-offset:3px;}
   @keyframes fadeInUp{
     from{opacity:0; transform:translateY(14px);}
     to{opacity:1; transform:translateY(0);}
@@ -398,6 +401,8 @@
       <button class="btn" onclick="window.location.href='client_access.html'">Перейти к актам</button>
     </div>
   </div>
+
+  <a class="worker-app-link" href="worker-app.html">Скачать приложение грузчика</a>
 
 </div>
 

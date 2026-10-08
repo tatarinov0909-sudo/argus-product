@@ -1827,7 +1827,7 @@
 <script src="auth.js?v=84f56b4f"></script>
 <script src="back.js?v=4901b838"></script>
 <script>
-  const API_BASE = 'https://api.argus-ai.online';
+  const API_BASE = window.ArgusWorker ? ArgusWorker.apiBase : 'https://api.argus-ai.online';
   // Вход работника — на своём месте (auth.js): вход владельца или продавца
   // в соседней вкладке его не затирает.
   const AUTH = window.ArgusAuth ? ArgusAuth.get(['worker']) : null;
@@ -1861,6 +1861,13 @@
   }
 
   async function apiFetch(path, options = {}){
+    if(window.ArgusWorker){
+      try {
+        return path === '/api/journal/pause' && options.method === 'POST'
+          ? await ArgusWorker.recordPause(options.body || {})
+          : await ArgusWorker.request(path, options);
+      } finally { TOKEN = AUTH.token; }
+    }
     const res = await fetch(API_BASE + path, {
       method: options.method || 'GET',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN },
@@ -1883,9 +1890,19 @@
     return data;
   }
 
-  function logout(){
-    ArgusAuth.clear(ROLE, TOKEN);
-    window.location.href = 'login.html';
+  let logoutPending = false;
+  async function logout(){
+    if(logoutPending) return;
+    logoutPending = true;
+    try {
+      if(window.ArgusWorker && ArgusWorker.native){
+        showToast('Сохраняем паузу и проверяем действия перед выходом…');
+        await ArgusWorker.beforeLogout();
+      }
+      ArgusAuth.clear(ROLE, TOKEN);
+      window.location.href = 'login.html';
+    } catch(error){ showToast(error.message); }
+    finally { logoutPending = false; }
   }
 
   let invoices = [];
@@ -1962,8 +1979,8 @@
     return new Promise((resolve, reject) => {
       if(window.jsQR) return resolve();
       const s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
-      s.integrity = 'sha256-vEDIoVGWI2sjFNsIVvcsoLSZgM1UE7jIUqc0n1/uCFk=';
+      s.src = window.ArgusWorker ? 'jsqr.js' : 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+      if(!window.ArgusWorker) s.integrity = 'sha256-vEDIoVGWI2sjFNsIVvcsoLSZgM1UE7jIUqc0n1/uCFk=';
       s.crossOrigin = 'anonymous';
       s.onload = () => resolve();
       s.onerror = () => reject(new Error('Не загрузился распознаватель QR — проверьте интернет'));
@@ -2032,6 +2049,7 @@
     }, 250);
   }
   function onQrScanned(text){
+    if(window.ArgusWorker && ArgusWorker.handleQr(text)) return;
     const m = /\/loader\.html#paper=([0-9a-f-]{36})$/i.exec(String(text || '').trim());
     if(!m){ scanStatus('Это не QR листа сборки Аргуса. Наведите камеру на QR в углу листа.'); return; }
     closeScanner();
@@ -2040,6 +2058,7 @@
     refreshWork().catch(() => {}).then(() => openPaper(m[1], { start: true }));
   }
   function closeScanner(){
+    if(window.ArgusWorker) ArgusWorker.cancelScan();
     clearInterval(scanTimer); scanTimer = null;
     if(scanStream){ scanStream.getTracks().forEach(t => t.stop()); scanStream = null; }
     const video = document.getElementById('scanVideo');
@@ -2102,7 +2121,10 @@
     if(row && row.direction === 'in') return openReceipt(invoiceId);
     // Ушёл с паузы на другую работу — пауза кончилась: так и пишем
     // руководителю, а не бросаем её висеть без конца.
-    if(pauseStart) resumeTask();
+    if(pauseStart){
+      if(window.ArgusWorker && ArgusWorker.native){ if(!await resumeTask()) return; }
+      else resumeTask();
+    }
     productRun = null;
     recvRun = null;
     runState = null;
@@ -2252,6 +2274,7 @@
     pauseStart = null;
     recvRun = null;
     productRun = { supplyId, preferred: sku || null };
+    if(window.ArgusWorker) ArgusWorker.publishWorkState();
     backTarget = { kind: 'supply', id: supplyId };
     postponedItems = new Set();
     try{ await reloadProductRun(); }
@@ -2284,6 +2307,7 @@
   // поле количества встаёт в строку «нужно · взял» («заявлено · принял») под
   // названием, коды товара — крупно.
   function layoutRun(on, kind = 'assembly'){
+    if(window.ArgusWorker) ArgusWorker.publishWorkState();
     const screen = document.getElementById('taskScreen');
     screen.classList.toggle('run', on);
     screen.classList.toggle('recv', on && kind === 'receiving');
@@ -2486,6 +2510,7 @@
   window.pickProductNow = pickProductNow;
 
   function renderCurrentItem(){
+    if(window.ArgusWorker) ArgusWorker.resetScan();
     document.getElementById('allProductsBtn').classList.toggle('show', Boolean(productRun));
     document.getElementById('missingBtn').style.display = isPicking() ? '' : 'none';
     document.getElementById('itemDefectBtn').classList.toggle('show', !isReturn());
@@ -3288,6 +3313,7 @@
   async function confirmItem(){
     if(isPicking()){ return confirmPick(); }
     if(isReturn()){ return confirmReturn(); }
+    if(window.ArgusWorker && currentQty > 0 && !ArgusWorker.confirmPlacement()) return;
     const item = currentInvoice.items[currentItemIndex];
     const btn = document.getElementById('confirmBtn');
     btn.disabled = true;
@@ -4117,7 +4143,9 @@
     const got = await Promise.all([apiFetch('/api/invoices'), apiFetch('/api/supplies')]);
     invoices = got[0];
     supplies = got[1];
+    workerWorkListLoaded = true;
   }
+  let workerWorkListLoaded = false;
 
   async function showHome(){
     openJob('homeScreen');
@@ -4684,6 +4712,7 @@
     pauseStart = null;
     productRun = null;
     recvRun = { invoiceId, preferred: itemId || null, legacy: Boolean(opts.legacy) };
+    if(window.ArgusWorker) ArgusWorker.publishWorkState();
     backTarget = { kind: 'receipt', id: invoiceId };
     postponedItems = new Set();
     try{ currentInvoice = await apiFetch('/api/invoices/' + invoiceId); }
@@ -5045,7 +5074,8 @@
   };
   let recvRun = null;          // { invoiceId, preferred }
   const workNow = () => productRun ? { kind: 'assembly', id: productRun.supplyId }
-    : recvRun ? { kind: 'receiving', id: recvRun.invoiceId } : null;
+    : recvRun ? { kind: 'receiving', id: recvRun.invoiceId }
+    : window.ArgusWorker && paper && document.getElementById('paperScreen').classList.contains('show') ? { kind: 'assembly', id: paper.supplyId } : null;
 
   function applyAssemblyState(st){
     const doc = st && (st.supply || st.invoice);
@@ -5056,6 +5086,7 @@
       kind, docId: doc.id, supplyId: kind === 'assembly' ? doc.id : null, invoiceId: kind === 'receiving' ? doc.id : null,
       number: doc.number, supplyStatus: doc.status, docStatus: doc.status,
       status: a.status || null, mine: Boolean(a.mine), mode: a.mode || 'app', workerName: a.workerName || '',
+      workSessionId: a.id || null, eventSequence: Number(a.eventSequence || 0),
       startedAt: a.startedAt || null, pausedAt: a.pausedAt || null, pausedMs: Number(a.pausedMs || 0),
       pauseReason: a.pauseReason || '', endedAt: a.endedAt || null, workMs: Number(a.workMs || 0),
       comment: a.comment || '', taken: Number(st.taken || 0), total: Number(st.total || 0),
@@ -5063,6 +5094,7 @@
       // Часы телефона бывают неточны: таймер считается по часам сервера.
       skewMs: st.serverNow ? new Date(st.serverNow).getTime() - Date.now() : 0,
     };
+    if(window.ArgusWorker) ArgusWorker.publishWorkState();
     return runState;
   }
   const runActive = () => {
@@ -5371,10 +5403,22 @@
   // Вкладку скрыли или страницу закрывают — ответа ждать некогда: запрос
   // уходит с keepalive и доедет, даже если страница уже закрылась. at — когда
   // ушли на самом деле (по часам сервера).
-  function exitBeacon(atClientMs){
-    if(!runActive()) return;
+  function exitBeacon(atClientMs, nativeReplay){
+    if(!runActive() && !(nativeReplay && window.ArgusWorker && runState && runState.mine && runState.localPausePending && workNow())) return;
     const w = workNow();
     const at = new Date((atClientMs || Date.now()) + runState.skewMs).toISOString();
+    if(window.ArgusWorker){
+      const recorded = ArgusWorker.recordPause({ [WORK[w.kind].key]: w.id, reason: WORK[w.kind].exit, exit: true, at });
+      recorded.catch(e => showToast(e.message));
+      runState.status = 'paused';
+      runState.localPausePending = true;
+      runState.pausedAt = at;
+      runState.pauseReason = WORK[w.kind].exit.toLowerCase();
+      if(window.ArgusWorker) ArgusWorker.publishWorkState();
+      if(paper && document.getElementById('paperScreen').classList.contains('show')){ syncPaperFromState(); renderPaperTimer(); }
+      else showRunPaused();
+      return recorded;
+    }
     try{
       fetch(API_BASE + '/api/journal/pause', {
         method: 'POST', keepalive: true,
@@ -5391,6 +5435,7 @@
   let hiddenTimer = null;
   let exitedWhileHidden = false;
   document.addEventListener('visibilitychange', function(){
+    if(window.ArgusWorker && ArgusWorker.native) return;
     if(document.hidden){
       if(!runActive()) return;
       hiddenAt = Date.now();
@@ -5414,7 +5459,7 @@
       setTimeout(() => refreshRunState(), 800);
     }
   });
-  window.addEventListener('pagehide', function(){ exitBeacon(); });
+  window.addEventListener('pagehide', function(){ if(!window.ArgusWorker || !ArgusWorker.native) exitBeacon(); });
 
   async function refreshRunState(){
     const w = workNow();
@@ -5588,7 +5633,7 @@
      только то, чего не нашёл, и жмёт «Собрал по листу» — Аргус записывает
      взятое по ячейкам листа и шлёт руководителю «нет товара» на ненайденное.
      Начатая сборка переживает перезагрузку телефона: она в памяти браузера. */
-  const PAPER_KEY = 'argus_paper';
+  const PAPER_KEY = window.ArgusWorker ? ['argus_paper', API_BASE, authPayload.warehouseId, authPayload.staffKeyId].join('|') : 'argus_paper';
   let paper = null;          // { supplyId, number, startedAt, pausedMs, pauseAt, pauseReason, miss: {sku: found} }
   let paperLines = [];
   let paperKits = new Map();   // артикул набора → строка листа грузчика
@@ -5602,7 +5647,10 @@
   }
 
   async function openPaper(supplyId, opts = {}){
-    if(pauseStart) resumeTask();
+    if(pauseStart){
+      if(window.ArgusWorker && ArgusWorker.native){ if(!await resumeTask()) return; }
+      else resumeTask();
+    }
     openJob('paperScreen');
     backTarget = { kind: 'supply', id: supplyId };
     document.getElementById('paperSub').textContent = 'Загружаю…';
@@ -5660,6 +5708,7 @@
       applyAssemblyState(st);
       paper = { supplyId, number: st.supply.number, startedAt: null, pausedMs: 0, pauseAt: null, pauseReason: '',
         miss: saved && saved.supplyId === supplyId ? (saved.miss || {}) : {} };
+      if(window.ArgusWorker) ArgusWorker.publishWorkState();
       syncPaperFromState();
     }
     document.getElementById('paperTitle').textContent = 'По листу · ' + (d.supply && d.supply.number || '');
@@ -5724,9 +5773,24 @@
     reportPause(Object.assign({ reason }, comment ? { comment } : {}));
   }
 
-  function paperResume(){
+  async function paperResume(){
     if(!paper || !paper.pauseAt) return;
     const ms = Date.now() + (paper.skewMs || 0) - new Date(paper.pauseAt).getTime();
+    if(window.ArgusWorker && ArgusWorker.native){
+      if(nativeResumePending) return false;
+      nativeResumePending = true;
+      const btn = document.querySelector('#paperPauseBanner button');
+      const title = btn && btn.textContent;
+      if(btn){ btn.disabled = true; btn.textContent = 'Подтверждаем…'; }
+      try {
+        await reportPause({ reason: paper.pauseReason, resumed: true, pausedMs: ms });
+        // reportPause applies the confirmed server session and paper timer.
+        if(paper && paper.pauseAt){ paper.pausedMs += ms; paper.pauseAt = null; paper.pauseReason = ''; }
+        savePaper(); renderPaperTimer();
+        return true;
+      } catch(error){ return false; }
+      finally { nativeResumePending = false; if(btn){ btn.disabled = false; btn.textContent = title; } }
+    }
     paper.pausedMs += ms;
     const reason = paper.pauseReason;
     paper.pauseAt = null;
@@ -5797,7 +5861,10 @@
 
   async function finishPaper(){
     if(!paper) return;
-    if(paper.pauseAt) paperResume();
+    if(paper.pauseAt){
+      if(window.ArgusWorker && ArgusWorker.native){ if(!await paperResume()) return; }
+      else paperResume();
+    }
     const btn = document.getElementById('paperDoneBtn');
     btn.disabled = true;
     btn.textContent = 'Записываю…';
@@ -6803,7 +6870,10 @@
         }
         return r;
       })
-      .catch(e => showToast('Руководитель не получил отметку о паузе: ' + e.message));
+      .catch(e => {
+        showToast('Руководитель не получил отметку о паузе: ' + e.message);
+        if(window.ArgusWorker && ArgusWorker.native && body.resumed) throw e;
+      });
   }
 
   function setPauseBannerText(reason){
@@ -6840,10 +6910,29 @@
     reportPause(Object.assign({ reason }, comment ? { comment } : {}));
   }
 
-  function resumeTask(){
+  let nativeResumePending = false;
+  async function resumeTask(){
     if(!pauseStart) return;
     const now = new Date();
     const ms = now - pauseStart;
+    if(window.ArgusWorker && ArgusWorker.native){
+      if(nativeResumePending) return false;
+      nativeResumePending = true;
+      const last = pauseLog[pauseLog.length - 1];
+      const box = document.getElementById('pauseComment'), btn = document.getElementById('pauseResumeBtn');
+      const comment = (productRun || recvRun) && box ? box.value.trim() : '';
+      const title = btn && btn.textContent;
+      if(btn){ btn.disabled = true; btn.textContent = 'Подтверждаем…'; }
+      try {
+        await reportPause(Object.assign({ reason: last.reason, resumed: true, pausedMs: ms }, comment ? { comment } : {}));
+        totalPausedMs += ms; last.end = now; pauseStart = null;
+        if(box) box.value = '';
+        setPauseLock(false);
+        if(isPicking()) updatePickConfirm(); else updateConfirmState();
+        return true;
+      } catch(error){ return false; }
+      finally { nativeResumePending = false; if(btn){ btn.disabled = false; btn.textContent = title; } }
+    }
     totalPausedMs += ms;
     const last = pauseLog[pauseLog.length - 1];
     last.end = now;
@@ -7075,6 +7164,7 @@
   }
 
   function applyCustomCell(blockId, label){
+    if(window.ArgusWorker) document.querySelector('#customCellDisplay .custom-cell-label').textContent = 'Выбрано вручную';
     document.querySelectorAll('.cell-option').forEach(el => el.classList.remove('selected'));
     selectedCellBlockId = blockId;
     selectedCellLabel = label;
@@ -7092,7 +7182,67 @@
   // «Назад» браузера — то же, что стрелка «←» на экране (back.js).
   argusBackButton({ buttons: '.job-back, .done-back, .sheet-back, .sheet-back-btn, .map-back, #invoiceSwitch' });
 
-  init();
+  if(window.ArgusWorker){
+    ArgusWorker.bind(AUTH, {
+      context: () => {
+        const item = currentInvoice && currentInvoice.items && currentInvoice.items[currentItemIndex];
+        return { workSessionId: runState && runState.workSessionId, eventSequence: runState && runState.eventSequence,
+          skewMs: runState && runState.skewMs, status: runState && runState.status, mine: runState && runState.mine, workActive: runActive(), pauseLocal: runState && runState.localPausePending, startedAt: runState && runState.startedAt,
+          itemId: item && (item.id || item.sku), itemName: item && item.name, cellId: selectedCellBlockId,
+          cellLabel: selectedCellLabel, documentNumber: currentInvoice && currentInvoice.number,
+          unplacedQty: item ? recvLeft(item) : null };
+      },
+      findCell: id => {
+        for(const row of cellRows){
+          const b = (row.blocks || []).find(block => block.id.toLowerCase() === id.toLowerCase());
+          if(b) return { id: b.id, label: formatBlockLabel(row.row_num, b) };
+        }
+        return null;
+      },
+      selectCell: cell => {
+        if(isPicking()){
+          const i = pickSuggestion && pickSuggestion.cells.findIndex(c => c.cellBlockId === cell.id);
+          if(i == null || i < 0) throw new Error('В выбранной ячейке нет этого товара для сборки.');
+          selectPickCell(i);
+        } else applyCustomCell(cell.id, cell.label);
+      },
+      openScanner, closeScanner, scanStatus: text => { scanStatus(text); showToast(text); }, toast: showToast,
+      pause: at => exitBeacon(at, true),
+      draft: () => {
+        const item = currentInvoice && currentInvoice.items && currentInvoice.items[currentItemIndex];
+        const w = workNow();
+        if(paper && document.getElementById('paperScreen').classList.contains('show')) return {
+          kind: 'paper', id: paper.supplyId, workSessionId: runState && runState.workSessionId
+        };
+        return w && item ? { kind: w.kind, id: w.id, itemId: item.id || item.sku,
+          workSessionId: runState && runState.workSessionId, qty: currentQty, placeQty, cellId: selectedCellBlockId, cellLabel: selectedCellLabel } : null;
+      },
+      restoreDraft: async draft => {
+        if(draft.kind === 'paper') return openPaper(draft.id);
+        if(draft.kind === 'receiving') await openReceivingRun(draft.id, draft.itemId);
+        else if(draft.kind === 'assembly') await openProductRun(draft.id, draft.itemId);
+        if(!runState || runState.workSessionId !== draft.workSessionId || !runState.mine) return;
+        const item = currentInvoice && currentInvoice.items[currentItemIndex];
+        if(!item || (item.id || item.sku) !== draft.itemId) return;
+        if(Number.isFinite(draft.qty)) qtyTyped(String(draft.qty));
+        if(draft.cellId && draft.cellLabel && !isPicking()) applyCustomCell(draft.cellId, draft.cellLabel);
+        if(Number.isFinite(draft.placeQty)) placeQtyTyped(String(draft.placeQty));
+        showToast('Восстановлен незавершённый ввод. Проверьте количество и ячейку перед подтверждением.');
+      },
+      restoreActive: async () => {
+        const active = st => st && st.assembly && st.assembly.mine && st.assembly.status === 'active';
+        const receipt = invoices.find(row => active(row.work));
+        if(receipt) return openReceivingRun(receipt.id);
+        const supply = supplies.find(row => active(row.assembly));
+        if(supply) return supply.assembly.assembly.mode === 'paper' ? openPaper(supply.id) : openProductRun(supply.id);
+      },
+      noActiveWork: () => {
+        const active = st => st && st.assembly && st.assembly.mine && st.assembly.status === 'active';
+        return workerWorkListLoaded && !invoices.some(row => active(row.work)) && !supplies.some(row => active(row.assembly));
+      }
+    });
+  }
+  init().then(() => { if(window.ArgusWorker) return ArgusWorker.restoreDraft(); });
 </script>
 
 </body>
