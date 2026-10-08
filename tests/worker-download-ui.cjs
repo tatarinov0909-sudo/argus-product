@@ -15,7 +15,7 @@ const base = process.env.ARGUS_DOWNLOAD_PREVIEW || 'http://127.0.0.1:8740';
       await page.goto(base + '/login.html');
       await page.getByRole('link', { name: 'Скачать приложение грузчика', exact: true }).click();
       await page.waitForURL('**/worker-app.html');
-      assert.equal(await page.locator('#downloadAndroid').getAttribute('href'), 'downloads/argus-worker-0.1.1.apk');
+      assert.equal(await page.locator('#downloadAndroid').getAttribute('href'), 'downloads/argus-worker-0.1.2.apk');
       assert.equal(await page.getByRole('link', { name: 'Открыть вход грузчика', exact: true }).getAttribute('href'), 'worker-login.html');
       const rects = await page.evaluate(() => [...document.querySelectorAll('a, summary, h1, h2')].map(el => {
         const r = el.getBoundingClientRect(); return { text: el.textContent, left: r.left, right: r.right, width: r.width, height: r.height };

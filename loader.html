@@ -281,6 +281,10 @@
   .product-row.done{opacity:0.45; cursor:default;}
   .product-row-name{font-size:14px; font-weight:600;}
   .product-row-sub{font-size:12px; color:var(--muted); margin-top:3px; font-family:var(--mono);}
+  .home-error{margin-bottom:16px;padding:16px;border:1px solid var(--accent);border-radius:12px;background:var(--panel);color:var(--text);}
+  .home-error-text{margin:0 0 12px;font-size:16px;line-height:1.5;overflow-wrap:anywhere;}
+  .home-retry{min-height:48px;padding:10px 18px;border:1px solid var(--accent);border-radius:10px;background:transparent;color:var(--text);font:600 16px/1.4 var(--sans);cursor:pointer;}
+  .home-retry:focus-visible{outline:3px solid var(--accent);outline-offset:3px;}
   /* Сканер QR листа сборки (06.10.2026). */
   .scan-open{display:flex; align-items:center; justify-content:center; gap:8px; width:100%; margin-top:12px; padding:13px 14px; border:1px solid var(--accent); border-radius:12px; background:transparent; color:var(--accent); font:600 15px/1.2 var(--sans); cursor:pointer;}
   .scan-open span{font-size:18px; line-height:1;}
@@ -475,8 +479,12 @@
   .job-screen.show{display:flex;}
   /* Главный экран и списки работ: сначала «что делаем», потом «что именно». */
   .home-tile{display:flex; justify-content:space-between; align-items:center; gap:14px; cursor:pointer;
+    width:100%; font:inherit; color:var(--text); text-align:left;
     background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:20px 22px;}
+  .home-tile > span:first-child{min-width:0;}
+  .home-tile-name,.home-tile-sub{display:block;}
   .home-tile:active{border-color:var(--accent);}
+  .home-tile:focus-visible,.job-logout:focus-visible,.docs-content:focus-visible,.recv-filter button:focus-visible{outline:2px solid var(--accent-2); outline-offset:3px;}
   .home-tile-name{font-size:18px; font-weight:600;}
   .home-tile-sub{font-size:13.5px; color:var(--muted); margin-top:4px; line-height:1.45;}
   .home-tile-count{font-family:var(--mono); font-size:24px; font-weight:700; color:var(--accent-2); flex-shrink:0;}
@@ -494,7 +502,8 @@
   .home-work-sub{font-size:14px; color:var(--muted); margin-top:4px; line-height:1.4;}
   .home-work-go{flex:0 0 auto; font-size:14px; font-weight:700; color:var(--yellow); white-space:nowrap;}
   .home-work.active .home-work-go{color:var(--accent-2);}
-  .job-logout{font-size:13px; color:var(--muted); cursor:pointer; padding:8px 0; margin-left:auto;}
+  .job-logout{font:inherit; font-size:14px; color:var(--text); cursor:pointer; padding:8px 12px; margin-left:auto;
+    min-height:44px; background:none; border:1px solid var(--line); border-radius:10px;}
   .sup-card{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:18px 20px; cursor:pointer;}
   .sup-card:active{border-color:var(--accent);}
   .sup-card-top{display:flex; justify-content:space-between; align-items:center; gap:10px;}
@@ -951,7 +960,7 @@
      крупно: ячейка, название, артикул продавца, штрихкод, артикул WB, сколько. */
   .supply-head{text-align:center;}
   .supply-head .job-back{text-align:left;}
-  .supply-title{font-family:var(--sans); font-weight:700; font-size:30px; letter-spacing:0.3px; color:var(--accent-2);}
+  .supply-title{font-family:var(--sans); font-weight:700; font-size:30px; letter-spacing:0.3px; color:var(--accent-2); overflow-wrap:anywhere;}
   .supply-sub{font-size:15px;}
   .asm-line{font-size:15px; line-height:1.45; padding:12px 14px; border-radius:12px; border:1px solid var(--line);
     background:var(--panel); color:var(--text);}
@@ -1146,6 +1155,10 @@
   }
   /* ===================== Приёмка (задание 27.09.2026, второе) ===================== */
   /* Список приходов: поиск и фильтры сверху, приехавшая машина — заметно. */
+  /* Фильтры и приходы прокручиваются вместе: число продавцов не отнимает
+     всё место у списка в корпусе фиксированной высоты. */
+  .docs-content{flex:1; min-height:0; overflow-y:auto;}
+  .docs-content .job-body{flex:none; overflow:visible;}
   .recv-filter{display:flex; flex-direction:column; gap:10px; padding:16px 24px 0;}
   .recv-search{width:100%; background:var(--panel); border:1px solid var(--line); border-radius:12px;
     padding:13px 14px; color:var(--text); font:inherit; font-size:16px;}
@@ -1156,7 +1169,7 @@
   /* Варианты фильтра переносятся на новую строку, а не уезжают вбок:
      прокрутку внутри полоски на телефоне никто не находит. */
   .recv-filter-row .pick-seg{flex:0 1 auto; min-width:0; flex-wrap:wrap; overflow:visible;}
-  .recv-filter-row .pick-seg button{flex:0 1 auto;}
+  .recv-filter-row .pick-seg button{flex:0 1 auto; min-width:0; min-height:44px; white-space:normal; overflow-wrap:anywhere;}
   .recv-found{font-size:13px; color:var(--muted);}
   .recv-row{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:14px 16px;
     cursor:pointer; display:flex; flex-direction:column; gap:6px;}
@@ -1267,7 +1280,7 @@
             <div class="job-title">Что делаем?</div>
             <div class="job-sub" id="homeSub">Загружаю…</div>
           </div>
-          <div class="job-logout" onclick="logout()">Выйти</div>
+          <button type="button" class="job-logout" onclick="logout()">Выйти</button>
         </div>
         <button type="button" class="scan-open" onclick="openScanner()"><span aria-hidden="true">⌗</span> Сканировать QR листа сборки</button>
       </div>
@@ -1326,8 +1339,10 @@
       </div>
       <!-- Поиск и фильтры приходов (владелец 27.09.2026): привоз продавца
            тонул сто шестьдесят седьмым в списке без поиска. -->
-      <div class="recv-filter" id="docsFilter" style="display:none;"></div>
-      <div class="job-body" id="docsBody"></div>
+      <div class="docs-content" tabindex="0" role="region" aria-labelledby="docsTitle">
+        <div class="recv-filter" id="docsFilter" style="display:none;"></div>
+        <div class="job-body" id="docsBody"></div>
+      </div>
     </div>
 
     <!-- Приход: как поставка у сборки — номер один раз по центру, кто
@@ -1833,7 +1848,7 @@
 
   <div class="toast" id="toast"></div>
 
-<script src="auth.js?v=84f56b4f"></script>
+<script src="auth.js?v=36b93e56"></script>
 <script src="back.js?v=4901b838"></script>
 <script>
   const API_BASE = window.ArgusWorker ? ArgusWorker.apiBase : 'https://api.argus-ai.online';
@@ -2005,30 +2020,47 @@
   const scanStatus = (text) => { document.getElementById('scanStatus').textContent = text; };
   function loadJsQr(){
     return new Promise((resolve, reject) => {
-      if(window.jsQR) return resolve();
+      if(typeof window.jsQR === 'function') return resolve();
       const s = document.createElement('script');
       s.src = window.ArgusWorker ? 'jsqr.js' : 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
       if(!window.ArgusWorker) s.integrity = 'sha256-vEDIoVGWI2sjFNsIVvcsoLSZgM1UE7jIUqc0n1/uCFk=';
       s.crossOrigin = 'anonymous';
-      s.onload = () => resolve();
-      s.onerror = () => reject(new Error('Не загрузился распознаватель QR — проверьте интернет'));
+      const finish = ok => {
+        clearTimeout(timeout); s.onload = s.onerror = null;
+        if(ok){ resolve(); return; }
+        s.remove();
+        reject(new Error('Не загрузился распознаватель QR. Проверьте интернет и нажмите «Повторить».'));
+      };
+      const timeout = setTimeout(() => finish(false), 10000);
+      s.onload = () => finish(typeof window.jsQR === 'function');
+      s.onerror = () => finish(false);
       document.head.appendChild(s);
     });
   }
   async function makeQrReader(){
+    let detector = null;
     if('BarcodeDetector' in window){
       try{
         const formats = await window.BarcodeDetector.getSupportedFormats();
         if(formats.includes('qr_code')){
-          const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
-          return async (video) => { const found = await detector.detect(video); return found[0] ? found[0].rawValue : null; };
+          detector = new window.BarcodeDetector({ formats: ['qr_code'] });
         }
       } catch(e){}
     }
-    await loadJsQr();
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    let canvas, ctx;
+    const prepareFallback = async () => {
+      await loadJsQr();
+      canvas = document.createElement('canvas');
+      ctx = canvas.getContext('2d', { willReadFrequently: true });
+    };
+    if(!detector) await prepareFallback();
     return async (video) => {
+      if(detector){
+        try{ const found = await detector.detect(video); return found[0] ? found[0].rawValue : null; }
+        catch(e){ detector = null; }
+      }
+      // Some devices advertise QR support but reject detect() on real frames.
+      if(!canvas) await prepareFallback();
       const w = video.videoWidth, h = video.videoHeight;
       if(!w || !h) return null;
       const k = Math.min(1, 800 / Math.max(w, h));
@@ -2130,7 +2162,7 @@
       if(busy || !scanStream || generation !== scanGeneration) return;
       busy = true;
       try{ const text = await read(video); if(text && generation === scanGeneration) onQrScanned(text); }
-      catch(e){}
+      catch(e){ failScanner(generation, 'Не удалось распознать QR. Проверьте интернет и нажмите «Повторить» или выберите задание из списка.'); }
       finally{ busy = false; }
     }, 250);
   }
@@ -2202,6 +2234,7 @@
   }
 
   async function selectInvoice(invoiceId, keepRun){
+    const navigation = ++screenNavigation;
     // Приход открывается своим экраном — с «Начать приёмку», таймером на
     // сервере и паузой при выходе (владелец 27.09.2026), а не сразу работой.
     const row = invoices.find(i => i.id === invoiceId);
@@ -2212,17 +2245,22 @@
       if(window.ArgusWorker && ArgusWorker.native){ if(!await resumeTask()) return; }
       else resumeTask();
     }
+    if(navigation !== screenNavigation) return;
+    let invoice;
+    try{
+      invoice = await apiFetch('/api/invoices/' + invoiceId);
+    } catch(e){
+      if(navigation === screenNavigation) showToast('Не удалось загрузить накладную: ' + e.message);
+      return;
+    }
+    // Старый ответ не меняет ни экран, ни рабочий документ после нового выбора.
+    if(navigation !== screenNavigation) return;
+    if(invoice.direction === 'in') return openReceipt(invoiceId);
+    currentInvoice = invoice;
     productRun = null;
     recvRun = null;
     runState = null;
     layoutRun(false);
-    try{
-      currentInvoice = await apiFetch('/api/invoices/' + invoiceId);
-    } catch(e){
-      showToast('Не удалось загрузить накладную: ' + e.message);
-      return;
-    }
-    if(currentInvoice.direction === 'in') return openReceipt(invoiceId);
     hideAllScreens();
     // Сборка поставки — одна работа, а не десять отдельных. Переходя к
     // следующему заказу той же поставки, не сбрасываем ни таймер, ни то,
@@ -4187,8 +4225,10 @@
 
   const ALL_SCREENS = ['homeScreen', 'suppliesScreen', 'supplyScreen', 'paperScreen', 'docsScreen', 'receiptScreen',
     'pickListScreen', 'moveScreen', 'kitScreen', 'invScreen', 'defectScreen', 'manualReturnScreen', 'vwMoveScreen'];
+  let screenNavigation = 0;
 
   function hideAllScreens(){
+    ++screenNavigation;
     ALL_SCREENS.forEach(id => document.getElementById(id).classList.remove('show'));
     document.getElementById('taskScreen').style.display = 'none';
     document.getElementById('doneScreen').classList.remove('show');
@@ -4236,16 +4276,29 @@
 
   async function showHome(){
     openJob('homeScreen');
+    const navigation = screenNavigation;
+    const failed = [];
+    let workFresh = false;
     document.getElementById('homeSub').textContent = 'Загружаю…';
-    try{ await refreshWork(); }
-    catch(e){ document.getElementById('homeSub').textContent = 'Не удалось обновить: ' + e.message; }
+    document.getElementById('homeBody').setAttribute('aria-busy', 'true');
+    document.querySelectorAll('#homeBody .home-retry').forEach(button => { button.disabled = true; button.textContent = 'Загружаю…'; });
+    try{ await refreshWork(); workFresh = true; }
+    catch(e){ failed.push('приходы и поставки'); }
     let counting = null;
-    try{ counting = (await apiFetch('/api/inventory/tasks')).length; } catch(e){ counting = null; }
+    try{ counting = (await apiFetch('/api/inventory/tasks')).length; } catch(e){ failed.push('задания на пересчёт'); }
     let defectCount = null;
-    try{ defectCount = (await apiFetch('/api/defects/tasks')).length; } catch(e){ defectCount = null; }
+    try{ defectCount = (await apiFetch('/api/defects/tasks')).length; } catch(e){ failed.push('задания по браку'); }
     // Задания «переложить» — плитка появляется, только когда они есть.
     let vwMoveCount = 0;
-    try{ vwMoveCount = (await apiFetch('/api/vwarehouses/move-tasks')).length; } catch(e){ vwMoveCount = 0; }
+    try{ vwMoveCount = (await apiFetch('/api/vwarehouses/move-tasks')).length; } catch(e){ vwMoveCount = null; failed.push('задания на перемещение'); }
+    if(navigation !== screenNavigation) return;
+    document.getElementById('homeBody').setAttribute('aria-busy', 'false');
+    const workKnown = workFresh || workerWorkListLoaded;
+    const errorHtml = failed.length
+      ? '<div class="home-error" role="alert"><p class="home-error-text">Не удалось обновить: ' + failed.join(', ')
+        + '. Проверьте связь и повторите.' + (!workFresh && workerWorkListLoaded ? ' Показан ранее загруженный список работ.' : '')
+        + '</p><button type="button" class="home-retry" onclick="showHome()">Повторить</button></div>'
+      : '';
 
     // Поставка без заказов (их принял WB мимо Аргуса) — собирать нечего.
     const collecting = supplies.filter(s => s.status === 'collecting' && Number(s.orders) > 0);
@@ -4277,19 +4330,19 @@
         }).join('') + '</div>'
       : '';
 
-    const tile = (onclick, name, sub, count) => '<div class="home-tile" onclick="' + onclick + '">'
-      + '<div><div class="home-tile-name">' + name + '</div><div class="home-tile-sub">' + sub + '</div></div>'
-      + '<div class="home-tile-count' + (count ? '' : ' zero') + '">' + (count == null ? '' : count || 'нет') + '</div></div>';
-    document.getElementById('homeBody').innerHTML = startedHtml +
+    const tile = (onclick, name, sub, count) => '<button type="button" class="home-tile" onclick="' + onclick + '">'
+      + '<span><span class="home-tile-name">' + name + '</span><span class="home-tile-sub">' + sub + '</span></span>'
+      + '<span class="home-tile-count' + (count ? '' : ' zero') + '">' + (count == null ? '' : count || 'нет') + '</span></button>';
+    document.getElementById('homeBody').innerHTML = errorHtml + startedHtml +
       tile('openSupplies()', 'Сборка поставок',
-        collecting.length
+        !workKnown ? 'Не удалось загрузить задания' : collecting.length
           ? ordersLeft + ' ' + pluralRu(ordersLeft, 'заказ ждёт', 'заказа ждут', 'заказов ждут') + ' сборки'
             + (loose ? ' · ещё ' + loose + ' ' + pluralRu(loose, 'отгрузка', 'отгрузки', 'отгрузок') + ' из 1С' : '')
           : (loose ? loose + ' ' + pluralRu(loose, 'отгрузка', 'отгрузки', 'отгрузок') + ' из 1С' : 'поставок на сборку нет'),
-        collecting.length + loose)
-      + tile("openDocs('in')", 'Приёмка товара', 'приходы, которые привезли на склад', receipts)
-      + tile("openDocs('return')", 'Возвраты', 'разобрать вернувшийся товар по состоянию', returns)
-      + (vwMoveCount ? tile('openVwMoves()', 'Переложить', 'товар склада продавца — в его отдельные ячейки', vwMoveCount) : '')
+        workKnown ? collecting.length + loose : null)
+      + tile("openDocs('in')", 'Приёмка товара', 'приходы, которые привезли на склад', workKnown ? receipts : null)
+      + tile("openDocs('return')", 'Возвраты', 'разобрать вернувшийся товар по состоянию', workKnown ? returns : null)
+      + (vwMoveCount !== 0 ? tile('openVwMoves()', 'Переложить', 'товар склада продавца — в его отдельные ячейки', vwMoveCount) : '')
       + tile('openDefectTasks()', 'Склад брака', 'решения продавцов: выдать, утилизировать, перепаковать', defectCount)
       + tile('openMove()', 'Перепаковка и перестановка', 'переложить товар в другую ячейку или отметить брак', null)
       + tile('openInventory()', 'Пересчёт ячеек', 'задания руководителя', counting);
@@ -4614,6 +4667,8 @@
     // Поле поиска перерисовывается вместе с фильтрами: фокус и каретку
     // возвращаем туда, где их оставил человек.
     const keep = document.activeElement && document.activeElement.id === 'recvSearch' ? document.activeElement.selectionStart : null;
+    const focusedFilter = host.contains(document.activeElement) && document.activeElement.matches('[data-recv]')
+      ? { name: document.activeElement.dataset.recv, value: document.activeElement.dataset.value } : null;
     host.innerHTML = '<input type="search" class="recv-search" id="recvSearch" placeholder="Номер, продавец, перевозчик, машина" '
       + 'value="' + escapeHTML(recvUi.q) + '" autocomplete="off" enterkeyhint="search" aria-label="Поиск прихода">'
       + row('Статус', Object.keys(RECV_STATUS).map(k => seg('status', k, RECV_STATUS[k])).join(''))
@@ -4625,6 +4680,7 @@
     if(keep != null){ box.focus(); const at = Math.min(keep, box.value.length); box.setSelectionRange(at, at); }
     host.querySelectorAll('[data-recv]').forEach(b => {
       b.onclick = () => { recvUi[b.dataset.recv] = b.dataset.value; recvUi.shown = RECV_PAGE; renderReceipts(); };
+      if(focusedFilter && b.dataset.recv === focusedFilter.name && b.dataset.value === focusedFilter.value) b.focus({ preventScroll: true });
     });
   }
 

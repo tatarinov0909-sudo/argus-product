@@ -5,7 +5,7 @@ $argusTools = Join-Path $argusRoot '.tools'
 $argusJdk = Join-Path $argusTools 'jdk-21'
 $argusSdk = Join-Path $argusTools 'android-sdk'
 $argusGradle = Join-Path $argusTools 'gradle-8.14.3/bin/gradle.bat'
-if (!$OutputApk) { $OutputApk = Join-Path $PSScriptRoot 'output/argus-worker-0.1.1.apk' }
+if (!$OutputApk) { $OutputApk = Join-Path $PSScriptRoot 'output/argus-worker-0.1.2.apk' }
 if (Test-Path -LiteralPath $OutputApk) { throw 'Release output already exists. Choose a new path; published releases must not be overwritten.' }
 if (Test-Path -LiteralPath $argusJdk) { $env:JAVA_HOME = $argusJdk }
 if (Test-Path -LiteralPath $argusSdk) { $env:ANDROID_HOME = $argusSdk }

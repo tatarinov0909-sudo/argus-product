@@ -19,6 +19,6 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Не удалось собрать Android APK' }
     $argusOutput = Join-Path $PSScriptRoot 'output'
     New-Item -ItemType Directory -Path $argusOutput -Force | Out-Null
-    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'android/app/build/outputs/apk/debug/app-debug.apk') -Destination (Join-Path $argusOutput 'argus-worker-0.1.1-stand.apk')
-    Write-Output "Тестовый APK: $argusOutput/argus-worker-0.1.1-stand.apk"
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'android/app/build/outputs/apk/debug/app-debug.apk') -Destination (Join-Path $argusOutput 'argus-worker-0.1.2-stand.apk')
+    Write-Output "Тестовый APK: $argusOutput/argus-worker-0.1.2-stand.apk"
 } finally { Pop-Location }
