@@ -1,13 +1,13 @@
 {
-  "version": "0.1.0",
-  "versionCode": 1,
+  "version": "0.1.1",
+  "versionCode": 2,
   "package": "online.argus.worker",
   "minAndroid": "7.0",
-  "downloadUrl": "https://argus-ai.online/downloads/argus-worker-0.1.0.apk",
-  "sha256": "f28c9cb4261dbccbab25a0378d88bc0ef123da49b39fe58de8af2feaafc0cfda",
-  "size": 3766059,
+  "downloadUrl": "https://argus-ai.online/downloads/argus-worker-0.1.1.apk",
+  "sha256": "0fcc5f23c786e0af58fac3855f8d872d036bb93b89d713a3f0bf7353218a4b94",
+  "size": 3770155,
   "certificateSha256": "3981f1a257a744accf587beabaa2f2d880427a4ed674bc0406d31daf37091e6f",
-  "buildId": "7986a908a5a6",
-  "sourceCommit": "f460bb88a488766fc3c11d085625f2d1e09cee5a",
-  "releasedAt": "2026-10-08T19:03:10.871Z"
+  "buildId": "8ba05516f3da",
+  "sourceCommit": "d3a4009ab7ba08ca6fb6b1edc1be05c35f049c62",
+  "releasedAt": "2026-10-08T20:12:04.440Z"
 }
