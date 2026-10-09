@@ -25,12 +25,17 @@ const root=path.resolve(__dirname,'..');
         decisions.push(route.request().postDataJSON());data={applied:false,recount:true,changes:[]};
       }
       if(u.pathname==='/api/sync/status')data={};
+      if(u.pathname==='/api/sellers/stock-summary')data={sellers:[]};   // «Склад и товары» открывается на списке продавцов
       if(u.pathname==='/api/leads/manage/access'||u.pathname==='/api/inventory/advice')return route.fulfill({status:403,json:{error:'test'}});
       return route.fulfill({json:data});
     });
-    await page.addInitScript(()=>{localStorage.setItem('argus_token','offline-test');localStorage.setItem('argus_role','owner');});
+    // auth.js берёт только живой вход своей роли — похожий на настоящий (владелец: все права склада).
+    const token='test.'+Buffer.from(JSON.stringify({role:'owner',ownerId:'test-owner',warehouseId:'test-warehouse'})).toString('base64url')+'.test';
+    await page.addInitScript(t=>{localStorage.setItem('argus_auth_owner',t);sessionStorage.setItem('argus_tab_role','owner');},token);
     await page.goto('http://argus.test/cabinet_main.html');
-    await page.locator('#nav-inv').click();
+    // Инвентаризация — вкладка раздела «Склад и товары».
+    await page.locator('#nav-products').click();
+    await page.locator('#view-stock .pane-tab',{hasText:'Инвентаризация'}).click();
     const preview=page.locator('#invWaitingList');
     await preview.getByRole('button',{name:'Посчитать заново',exact:true}).waitFor();
     const text=await preview.textContent();

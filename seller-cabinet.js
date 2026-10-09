@@ -1683,7 +1683,8 @@
           : '<p class="help">Склад ещё не записывал операций по этому товару.</p>';
         if ($('historyMore')) $('historyMore').onclick = more;
       } catch (e) {
-        if (run === state.drawerRun) $('productHistory').innerHTML = `<p class="error-text">${h(e.message)}</p><button class="button" id="historyMore">Повторить</button>`;
+        // Уже загруженная часть остаётся на экране: не вышло дочитать — это не повод её прятать.
+        if (run === state.drawerRun) $('productHistory').innerHTML = (events.length ? `<ol class="timeline">${events.map(historyEvent).join('')}</ol>` : '') + `<p class="error-text">${h(e.message)}</p><button class="button" id="historyMore">Повторить</button>`;
         if ($('historyMore')) $('historyMore').onclick = more;
       } finally { busy = false; }
     }

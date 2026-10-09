@@ -21,7 +21,7 @@ const root = path.resolve(__dirname, '..');
         return route.fulfill({body:fs.readFileSync(file),contentType:'text/html; charset=utf-8'});
       }
       if(url.hostname !== 'api.argus-ai.online') return route.abort();
-      if(url.pathname === '/api/invoices' || url.pathname === '/api/cells/rows') return route.fulfill({json:[]});
+      if(['/api/invoices','/api/cells/rows'].includes(url.pathname)) return route.fulfill({json:[]});
       if(url.pathname === '/api/inventory/tasks') return route.fulfill({json:[{id:'test-task',label:'1.1.1',reason:'Тестовый пересчёт'}]});
       if(url.pathname === '/api/inventory/tasks/test-task/open') return route.fulfill({json:{id:'test-task',snapshotId:'a6ab101b-bdd2-4583-b39c-06915c5f4775',label:'1.1.1',reason:'Тестовый пересчёт',expected:products.map((p,i)=>({...p,quality:'good',qty:i?7:4}))}});
       if(url.pathname === '/api/inventory/products') {
@@ -32,12 +32,17 @@ const root = path.resolve(__dirname, '..');
         counts.push(request.postDataJSON());
         return route.fulfill({json:{matched:false}});
       }
-      throw new Error('Unexpected test API request: '+url.pathname);
+      // Остальное — списки, которые главный экран подгружает при запуске (задания, поставки…): пусто.
+      // Запись, которой тест не ждёт, — ошибка теста.
+      if(request.method() === 'GET') return route.fulfill({json:[]});
+      throw new Error('Unexpected test API write: '+request.method()+' '+url.pathname);
     });
-    await page.addInitScript(()=>{
-      localStorage.setItem('argus_token','synthetic-offline-token');
-      localStorage.setItem('argus_role','worker');
-    });
+    // auth.js берёт только живой вход своей роли — похожий на настоящий.
+    const token = 'test.' + Buffer.from(JSON.stringify({role:'worker',staffKeyId:'test-key',warehouseId:'test-warehouse'})).toString('base64url') + '.test';
+    await page.addInitScript(t=>{
+      localStorage.setItem('argus_auth_worker',t);
+      sessionStorage.setItem('argus_tab_role','worker');
+    },token);
     await page.goto('http://argus.test/loader.html');
     await page.evaluate(()=>openInventory());
     await page.getByText('посчитать →',{exact:true}).click();

@@ -4,7 +4,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require(process.env.ARGUS_PLAYWRIGHT_MODULE || 'playwright');
 const root = path.resolve(__dirname, '..');
-const expectBug = process.argv.includes('--expect-bug');
+
+// Вход должен быть похож на настоящий: auth.js берёт только живой вход своей роли.
+const TOKEN = 'test.' + Buffer.from(JSON.stringify({ role: 'seller', sellerKeyId: 'test-key', warehouseId: 'test-warehouse' })).toString('base64url') + '.test';
+
+// Кабинет открылся: название продавца в шапке и страница дочитала данные.
+const ready = (page) => page.waitForFunction(() => document.getElementById('companyName').textContent === 'Тестовый продавец'
+  && document.getElementById('view').getAttribute('aria-busy') === 'false');
 
 (async () => {
   const browser = await chromium.launch({ headless: true, channel: 'chrome' });
@@ -32,13 +38,14 @@ const expectBug = process.argv.includes('--expect-bug');
           if (route.request().postDataJSON().keyCode === 'bad-test-key') {
             return route.fulfill({ status: 401, json: { error: 'Неверный тестовый ключ' } });
           }
-          return route.fulfill({ json: { token: 'test-token-only', companyName: 'Тестовый продавец', warehouseName: 'Тестовый склад' } });
+          return route.fulfill({ json: { token: TOKEN, companyName: 'Тестовый продавец', warehouseName: 'Тестовый склад' } });
         }
-        assert.equal(route.request().headers().authorization, 'Bearer test-token-only');
+        assert.equal(route.request().headers().authorization, 'Bearer ' + TOKEN);
         if (url.pathname.endsWith('/profile')) return route.fulfill({ json: { id: 'test', name: 'Тестовый продавец' } });
         if (url.pathname.endsWith('/catalog')) return route.fulfill({ json: { products: [] } });
-        if (url.pathname.endsWith('/stock')) return route.fulfill({ json: [] });
-        throw Error('Unexpected API path: ' + url.pathname);
+        if (url.pathname.endsWith('/stock')) return route.fulfill({ json: { rows: [], summary: null } });
+        // Остальное кабинет подгружает «дополнением» (заказы, склады, приходы…) и без него живёт.
+        return route.fulfill({ status: 404, json: { error: 'Нет в тестовых данных' } });
       });
       await page.goto('http://argus.test/client_access.html' + suffix);
       await page.locator('#loginName').fill('Тест');
@@ -48,37 +55,28 @@ const expectBug = process.argv.includes('--expect-bug');
       assert.equal(await page.locator('#loginSubmit').isEnabled(), true);
       await page.locator('#loginKey').fill('valid-test-key');
       await page.locator('#loginSubmit').click();
-      if (expectBug) {
-        await page.waitForFunction(() => localStorage.getItem('argus_token') === 'test-token-only');
-        assert.equal(await page.locator('#loginScreen').isVisible(), true);
-        assert.equal(await page.locator('#loginSubmit').isDisabled(), true);
-        assert.equal(documents, 1);
-        await page.reload();
-      }
-      await page.locator('#productGroups').waitFor();
+      await ready(page);
       assert.equal(await page.locator('#loginScreen').isVisible(), false);
       assert.equal(await page.locator('#companyName').textContent(), 'Тестовый продавец');
       assert.equal(documents, 2);
       assert.equal(logins, 2); // One rejected attempt, one successful attempt.
       assert.equal(new URL(page.url()).hash, '#products');
-      if (!expectBug) {
       await page.locator('#accountButton').click();
       await page.locator('#logoutButton').click();
-        await page.locator('#loginScreen').waitFor();
-        assert.equal(await page.evaluate(() => localStorage.getItem('argus_token')), null);
-        assert.equal(await page.locator('#app').isVisible(), false);
-        assert.equal(documents, 3);
-        await page.locator('#loginName').fill('Повторный вход');
-        await page.locator('#loginKey').fill('valid-test-key');
-        await page.locator('#loginSubmit').click();
-        await page.locator('#productGroups').waitFor();
-        assert.equal(documents, 4);
-        assert.equal(logins, 3);
-      }
+      await page.locator('#loginScreen').waitFor();
+      // У каждой роли свой вход (auth.js): продавец — argus_auth_seller.
+      assert.equal(await page.evaluate(() => localStorage.getItem('argus_auth_seller')), null);
+      assert.equal(await page.locator('#app').isVisible(), false);
+      assert.equal(documents, 3);
+      await page.locator('#loginName').fill('Повторный вход');
+      await page.locator('#loginKey').fill('valid-test-key');
+      await page.locator('#loginSubmit').click();
+      await ready(page);
+      assert.equal(documents, 4);
+      assert.equal(logins, 3);
       assert.deepEqual(errors, []);
       await context.close();
     }
-    console.log(expectBug ? 'REPRODUCED: login sticks until manual reload, on all three canonical URLs' :
-      'PASS: form login, logout and re-login work without manual reload; plain URL, #products, #orders; failed login stays retryable');
+    console.log('PASS: form login, logout and re-login work without manual reload; plain URL, #products, #orders; failed login stays retryable');
   } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });
