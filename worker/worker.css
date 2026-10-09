@@ -1,0 +1,26 @@
+@font-face{font-family:Golos;src:url('fonts/golos-text.ttf') format('truetype');font-display:swap}
+body.argus-worker-root{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;margin:0;padding:0;overflow-x:visible}
+body.argus-worker-root *{box-sizing:border-box}
+body.argus-worker-root>.phone{flex-shrink:0;min-width:0;width:100%;margin:16px auto}
+body.argus-worker-root>#workerStatus{width:100%;flex-shrink:0}
+body.argus-worker-root .supply-title{overflow-wrap:anywhere;word-break:break-word}
+@media(max-width:480px){body.argus-worker-root>.phone{margin:0;min-height:calc(100dvh - 120px)}}
+#workerStatus,#workerQueue,.worker-login,.worker-scan,#workerScanInput{font-family:Golos,'Golos Text',system-ui,sans-serif;font-size:16px;line-height:1.45}
+#workerStatus{position:relative;z-index:1;padding:10px 16px;background:#182d28;color:#e8f2ed;border-bottom:1px solid #5b8778;display:flex;align-items:center;flex-wrap:wrap;gap:8px 16px;overflow-wrap:anywhere}
+#workerStatus[data-state=queued]{background:#392f1d;color:#ffe6ae;border-color:#ad8746}
+#workerStatus[data-state=conflict]{background:#42272a;color:#ffdddd;border-color:#b86b72}
+#workerStatus small{display:block;flex-basis:100%;font-size:14px}
+.worker-status-actions{display:flex;flex-wrap:wrap;gap:8px;margin-left:auto}
+.worker-status-actions a{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 12px;color:inherit;border:1px solid #61736a;border-radius:10px;text-underline-offset:3px}
+#workerStatus button,#workerQueue button,.worker-scan,.worker-login button{min-height:48px;padding:10px 16px;border:1px solid #61736a;border-radius:10px;background:#22382e;color:#f2f7f4;font:inherit;cursor:pointer;white-space:normal}
+#workerStatus button:focus-visible,#workerQueue button:focus-visible,.worker-login input:focus-visible,.worker-login button:focus-visible,.worker-scan:focus-visible,#workerScanInput:focus-visible{outline:3px solid #ccedba;outline-offset:2px}
+#workerQueue{box-sizing:border-box;width:min(620px,calc(100vw - 24px));max-height:calc(100dvh - 32px);padding:20px;border:1px solid #61736a;border-radius:18px;background:#141e1a;color:#edf2ee;overflow:auto}
+#workerQueue::backdrop{background:#000b}
+#workerQueue h2{font-size:24px;line-height:1.2;margin:0 0 16px}
+#workerQueue p{margin:8px 0}#workerQueue button{margin:8px 8px 0 0}
+.worker-command{padding:14px 0;border-bottom:1px solid #3e5045;overflow-wrap:anywhere}.worker-command small{font-size:13px;color:#c0d0c5}.worker-command[data-state=conflict]{color:#ffc7c7}
+.worker-scan{display:block;width:100%;margin:0 0 8px;background:#b9d3b0;color:#16231b;border:0;font-weight:600}
+#workerScanInput{display:block;box-sizing:border-box;min-height:48px;width:100%;background:#19261f;color:#f3f6f4;border:1px solid #61736a;border-radius:10px;padding:10px 12px;margin:0 0 16px}#workerScanInput::placeholder{color:#b9c6bc}
+.worker-login{box-sizing:border-box;margin:0;min-height:100dvh;background:#121b16;color:#edf3ee;padding:clamp(18px,6vw,64px);display:grid;place-items:center}
+.worker-login *{box-sizing:border-box}.worker-login main{max-width:460px;width:100%}.worker-login h1{font-size:32px;line-height:1.12;margin:10px 0 16px}.worker-login p{color:#c9d5cc}.worker-login label{display:block;margin:24px 0 8px}.worker-login input{width:100%;min-height:52px;border:1px solid #708678;background:#1b2a21;color:#edf3ee;border-radius:10px;padding:12px;font:inherit}.worker-login button{display:block;width:100%;margin:14px 0;background:#b9d3b0;color:#16231b;border:0;font-weight:600}.worker-login button:disabled{opacity:.65;cursor:wait}.worker-login a{color:#c7e9b6}.worker-login .brand{letter-spacing:.12em;font-weight:700}.worker-login [role=alert]{color:#ffd1d1}.worker-login details{margin-top:28px}.worker-login summary{min-height:48px;cursor:pointer;line-height:48px}.worker-login ol{padding-left:24px}.worker-login li{margin:10px 0}
+@media(max-width:600px){#workerStatus{padding:8px 12px}.worker-status-actions{margin-left:0;width:100%}.worker-status-actions button{flex:1 1 160px;overflow-wrap:normal}#workerQueue{padding:16px}}

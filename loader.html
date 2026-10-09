@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Аргус — рабочее место</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Аргус · Грузчик">
 <link rel="stylesheet" href="fonts.css?v=f77584bf">
 <link rel="stylesheet" href="seller-fonts.css?v=d1da12bc">
 <style>
@@ -279,18 +281,29 @@
   .product-row.done{opacity:0.45; cursor:default;}
   .product-row-name{font-size:14px; font-weight:600;}
   .product-row-sub{font-size:12px; color:var(--muted); margin-top:3px; font-family:var(--mono);}
+  .home-error{margin-bottom:16px;padding:16px;border:1px solid var(--accent);border-radius:12px;background:var(--panel);color:var(--text);}
+  .home-error-text{margin:0 0 12px;font-size:16px;line-height:1.5;overflow-wrap:anywhere;}
+  .home-retry{min-height:48px;padding:10px 18px;border:1px solid var(--accent);border-radius:10px;background:transparent;color:var(--text);font:600 16px/1.4 var(--sans);cursor:pointer;}
+  .home-retry:focus-visible{outline:3px solid var(--accent);outline-offset:3px;}
   /* Сканер QR листа сборки (06.10.2026). */
   .scan-open{display:flex; align-items:center; justify-content:center; gap:8px; width:100%; margin-top:12px; padding:13px 14px; border:1px solid var(--accent); border-radius:12px; background:transparent; color:var(--accent); font:600 15px/1.2 var(--sans); cursor:pointer;}
   .scan-open span{font-size:18px; line-height:1;}
-  .scan-overlay{position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(8,10,12,0.94);}
+  .scan-overlay{position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center; padding:16px; overflow-y:auto; background:rgba(8,10,12,0.94);}
   .scan-overlay[hidden]{display:none;}
-  .scan-box{display:flex; flex-direction:column; align-items:center; gap:14px; width:100%; max-width:440px;}
+  .scan-box{display:flex; flex-direction:column; align-items:center; gap:14px; width:100%; max-width:440px; margin:auto;}
   .scan-title{font:600 17px/1.35 var(--sans); color:var(--text); text-align:center;}
-  .scan-view{position:relative; width:100%; aspect-ratio:1/1; border-radius:16px; overflow:hidden; background:#000;}
-  .scan-view video{position:absolute; inset:0; width:100%; height:100%; object-fit:cover;}
-  .scan-frame{position:absolute; inset:14%; border:3px solid var(--accent-2); border-radius:16px; box-shadow:0 0 0 999px rgba(0,0,0,0.25);}
-  .scan-status{min-height:40px; font-size:14px; line-height:1.4; color:var(--muted); text-align:center;}
-  .scan-close{width:100%; padding:14px; border:1px solid var(--line); border-radius:12px; background:var(--panel); color:var(--text); font:600 16px/1.2 var(--sans); cursor:pointer;}
+  .scan-view{position:relative; width:100%; aspect-ratio:1/1; max-height:50vh; max-height:50dvh; border-radius:16px; overflow:hidden; background:#000;}
+  .scan-view video{position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0; pointer-events:none;}
+  .scan-view[data-ready="true"] video{opacity:1;}
+  .scan-hint{position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding:24px; color:var(--text); font-size:16px; line-height:1.5; text-align:center;}
+  .scan-frame{display:none; position:absolute; inset:14%; border:3px solid var(--accent-2); border-radius:16px; box-shadow:0 0 0 999px rgba(0,0,0,0.25);}
+  .scan-view[data-ready="true"] .scan-frame{display:block;}
+  .scan-view[data-ready="true"] .scan-hint{display:none;}
+  .scan-status{min-height:42px; font-size:15px; line-height:1.4; color:var(--text); text-align:center;}
+  .scan-actions{display:flex; gap:10px; width:100%;}
+  .scan-close,.scan-retry{flex:1; min-height:48px; padding:12px; border:1px solid var(--line); border-radius:12px; background:var(--panel); color:var(--text); font:600 16px/1.2 var(--sans); cursor:pointer;}
+  .scan-retry{border-color:var(--accent); color:var(--accent);}
+  .scan-retry[hidden]{display:none;}
   /* Коды строки «Все товары» — как в карточке (06.10.2026). */
   .product-row-codes{display:flex; flex-wrap:wrap; gap:4px 12px; align-items:baseline; margin-top:4px; font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums;}
   .product-row-codes b{color:var(--text); font-weight:600;}
@@ -466,8 +479,12 @@
   .job-screen.show{display:flex;}
   /* Главный экран и списки работ: сначала «что делаем», потом «что именно». */
   .home-tile{display:flex; justify-content:space-between; align-items:center; gap:14px; cursor:pointer;
+    width:100%; font:inherit; color:var(--text); text-align:left;
     background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:20px 22px;}
+  .home-tile > span:first-child{min-width:0;}
+  .home-tile-name,.home-tile-sub{display:block;}
   .home-tile:active{border-color:var(--accent);}
+  .home-tile:focus-visible,.job-logout:focus-visible,.docs-content:focus-visible,.recv-filter button:focus-visible{outline:2px solid var(--accent-2); outline-offset:3px;}
   .home-tile-name{font-size:18px; font-weight:600;}
   .home-tile-sub{font-size:13.5px; color:var(--muted); margin-top:4px; line-height:1.45;}
   .home-tile-count{font-family:var(--mono); font-size:24px; font-weight:700; color:var(--accent-2); flex-shrink:0;}
@@ -485,7 +502,8 @@
   .home-work-sub{font-size:14px; color:var(--muted); margin-top:4px; line-height:1.4;}
   .home-work-go{flex:0 0 auto; font-size:14px; font-weight:700; color:var(--yellow); white-space:nowrap;}
   .home-work.active .home-work-go{color:var(--accent-2);}
-  .job-logout{font-size:13px; color:var(--muted); cursor:pointer; padding:8px 0; margin-left:auto;}
+  .job-logout{font:inherit; font-size:14px; color:var(--text); cursor:pointer; padding:8px 12px; margin-left:auto;
+    min-height:44px; background:none; border:1px solid var(--line); border-radius:10px;}
   .sup-card{background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:18px 20px; cursor:pointer;}
   .sup-card:active{border-color:var(--accent);}
   .sup-card-top{display:flex; justify-content:space-between; align-items:center; gap:10px;}
@@ -942,7 +960,7 @@
      крупно: ячейка, название, артикул продавца, штрихкод, артикул WB, сколько. */
   .supply-head{text-align:center;}
   .supply-head .job-back{text-align:left;}
-  .supply-title{font-family:var(--sans); font-weight:700; font-size:30px; letter-spacing:0.3px; color:var(--accent-2);}
+  .supply-title{font-family:var(--sans); font-weight:700; font-size:30px; letter-spacing:0.3px; color:var(--accent-2); overflow-wrap:anywhere;}
   .supply-sub{font-size:15px;}
   .asm-line{font-size:15px; line-height:1.45; padding:12px 14px; border-radius:12px; border:1px solid var(--line);
     background:var(--panel); color:var(--text);}
@@ -1137,6 +1155,10 @@
   }
   /* ===================== Приёмка (задание 27.09.2026, второе) ===================== */
   /* Список приходов: поиск и фильтры сверху, приехавшая машина — заметно. */
+  /* Фильтры и приходы прокручиваются вместе: число продавцов не отнимает
+     всё место у списка в корпусе фиксированной высоты. */
+  .docs-content{flex:1; min-height:0; overflow-y:auto;}
+  .docs-content .job-body{flex:none; overflow:visible;}
   .recv-filter{display:flex; flex-direction:column; gap:10px; padding:16px 24px 0;}
   .recv-search{width:100%; background:var(--panel); border:1px solid var(--line); border-radius:12px;
     padding:13px 14px; color:var(--text); font:inherit; font-size:16px;}
@@ -1147,7 +1169,7 @@
   /* Варианты фильтра переносятся на новую строку, а не уезжают вбок:
      прокрутку внутри полоски на телефоне никто не находит. */
   .recv-filter-row .pick-seg{flex:0 1 auto; min-width:0; flex-wrap:wrap; overflow:visible;}
-  .recv-filter-row .pick-seg button{flex:0 1 auto;}
+  .recv-filter-row .pick-seg button{flex:0 1 auto; min-width:0; min-height:44px; white-space:normal; overflow-wrap:anywhere;}
   .recv-found{font-size:13px; color:var(--muted);}
   .recv-row{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:14px 16px;
     cursor:pointer; display:flex; flex-direction:column; gap:6px;}
@@ -1244,9 +1266,9 @@
     <div class="scan-overlay" id="scanOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="scanTitle">
       <div class="scan-box">
         <div class="scan-title" id="scanTitle">Наведите камеру на QR листа сборки</div>
-        <div class="scan-view"><video id="scanVideo" playsinline muted></video><div class="scan-frame" aria-hidden="true"></div></div>
+        <div class="scan-view" id="scanView"><video id="scanVideo" autoplay playsinline muted disablepictureinpicture aria-hidden="true"></video><div class="scan-hint" id="scanHint">Ожидаем изображение камеры…</div><div class="scan-frame" aria-hidden="true"></div></div>
         <div class="scan-status" id="scanStatus" role="status"></div>
-        <button type="button" class="scan-close" onclick="closeScanner()">Закрыть</button>
+        <div class="scan-actions"><button type="button" class="scan-retry" id="scanRetry" onclick="retryScanner()" hidden>Повторить</button><button type="button" class="scan-close" onclick="closeScanner()">Закрыть</button></div>
       </div>
     </div>
 
@@ -1258,7 +1280,7 @@
             <div class="job-title">Что делаем?</div>
             <div class="job-sub" id="homeSub">Загружаю…</div>
           </div>
-          <div class="job-logout" onclick="logout()">Выйти</div>
+          <button type="button" class="job-logout" onclick="logout()">Выйти</button>
         </div>
         <button type="button" class="scan-open" onclick="openScanner()"><span aria-hidden="true">⌗</span> Сканировать QR листа сборки</button>
       </div>
@@ -1317,8 +1339,10 @@
       </div>
       <!-- Поиск и фильтры приходов (владелец 27.09.2026): привоз продавца
            тонул сто шестьдесят седьмым в списке без поиска. -->
-      <div class="recv-filter" id="docsFilter" style="display:none;"></div>
-      <div class="job-body" id="docsBody"></div>
+      <div class="docs-content" tabindex="0" role="region" aria-labelledby="docsTitle">
+        <div class="recv-filter" id="docsFilter" style="display:none;"></div>
+        <div class="job-body" id="docsBody"></div>
+      </div>
     </div>
 
     <!-- Приход: как поставка у сборки — номер один раз по центру, кто
@@ -1827,7 +1851,13 @@
 <script src="auth.js?v=36b93e56"></script>
 <script src="back.js?v=4901b838"></script>
 <script>
-  const API_BASE = 'https://api.argus-ai.online';
+  const API_BASE = window.ArgusWorker ? ArgusWorker.apiBase : 'https://api.argus-ai.online';
+  const WORKER_LOGIN = window.ArgusWorker ? 'login.html' : 'worker-login.html';
+  if(!window.ArgusWorker){
+    const manifest = document.createElement('link');
+    manifest.rel = 'manifest'; manifest.href = 'worker-web.webmanifest';
+    document.head.appendChild(manifest);
+  }
   // Вход работника — на своём месте (auth.js): вход владельца или продавца
   // в соседней вкладке его не затирает.
   const AUTH = window.ArgusAuth ? ArgusAuth.get(['worker']) : null;
@@ -1836,7 +1866,7 @@
   if(!AUTH){
     // Скан QR листа до входа: адрес с поставкой дождётся входа.
     try{ if(location.hash) sessionStorage.setItem('argus_after_login', location.hash); } catch(e){}
-    window.location.href = 'login.html';
+    window.location.href = WORKER_LOGIN;
     throw new Error('not authenticated');
   }
 
@@ -1861,6 +1891,22 @@
   }
 
   async function apiFetch(path, options = {}){
+    if(window.ArgusWorker){
+      try {
+        return path === '/api/journal/pause' && options.method === 'POST'
+          ? await ArgusWorker.recordPause(options.body || {})
+          : await ArgusWorker.request(path, options);
+      } finally { TOKEN = AUTH.token; }
+    }
+    // Другая вкладка могла продлить вход, пока эта была закрыта или заморожена.
+    const savedAuth = ArgusAuth.get(['worker']);
+    if(!savedAuth || !sameUser(savedAuth.token, TOKEN)){
+      window.location.href = WORKER_LOGIN;
+      throw new Error('войдите ключом работника');
+    }
+    TOKEN = savedAuth.token;
+    AUTH.token = TOKEN;
+    const requestToken = TOKEN;
     const res = await fetch(API_BASE + path, {
       method: options.method || 'GET',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN },
@@ -1869,13 +1915,16 @@
     // Сервер продлевает вход, пока человек работает: свежий токен приходит
     // в заголовке — берём его, и выкидывать каждые 45 минут перестаёт.
     const renewed = res.headers.get('X-Argus-Token');
-    if(renewed && sameUser(renewed, TOKEN)){
-      ArgusAuth.renew(ROLE, TOKEN, renewed);
+    if(renewed && sameUser(renewed, requestToken)){
+      ArgusAuth.renew(ROLE, requestToken, renewed);
       TOKEN = renewed;
+      AUTH.token = renewed;
     }
     if(res.status === 401){
-      ArgusAuth.clear(ROLE, TOKEN);
-      window.location.href = 'login.html';
+      // Старый ответ не удаляет более свежий вход из соседней вкладки.
+      const current = ArgusAuth.get(['worker']);
+      if(!current || current.token === requestToken) ArgusAuth.clear(ROLE, requestToken);
+      window.location.href = WORKER_LOGIN;
       throw new Error('сессия истекла');
     }
     const data = await res.json().catch(() => null);
@@ -1883,9 +1932,19 @@
     return data;
   }
 
-  function logout(){
-    ArgusAuth.clear(ROLE, TOKEN);
-    window.location.href = 'login.html';
+  let logoutPending = false;
+  async function logout(){
+    if(logoutPending) return;
+    logoutPending = true;
+    try {
+      if(window.ArgusWorker && ArgusWorker.native){
+        showToast('Сохраняем паузу и проверяем действия перед выходом…');
+        await ArgusWorker.beforeLogout();
+      }
+      ArgusAuth.clear(ROLE, TOKEN);
+      window.location.href = WORKER_LOGIN;
+    } catch(error){ showToast(error.message); }
+    finally { logoutPending = false; }
   }
 
   let invoices = [];
@@ -1956,34 +2015,52 @@
   // сборки поставки (…/loader.html#paper=<поставка>); чужие ссылки не открываем.
   // Распознаёт сам браузер (BarcodeDetector), а где его нет (iPhone) — jsQR
   // с jsDelivr, с проверкой подлинности файла.
-  let scanStream = null, scanTimer = null, scanBusy = false;
+  let scanStream = null, scanTimer = null, scanDeadline = null, scanCancelFrame = null, scanGeneration = 0, scanKind = 'paper';
+  const workerBackButtons = '.job-back, .done-back, .sheet-back, .sheet-back-btn, .map-back, #invoiceSwitch';
   const scanStatus = (text) => { document.getElementById('scanStatus').textContent = text; };
   function loadJsQr(){
     return new Promise((resolve, reject) => {
-      if(window.jsQR) return resolve();
+      if(typeof window.jsQR === 'function') return resolve();
       const s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
-      s.integrity = 'sha256-vEDIoVGWI2sjFNsIVvcsoLSZgM1UE7jIUqc0n1/uCFk=';
+      s.src = window.ArgusWorker ? 'jsqr.js' : 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
+      if(!window.ArgusWorker) s.integrity = 'sha256-vEDIoVGWI2sjFNsIVvcsoLSZgM1UE7jIUqc0n1/uCFk=';
       s.crossOrigin = 'anonymous';
-      s.onload = () => resolve();
-      s.onerror = () => reject(new Error('Не загрузился распознаватель QR — проверьте интернет'));
+      const finish = ok => {
+        clearTimeout(timeout); s.onload = s.onerror = null;
+        if(ok){ resolve(); return; }
+        s.remove();
+        reject(new Error('Не загрузился распознаватель QR. Проверьте интернет и нажмите «Повторить».'));
+      };
+      const timeout = setTimeout(() => finish(false), 10000);
+      s.onload = () => finish(typeof window.jsQR === 'function');
+      s.onerror = () => finish(false);
       document.head.appendChild(s);
     });
   }
   async function makeQrReader(){
+    let detector = null;
     if('BarcodeDetector' in window){
       try{
         const formats = await window.BarcodeDetector.getSupportedFormats();
         if(formats.includes('qr_code')){
-          const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
-          return async (video) => { const found = await detector.detect(video); return found[0] ? found[0].rawValue : null; };
+          detector = new window.BarcodeDetector({ formats: ['qr_code'] });
         }
       } catch(e){}
     }
-    await loadJsQr();
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    let canvas, ctx;
+    const prepareFallback = async () => {
+      await loadJsQr();
+      canvas = document.createElement('canvas');
+      ctx = canvas.getContext('2d', { willReadFrequently: true });
+    };
+    if(!detector) await prepareFallback();
     return async (video) => {
+      if(detector){
+        try{ const found = await detector.detect(video); return found[0] ? found[0].rawValue : null; }
+        catch(e){ detector = null; }
+      }
+      // Some devices advertise QR support but reject detect() on real frames.
+      if(!canvas) await prepareFallback();
       const w = video.videoWidth, h = video.videoHeight;
       if(!w || !h) return null;
       const k = Math.min(1, 800 / Math.max(w, h));
@@ -1994,44 +2071,103 @@
       return code ? code.data : null;
     };
   }
-  async function openScanner(){
+  function stopScannerCapture(){
+    clearInterval(scanTimer); scanTimer = null;
+    clearTimeout(scanDeadline); scanDeadline = null;
+    if(scanCancelFrame){ scanCancelFrame(); scanCancelFrame = null; }
+    if(scanStream){ scanStream.getTracks().forEach(t => t.stop()); scanStream = null; }
+    const video = document.getElementById('scanVideo');
+    video.pause(); video.srcObject = null;
+    document.getElementById('scanView').dataset.ready = 'false';
+  }
+  function failScanner(generation, message){
+    if(generation !== scanGeneration) return;
+    ++scanGeneration;
+    stopScannerCapture();
+    document.getElementById('scanHint').textContent = 'Камера не запущена';
+    document.getElementById('scanRetry').hidden = false;
+    scanStatus(message);
+  }
+  function firstScannerFrame(video){
+    return new Promise((resolve, reject) => {
+      let frame = null, timeout = null;
+      const finish = error => {
+        clearTimeout(timeout);
+        video.removeEventListener('loadeddata', check);
+        video.removeEventListener('playing', check);
+        if(frame !== null && video.cancelVideoFrameCallback) video.cancelVideoFrameCallback(frame);
+        scanCancelFrame = null;
+        error ? reject(error) : resolve();
+      };
+      const check = () => { if(video.readyState >= 2 && video.videoWidth > 0) finish(); };
+      scanCancelFrame = () => finish(new Error('scanner_closed'));
+      timeout = setTimeout(() => finish(new Error('camera_no_frame')), 10000);
+      if(video.requestVideoFrameCallback) frame = video.requestVideoFrameCallback(() => finish());
+      else {
+        video.addEventListener('loadeddata', check); video.addEventListener('playing', check); check();
+      }
+    });
+  }
+  async function openScanner(options = {}){
     const overlay = document.getElementById('scanOverlay');
     const video = document.getElementById('scanVideo');
+    const generation = ++scanGeneration;
+    stopScannerCapture();
+    scanKind = options.kind === 'cell' ? 'cell' : 'paper';
+    document.getElementById('scanTitle').textContent = scanKind === 'cell' ? 'Наведите камеру на QR ячейки' : 'Наведите камеру на QR листа сборки';
+    document.getElementById('scanHint').textContent = 'Ожидаем изображение камеры…';
+    document.getElementById('scanRetry').hidden = true;
+    video.autoplay = true; video.muted = true; video.defaultMuted = true; video.playsInline = true; video.controls = false;
+    video.removeAttribute('controls'); video.removeAttribute('poster');
     overlay.hidden = false;
+    if(window.argusBackButton) argusBackButton({ buttons: '#scanOverlay .scan-close' });
     scanStatus('Включаю камеру…');
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-      scanStatus('Камера в этом браузере недоступна. Откройте кабинет в Chrome или Safari.');
+      failScanner(generation, 'Камера в этом браузере недоступна. Откройте кабинет в Chrome или Safari.');
       return;
     }
+    scanDeadline = setTimeout(() => failScanner(generation, 'Камера не ответила. Проверьте разрешение на камеру и нажмите «Повторить».'), 20000);
     try{
-      scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+      // A closed or retried permission request may still return a live camera later.
+      if(generation !== scanGeneration){ stream.getTracks().forEach(t => t.stop()); return; }
+      clearTimeout(scanDeadline); scanDeadline = null;
+      scanStream = stream;
+      stream.getVideoTracks().forEach(track => track.addEventListener('ended', () => failScanner(generation, 'Камера отключилась. Нажмите «Повторить», чтобы включить её снова.'), { once: true }));
+      video.srcObject = stream;
+      await Promise.all([Promise.resolve(video.play()).catch(() => { const error = new Error('video_play_failed'); error.name = 'PlaybackError'; throw error; }), firstScannerFrame(video)]);
+      if(generation !== scanGeneration) return;
+      document.getElementById('scanView').dataset.ready = 'true';
     } catch(e){
+      if(generation !== scanGeneration) return;
       const why = {
-        NotAllowedError: 'Нет доступа к камере. Разрешите камеру для этого сайта в настройках браузера и нажмите кнопку ещё раз.',
-        SecurityError: 'Нет доступа к камере. Разрешите камеру для этого сайта в настройках браузера и нажмите кнопку ещё раз.',
+        NotAllowedError: 'Нет доступа к камере. Разрешите камеру в настройках приложения или сайта и нажмите «Повторить».',
+        SecurityError: 'Нет доступа к камере. Разрешите камеру в настройках приложения или сайта и нажмите «Повторить».',
         NotFoundError: 'Камера не найдена. На этом устройстве нет камеры или она отключена.',
         OverconstrainedError: 'Камера не найдена. На этом устройстве нет подходящей камеры.',
         NotReadableError: 'Камера занята другим приложением. Закройте его и нажмите кнопку ещё раз.',
+        PlaybackError: 'Не удалось запустить изображение камеры. Нажмите «Повторить».',
       }[e && e.name];
-      scanStatus(why || 'Камера не включилась. Закройте окно и попробуйте ещё раз.');
+      failScanner(generation, e.message === 'camera_no_frame' ? 'Камера не передаёт изображение. Закройте другие приложения с камерой и нажмите «Повторить».' : why || 'Камера не включилась. Нажмите «Повторить» или закройте окно.');
       return;
     }
-    if(overlay.hidden){ closeScanner(); return; }   // закрыли, пока камера включалась
-    video.srcObject = scanStream;
-    try{ await video.play(); } catch(e){}
     let read;
+    scanStatus('Готовлю распознавание QR…');
     try{ read = await makeQrReader(); }
-    catch(e){ scanStatus(e.message); return; }
+    catch(e){ failScanner(generation, e.message); return; }
+    if(generation !== scanGeneration) return;
     scanStatus('Ищу QR…');
+    let busy = false;
     scanTimer = setInterval(async () => {
-      if(scanBusy || !scanStream) return;
-      scanBusy = true;
-      try{ const text = await read(video); if(text) onQrScanned(text); }
-      catch(e){}
-      finally{ scanBusy = false; }
+      if(busy || !scanStream || generation !== scanGeneration) return;
+      busy = true;
+      try{ const text = await read(video); if(text && generation === scanGeneration) onQrScanned(text); }
+      catch(e){ failScanner(generation, 'Не удалось распознать QR. Проверьте интернет и нажмите «Повторить» или выберите задание из списка.'); }
+      finally{ busy = false; }
     }, 250);
   }
   function onQrScanned(text){
+    if(window.ArgusWorker && ArgusWorker.handleQr(text)) return;
     const m = /\/loader\.html#paper=([0-9a-f-]{36})$/i.exec(String(text || '').trim());
     if(!m){ scanStatus('Это не QR листа сборки Аргуса. Наведите камеру на QR в углу листа.'); return; }
     closeScanner();
@@ -2040,15 +2176,17 @@
     refreshWork().catch(() => {}).then(() => openPaper(m[1], { start: true }));
   }
   function closeScanner(){
-    clearInterval(scanTimer); scanTimer = null;
-    if(scanStream){ scanStream.getTracks().forEach(t => t.stop()); scanStream = null; }
-    const video = document.getElementById('scanVideo');
-    if(video) video.srcObject = null;
+    ++scanGeneration;
+    if(window.ArgusWorker) ArgusWorker.cancelScan();
+    stopScannerCapture();
     document.getElementById('scanOverlay').hidden = true;
+    if(window.argusBackButton) argusBackButton({ buttons: workerBackButtons });
   }
-  Object.assign(window, { openScanner, closeScanner });
+  function retryScanner(){ return openScanner({ kind: scanKind }); }
+  Object.assign(window, { openScanner, closeScanner, retryScanner });
   // Ушёл со вкладки — камеру выключить.
-  document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'hidden' && scanStream) closeScanner(); });
+  document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'hidden' && !document.getElementById('scanOverlay').hidden) closeScanner(); });
+  window.addEventListener('pagehide', closeScanner);
 
   // ---------- Автообновление (владелец 06.10.2026) ----------
   // Грузчик не должен сам обновлять страницу: раз в 30 секунд списки
@@ -2096,24 +2234,33 @@
   }
 
   async function selectInvoice(invoiceId, keepRun){
+    const navigation = ++screenNavigation;
     // Приход открывается своим экраном — с «Начать приёмку», таймером на
     // сервере и паузой при выходе (владелец 27.09.2026), а не сразу работой.
     const row = invoices.find(i => i.id === invoiceId);
     if(row && row.direction === 'in') return openReceipt(invoiceId);
     // Ушёл с паузы на другую работу — пауза кончилась: так и пишем
     // руководителю, а не бросаем её висеть без конца.
-    if(pauseStart) resumeTask();
+    if(pauseStart){
+      if(window.ArgusWorker && ArgusWorker.native){ if(!await resumeTask()) return; }
+      else resumeTask();
+    }
+    if(navigation !== screenNavigation) return;
+    let invoice;
+    try{
+      invoice = await apiFetch('/api/invoices/' + invoiceId);
+    } catch(e){
+      if(navigation === screenNavigation) showToast('Не удалось загрузить накладную: ' + e.message);
+      return;
+    }
+    // Старый ответ не меняет ни экран, ни рабочий документ после нового выбора.
+    if(navigation !== screenNavigation) return;
+    if(invoice.direction === 'in') return openReceipt(invoiceId);
+    currentInvoice = invoice;
     productRun = null;
     recvRun = null;
     runState = null;
     layoutRun(false);
-    try{
-      currentInvoice = await apiFetch('/api/invoices/' + invoiceId);
-    } catch(e){
-      showToast('Не удалось загрузить накладную: ' + e.message);
-      return;
-    }
-    if(currentInvoice.direction === 'in') return openReceipt(invoiceId);
     hideAllScreens();
     // Сборка поставки — одна работа, а не десять отдельных. Переходя к
     // следующему заказу той же поставки, не сбрасываем ни таймер, ни то,
@@ -2252,6 +2399,7 @@
     pauseStart = null;
     recvRun = null;
     productRun = { supplyId, preferred: sku || null };
+    if(window.ArgusWorker) ArgusWorker.publishWorkState();
     backTarget = { kind: 'supply', id: supplyId };
     postponedItems = new Set();
     try{ await reloadProductRun(); }
@@ -2284,6 +2432,7 @@
   // поле количества встаёт в строку «нужно · взял» («заявлено · принял») под
   // названием, коды товара — крупно.
   function layoutRun(on, kind = 'assembly'){
+    if(window.ArgusWorker) ArgusWorker.publishWorkState();
     const screen = document.getElementById('taskScreen');
     screen.classList.toggle('run', on);
     screen.classList.toggle('recv', on && kind === 'receiving');
@@ -2486,6 +2635,7 @@
   window.pickProductNow = pickProductNow;
 
   function renderCurrentItem(){
+    if(window.ArgusWorker) ArgusWorker.resetScan();
     document.getElementById('allProductsBtn').classList.toggle('show', Boolean(productRun));
     document.getElementById('missingBtn').style.display = isPicking() ? '' : 'none';
     document.getElementById('itemDefectBtn').classList.toggle('show', !isReturn());
@@ -3288,6 +3438,7 @@
   async function confirmItem(){
     if(isPicking()){ return confirmPick(); }
     if(isReturn()){ return confirmReturn(); }
+    if(window.ArgusWorker && currentQty > 0 && !ArgusWorker.confirmPlacement()) return;
     const item = currentInvoice.items[currentItemIndex];
     const btn = document.getElementById('confirmBtn');
     btn.disabled = true;
@@ -4074,8 +4225,10 @@
 
   const ALL_SCREENS = ['homeScreen', 'suppliesScreen', 'supplyScreen', 'paperScreen', 'docsScreen', 'receiptScreen',
     'pickListScreen', 'moveScreen', 'kitScreen', 'invScreen', 'defectScreen', 'manualReturnScreen', 'vwMoveScreen'];
+  let screenNavigation = 0;
 
   function hideAllScreens(){
+    ++screenNavigation;
     ALL_SCREENS.forEach(id => document.getElementById(id).classList.remove('show'));
     document.getElementById('taskScreen').style.display = 'none';
     document.getElementById('doneScreen').classList.remove('show');
@@ -4117,20 +4270,35 @@
     const got = await Promise.all([apiFetch('/api/invoices'), apiFetch('/api/supplies')]);
     invoices = got[0];
     supplies = got[1];
+    workerWorkListLoaded = true;
   }
+  let workerWorkListLoaded = false;
 
   async function showHome(){
     openJob('homeScreen');
+    const navigation = screenNavigation;
+    const failed = [];
+    let workFresh = false;
     document.getElementById('homeSub').textContent = 'Загружаю…';
-    try{ await refreshWork(); }
-    catch(e){ document.getElementById('homeSub').textContent = 'Не удалось обновить: ' + e.message; }
+    document.getElementById('homeBody').setAttribute('aria-busy', 'true');
+    document.querySelectorAll('#homeBody .home-retry').forEach(button => { button.disabled = true; button.textContent = 'Загружаю…'; });
+    try{ await refreshWork(); workFresh = true; }
+    catch(e){ failed.push('приходы и поставки'); }
     let counting = null;
-    try{ counting = (await apiFetch('/api/inventory/tasks')).length; } catch(e){ counting = null; }
+    try{ counting = (await apiFetch('/api/inventory/tasks')).length; } catch(e){ failed.push('задания на пересчёт'); }
     let defectCount = null;
-    try{ defectCount = (await apiFetch('/api/defects/tasks')).length; } catch(e){ defectCount = null; }
+    try{ defectCount = (await apiFetch('/api/defects/tasks')).length; } catch(e){ failed.push('задания по браку'); }
     // Задания «переложить» — плитка появляется, только когда они есть.
     let vwMoveCount = 0;
-    try{ vwMoveCount = (await apiFetch('/api/vwarehouses/move-tasks')).length; } catch(e){ vwMoveCount = 0; }
+    try{ vwMoveCount = (await apiFetch('/api/vwarehouses/move-tasks')).length; } catch(e){ vwMoveCount = null; failed.push('задания на перемещение'); }
+    if(navigation !== screenNavigation) return;
+    document.getElementById('homeBody').setAttribute('aria-busy', 'false');
+    const workKnown = workFresh || workerWorkListLoaded;
+    const errorHtml = failed.length
+      ? '<div class="home-error" role="alert"><p class="home-error-text">Не удалось обновить: ' + failed.join(', ')
+        + '. Проверьте связь и повторите.' + (!workFresh && workerWorkListLoaded ? ' Показан ранее загруженный список работ.' : '')
+        + '</p><button type="button" class="home-retry" onclick="showHome()">Повторить</button></div>'
+      : '';
 
     // Поставка без заказов (их принял WB мимо Аргуса) — собирать нечего.
     const collecting = supplies.filter(s => s.status === 'collecting' && Number(s.orders) > 0);
@@ -4162,19 +4330,19 @@
         }).join('') + '</div>'
       : '';
 
-    const tile = (onclick, name, sub, count) => '<div class="home-tile" onclick="' + onclick + '">'
-      + '<div><div class="home-tile-name">' + name + '</div><div class="home-tile-sub">' + sub + '</div></div>'
-      + '<div class="home-tile-count' + (count ? '' : ' zero') + '">' + (count == null ? '' : count || 'нет') + '</div></div>';
-    document.getElementById('homeBody').innerHTML = startedHtml +
+    const tile = (onclick, name, sub, count) => '<button type="button" class="home-tile" onclick="' + onclick + '">'
+      + '<span><span class="home-tile-name">' + name + '</span><span class="home-tile-sub">' + sub + '</span></span>'
+      + '<span class="home-tile-count' + (count ? '' : ' zero') + '">' + (count == null ? '' : count || 'нет') + '</span></button>';
+    document.getElementById('homeBody').innerHTML = errorHtml + startedHtml +
       tile('openSupplies()', 'Сборка поставок',
-        collecting.length
+        !workKnown ? 'Не удалось загрузить задания' : collecting.length
           ? ordersLeft + ' ' + pluralRu(ordersLeft, 'заказ ждёт', 'заказа ждут', 'заказов ждут') + ' сборки'
             + (loose ? ' · ещё ' + loose + ' ' + pluralRu(loose, 'отгрузка', 'отгрузки', 'отгрузок') + ' из 1С' : '')
           : (loose ? loose + ' ' + pluralRu(loose, 'отгрузка', 'отгрузки', 'отгрузок') + ' из 1С' : 'поставок на сборку нет'),
-        collecting.length + loose)
-      + tile("openDocs('in')", 'Приёмка товара', 'приходы, которые привезли на склад', receipts)
-      + tile("openDocs('return')", 'Возвраты', 'разобрать вернувшийся товар по состоянию', returns)
-      + (vwMoveCount ? tile('openVwMoves()', 'Переложить', 'товар склада продавца — в его отдельные ячейки', vwMoveCount) : '')
+        workKnown ? collecting.length + loose : null)
+      + tile("openDocs('in')", 'Приёмка товара', 'приходы, которые привезли на склад', workKnown ? receipts : null)
+      + tile("openDocs('return')", 'Возвраты', 'разобрать вернувшийся товар по состоянию', workKnown ? returns : null)
+      + (vwMoveCount !== 0 ? tile('openVwMoves()', 'Переложить', 'товар склада продавца — в его отдельные ячейки', vwMoveCount) : '')
       + tile('openDefectTasks()', 'Склад брака', 'решения продавцов: выдать, утилизировать, перепаковать', defectCount)
       + tile('openMove()', 'Перепаковка и перестановка', 'переложить товар в другую ячейку или отметить брак', null)
       + tile('openInventory()', 'Пересчёт ячеек', 'задания руководителя', counting);
@@ -4499,6 +4667,8 @@
     // Поле поиска перерисовывается вместе с фильтрами: фокус и каретку
     // возвращаем туда, где их оставил человек.
     const keep = document.activeElement && document.activeElement.id === 'recvSearch' ? document.activeElement.selectionStart : null;
+    const focusedFilter = host.contains(document.activeElement) && document.activeElement.matches('[data-recv]')
+      ? { name: document.activeElement.dataset.recv, value: document.activeElement.dataset.value } : null;
     host.innerHTML = '<input type="search" class="recv-search" id="recvSearch" placeholder="Номер, продавец, перевозчик, машина" '
       + 'value="' + escapeHTML(recvUi.q) + '" autocomplete="off" enterkeyhint="search" aria-label="Поиск прихода">'
       + row('Статус', Object.keys(RECV_STATUS).map(k => seg('status', k, RECV_STATUS[k])).join(''))
@@ -4510,6 +4680,7 @@
     if(keep != null){ box.focus(); const at = Math.min(keep, box.value.length); box.setSelectionRange(at, at); }
     host.querySelectorAll('[data-recv]').forEach(b => {
       b.onclick = () => { recvUi[b.dataset.recv] = b.dataset.value; recvUi.shown = RECV_PAGE; renderReceipts(); };
+      if(focusedFilter && b.dataset.recv === focusedFilter.name && b.dataset.value === focusedFilter.value) b.focus({ preventScroll: true });
     });
   }
 
@@ -4684,6 +4855,7 @@
     pauseStart = null;
     productRun = null;
     recvRun = { invoiceId, preferred: itemId || null, legacy: Boolean(opts.legacy) };
+    if(window.ArgusWorker) ArgusWorker.publishWorkState();
     backTarget = { kind: 'receipt', id: invoiceId };
     postponedItems = new Set();
     try{ currentInvoice = await apiFetch('/api/invoices/' + invoiceId); }
@@ -5045,7 +5217,8 @@
   };
   let recvRun = null;          // { invoiceId, preferred }
   const workNow = () => productRun ? { kind: 'assembly', id: productRun.supplyId }
-    : recvRun ? { kind: 'receiving', id: recvRun.invoiceId } : null;
+    : recvRun ? { kind: 'receiving', id: recvRun.invoiceId }
+    : window.ArgusWorker && paper && document.getElementById('paperScreen').classList.contains('show') ? { kind: 'assembly', id: paper.supplyId } : null;
 
   function applyAssemblyState(st){
     const doc = st && (st.supply || st.invoice);
@@ -5056,6 +5229,7 @@
       kind, docId: doc.id, supplyId: kind === 'assembly' ? doc.id : null, invoiceId: kind === 'receiving' ? doc.id : null,
       number: doc.number, supplyStatus: doc.status, docStatus: doc.status,
       status: a.status || null, mine: Boolean(a.mine), mode: a.mode || 'app', workerName: a.workerName || '',
+      workSessionId: a.id || null, eventSequence: Number(a.eventSequence || 0),
       startedAt: a.startedAt || null, pausedAt: a.pausedAt || null, pausedMs: Number(a.pausedMs || 0),
       pauseReason: a.pauseReason || '', endedAt: a.endedAt || null, workMs: Number(a.workMs || 0),
       comment: a.comment || '', taken: Number(st.taken || 0), total: Number(st.total || 0),
@@ -5063,6 +5237,7 @@
       // Часы телефона бывают неточны: таймер считается по часам сервера.
       skewMs: st.serverNow ? new Date(st.serverNow).getTime() - Date.now() : 0,
     };
+    if(window.ArgusWorker) ArgusWorker.publishWorkState();
     return runState;
   }
   const runActive = () => {
@@ -5371,10 +5546,22 @@
   // Вкладку скрыли или страницу закрывают — ответа ждать некогда: запрос
   // уходит с keepalive и доедет, даже если страница уже закрылась. at — когда
   // ушли на самом деле (по часам сервера).
-  function exitBeacon(atClientMs){
-    if(!runActive()) return;
+  function exitBeacon(atClientMs, nativeReplay){
+    if(!runActive() && !(nativeReplay && window.ArgusWorker && runState && runState.mine && runState.localPausePending && workNow())) return;
     const w = workNow();
     const at = new Date((atClientMs || Date.now()) + runState.skewMs).toISOString();
+    if(window.ArgusWorker){
+      const recorded = ArgusWorker.recordPause({ [WORK[w.kind].key]: w.id, reason: WORK[w.kind].exit, exit: true, at });
+      recorded.catch(e => showToast(e.message));
+      runState.status = 'paused';
+      runState.localPausePending = true;
+      runState.pausedAt = at;
+      runState.pauseReason = WORK[w.kind].exit.toLowerCase();
+      if(window.ArgusWorker) ArgusWorker.publishWorkState();
+      if(paper && document.getElementById('paperScreen').classList.contains('show')){ syncPaperFromState(); renderPaperTimer(); }
+      else showRunPaused();
+      return recorded;
+    }
     try{
       fetch(API_BASE + '/api/journal/pause', {
         method: 'POST', keepalive: true,
@@ -5391,6 +5578,7 @@
   let hiddenTimer = null;
   let exitedWhileHidden = false;
   document.addEventListener('visibilitychange', function(){
+    if(window.ArgusWorker && ArgusWorker.native) return;
     if(document.hidden){
       if(!runActive()) return;
       hiddenAt = Date.now();
@@ -5414,7 +5602,7 @@
       setTimeout(() => refreshRunState(), 800);
     }
   });
-  window.addEventListener('pagehide', function(){ exitBeacon(); });
+  window.addEventListener('pagehide', function(){ if(!window.ArgusWorker || !ArgusWorker.native) exitBeacon(); });
 
   async function refreshRunState(){
     const w = workNow();
@@ -5588,7 +5776,7 @@
      только то, чего не нашёл, и жмёт «Собрал по листу» — Аргус записывает
      взятое по ячейкам листа и шлёт руководителю «нет товара» на ненайденное.
      Начатая сборка переживает перезагрузку телефона: она в памяти браузера. */
-  const PAPER_KEY = 'argus_paper';
+  const PAPER_KEY = window.ArgusWorker ? ['argus_paper', API_BASE, authPayload.warehouseId, authPayload.staffKeyId].join('|') : 'argus_paper';
   let paper = null;          // { supplyId, number, startedAt, pausedMs, pauseAt, pauseReason, miss: {sku: found} }
   let paperLines = [];
   let paperKits = new Map();   // артикул набора → строка листа грузчика
@@ -5602,7 +5790,10 @@
   }
 
   async function openPaper(supplyId, opts = {}){
-    if(pauseStart) resumeTask();
+    if(pauseStart){
+      if(window.ArgusWorker && ArgusWorker.native){ if(!await resumeTask()) return; }
+      else resumeTask();
+    }
     openJob('paperScreen');
     backTarget = { kind: 'supply', id: supplyId };
     document.getElementById('paperSub').textContent = 'Загружаю…';
@@ -5660,6 +5851,7 @@
       applyAssemblyState(st);
       paper = { supplyId, number: st.supply.number, startedAt: null, pausedMs: 0, pauseAt: null, pauseReason: '',
         miss: saved && saved.supplyId === supplyId ? (saved.miss || {}) : {} };
+      if(window.ArgusWorker) ArgusWorker.publishWorkState();
       syncPaperFromState();
     }
     document.getElementById('paperTitle').textContent = 'По листу · ' + (d.supply && d.supply.number || '');
@@ -5724,9 +5916,24 @@
     reportPause(Object.assign({ reason }, comment ? { comment } : {}));
   }
 
-  function paperResume(){
+  async function paperResume(){
     if(!paper || !paper.pauseAt) return;
     const ms = Date.now() + (paper.skewMs || 0) - new Date(paper.pauseAt).getTime();
+    if(window.ArgusWorker && ArgusWorker.native){
+      if(nativeResumePending) return false;
+      nativeResumePending = true;
+      const btn = document.querySelector('#paperPauseBanner button');
+      const title = btn && btn.textContent;
+      if(btn){ btn.disabled = true; btn.textContent = 'Подтверждаем…'; }
+      try {
+        await reportPause({ reason: paper.pauseReason, resumed: true, pausedMs: ms });
+        // reportPause applies the confirmed server session and paper timer.
+        if(paper && paper.pauseAt){ paper.pausedMs += ms; paper.pauseAt = null; paper.pauseReason = ''; }
+        savePaper(); renderPaperTimer();
+        return true;
+      } catch(error){ return false; }
+      finally { nativeResumePending = false; if(btn){ btn.disabled = false; btn.textContent = title; } }
+    }
     paper.pausedMs += ms;
     const reason = paper.pauseReason;
     paper.pauseAt = null;
@@ -5797,7 +6004,10 @@
 
   async function finishPaper(){
     if(!paper) return;
-    if(paper.pauseAt) paperResume();
+    if(paper.pauseAt){
+      if(window.ArgusWorker && ArgusWorker.native){ if(!await paperResume()) return; }
+      else paperResume();
+    }
     const btn = document.getElementById('paperDoneBtn');
     btn.disabled = true;
     btn.textContent = 'Записываю…';
@@ -6803,7 +7013,10 @@
         }
         return r;
       })
-      .catch(e => showToast('Руководитель не получил отметку о паузе: ' + e.message));
+      .catch(e => {
+        showToast('Руководитель не получил отметку о паузе: ' + e.message);
+        if(window.ArgusWorker && ArgusWorker.native && body.resumed) throw e;
+      });
   }
 
   function setPauseBannerText(reason){
@@ -6840,10 +7053,29 @@
     reportPause(Object.assign({ reason }, comment ? { comment } : {}));
   }
 
-  function resumeTask(){
+  let nativeResumePending = false;
+  async function resumeTask(){
     if(!pauseStart) return;
     const now = new Date();
     const ms = now - pauseStart;
+    if(window.ArgusWorker && ArgusWorker.native){
+      if(nativeResumePending) return false;
+      nativeResumePending = true;
+      const last = pauseLog[pauseLog.length - 1];
+      const box = document.getElementById('pauseComment'), btn = document.getElementById('pauseResumeBtn');
+      const comment = (productRun || recvRun) && box ? box.value.trim() : '';
+      const title = btn && btn.textContent;
+      if(btn){ btn.disabled = true; btn.textContent = 'Подтверждаем…'; }
+      try {
+        await reportPause(Object.assign({ reason: last.reason, resumed: true, pausedMs: ms }, comment ? { comment } : {}));
+        totalPausedMs += ms; last.end = now; pauseStart = null;
+        if(box) box.value = '';
+        setPauseLock(false);
+        if(isPicking()) updatePickConfirm(); else updateConfirmState();
+        return true;
+      } catch(error){ return false; }
+      finally { nativeResumePending = false; if(btn){ btn.disabled = false; btn.textContent = title; } }
+    }
     totalPausedMs += ms;
     const last = pauseLog[pauseLog.length - 1];
     last.end = now;
@@ -7075,6 +7307,7 @@
   }
 
   function applyCustomCell(blockId, label){
+    if(window.ArgusWorker) document.querySelector('#customCellDisplay .custom-cell-label').textContent = 'Выбрано вручную';
     document.querySelectorAll('.cell-option').forEach(el => el.classList.remove('selected'));
     selectedCellBlockId = blockId;
     selectedCellLabel = label;
@@ -7090,9 +7323,69 @@
 
   startTaskTimer();
   // «Назад» браузера — то же, что стрелка «←» на экране (back.js).
-  argusBackButton({ buttons: '.job-back, .done-back, .sheet-back, .sheet-back-btn, .map-back, #invoiceSwitch' });
+  argusBackButton({ buttons: workerBackButtons });
 
-  init();
+  if(window.ArgusWorker){
+    ArgusWorker.bind(AUTH, {
+      context: () => {
+        const item = currentInvoice && currentInvoice.items && currentInvoice.items[currentItemIndex];
+        return { workSessionId: runState && runState.workSessionId, eventSequence: runState && runState.eventSequence,
+          skewMs: runState && runState.skewMs, status: runState && runState.status, mine: runState && runState.mine, workActive: runActive(), pauseLocal: runState && runState.localPausePending, startedAt: runState && runState.startedAt,
+          itemId: item && (item.id || item.sku), itemName: item && item.name, cellId: selectedCellBlockId,
+          cellLabel: selectedCellLabel, documentNumber: currentInvoice && currentInvoice.number,
+          unplacedQty: item ? recvLeft(item) : null };
+      },
+      findCell: id => {
+        for(const row of cellRows){
+          const b = (row.blocks || []).find(block => block.id.toLowerCase() === id.toLowerCase());
+          if(b) return { id: b.id, label: formatBlockLabel(row.row_num, b) };
+        }
+        return null;
+      },
+      selectCell: cell => {
+        if(isPicking()){
+          const i = pickSuggestion && pickSuggestion.cells.findIndex(c => c.cellBlockId === cell.id);
+          if(i == null || i < 0) throw new Error('В выбранной ячейке нет этого товара для сборки.');
+          selectPickCell(i);
+        } else applyCustomCell(cell.id, cell.label);
+      },
+      openScanner, closeScanner, scanStatus: text => { scanStatus(text); showToast(text); }, toast: showToast,
+      pause: at => exitBeacon(at, true),
+      draft: () => {
+        const item = currentInvoice && currentInvoice.items && currentInvoice.items[currentItemIndex];
+        const w = workNow();
+        if(paper && document.getElementById('paperScreen').classList.contains('show')) return {
+          kind: 'paper', id: paper.supplyId, workSessionId: runState && runState.workSessionId
+        };
+        return w && item ? { kind: w.kind, id: w.id, itemId: item.id || item.sku,
+          workSessionId: runState && runState.workSessionId, qty: currentQty, placeQty, cellId: selectedCellBlockId, cellLabel: selectedCellLabel } : null;
+      },
+      restoreDraft: async draft => {
+        if(draft.kind === 'paper') return openPaper(draft.id);
+        if(draft.kind === 'receiving') await openReceivingRun(draft.id, draft.itemId);
+        else if(draft.kind === 'assembly') await openProductRun(draft.id, draft.itemId);
+        if(!runState || runState.workSessionId !== draft.workSessionId || !runState.mine) return;
+        const item = currentInvoice && currentInvoice.items[currentItemIndex];
+        if(!item || (item.id || item.sku) !== draft.itemId) return;
+        if(Number.isFinite(draft.qty)) qtyTyped(String(draft.qty));
+        if(draft.cellId && draft.cellLabel && !isPicking()) applyCustomCell(draft.cellId, draft.cellLabel);
+        if(Number.isFinite(draft.placeQty)) placeQtyTyped(String(draft.placeQty));
+        showToast('Восстановлен незавершённый ввод. Проверьте количество и ячейку перед подтверждением.');
+      },
+      restoreActive: async () => {
+        const active = st => st && st.assembly && st.assembly.mine && st.assembly.status === 'active';
+        const receipt = invoices.find(row => active(row.work));
+        if(receipt) return openReceivingRun(receipt.id);
+        const supply = supplies.find(row => active(row.assembly));
+        if(supply) return supply.assembly.assembly.mode === 'paper' ? openPaper(supply.id) : openProductRun(supply.id);
+      },
+      noActiveWork: () => {
+        const active = st => st && st.assembly && st.assembly.mine && st.assembly.status === 'active';
+        return workerWorkListLoaded && !invoices.some(row => active(row.work)) && !supplies.some(row => active(row.assembly));
+      }
+    });
+  }
+  init().then(() => { if(window.ArgusWorker) return ArgusWorker.restoreDraft(); });
 </script>
 
 </body>
