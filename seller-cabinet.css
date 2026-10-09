@@ -531,9 +531,10 @@ dialog::backdrop { background: rgba(8, 11, 18, .6); }
   .grid th, .grid td { padding: 10px 12px; }
   .grid { font-size: 17px; }
 }
-/* Телефон: строка таблицы — карточка. Фото слева, главное справа от него,
-   остальное — «подпись … значение» строками. Листать вбок не нужно. */
-@media (max-width: 640px) {
+/* Телефон и планшет (до 900 px, правила 08.10 — 390 и 768): строка таблицы —
+   карточка. Фото слева, главное справа от него, остальное — «подпись …
+   значение» строками. Листать вбок не нужно. */
+@media (max-width: 900px) {
   .table-wrap { border: 0; background: none; overflow: visible; }
   .grid, .grid tbody { display: block; }
   .grid thead { display: none; }

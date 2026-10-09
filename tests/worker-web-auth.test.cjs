@@ -163,7 +163,7 @@ test('worker-only login and download controls fit 375/390/660/768/1440, includin
       assert.match(await page.locator('#loginError').innerText(), /Ключ не найден/);
       if ([390, 768, 1440].includes(width)) await page.screenshot({ path: path.join(output, 'worker-login-' + width + '.png'), fullPage: true });
       await page.goto(site + '/worker-app.html');
-      assert.equal(await page.locator('#downloadAndroid').getAttribute('href'), 'downloads/argus-worker-0.1.1.apk');
+      assert.equal(await page.locator('#downloadAndroid').getAttribute('href'), new URL(require('../downloads/release.json').downloadUrl).pathname.slice(1));
       await page.getByText('Как установить', { exact: true }).click(); await page.getByText('Добавить на экран «Домой»', { exact: true }).click();
       const buttons = await page.locator('a, summary, h1, h2').evaluateAll(els => els.map(el => { const r = el.getBoundingClientRect(); return { left: r.left, right: r.right, width: r.width }; }));
       assert.ok(buttons.every(r => r.left >= 0 && r.right <= width + 1 && r.width > 0));

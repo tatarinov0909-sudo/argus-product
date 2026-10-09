@@ -347,7 +347,7 @@
 
 <div id="docs"></div>
 
-<script src="auth.js?v=84f56b4f"></script>
+<script src="auth.js?v=36b93e56"></script>
 <script src="qrcode.min.js?v=e259e455"></script>
 <script>
 (function(){
@@ -913,7 +913,7 @@
     return '<table style="margin-top:14px">' + cols([14, 0, 14, 16])
       + '<thead><tr><th>Заказ</th><th>Кому и куда</th><th>Телефон</th><th>Доставка</th></tr></thead><tbody>'
       + [...seen].map(([no, to]) => '<tr><td>' + esc(no) + '</td>'
-        + '<td class="goods"><div class="goods-line"><b>' + esc(to.recipient) + '</b>, ' + esc(to.address)
+        + '<td class="goods"><div class="goods-line"><b>' + esc(to.recipient) + '</b>' + (to.address !== to.recipient ? ', ' + esc(to.address) : '')
         + (to.comment ? '<br><i>' + esc(to.comment) + '</i>' : '') + '</div></td>'
         + '<td>' + esc(to.phone || '—') + '</td>'
         + '<td>' + esc(to.service || '—') + (to.track ? '<br>' + esc(to.track) : '') + '</td></tr>').join('')

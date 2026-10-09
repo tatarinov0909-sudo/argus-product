@@ -1004,7 +1004,7 @@
   const TRACK_URLS = { 'СДЭК': 'https://www.cdek.ru/ru/tracking?order_id=', 'Почта России': 'https://www.pochta.ru/tracking?barcode=',
     'Boxberry': 'https://boxberry.ru/tracking-page?id=' };
   const trackLink = (service, track) => (track && TRACK_URLS[service]
-    ? '<a href="' + escapeHTML(TRACK_URLS[service] + encodeURIComponent(track)) + '" target="_blank" rel="noopener noreferrer">' + escapeHTML(track) + '</a>'
+    ? '<a class="track-link" href="' + escapeHTML(TRACK_URLS[service] + encodeURIComponent(track)) + '" target="_blank" rel="noopener noreferrer">' + escapeHTML(track) + '</a>'
     : escapeHTML(track || ''));
   // Номер операции окна: повтор запроса (двойное нажатие, обрыв связи) не
   // создаст второй заказ. randomUUID есть только на https.
@@ -1061,7 +1061,7 @@
     const free = (r) => (vw ? ((r.warehouses || []).find(w => w.id === vw) || {}).available : r.available);
     directOrderPicker = window.ArgusProductPicker.open({
       host: document.getElementById('directOrderPicker'), request: apiFetch, companyId,
-      maxItems: 500, templateName: 'Товары заказа', submitLabel: 'Создать заказ',
+      maxItems: 500, templateName: 'Товары заказа', submitLabel: 'Создать заказ', submitAtEnd: true,
       loadRows: async () => (await apiFetch('/api/sellers/stock?view=seller&companyId=' + encodeURIComponent(companyId))).rows,
       columns: [{ title: 'Всего', value: r => r.total }, { title: vw ? 'Свободно на складе' : 'Доступно', value: free }],
       limit: free, defaultQty: () => '1',
@@ -1126,7 +1126,7 @@
         + '<td class="ord-mono ord-no" data-label="Заказ">' + escapeHTML(o.number) + '<div class="ord-sub">' + escapeHTML(fmtDay(o.createdAt))
           + (o.createdRole === 'seller' ? ' · от продавца' : '') + '</div></td>'
         + '<td data-label="Продавец">' + escapeHTML(o.companyName) + (o.vwName ? '<div class="ord-sub">склад «' + escapeHTML(o.vwName) + '»</div>' : '') + '</td>'
-        + '<td class="do-wide" data-label="Кому и куда"><b>' + escapeHTML(o.recipient) + '</b><div class="ord-sub">' + escapeHTML(o.address) + '</div>'
+        + '<td class="do-wide" data-label="Кому и куда"><b>' + escapeHTML(o.recipient) + '</b>' + (o.address !== o.recipient ? '<div class="ord-sub">' + escapeHTML(o.address) + '</div>' : '')
           + (o.phone ? '<div class="ord-sub">' + escapeHTML(o.phone) + '</div>' : '')
           + (o.comment ? '<div class="ord-sub">' + escapeHTML(o.comment) + '</div>' : '') + '</td>'
         + '<td class="do-wide" data-label="Товары">' + (o.items || []).map(i => escapeHTML(i.name) + ' × ' + Number(i.qty)).join('<br>') + '</td>'
@@ -2106,7 +2106,7 @@
           + '<td class="num">' + nfmt(r.acceptedByWb || 0) + '</td>'
           + '<td class="num strong">' + nfmt(r.sellerAvailable)
           // Набор: сколько ещё соберут из свободных частей (08.10.2026).
-          + (r.kitParts ? '<div class="sub" title="Можно собрать из свободных частей">+ собрать ' + (r.kitBuildable == null ? '—' : nfmt(r.kitBuildable)) + '</div>' : '') + '</td>'
+          + (r.kitParts ? '<div class="sub kit-build" title="Можно собрать из свободных частей">+&nbsp;собрать ' + (r.kitBuildable == null ? '—' : nfmt(r.kitBuildable)) + '</div>' : '') + '</td>'
           + '<td class="num' + (r.wbOver > 0 ? ' warn' : '') + '">' + (r.wbListed == null ? '<span class="sub">—</span>' : nfmt(r.wbListed)) + '</td>'
           + '<td class="num' + (prDefect(r) ? ' warn' : '') + '">' + nfmt(prDefect(r)) + '</td>'
           + '<td class="num">' + nfmt(prInCells(r)) + '</td>'
@@ -7815,7 +7815,8 @@
     const edit = kitEdit ? '<div class="kit-edit">'
       + '<div class="staff-title" style="font-size:15px;margin:0 0 8px">' + (kitEdit.isNew ? 'Новый набор' : 'Состав набора') + '</div>'
       + '<label class="rc-field"><span>Набор — артикул или штрихкод</span><input class="mp-field" id="kitEditSku" list="kitProducts" value="' + escapeHTML(kitEdit.kitSku) + '"' + (kitEdit.isNew ? '' : ' readonly') + '></label>'
-      + '<div class="kit-parts">' + kitEdit.parts.map((p, i) => '<div class="kit-part">'
+      + '<div class="kit-parts"><div class="kit-part kit-part-head"><span>Часть — артикул или штрихкод</span><span>Сколько в наборе</span><span></span></div>'
+      + kitEdit.parts.map((p, i) => '<div class="kit-part">'
         + '<input class="mp-field" data-kit-part="' + i + '" list="kitProducts" placeholder="Часть — артикул или штрихкод" value="' + escapeHTML(p.sku) + '">'
         + '<input class="mp-field" data-kit-qty="' + i + '" type="number" min="1" max="1000" value="' + escapeHTML(String(p.qty)) + '" aria-label="Сколько в наборе">'
         + '<button type="button" class="wh-onboarding-btn" onclick="removeKitPart(' + i + ')" aria-label="Убрать часть">×</button></div>').join('') + '</div>'
@@ -7838,11 +7839,12 @@
       const r = kitRow(k.kitSku);
       const ready = r ? r.sellerAvailable : null;
       const build = r ? r.kitBuildable : null;
-      return '<tr><td><b>' + escapeHTML(k.name) + '</b><div class="sub">' + escapeHTML(k.kitSku) + '</div></td>'
-        + '<td>' + k.components.map(p => escapeHTML(p.name) + ' <span class="sub">× ' + nfmt(p.qty) + '</span>').join('<br>') + '</td>'
-        + '<td class="num">' + (ready == null ? '<span class="sub">—</span>' : nfmt(ready)) + '</td>'
-        + '<td class="num strong">' + (build == null ? '<span class="sub" title="У части нет числа учёта">—</span>' : nfmt(build)) + '</td>'
-        + '<td><button type="button" class="wh-onboarding-btn" onclick="editKit(\'' + jsArg(k.kitSku) + '\')">Изменить</button></td></tr>';
+      // data-label — подписи карточки на телефоне и планшете (проверка 08.10, И5).
+      return '<tr><td class="do-wide" data-label="Набор"><b>' + escapeHTML(k.name) + '</b><div class="sub kit-sku">' + escapeHTML(k.kitSku) + '</div></td>'
+        + '<td class="do-wide" data-label="Состав">' + k.components.map(p => escapeHTML(p.name) + ' <span class="sub">× ' + nfmt(p.qty) + '</span>').join('<br>') + '</td>'
+        + '<td class="num" data-label="Готовых">' + (ready == null ? '<span class="sub">—</span>' : nfmt(ready)) + '</td>'
+        + '<td class="num strong" data-label="Можно собрать">' + (build == null ? '<span class="sub" title="У части нет числа учёта">—</span>' : nfmt(build)) + '</td>'
+        + '<td class="do-wide"><button type="button" class="wh-onboarding-btn" onclick="editKit(\'' + jsArg(k.kitSku) + '\')">Изменить</button></td></tr>';
     }).join('');
     box.innerHTML = '<div class="rc-card kits-panel">'
       + '<div class="pr-bar"><div class="staff-title" style="font-size:17px;margin:0">Наборы · ' + nfmt(kitsList.length) + '</div><span class="grow"></span>'
@@ -7854,7 +7856,7 @@
       + 'вместе с готовыми это и есть «свободно» набора для WB. Части продаются и поштучно — в итоги продавца это не прибавляется. '
       + 'Файл: столбцы «Набор», «Часть», «Сколько» — артикул или штрихкод, по строке на часть.</div>'
       + imp + edit
-      + (kitsList.length ? '<div class="bill-wrap"><table class="ord-table kits-table"><thead><tr><th>Набор</th><th>Состав</th><th class="num">Готовых</th><th class="num">Можно собрать</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+      + (kitsList.length ? '<div class="bill-wrap"><table class="ord-table kits-table do-table"><thead><tr><th>Набор</th><th>Состав</th><th class="num">Готовых</th><th class="num">Можно собрать</th><th></th></tr></thead><tbody>' + rows + '</tbody></table></div>'
         : '<div class="staff-empty">Наборов пока нет. Добавьте набор или загрузите составы файлом.</div>')
       + '<datalist id="kitProducts">' + options + '</datalist></div>';
   }
@@ -8436,7 +8438,7 @@
           ? '<div class="ord-sub ord-warn">нет в номенклатуре склада — сопоставьте артикул</div>' : ''}${lineVw(o)}</div></div></td>
         <td class="ord-mono">${escapeHTML(o.article || '—')}${o.nmId ? `<div class="ord-sub">WB ${escapeHTML(o.nmId)}</div>` : ''}</td>
         <td class="ord-mono">${escapeHTML(o.barcode || '—')}</td>
-        <td>${o.direct ? `<b>${escapeHTML(o.direct.recipient)}</b><div class="ord-sub">${escapeHTML(o.direct.address)}</div>${
+        <td>${o.direct ? `<b>${escapeHTML(o.direct.recipient)}</b>${o.direct.address !== o.direct.recipient ? `<div class="ord-sub">${escapeHTML(o.direct.address)}</div>` : ''}${
             [o.direct.deliveryService, o.direct.phone, o.direct.vwName ? 'склад «' + o.direct.vwName + '»' : ''].filter(Boolean).length
               ? `<div class="ord-sub">${escapeHTML([o.direct.deliveryService, o.direct.phone, o.direct.vwName ? 'склад «' + o.direct.vwName + '»' : ''].filter(Boolean).join(' · '))}</div>` : ''}`
           : (o.offices || []).length ? escapeHTML(o.offices.join(', ')) : '<span class="ord-sub">—</span>'}${o.wbWarehouse

@@ -84,3 +84,5 @@
 .pp-warn{margin-top:6px;color:var(--terracotta,var(--red));font:14px/1.35 var(--sans);}
 .pp-warn:empty{display:none;}
 @media(max-width:640px){.vws-toolbar.pp-toolbar{grid-template-columns:1fr;}.vws-selection>.vws-actions [data-action=submit]{grid-column:1/-1;}}
+/* Главная кнопка панели — в конце формы (submitAtEnd, правила 08.10). */
+.pp-end{margin-top:16px;}.pp-end .vws-button{width:100%;min-height:52px;font-weight:700;}
