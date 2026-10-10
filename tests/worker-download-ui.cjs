@@ -13,10 +13,13 @@ const base = process.env.ARGUS_DOWNLOAD_PREVIEW || 'http://127.0.0.1:8740';
     for (const width of [375, 390, 659, 660, 661, 768, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto(base + '/login.html');
-      await page.getByRole('link', { name: 'Скачать приложение грузчика', exact: true }).click();
+      // Ссылка — только на входе работника склада (владелец 10.10.2026), не на выборе кабинета.
+      assert.equal(await page.getByRole('link', { name: 'Скачать приложение комплектовщика', exact: true }).count(), 0);
+      await page.locator('.cabinet-card', { hasText: 'Работник склада' }).click();
+      await page.getByRole('link', { name: 'Скачать приложение комплектовщика', exact: true }).click();
       await page.waitForURL('**/worker-app.html');
       assert.equal(await page.locator('#downloadAndroid').getAttribute('href'), 'downloads/argus-worker-0.1.2.apk');
-      assert.equal(await page.getByRole('link', { name: 'Открыть вход грузчика', exact: true }).getAttribute('href'), 'worker-login.html');
+      assert.equal(await page.getByRole('link', { name: 'Открыть вход комплектовщика', exact: true }).getAttribute('href'), 'worker-login.html');
       const rects = await page.evaluate(() => [...document.querySelectorAll('a, summary, h1, h2')].map(el => {
         const r = el.getBoundingClientRect(); return { text: el.textContent, left: r.left, right: r.right, width: r.width, height: r.height };
       }));

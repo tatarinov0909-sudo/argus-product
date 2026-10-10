@@ -1,5 +1,5 @@
   const API_BASE = 'https://api.argus-ai.online';
-  // Вход — свой у каждой роли (auth.js): вход продавца или грузчика в
+  // Вход — свой у каждой роли (auth.js): вход продавца или комплектовщика в
   // соседней вкладке больше не выбивает отсюда.
   const AUTH = window.ArgusAuth ? ArgusAuth.get(['owner', 'manager']) : null;
   let TOKEN = AUTH ? AUTH.token : null;
@@ -264,7 +264,7 @@
       el.classList.toggle('active', active);
       if(active) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current');
     });
-    // Приход: свежий список (грузчик мог принять) и панель товаров — на
+    // Приход: свежий список (комплектовщик мог принять) и панель товаров — на
     // компьютере форма видна сразу, без «+ Приход».
     if(view === 'receipts'){ loadInvoicesList(); openReceiptPicker(); }
     if(view==='journal'){
@@ -385,7 +385,7 @@
     marketplaces: ['Площадки', 'подключать WB, разрешать менять статусы'],
     integration: ['1С', 'подключать обмен'],
     billing: ['Тариф и деньги', ''],
-    shortages: ['Нет товара', 'получать отметки грузчиков «нет товара» со сборки'],
+    shortages: ['Нет товара', 'получать отметки комплектовщиков «нет товара» со сборки'],
   };
   const grantTitle = (g) => (GRANT_LABELS[g] ? GRANT_LABELS[g][0] : g);
 
@@ -985,7 +985,7 @@
     toggleReceiptForm(false);
     openReceiptPicker();   // на компьютере форма на виду — сразу чистая панель для следующего
     await loadInvoicesList();
-    showWhToast('Приход ' + number + ' создан: ' + units + ' шт. Грузчик увидит его в «Приёмке».');
+    showWhToast('Приход ' + number + ' создан: ' + units + ' шт. Комплектовщик увидит его в «Приёмке».');
   }
   function toggleReceiptForm(open){
     const form = document.getElementById('receiptForm');
@@ -996,7 +996,8 @@
   window.toggleReceiptForm = toggleReceiptForm;
 
   /* ---------- Заказ физлицу (схема 06.10, владелец 08.10.2026) ----------
-     «Заказы» → «+ Заказ физлицу» → продавец, его склад, получатель, товары.
+     «Заказы» → «Физлицам» → «+ Новый заказ» → продавец, получатель, товары
+     (свой экран — владелец 10.10.2026: «половина экрана чёрная», «не могу найти кнопку»).
      Заказ встаёт в «Заказы» продавца; поставку из таких заказов составляют
      как обычно, несколько получателей в одной. Или сразу на сборку. */
   const DELIVERY_SERVICES = ['СДЭК', 'Почта России', 'Boxberry', 'Яндекс Доставка', 'DPD', 'Деловые Линии', 'ПЭК', 'Курьер склада', 'Самовывоз'];
@@ -1012,8 +1013,31 @@
     : '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c => (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)));
   let directOrderPicker = null;
   let directOrderRequest = null;
+  // Вкладки «Заказов»: с площадок и физлицам. Новые разделы — в «Ещё».
+  let ordersTab = 'wb';
+  function setOrdersTab(tab){
+    ordersTab = tab === 'direct' ? 'direct' : 'wb';
+    const direct = ordersTab === 'direct';
+    document.getElementById('ordersPaneWb').hidden = direct;
+    document.getElementById('ordersPaneDirect').hidden = !direct;
+    document.getElementById('ordersActionsWb').hidden = direct;
+    document.getElementById('ordersActionsDirect').hidden = !direct;
+    document.getElementById('ordersTabWb').setAttribute('aria-selected', String(!direct));
+    document.getElementById('ordersTabDirect').setAttribute('aria-selected', String(direct));
+    toggleOrdersMore(false);
+    if(direct) loadDirectOrders();
+  }
+  function toggleOrdersMore(open){
+    const menu = document.getElementById('ordersMoreMenu'), btn = document.getElementById('ordersMoreBtn');
+    if(!menu) return;
+    const on = typeof open === 'boolean' ? open : menu.hidden;
+    menu.hidden = !on; btn.setAttribute('aria-expanded', String(on));
+  }
+  document.addEventListener('click', (e) => { if(!e.target.closest('.ord-tab-more')) toggleOrdersMore(false); });
+
   async function openDirectOrder(companyId){
     if(currentView !== 'orders') switchView('orders');
+    setOrdersTab('direct');
     const select = document.getElementById('directOrderCompany');
     const keep = companyId || select.value || ordersPicked;
     select.innerHTML = companies.length
@@ -1025,9 +1049,14 @@
       service.innerHTML = '<option value="">Не выбрана</option>' + DELIVERY_SERVICES.map(n => '<option>' + escapeHTML(n) + '</option>').join('')
         + '<option value="other">Другая…</option>';
     }
+    document.getElementById('directOrdersList').hidden = true;
+    document.getElementById('ordersActionsDirect').hidden = true;
     document.getElementById('directOrder').hidden = false;
+    document.getElementById('directOrderToField').classList.remove('do-missing');
     document.getElementById('directOrderDate').min = moscowToday();
     if(!directOrderRequest) directOrderRequest = newRequestId();
+    directOrderSummary = { count: 0, units: 0, unset: 0, busy: false };
+    updateDirectOrderBar();
     document.getElementById('directOrder').scrollIntoView({ block: 'start' });
     await directOrderCompanyChanged(true);
   }
@@ -1035,6 +1064,42 @@
     directOrderPicker?.close(); directOrderPicker = null;
     directOrderRequest = null;
     document.getElementById('directOrder').hidden = true;
+    document.getElementById('directOrdersList').hidden = false;
+    document.getElementById('ordersActionsDirect').hidden = ordersTab !== 'direct';
+  }
+  // Итог внизу: сколько выбрано и чего не хватает, чтобы создать заказ.
+  let directOrderSummary = { count: 0, units: 0, unset: 0, busy: false };
+  function directOrderMissing(){
+    const missing = [];
+    if(!document.getElementById('directOrderCompany').value) missing.push('добавьте продавца в «Клиентах»');
+    if(!document.getElementById('directOrderTo').value.trim()) missing.push('впишите, кому');
+    if(!directOrderSummary.count) missing.push('выберите товары');
+    else if(directOrderSummary.unset) missing.push('укажите количество у ' + directOrderSummary.unset + ' ' + pluralRu(directOrderSummary.unset, 'товара', 'товаров', 'товаров'));
+    return missing;
+  }
+  function updateDirectOrderBar(summary){
+    if(summary) directOrderSummary = summary;
+    const s = directOrderSummary, missing = directOrderMissing();
+    document.getElementById('directOrderSum').textContent = s.count
+      ? s.count + ' ' + pluralRu(s.count, 'товар', 'товара', 'товаров') + ' · ' + nfmt(s.units) + ' шт.' : 'Товары не выбраны';
+    const hint = document.getElementById('directOrderHint');
+    hint.textContent = missing.length ? 'Осталось: ' + missing.join(', ') : 'Всё заполнено — можно создавать';
+    hint.classList.toggle('do-hint-ok', !missing.length);
+    if(document.getElementById('directOrderTo').value.trim()) document.getElementById('directOrderToField').classList.remove('do-missing');
+    const go = document.getElementById('directOrderGo');
+    go.disabled = !!s.busy; go.textContent = s.busy ? 'Создаём заказ…' : 'Создать заказ';
+  }
+  async function submitDirectOrderForm(){
+    const missing = directOrderMissing();
+    updateDirectOrderBar();
+    if(!document.getElementById('directOrderTo').value.trim()){
+      document.getElementById('directOrderToField').classList.add('do-missing');
+      document.getElementById('directOrderTo').focus();
+      return;
+    }
+    if(missing.length){ document.getElementById('directOrderPicker').scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
+    if(!directOrderPicker) return;
+    await directOrderPicker.submit();
   }
   function directOrderServiceChanged(){
     const other = document.getElementById('directOrderService').value === 'other';
@@ -1061,7 +1126,7 @@
     const free = (r) => (vw ? ((r.warehouses || []).find(w => w.id === vw) || {}).available : r.available);
     directOrderPicker = window.ArgusProductPicker.open({
       host: document.getElementById('directOrderPicker'), request: apiFetch, companyId,
-      maxItems: 500, templateName: 'Товары заказа', submitLabel: 'Создать заказ', submitAtEnd: true,
+      maxItems: 500, templateName: 'Товары заказа', submitLabel: 'Создать заказ', hideSubmit: true, flat: true, onChange: updateDirectOrderBar,
       loadRows: async () => (await apiFetch('/api/sellers/stock?view=seller&companyId=' + encodeURIComponent(companyId))).rows,
       columns: [{ title: 'Всего', value: r => r.total }, { title: vw ? 'Свободно на складе' : 'Доступно', value: free }],
       limit: free, defaultQty: () => '1',
@@ -1071,8 +1136,7 @@
   }
   async function submitDirectOrder(companyId, vwId, items){
     const val = (id) => document.getElementById(id).value.trim();
-    if(!val('directOrderTo')){ document.getElementById('directOrderTo').focus(); throw new Error('Впишите, кому заказ.'); }
-    if(!val('directOrderAddress')){ document.getElementById('directOrderAddress').focus(); throw new Error('Впишите, куда везти.'); }
+    if(!val('directOrderTo')){ document.getElementById('directOrderToField').classList.add('do-missing'); document.getElementById('directOrderTo').focus(); throw new Error('Впишите, кому заказ.'); }
     const serviceValue = document.getElementById('directOrderService').value;
     const service = serviceValue === 'other' ? val('directOrderServiceOther') : serviceValue;
     if(serviceValue === 'other' && !service){ document.getElementById('directOrderServiceOther').focus(); throw new Error('Впишите службу доставки.'); }
@@ -1080,12 +1144,21 @@
     const over = items.filter(i => i.limit != null && i.qty > i.limit);
     if(over.length && !await askConfirm('Больше, чем доступно по учёту: '
       + over.slice(0, 5).map(i => '«' + i.name + '» — ' + i.qty + ' из ' + i.limit).join(', ')
-      + (over.length > 5 ? ' и ещё ' + (over.length - 5) : '') + '.\n\nСоздать заказ всё равно? Если товара на полке не окажется, грузчик отметит нехватку.')) return;
+      + (over.length > 5 ? ' и ещё ' + (over.length - 5) : '') + '.\n\nСоздать заказ всё равно? Если товара на полке не окажется, комплектовщик отметит нехватку.')) return;
     const toSupply = document.getElementById('directOrderToSupply').checked;
-    const created = await apiFetch('/api/direct-orders', { method: 'POST', body: { companyId, vwId,
+    updateDirectOrderBar({ ...directOrderSummary, busy: true });
+    let created;
+    try{
+      created = await apiFetch('/api/direct-orders', { method: 'POST', body: { companyId, vwId,
       recipient: val('directOrderTo'), address: val('directOrderAddress'), phone: val('directOrderPhone'),
       deliveryService: service || null, plannedDate: val('directOrderDate') || null, comment: val('directOrderComment'),
       toSupply, items: items.map(i => ({ sku: i.sku, qty: i.qty })), requestId: directOrderRequest } });
+    } catch(e){
+      updateDirectOrderBar({ ...directOrderSummary, busy: false });
+      document.getElementById('directOrderHint').textContent = 'Не создан: ' + e.message;
+      throw e;
+    }
+    updateDirectOrderBar({ ...directOrderSummary, busy: false });
     const units = items.reduce((s, i) => s + i.qty, 0);
     ['directOrderTo', 'directOrderAddress', 'directOrderPhone', 'directOrderDate', 'directOrderComment', 'directOrderServiceOther']
       .forEach(id => { document.getElementById(id).value = ''; });
@@ -1094,13 +1167,16 @@
     closeDirectOrder();
     await loadMpOrders();
     showWhToast('Заказ ' + created.number + ' создан: ' + units + ' шт. '
-      + (created.supply ? '— поставка ' + created.supply.number + ' ушла грузчикам.' : '— он в «Заказах» продавца, составьте поставку, когда будете готовы.'));
+      + (created.supply ? '— поставка ' + created.supply.number + ' ушла комплектовщикам.' : '— он в «Заказах» продавца, составьте поставку, когда будете готовы.'));
   }
-  Object.assign(window, { openDirectOrder, closeDirectOrder, openDirectOrderPicker, directOrderCompanyChanged, directOrderServiceChanged });
+  Object.assign(window, { openDirectOrder, closeDirectOrder, openDirectOrderPicker, directOrderCompanyChanged, directOrderServiceChanged,
+    setOrdersTab, toggleOrdersMore, updateDirectOrderBar, submitDirectOrderForm });
 
   // Заказы физлицам — история со статусами: после отъезда склад ставит
   // «в пути», «доставлен», «отказ / возврат» и трек-номер.
   let directOrdersRows = [];
+  // Отмеченные новые заказы — поставка прямо из вкладки «Физлицам».
+  const directPicked = new Set();
   async function loadDirectOrders(){
     const host = document.getElementById('directOrdersList');
     if(!host) return;
@@ -1111,22 +1187,38 @@
   function renderDirectOrders(){
     const host = document.getElementById('directOrdersList');
     if(!host) return;
-    if(!directOrdersRows.length){ host.innerHTML = ''; return; }
+    const fresh = directOrdersRows.filter(o => o.status === 'new').length;
+    const tabN = document.getElementById('ordersTabDirectN'); if(tabN) tabN.textContent = fresh ? String(fresh) : '';
+    if(!directOrdersRows.length){
+      host.innerHTML = '<div class="staff-empty">Заказов физлицам пока нет. Нажмите «+ Новый заказ» — выберите продавца, впишите, кому, и отметьте товары.</div>';
+      return;
+    }
     const statusCell = (o) => '<span class="do-status do-' + o.status + '">' + escapeHTML(o.statusName) + '</span>'
       + (o.supplyNumber ? '<div class="ord-sub">поставка ' + escapeHTML(o.supplyNumber) + '</div>' : '')
       + (o.canMark ? '<select class="ord-sort do-mark" aria-label="Статус после отъезда" onchange="markDirectOrder(\'' + o.id + '\', this.value, this)">'
         + [['', 'Уехал'], ['in_transit', 'В пути'], ['delivered', 'Доставлен'], ['refused', 'Отказ / возврат']]
           .map(([v, t]) => '<option value="' + v + '"' + ((['in_transit', 'delivered', 'refused'].includes(o.status) ? o.status : '') === v ? ' selected' : '') + '>' + t + '</option>').join('')
         + '</select>' : '');
-    host.innerHTML = '<div class="rc-list-head" style="margin-top:32px;"><div class="staff-title" style="font-size:17px; margin:0;">Заказы физлицам</div>'
-      + '<span class="ord-meta">последние ' + directOrdersRows.length + '</span></div>'
-      + '<div class="ord-scroll"><table class="ord-table do-table"><thead><tr><th>Заказ</th><th>Продавец</th><th>Кому и куда</th><th>Товары</th>'
+    const pickable = (o) => o.status === 'new' && !o.supplyNumber;
+    [...directPicked].forEach(id => { if(!directOrdersRows.some(o => o.id === id && pickable(o))) directPicked.delete(id); });
+    const picked = directOrdersRows.filter(o => directPicked.has(o.id));
+    const sellers = new Set(picked.map(o => o.companyId));
+    const goLabel = !picked.length ? 'Отметьте новые заказы для поставки'
+      : sellers.size > 1 ? 'Отметьте заказы одного продавца'
+      : 'Составить поставку — ' + picked.length + ' ' + pluralRu(picked.length, 'заказ', 'заказа', 'заказов');
+    host.innerHTML = '<div class="rc-list-head do-list-head"><span class="ord-meta">Последние ' + directOrdersRows.length + ' '
+      + pluralRu(directOrdersRows.length, 'заказ', 'заказа', 'заказов') + (fresh ? ' · новых ' + fresh : '') + '</span>'
+      + (fresh ? '<button type="button" class="wh-onboarding-btn' + (picked.length && sellers.size === 1 ? ' primary' : '') + '" onclick="makeDirectSupply()"'
+        + (picked.length && sellers.size === 1 ? '' : ' disabled') + '>' + escapeHTML(goLabel) + '</button>' : '') + '</div>'
+      + '<div class="ord-scroll"><table class="ord-table do-table"><thead><tr><th></th><th>Заказ</th><th>Продавец</th><th>Кому и куда</th><th>Товары</th>'
       + '<th>Доставка и трек</th><th>Статус</th><th></th></tr></thead><tbody>'
       + directOrdersRows.map(o => '<tr>'
+        + '<td class="do-pick">' + (pickable(o) ? '<input type="checkbox" aria-label="Взять заказ ' + escapeHTML(o.number) + ' в поставку"'
+          + (directPicked.has(o.id) ? ' checked' : '') + ' onchange="toggleDirectPick(\'' + o.id + '\', this.checked)">' : '') + '</td>'
         + '<td class="ord-mono ord-no" data-label="Заказ">' + escapeHTML(o.number) + '<div class="ord-sub">' + escapeHTML(fmtDay(o.createdAt))
           + (o.createdRole === 'seller' ? ' · от продавца' : '') + '</div></td>'
         + '<td data-label="Продавец">' + escapeHTML(o.companyName) + (o.vwName ? '<div class="ord-sub">склад «' + escapeHTML(o.vwName) + '»</div>' : '') + '</td>'
-        + '<td class="do-wide" data-label="Кому и куда"><b>' + escapeHTML(o.recipient) + '</b>' + (o.address !== o.recipient ? '<div class="ord-sub">' + escapeHTML(o.address) + '</div>' : '')
+        + '<td class="do-wide" data-label="Кому и куда"><b>' + escapeHTML(o.recipient) + '</b>' + (o.address && o.address !== o.recipient ? '<div class="ord-sub">' + escapeHTML(o.address) + '</div>' : '')
           + (o.phone ? '<div class="ord-sub">' + escapeHTML(o.phone) + '</div>' : '')
           + (o.comment ? '<div class="ord-sub">' + escapeHTML(o.comment) + '</div>' : '') + '</td>'
         + '<td class="do-wide" data-label="Товары">' + (o.items || []).map(i => escapeHTML(i.name) + ' × ' + Number(i.qty)).join('<br>') + '</td>'
@@ -1137,6 +1229,21 @@
         + '<td class="do-wide">' + (o.canCancel ? '<button type="button" class="wh-onboarding-btn" onclick="cancelDirectOrder(\'' + o.id + '\')">Отменить</button>' : '') + '</td>'
         + '</tr>').join('')
       + '</tbody></table></div>';
+  }
+  function toggleDirectPick(id, on){ if(on) directPicked.add(id); else directPicked.delete(id); renderDirectOrders(); }
+  // Поставка из отмеченных заказов физлицам одного продавца: «куда» сервер
+  // подставит сам (получатель или «Физлицам: N заказов»).
+  async function makeDirectSupply(){
+    const picked = directOrdersRows.filter(o => directPicked.has(o.id));
+    if(!picked.length || new Set(picked.map(o => o.companyId)).size !== 1) return;
+    if(!await askConfirm('Составить поставку: ' + picked.length + ' ' + pluralRu(picked.length, 'заказ', 'заказа', 'заказов')
+      + ' физлицам продавца «' + picked[0].companyName + '»?\n\nОна уйдёт на склад, комплектовщики начнут сборку.')) return;
+    try{
+      const supply = await apiFetch('/api/supplies', { method: 'POST', body: { invoiceIds: picked.map(o => o.id), marketplace: null, destination: null } });
+      directPicked.clear();
+      showWhToast('Поставка ' + supply.number + ' составлена — ушла комплектовщикам.');
+    } catch(e){ showWhToast('Поставка не составлена: ' + e.message); }
+    loadMpOrders();
   }
   async function markDirectOrder(id, value, el){
     el.disabled = true;
@@ -1166,7 +1273,7 @@
     } catch(e){ showWhToast(e.message); }
     loadMpOrders();
   }
-  Object.assign(window, { markDirectOrder, editDirectTrack, cancelDirectOrder });
+  Object.assign(window, { markDirectOrder, editDirectTrack, cancelDirectOrder, toggleDirectPick, makeDirectSupply });
 
   let lastInvoices = [];
   let lastOutbound = [];
@@ -1191,7 +1298,7 @@
   }
 
   // Отгрузки не через маркетплейс — вручную и из 1С: в работе и уехавшие
-  // за две недели. Закрывает грузчик: «Отгрузили — машина уехала».
+  // за две недели. Закрывает комплектовщик: «Отгрузили — машина уехала».
   const OUT_STATE = { open: ['ждёт сборки', 'wait'], in_progress: ['собирается', 'busy'],
     ready: ['собрана, ждёт машину', 'arrived'], shipped: ['уехала', 'active'] };
   function renderOutboundList(){
@@ -1220,7 +1327,7 @@
 
   /* Список приходов (владелец 27.09.2026): поиск по номеру, продавцу,
      перевозчику, машине и номеру документа поставщика; фильтры — продавец,
-     статус, откуда, период; порядок — как у грузчика: машина приехала,
+     статус, откуда, период; порядок — как у комплектовщика: машина приехала,
      привезут сегодня, остальные привозы продавцов, из 1С и вручную, затем
      принятые; внутри — новые выше. Список не тонет в старых приходах:
      по 30 строк и «Показать ещё». Заказы поставщику из 1С — не привоз:
@@ -1444,7 +1551,7 @@
     // Кто принимает и где остановился — из списка приходов (ход приёмки).
     const row = (lastInvoices || []).find(i => i.id === c.id);
     const work = row && row.work && row.work.assembly ? row.work : null;
-    const workText = work ? ({ active: 'идёт', paused: 'на паузе', abandoned: 'брошена — продолжит любой грузчик', finished: 'закончена' }[work.assembly.status] || '')
+    const workText = work ? ({ active: 'идёт', paused: 'на паузе', abandoned: 'брошена — продолжит любой комплектовщик', finished: 'закончена' }[work.assembly.status] || '')
       + ' · ' + work.assembly.workerName + ' · принято ' + work.taken + ' из ' + work.total + ' ' + pluralRu(work.total, 'позиции', 'позиций', 'позиций')
       + (work.lastComment ? ' · «' + work.lastComment.text + '»' : '') : '';
     const facts = [
@@ -1532,15 +1639,15 @@
   }
   window.setReceiptLineVw = setReceiptLineVw;
 
-  // Записки грузчиков о товаре (третье задание 27.09.2026) — в карточке
+  // Записки комплектовщиков о товаре (третье задание 27.09.2026) — в карточке
   // прихода и поставки: ждущие — с «Принял к сведению», отмеченные — кем и
   // когда. То же нажатие, что в журнале.
   function itemNotesHtml(notes, where){
     if(!notes || !notes.length) return '';
     const waiting = notes.filter(n => !n.answered).length;
-    return '<div class="rc-section">Грузчики пишут о товаре' + (waiting ? ' · ждёт ответа: ' + waiting : '') + '</div>'
+    return '<div class="rc-section">Комплектовщики пишут о товаре' + (waiting ? ' · ждёт ответа: ' + waiting : '') + '</div>'
       + notes.map(n => '<div class="rc-wnote' + (n.answered ? ' done' : '') + '">'
-        + '<div class="rc-src"><b>' + escapeHTML(n.workerName || 'Грузчик') + '</b> · ' + escapeHTML(rcWhen(n.at))
+        + '<div class="rc-src"><b>' + escapeHTML(n.workerName || 'Комплектовщик') + '</b> · ' + escapeHTML(rcWhen(n.at))
         + ' · о товаре «' + escapeHTML(n.productName || n.sku || '') + '»</div>'
         + '<div class="rc-wnote-text">' + escapeHTML(n.text) + '</div>'
         + (n.answered
@@ -1882,7 +1989,7 @@
     overlay.className = 'ask-overlay';
     overlay.innerHTML = '<div class="ask-box" role="dialog" aria-modal="true" data-form>'
       + '<div class="ask-title">Перенести между складами</div>'
-      + '<div class="ask-text">' + escapeHTML(r.name || r.sku) + '. Остатки складов поменяются, продавцу придёт уведомление. Если один из складов хранится отдельно, грузчику придёт задание переложить товар.</div>'
+      + '<div class="ask-text">' + escapeHTML(r.name || r.sku) + '. Остатки складов поменяются, продавцу придёт уведомление. Если один из складов хранится отдельно, комплектовщику придёт задание переложить товар.</div>'
       + '<div class="tr-grid"><label>Откуда<select class="mp-field" id="trFrom">' + opts(from) + '</select></label>'
       + '<label>Куда<select class="mp-field" id="trTo">' + opts(to) + '</select></label>'
       + '<label>Сколько штук<input class="mp-field" id="trQty" type="number" min="1" inputmode="numeric" value="' + escapeHTML(pre.qty || '') + '"></label>'
@@ -1906,7 +2013,7 @@
         showWhToast(res.status === 'waiting_seller'
           ? 'Продавец запретил складу решать такое без него — просьба отправлена ему, перенос сделается после «Согласен».'
           : res.status === 'to_move'
-          ? 'Грузчику создано задание переложить: ' + res.fromName + ' → ' + res.toName + ', ' + nfmt(res.qty) + ' шт. Остатки складов поменяются по мере перекладки.'
+          ? 'Комплектовщику создано задание переложить: ' + res.fromName + ' → ' + res.toName + ', ' + nfmt(res.qty) + ' шт. Остатки складов поменяются по мере перекладки.'
           : 'Перенесено: ' + res.fromName + ' → ' + res.toName + ', ' + nfmt(res.qty) + ' шт. Продавцу пришло уведомление «обратите внимание».');
         if(pre.after) pre.after(); else loadProducts();
       } catch(e){ showWhToast(e.message); btn.disabled = false; }
@@ -1927,7 +2034,7 @@
     try{
       const res = await apiFetch('/api/vwarehouses/transfers/' + id + '/decide', { method: 'POST', body: { approve, reason: reason || undefined } });
       showWhToast(!approve ? 'Отказано — продавцу пришло уведомление.'
-        : res && res.status === 'to_move' ? 'Грузчику создано задание переложить — продавцу пришло уведомление.'
+        : res && res.status === 'to_move' ? 'Комплектовщику создано задание переложить — продавцу пришло уведомление.'
         : 'Перенос выполнен — продавцу пришло уведомление.');
       loadProducts();
       if(typeof loadJournal === 'function') loadJournal(true);
@@ -2035,7 +2142,7 @@
         + productTransfers.map(t => '<div class="sp-key"><span><b>' + escapeHTML(t.number) + '</b> «' + escapeHTML(t.name || t.sku) + '», ' + nfmt(t.qty) + ' шт.: '
           + escapeHTML(t.fromName) + ' → ' + escapeHTML(t.toName)
           + '<span class="mp-card-sub">' + (t.status === 'requested' ? 'просит продавец'
-            : t.status === 'to_move' ? 'грузчик перекладывает — остатки меняются по мере перекладки'
+            : t.status === 'to_move' ? 'комплектовщик перекладывает — остатки меняются по мере перекладки'
             : 'ждёт согласия продавца — он запретил складу решать такое без него')
           + (t.note ? ' · ' + escapeHTML(t.note) : '') + '</span></span>'
           + (t.status === 'requested' ? '<span class="mp-card-acts" style="margin:0;"><span class="mp-act" onclick="decideTransfer(\'' + t.id + '\', true)">Выполнить</span>'
@@ -3820,9 +3927,9 @@
   // answered уже принятое висело «требует внимания» вечно.
   function isWaiting(e){ return e.status === 'pending' && !e.answered; }
   function isUrgentWaiting(e){ return Boolean(e.urgent) && isWaiting(e); }
-  // Записка грузчика о товаре (третье задание 27.09.2026): решать там нечего —
+  // Записка комплектовщика о товаре (третье задание 27.09.2026): решать там нечего —
   // её отмечают «Принял к сведению».
-  // «Принял к сведению» — записка грузчика о товаре и предупреждение «зона
+  // «Принял к сведению» — записка комплектовщика о товаре и предупреждение «зона
   // склада продавца заполнена» (02.10.2026).
   function isNote(e){ return e.entity_type === 'item_note' || e.entity_type === 'vw_zone'; }
   // Текст срочной отметки уже начинается с «ОЧЕНЬ ВАЖНО:» — рядом с красной
@@ -4071,14 +4178,14 @@
                 data-history-cell="${escapeHTML(el.dataset.blockId)}" data-history-label="${escapeHTML(displayAddr)}">Что здесь происходило</button>
         ${stock.length ? `<button class="wh-onboarding-btn" style="margin-top:8px; width:100%;" type="button" onclick="exportCell('${el.dataset.blockId}')">Выгрузить в Excel</button>` : ''}
         ${entry ? `<button class="wh-onboarding-btn" style="margin-top:8px; width:100%;" type="button" onclick="toggleDefectZone('${el.dataset.blockId}')">${entry.block.defectZone ? 'Снять отметку «ячейка брака»' : 'Сделать ячейкой брака'}</button>
-        <div class="wh-detail-note" style="margin-top:6px;">${entry.block.defectZone ? 'Ячейка брака: сюда Аргус первой предложит грузчику класть брак продавцов.' : 'Ячейку брака Аргус предложит грузчику первой, когда тот отмечает брак.'}</div>` : ''}
+        <div class="wh-detail-note" style="margin-top:6px;">${entry.block.defectZone ? 'Ячейка брака: сюда Аргус первой предложит комплектовщику класть брак продавцов.' : 'Ячейку брака Аргус предложит комплектовщику первой, когда тот отмечает брак.'}</div>` : ''}
       </div>
     `;
     keepStill(el, () => detail.classList.add('open'));
     if(stock.length) loadCellItems(el.dataset.blockId);
   }
 
-  // Ячейка брака (владелец 02.10.2026): её Аргус первой предлагает грузчику,
+  // Ячейка брака (владелец 02.10.2026): её Аргус первой предлагает комплектовщику,
   // когда тот отмечает брак, — после ячеек, где уже лежит брак этого продавца.
   async function toggleDefectZone(blockId){
     const entry = blockById[blockId];
@@ -4562,7 +4669,7 @@
       return;
     }
 
-    // Дни — потому что двести строк подряд читать нельзя. Работа грузчика
+    // Дни — потому что двести строк подряд читать нельзя. Работа комплектовщика
     // (приёмка прихода, сборка поставки) — одной строкой под днём последнего
     // шага; срочные отметки внутри неё тоже есть, но в ленте — только сверху.
     let html = scopeBar + head;
@@ -4612,7 +4719,7 @@
     const works = new Map();
     entries.forEach(function(e){
       const day = journalDayKey(e.created_at);
-      // Работа грузчика по приходу или поставке — одна строка на всё время
+      // Работа комплектовщика по приходу или поставке — одна строка на всё время
       // работы, а не на день и не на человека (третье задание 27.09.2026).
       // Ключ и состояние работы даёт сервер (work_key, work). Лента идёт от
       // новых к старым, поэтому строка встаёт на место последнего шага.
@@ -4629,13 +4736,13 @@
       }
       // Срочное вне работы — только в приколотом сверху.
       if(urgentIds && urgentIds.has(e.id)) return;
-      // Пауза грузчика — отдельной строкой: её и должны заметить.
+      // Пауза комплектовщика — отдельной строкой: её и должны заметить.
       const groupable = !isWaiting(e) && e.invoice_id && e.entity_type !== 'worker_pause';
       // В поставке у каждого заказа свой товар, и по документу такая сборка
       // не собирается: сорок заказов — сорок групп по одной строке. Владельцу
       // нужна одна запись «собирается поставка» с полосой готовности.
       // Работа одного человека над одним документом — одна строка: «Иван
-      // собирает поставку ПС-…», «Иван принимает УТОХ…». Два грузчика на
+      // собирает поставку ПС-…», «Иван принимает УТОХ…». Два комплектовщика на
       // одной поставке — две строки: видно, кто сколько сделал.
       const who = e.actor_type === 'worker' ? (e.actor_id || '') : '';
       const key = groupable
@@ -4646,7 +4753,7 @@
         const node = { kind: 'group', day: day, id: key.replace(/[^a-zA-Z0-9]/g, ''),
           invoiceNumber: e.invoice_number, supplyNumber: e.invoice_supply_number || null,
           supplyDone: e.supply_items_done, supplyTotal: e.supply_items_total,
-          direction: e.invoice_direction, worker: who ? (e.actor_name || 'Грузчик') : null,
+          direction: e.invoice_direction, worker: who ? (e.actor_name || 'Комплектовщик') : null,
           agent: e.agent, entries: [] };
         buckets.set(key, node);
         out.push(node);
@@ -4655,7 +4762,7 @@
     });
     // Группа из одной-двух записей ничего не экономит, только прячет.
     return out.map(function(node){
-      // Работу грузчика и сборку поставки сворачиваем всегда, даже когда
+      // Работу комплектовщика и сборку поставки сворачиваем всегда, даже когда
       // сделан первый товар: это одна работа, и начальнику склада не нужна
       // строка на каждую штуку.
       if(node.kind === 'group' && !node.supplyNumber && !node.worker && node.entries.length < GROUP_MIN){
@@ -4735,8 +4842,8 @@
       .filter(function(n, i, all){ return all.indexOf(n) === i; });
     const session = w && w.session;
     const live = session && (session.status === 'active' || session.status === 'paused');
-    const current = live ? session.workerName : (names[names.length - 1] || 'Грузчик');
-    const allNames = names.length ? (names.length > 1 ? names.slice(0, -1).join(', ') + ' и ' + names[names.length - 1] : names[0]) : 'Грузчик';
+    const current = live ? session.workerName : (names[names.length - 1] || 'Комплектовщик');
+    const allNames = names.length ? (names.length > 1 ? names.slice(0, -1).join(', ') + ' и ' + names[names.length - 1] : names[0]) : 'Комплектовщик';
     const many = names.length > 1;
     const number = escapeHTML(w ? w.number : (entries[0].invoice_number || ''));
     const recv = w && w.kind === 'receiving';
@@ -4771,7 +4878,7 @@
     } else if(session && session.status === 'paused'){
       stageKind = 'paused'; stage = 'На паузе' + (session.pauseReason ? ': ' + session.pauseReason : '');
     } else if(session && session.status === 'abandoned'){
-      stageKind = 'abandoned'; stage = 'Брошена — продолжит любой грузчик';
+      stageKind = 'abandoned'; stage = 'Брошена — продолжит любой комплектовщик';
     } else if(w){
       stage = recv ? 'Ещё не принят' : 'Ещё не собрана';
     }
@@ -5024,7 +5131,7 @@
             ? 'Просьба продавца. О решении ему придёт уведомление. Данные 1С не изменяются.'
           : isNote(e)
             ? (e.entity_type === 'vw_zone' ? 'Зона склада продавца заполнена. Расширьте зону в окне продавца — иначе товар положат рядом.'
-              : 'Грузчик написал о товаре.') + ' Отметка «Принял к сведению» сохранится в журнале с вашим именем.'
+              : 'Комплектовщик написал о товаре.') + ' Отметка «Принял к сведению» сохранится в журнале с вашим именем.'
             : 'Решение сохранится в журнале вместе с вашим именем. Данные 1С не изменяются.'}</div>
       </div>
     `;}).join('');
@@ -5032,7 +5139,7 @@
 
   // Отметку «нет товара» решают делом, а не «Принять»: «принято» ничего не
   // сдвигало — поставка стояла дальше. Заказ в поставке — убрать его оттуда;
-  // товар нашёлся — закрыть отметку, и грузчик соберёт позицию как обычно.
+  // товар нашёлся — закрыть отметку, и комплектовщик соберёт позицию как обычно.
   function urgentActionsHtml(e, kind){
     const act = (primary, onclick, label) => kind === 'ctx'
       ? '<div class="ctx-btn ' + (primary ? 'confirm' : 'reject') + '" onclick="' + onclick + '">' + label + '</div>'
@@ -5054,8 +5161,8 @@
     const entry = journalEntries.find(x => x.id === id);
     const found = resolution === 'rollback';
     if(!await askConfirm(found
-      ? 'Товар нашёлся?\n\nОтметка закроется, и грузчик соберёт позицию как обычно.'
-      : 'Отметить, что вы в курсе?\n\nЗаказ остаётся в работе: грузчику позиция снова откроется для сборки.')) return;
+      ? 'Товар нашёлся?\n\nОтметка закроется, и комплектовщик соберёт позицию как обычно.'
+      : 'Отметить, что вы в курсе?\n\nЗаказ остаётся в работе: комплектовщику позиция снова откроется для сборки.')) return;
     const text = entry ? urgentText(entry.action_text) : '';
     try{
       await apiFetch('/api/journal/' + id + '/resolve', {method:'POST', body:{
@@ -5089,7 +5196,7 @@
   window.resolveTransferEntry = resolveTransferEntry;
 
   async function resolveJournalEntry(id, resolution){
-    // 'ack' — «Принял к сведению» записку грузчика: одно нажатие, без вопроса.
+    // 'ack' — «Принял к сведению» записку комплектовщика: одно нажатие, без вопроса.
     if(resolution === 'confirm' && !await askConfirm('Принять рекомендацию и сохранить решение в журнале?')) return;
     if(resolution === 'rollback' && !await askConfirm('Отклонить рекомендацию и сохранить решение в журнале?')) return;
     try{
@@ -5283,7 +5390,7 @@
     const picked = Array.from(checked).map(cb => cb.closest('.j-entry'));
     try{
       for(const el of picked){
-        // Записки грузчика о товаре — «Принял к сведению», остальное — «Принять».
+        // Записки комплектовщика о товаре — «Принял к сведению», остальное — «Принять».
         await apiFetch('/api/journal/' + el.dataset.entryId + '/resolve', {method:'POST', body:{resolution: el.dataset.note ? 'ack' : 'confirm'}});
       }
       await loadJournal();
@@ -5551,42 +5658,53 @@
     }
   }
   window.loadHome = loadHome;
-  // Полоса чисел, как у продавца (владелец 06.10.2026): товар всех продавцов
-  // склада — всего, заказано, в сборке, в пути, принято WB, доступно.
-  async function loadHomeStock(run = homeRun){
+  // Плитки «Сводки склада» (владелец 11.10.2026): то, чем живёт склад, —
+  // новые заказы, сборка, дорога на WB, брак, проблемные товары и клиенты.
+  // «Всего товара», «Можно продать» и «Принято WB» владельцу склада не нужны.
+  // Низкие, в одну строку; плитка открывает свой раздел.
+  function renderHomeTiles(t, data, pending){
     const host = document.getElementById('homeStockStrip');
     if(!host) return;
-    let data;
-    try{ data = await apiFetch('/api/sellers/stock-summary'); } catch(e){ return; }
-    if(run !== homeRun) return;
-    const sellers = data.sellers || [];
-    if(!sellers.length){ host.hidden = true; return; }
+    const sellers = data ? (data.sellers || []) : [];
     const sum = (k) => sellers.reduce((n, s) => n + Number(s[k] || 0), 0);
-    const known = (k) => sellers.some(s => s[k] != null) ? sum(k) : null;
+    const parts = (list) => list.filter(Boolean).join(' · ');
+    const orders = pending ? pending.reduce((n, p) => n + Number(p.orders || 0), 0) : null;
+    const units = pending ? pending.reduce((n, p) => n + Number(p.units || 0), 0) : null;
+    const short = sum('problemShortCount'), kits = sum('problemKitCount'), unmapped = Number(t.exchange.wbUnmappedSkus || 0);
+    const problems = data ? short + kits + unmapped : null;
+    const problemNames = sellers.flatMap(s => s.problemNames || []).slice(0, 5);
+    const defect = data ? sum('defect') : null, defectSellers = sellers.filter(s => Number(s.defect) > 0).length;
+    const c = t.clients || {};
     const tiles = [
-      ['Всего товара', known('total'), 'у ' + nfmt(sellers.length) + ' ' + pluralRu(sellers.length, 'продавца', 'продавцов', 'продавцов')],
-      ['Заказано', sum('ordered'), 'куплено на WB, ещё не в поставке'],
-      ['В сборке', sum('inAssembly'), 'в поставке, склад собирает'],
-      ['В пути', sum('inTransit'), 'уехало на WB, ещё не принято'],
-      ['Принято WB', sum('acceptedByWb'), 'сортировочный центр принял, за 3 дня'],
-      // Как у продавца: «в пути» — сколько вычтено, нехватка — ноль (07.10, замечание 6).
-      ['Доступно к продаже', known('available'), 'всего − заказано − в сборке − в пути'
-        + (sum('inTransit') > sum('transitDeducted') && sellers.some(s => s.transitDeducted != null) ? ' (в пути — ещё не списанное 1С: ' + nfmt(sum('transitDeducted')) + ')' : '')
-        + (sum('shortageCount') ? '; где заказов больше товара — 0' : ''), 'main'],
+      { label: 'Новые заказы', value: orders, unit: orders == null ? '' : pluralRu(orders, 'заказ', 'заказа', 'заказов'),
+        note: units == null ? 'не загрузились' : nfmt(units) + ' шт. · ждут поставки', view: 'orders' },
+      { label: 'Собирается', value: t.ship.supplies, unit: pluralRu(t.ship.supplies, 'поставка', 'поставки', 'поставок'),
+        note: data ? nfmt(sum('inAssembly')) + ' шт. в работе' : 'поставки в сборке', view: 'supplies' },
+      { label: 'Едет на WB', value: data ? sum('inTransit') : null, unit: 'шт.', note: 'уехало, WB ещё не принял', view: 'supplies' },
+      { label: 'Брак', value: defect, unit: 'шт.', warn: defect > 0, view: 'stock',
+        note: defect ? 'у ' + defectSellers + ' ' + pluralRu(defectSellers, 'клиента', 'клиентов', 'клиентов') : 'брака нет' },
+      { label: 'Проблемные товары', value: problems, unit: problems == null ? '' : pluralRu(problems, 'товар', 'товара', 'товаров'), warn: problems > 0,
+        view: unmapped && !short && !kits ? 'orders' : 'stock', title: problemNames.join(', '),
+        note: problems ? parts([short && 'заказов больше остатка: ' + short, kits && 'наборы не собрать: ' + kits,
+          unmapped && 'артикулы не сопоставлены: ' + unmapped]) : 'сборке ничего не мешает' },
+      { label: 'Клиенты', value: c.total, unit: '', view: 'mp',
+        note: c.total ? parts(['с WB на связи: ' + (c.live || 0), 'кабинет выдан: ' + (c.cabinet || 0)]) : 'добавьте первого клиента' },
     ];
-    host.innerHTML = tiles.map(([label, value, note, cls]) => '<div class="home-stat' + (cls ? ' ' + cls : '') + '">'
-      + '<div class="home-stat-label">' + escapeHTML(label) + '</div>'
-      + '<div class="home-stat-value">' + (value == null ? '—' : nfmt(value) + '<small>шт.</small>') + '</div>'
-      + '<div class="home-stat-note">' + escapeHTML(note) + '</div></div>').join('');
+    host.innerHTML = tiles.map(x => '<button type="button" class="home-stat' + (x.warn ? ' home-stat-warn' : '') + '"'
+      + (x.title ? ' title="' + escapeHTML(x.title) + '"' : '') + ' onclick="switchView(\'' + x.view + '\')">'
+      + '<span class="home-stat-label">' + escapeHTML(x.label) + '</span>'
+      + '<span class="home-stat-value">' + (x.value == null ? '—' : nfmt(x.value) + (x.unit ? '<small>' + escapeHTML(x.unit) + '</small>' : '')) + '</span>'
+      + '<span class="home-stat-note">' + escapeHTML(x.note) + '</span></button>').join('');
     host.hidden = false;
   }
 
   async function loadToday(run = homeRun){
-    loadHomeStock(run);
     const box = document.getElementById('todayStrip');
     if(!box) return;
-    const t = await apiFetch('/api/alerts/today');
+    const [t, summary, pending] = await Promise.all([apiFetch('/api/alerts/today'),
+      apiFetch('/api/sellers/stock-summary').catch(() => null), apiFetch('/api/supplies/pending').catch(() => null)]);
     if(run !== homeRun) return;
+    renderHomeTiles(t, summary, pending);
     const n = (x, one, few, many) => x > 0 ? nfmt(x) + ' ' + pluralRu(x, one, few, many) : '';
     const detail = (subs) => subs.filter(Boolean).join(' · ') || 'Сейчас нет';
     const s = t.ship, r = t.receive, d = t.decide, x = t.exchange;
@@ -6201,10 +6319,10 @@
     }
     if(sp.vwForm && !sp.vwForm.id) html += vwFormHtml();
     html += '<div class="sp-key"><span><b>Остальной товар</b> <span class="mp-card-sub">не отнесён ни к одному складу · любая площадка</span></span></div>';
-    // Задания грузчику «переложить» по складам этого продавца.
+    // Задания комплектовщику «переложить» по складам этого продавца.
     const tasks = (sp.vwTasks || []);
     if(tasks.length){
-      html += '<div class="mp-card-sub" style="margin-top:8px;"><b>Задания грузчику «переложить» · ' + tasks.length + '</b></div>'
+      html += '<div class="mp-card-sub" style="margin-top:8px;"><b>Задания комплектовщику «переложить» · ' + tasks.length + '</b></div>'
         + tasks.map(t => '<div class="sp-key"><span>«' + escapeHTML(t.name || t.sku) + '», осталось ' + nfmt(t.left) + ' из ' + nfmt(t.qty) + ' шт. из ячейки ' + escapeHTML(t.fromLabel)
           + '<span class="mp-card-sub">' + (t.kind === 'transfer' ? 'перенос ' + escapeHTML(t.transfer || '') + ': «' + escapeHTML(t.fromName) + '» → «' + escapeHTML(t.toName) + '»'
             : 'разделить: товар склада «' + escapeHTML(t.toName) + '» лежит вместе с другим') + '</span></span>'
@@ -6224,7 +6342,7 @@
       + '</div></details>'
       + '<div class="mp-card-sub">Для юрлица, опта или другого направления выберите «Иное — вне площадок».</div>'
       + '<label class="sp-check"><input type="checkbox" id="vwSep"' + (f.keepSeparate ? ' checked' : '') + ' onchange="document.getElementById(\'vwSepMore\').hidden = !this.checked">'
-      + '<span>Хранить отдельно<small>Товар этого склада не лежит в одной ячейке с товаром других складов продавца. Грузчику подсказываются отдельные ячейки.</small></span></label>'
+      + '<span>Хранить отдельно<small>Товар этого склада не лежит в одной ячейке с товаром других складов продавца. Комплектовщику подсказываются отдельные ячейки.</small></span></label>'
       + '<div id="vwSepMore"' + (f.keepSeparate ? '' : ' hidden') + '>'
       +   '<label class="sp-check"><input type="checkbox" id="vwSepDefect"' + (f.defectSeparate ? ' checked' : '') + '><span>И брак тоже отдельно<small>Иначе брак этого склада лежит в общих ячейках брака.</small></span></label>'
       +   '<label class="sp-vw-field">Зона — не обязательно<input class="mp-field" id="vwZone" maxlength="2000" placeholder="Например: ряд 3 или ячейки 4.1.2, 4.1.3" value="' + escapeHTML(f.zoneText || '') + '"></label>'
@@ -6277,7 +6395,7 @@
         + '<button type="button" class="wh-onboarding-btn primary ask-tasks">Создать задания</button></div></div>';
       overlay.querySelector('.ask-title').textContent = 'Товар склада «' + name + '» уже лежит вместе с другим';
       overlay.querySelector('.ask-text').textContent = 'В ' + n + ' ' + pluralRu(n, 'ячейке', 'ячейках', 'ячейках')
-        + ' товар этого склада лежит вместе с товаром других складов продавца. Создать грузчику задания переложить его отдельно — или разделять только новый товар, а уже лежащее оставить как есть?';
+        + ' товар этого склада лежит вместе с товаром других складов продавца. Создать комплектовщику задания переложить его отдельно — или разделять только новый товар, а уже лежащее оставить как есть?';
       const done = (v) => { overlay.remove(); resolve(v); };
       overlay.addEventListener('click', (e) => { if(e.target === overlay) done(null); });
       overlay.querySelector('.ask-cancel').onclick = () => done(null);
@@ -6322,7 +6440,7 @@
         delete vwCache[companyId];
         if(sp !== context) return;
         sp.vwForm = null;
-        showWhToast('Склад сохранён.' + (r.tasks ? ' Грузчику созданы задания «переложить»: ' + r.tasks + '.' : '')
+        showWhToast('Склад сохранён.' + (r.tasks ? ' Комплектовщику созданы задания «переложить»: ' + r.tasks + '.' : '')
           + (r.zone && r.zone.foreign ? ' В зоне лежит чужой товар в ' + r.zone.foreign + ' яч. — его надо убрать.' : ''));
       } else {
         if(body.zone === undefined && zoneText) body.zone = parseZone(zoneText);
@@ -7896,7 +8014,7 @@
     } catch(e){ showWhToast('Не сохранилось: ' + e.message); if(btn) btn.disabled = false; }
   }
   async function dropKit(){
-    if(!await askConfirm('Убрать состав набора ' + kitEdit.kitSku + '? Грузчик больше не сможет собрать его из частей.')) return;
+    if(!await askConfirm('Убрать состав набора ' + kitEdit.kitSku + '? Комплектовщик больше не сможет собрать его из частей.')) return;
     saveKit(true);
   }
 
@@ -8010,6 +8128,7 @@
     try{
       ordersPartners = await apiFetch('/api/supplies/pending');
       const total = ordersPartners.reduce((s, p) => s + p.orders, 0);
+      const tabN = document.getElementById('ordersTabWbN'); if(tabN) tabN.textContent = total ? String(total) : '';
       const badge = document.getElementById('ordersBadge');
       if(badge){
         badge.textContent = total > 0 ? String(total) : '';
@@ -8398,7 +8517,9 @@
     const pickedDirect = pickedKinds.has(true) && !pickedKinds.has(false);
     const mixedKind = pickedKinds.size > 1;
     const points = isWb && !pickedDirect && Array.isArray(ordersPoints[companyId]) ? ordersPoints[companyId] : null;
-    const needShipping = !!points && (!ordersPointId || !ordersShipDate);
+    // Пункт WB и дата — можно не указывать (владелец 10–11.10.2026): поля
+    // остаются, поставка составляется и без них, а укажут их позже, в кабинете WB.
+    const needShipping = false;
     const vwChoices = pickedDirect ? [] : supplyVwChoices(companyId, isWb) || [];
     if(ordersVw && !pickedDirect && !vwChoices.some(c => (c.id || 'main') === ordersVw)) ordersVw = '';
     const needVw = vwChoices.length > 1 && !ordersVw;
@@ -8438,7 +8559,7 @@
           ? '<div class="ord-sub ord-warn">нет в номенклатуре склада — сопоставьте артикул</div>' : ''}${lineVw(o)}</div></div></td>
         <td class="ord-mono">${escapeHTML(o.article || '—')}${o.nmId ? `<div class="ord-sub">WB ${escapeHTML(o.nmId)}</div>` : ''}</td>
         <td class="ord-mono">${escapeHTML(o.barcode || '—')}</td>
-        <td>${o.direct ? `<b>${escapeHTML(o.direct.recipient)}</b>${o.direct.address !== o.direct.recipient ? `<div class="ord-sub">${escapeHTML(o.direct.address)}</div>` : ''}${
+        <td>${o.direct ? `<b>${escapeHTML(o.direct.recipient)}</b>${o.direct.address && o.direct.address !== o.direct.recipient ? `<div class="ord-sub">${escapeHTML(o.direct.address)}</div>` : ''}${
             [o.direct.deliveryService, o.direct.phone, o.direct.vwName ? 'склад «' + o.direct.vwName + '»' : ''].filter(Boolean).length
               ? `<div class="ord-sub">${escapeHTML([o.direct.deliveryService, o.direct.phone, o.direct.vwName ? 'склад «' + o.direct.vwName + '»' : ''].filter(Boolean).join(' · '))}</div>` : ''}`
           : (o.offices || []).length ? escapeHTML(o.offices.join(', ')) : '<span class="ord-sub">—</span>'}${o.wbWarehouse
@@ -8458,16 +8579,16 @@
     box.innerHTML = `
       <div class="ord-actions" data-form>
         <!-- Куда уедет поставка. По этой точке её потом отбирают в списке
-             поставок и по ней грузчик раскладывает собранное по машинам.
+             поставок и по ней комплектовщик раскладывает собранное по машинам.
              Для WB — пункт приёма из списка WB и дата: их требует WB. -->
         ${points ? `
         <input class="ord-place ord-point" id="ordPointText"
                list="wbPoints-${companyId}" value="${escapeHTML(ordersPointText)}"
-               placeholder="Пункт WB: город или адрес — любой из кабинета WB" aria-label="Пункт отгрузки WB"
+               placeholder="Пункт WB (необязательно): город или адрес из кабинета WB" aria-label="Пункт отгрузки WB, необязательно"
                oninput="setOrdersPointText('${companyId}', this.value)">
         <input class="ord-place ord-date" id="ordShipDate" type="date" min="${moscowToday()}"
                value="${escapeHTML(ordersShipDate)}" onchange="setOrdersShipDate('${companyId}', this.value)"
-               aria-label="Дата отгрузки" title="Дата отгрузки">`
+               aria-label="Дата отгрузки, необязательно" title="Дата отгрузки (необязательно)">`
         : `
         <input class="ord-place" id="ordPlace" list="ordPlaceList" maxlength="120"
                placeholder="${pickedDirect ? 'Куда — не обязательно: подставим получателя' : isWb && ordersPoints[companyId] === 'loading' ? 'Загружаю пункты WB…' : 'Куда везём: склад WB или город'}"
@@ -8547,7 +8668,7 @@
         </div>` : ''}
       ${otherOrdersHtml(companyId)}
       <div class="ord-meta" style="margin-top:14px;">
-        Продавец: ${escapeHTML(partner ? partner.companyName : '')}. Поставка уходит на склад, грузчики
+        Продавец: ${escapeHTML(partner ? partner.companyName : '')}. Поставка уходит на склад, комплектовщики
         собирают её по листу. Пока для продавца не разрешено «Менять статусы» в окне клиента («Клиенты» → клиент), поставку и статусы в кабинете WB делают вручную — после того как поставка составлена здесь.
       </div>
     `;
@@ -8669,12 +8790,12 @@
     const d = supplyInside[id];
     if(!d) return '<div class="sup-head">Смотрю…</div>';
     if(d.error) return '<div class="sup-head warn">Не удалось посмотреть: ' + escapeHTML(d.error) + '</div>';
-    // Отметки грузчика «нет товара» — первым делом: поставка стоит, пока по
+    // Отметки комплектовщика «нет товара» — первым делом: поставка стоит, пока по
     // ним не решили. Решение прямо здесь: убрать заказ из поставки (она
     // уедет без него) — или, если товар нашёлся, закрыть отметку в журнале.
     const canRemove = d.supply && d.supply.status !== 'shipped' && !d.supply.mpSupplyId;
     const alerts = (d.shortages || []).length
-      ? '<div class="sup-alert"><b>ОЧЕНЬ ВАЖНО — грузчик отметил «нет товара»</b>'
+      ? '<div class="sup-alert"><b>ОЧЕНЬ ВАЖНО — комплектовщик отметил «нет товара»</b>'
         + d.shortages.map(x => '<div>' + escapeHTML(urgentText(x.text))
           + (!canRemove ? ''
             : x.orderPicked
@@ -8703,11 +8824,17 @@
     const units = rows.reduce((sum, r) => sum + r.qty, 0);
     const body = rows.map(r => {
       const p = left.get(r.sku);
-      const taken = r.qty - (p ? p.qty : 0);
+      // Поставка собрана целиком — сервер отдаёт в листе, сколько взяли
+      // (collected), а не сколько осталось: иначе собранное выглядело несобранным.
+      const done = !!(p && p.collected);
+      const taken = done ? Number(p.qty) : r.qty - (p ? p.qty : 0);
       // Где лежит. Идти больше некуда — товар уже на столе. Некуда идти —
       // товар в ячейки Аргуса не положен: собрать по такому листу нельзя,
       // и сказать об этом надо здесь, а не у стеллажа.
-      const where = taken >= r.qty
+      const where = done
+        ? (taken >= r.qty ? 'собрано' : 'собрано ' + taken + ' из ' + r.qty)
+          + (p.cells && p.cells.length ? '<div class="sku">' + p.cells.map(c => escapeHTML(c.label) + ' — ' + c.qty).join(' · ') + '</div>' : '')
+        : taken >= r.qty
         ? 'собрано'
         : p && p.cells && p.cells.length
           ? p.cells.map(c => escapeHTML(c.label) + (c.take ? ' — ' + c.take : '')).join('<br>')
@@ -8853,7 +8980,7 @@
         +   supplyAssemblyHtml(s)
         + '</div>'
         + '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">'
-        +   (s.missing > 0 ? '<span class="sup-missing" title="Грузчик отметил на сборке — смотрите «Что внутри» и журнал">Нет товара: ' + s.missing + '</span>' : '')
+        +   (s.missing > 0 ? '<span class="sup-missing" title="Комплектовщик отметил на сборке — смотрите «Что внутри» и журнал">Нет товара: ' + s.missing + '</span>' : '')
         // Ещё до сборки: по учёту Аргуса товара на полках не хватит.
         +   (s.stockShort > 0 && !(s.missing > 0) ? '<span class="sup-missing sup-short" title="По учёту Аргуса на полках не хватает товара для этих заказов">Не хватит товара: ' + s.stockShort + '</span>' : '')
         +   '<div class="sup-state ' + s.status + '">' + escapeHTML(supplyStateText(s)) + '</div>'
@@ -8889,9 +9016,9 @@
   window.loadSupplies = loadSupplies;
   window.renderSupplies = renderSupplies;
 
-  // Ход сборки у поставки — строкой, как её видят грузчики (27.09.2026):
+  // Ход сборки у поставки — строкой, как её видят комплектовщики (27.09.2026):
   // «На паузе · Дима · взято 3 из 7 · «коробы у ворот 3»». Руководитель и
-  // менеджер только смотрят: начать или бросить сборку может лишь грузчик.
+  // менеджер только смотрят: начать или бросить сборку может лишь комплектовщик.
   function supplyAssemblyHtml(s){
     const st = s.assembly;
     if(!st || !st.assembly || s.status === 'shipped') return '';
@@ -9106,8 +9233,7 @@
     const direct = ordersRows.filter(o => ready.includes(o.id)).every(o => o.marketplace === 'direct');
     const points = !direct && Array.isArray(ordersPoints[companyId]) ? ordersPoints[companyId] : null;
     const point = !direct && ordersPoint && String(ordersPoint.id) === ordersPointId ? ordersPoint : null;
-    if(points && (!point || !ordersShipDate)){ showWhToast('Выберите пункт WB и дату отгрузки.'); return; }
-    const place = (point ? point.label : ordersPlace.trim()).slice(0, 120);
+    const place = (point ? point.label : (points ? ordersPointText : ordersPlace).trim()).slice(0, 120);
     const dayText = ordersShipDate
       ? new Date(ordersShipDate + 'T12:00:00').toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : '';
     const vwChoices = direct ? [] : supplyVwChoices(companyId, partner && partner.marketplace === 'wb') || [];
@@ -9116,7 +9242,8 @@
     if(!await askConfirm(`Составить поставку: ${ready.length} ${pluralRu(ready.length, 'заказ', 'заказа', 'заказов')}`
       + ` продавца «${partner ? partner.companyName : ''}»` + (place ? ` — ${place}` : '') + (dayText ? `, отгрузка ${dayText}` : '')
       + (vwPick ? (vwPick.id === 'all' ? ', из всего товара продавца' : `, со склада «${vwPick.name}»`) : '')
-      + `?\n\nОна уйдёт на склад, грузчики начнут сборку` + (vwPick ? (vwPick.id === 'all' ? ' — с любого склада продавца.' : ' — только из товара этого склада.') : '.'))) return;
+      + (points && (!point || !ordersShipDate) ? '\n\nПункт WB и дату отгрузки можно указать позже — в кабинете WB.' : '')
+      + `?\n\nОна уйдёт на склад, комплектовщики начнут сборку` + (vwPick ? (vwPick.id === 'all' ? ' — с любого склада продавца.' : ' — только из товара этого склада.') : '.'))) return;
     supplyInFlight = true;
     const button = document.querySelector('.ord-actions button');
     if(button){ button.disabled = true; button.textContent = 'Составляем поставку…'; }

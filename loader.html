@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Аргус — рабочее место</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Аргус · Грузчик">
+<meta name="apple-mobile-web-app-title" content="Аргус · Комплектовщик">
 <link rel="stylesheet" href="fonts.css?v=f77584bf">
 <link rel="stylesheet" href="seller-fonts.css?v=d1da12bc">
 <style>
@@ -30,7 +30,7 @@
        не синий и не бирюзовый --accent, чтобы число не сливалось с кнопками.
        Контраст с фоном карточки #1D2023 — 8.6:1, с фоном #111315 — 10:1. */
     --sky:#7CC4F2;
-    /* Моноширинного шрифта на экранах грузчика нет (владелец 26–27.09.2026:
+    /* Моноширинного шрифта на экранах комплектовщика нет (владелец 26–27.09.2026:
        «шестёрки и пятёрки выглядят ужасно»): номера, ячейки и артикулы —
        тем же Golos, цифры одной ширины задаёт font-variant-numeric у body. */
     --mono:'Golos Text', 'Inter', system-ui, sans-serif;
@@ -143,6 +143,7 @@
      названия прихода или поставки, пауза — кнопкой рядом (задание 28.09.2026).
      Раньше таймер был мелкой строкой под шапкой, а справа от номера пусто. */
   .work-clock{display:flex; align-items:stretch; gap:8px; flex:0 0 auto; margin-left:auto;}
+  .work-clock[hidden]{display:none;}
   .work-clock[hidden]{display:none;}
   .work-clock .task-timer{font-size:30px; font-weight:700; line-height:1; padding:8px 16px; min-height:54px;
     border-radius:12px; gap:10px; letter-spacing:0.02em; border:1.5px solid rgba(95,175,166,0.45);}
@@ -468,7 +469,7 @@
   }
   .defect-input:focus{outline:none; border-color:var(--accent);}
   .defect-input::placeholder{color:var(--muted);}
-  /* ---------- Лист грузчика и перепаковка ----------
+  /* ---------- Лист комплектовщика и перепаковка ----------
      Оба экрана не привязаны к документу: лист сводит несколько заказов, а
      перепаковка вообще про полку, а не про накладную. Поэтому живут рядом с
      задачей, а не внутри неё. */
@@ -753,7 +754,7 @@
     width:44px; height:20px; border-radius:4px; cursor:pointer; position:relative;
   }
   /* Заполнение ячейки — «батарейка» (владелец 28.09.2026). Та же в
-     loader.html: одно место не должно выглядеть по-разному у грузчика и у
+     loader.html: одно место не должно выглядеть по-разному у комплектовщика и у
      владельца. Доля — --p, цвет — насколько полна; процента нет — штриховка. */
   .map-cell.free{background:#15171A; border:1.5px dashed rgba(232,230,225,0.16);}
   .map-cell.occupied{
@@ -1003,7 +1004,7 @@
   .asm-line.in-card{margin-top:10px; padding:9px 12px; font-size:14.5px;}
 
   /* Экран сборки по товарам: номер поставки один раз по центру, без имени
-     грузчика; ячейка, штрихкод и артикулы крупно; «нужно · взял» одной
+     комплектовщика; ячейка, штрихкод и артикулы крупно; «нужно · взял» одной
      строкой рядом с названием; «Все товары поставки» — заметной кнопкой. */
   .run-title{display:none;}
   .run-all-btn{display:none;}
@@ -1131,7 +1132,7 @@
   .done-print{display:none;}
   .done-screen.asm .done-print{display:block; background:var(--accent); color:#182422; border-color:var(--accent);}
   .done-screen.asm #doneNextBtn, .done-screen.asm #shipBtn, .done-screen.asm #shipDoneNote{display:none !important;}
-  /* Телефон: экран грузчика во всю ширину. Рамка «телефона» с полями по
+  /* Телефон: экран комплектовщика во всю ширину. Рамка «телефона» с полями по
      24 px отнимала у списка товаров почти шестую часть экрана. */
   @media(max-width:480px){
     body{padding:0; align-items:stretch;}
@@ -1181,7 +1182,7 @@
   .recv-row-seller{font-size:15px; font-weight:600;}
   .recv-row-meta{font-size:14px; color:var(--muted); line-height:1.45;}
   .recv-row .asm-line{margin-top:4px; padding:9px 12px; font-size:14.5px;}
-  /* «Машина приехала — принять»: у всех грузчиков сразу видно, что ждёт у ворот. */
+  /* «Машина приехала — принять»: у всех комплектовщиков сразу видно, что ждёт у ворот. */
   .recv-row.arrived{border:2px solid var(--accent); background:linear-gradient(160deg, var(--accent-soft), var(--panel) 70%);}
   .recv-arrived{font-size:16px; font-weight:700; color:var(--accent-2);}
   .recv-row .arrive-row{padding:0;}
@@ -1308,7 +1309,7 @@
 
     <!-- Сборка по бумажному листу: открывается сканом QR на листе или
          кнопкой в поставке. Лист в руках, а отметку «собрал» и «не нашёл»
-         грузчик ставит сам, без начальника (владелец 22.09.2026). -->
+         комплектовщик ставит сам, без начальника (владелец 22.09.2026). -->
     <div class="job-screen" id="paperScreen">
       <div class="job-head">
         <div class="job-back" onclick="paperBack()">← К поставке</div>
@@ -1717,7 +1718,7 @@
       </div>
     </div>
 
-    <!-- Лист грузчика: план обхода по нескольким заказам сразу. Собрать
+    <!-- Лист комплектовщика: план обхода по нескольким заказам сразу. Собрать
          записывают потом по каждому заказу как обычно — здесь именно план,
          чтобы работник прошёл склад один раз, а не по разу на заказ. -->
     <div class="job-screen" id="pickListScreen">
@@ -1725,7 +1726,7 @@
         <div class="job-back" onclick="pickListBack()">← Назад</div>
         <div class="job-head-row">
           <div>
-            <div class="job-title" id="pickListTitle">Лист грузчика</div>
+            <div class="job-title" id="pickListTitle">Лист комплектовщика</div>
             <div class="job-sub" id="pickListSub">Считаю…</div>
           </div>
           <div class="job-actions">
@@ -1765,7 +1766,7 @@
 
     <!-- Сборка набора. Заказан один артикул, а на полке лежат два-четыре
          разных товара: работник берёт компоненты и складывает их вместе.
-         Открывается из листа грузчика, где нехватка набора и обнаруживается. -->
+         Открывается из листа комплектовщика, где нехватка набора и обнаруживается. -->
     <div class="job-screen" id="kitScreen">
       <div class="job-head">
         <div class="job-back" onclick="kitBack()">← Назад</div>
@@ -1786,7 +1787,7 @@
         <div id="moveBody"></div>
       </div>
     </div>
-    <!-- Склад брака: решения продавцов — задания грузчику (02.10.2026). -->
+    <!-- Склад брака: решения продавцов — задания комплектовщику (02.10.2026). -->
     <div class="job-screen" id="defectScreen">
       <div class="job-head">
         <div class="job-back" onclick="showHome()">← Что делаем?</div>
@@ -1848,8 +1849,8 @@
 
   <div class="toast" id="toast"></div>
 
-<script src="auth.js?v=36b93e56"></script>
-<script src="back.js?v=4901b838"></script>
+<script src="auth.js?v=34b2912c"></script>
+<script src="back.js?v=abcfba2c"></script>
 <script>
   const API_BASE = window.ArgusWorker ? ArgusWorker.apiBase : 'https://api.argus-ai.online';
   const WORKER_LOGIN = window.ArgusWorker ? 'login.html' : 'worker-login.html';
@@ -2000,7 +2001,7 @@
   }
   // Адрес ячейки — «ряд.стеллаж.ярус», как на карте склада (решение владельца
   // 27.09.2026): «1.7.3» — ряд 1, стеллаж 7, ярус 3. Одна запись на весь
-  // экран грузчика; сервер пишет так же (argus-api/src/cells/label.js).
+  // экран комплектовщика; сервер пишет так же (argus-api/src/cells/label.js).
   // Ряд 0 — общее место «Склад»: адресное хранение выключено (06.10.2026).
   function formatBlockLabel(rowNum, block){
     if(Number(rowNum) === 0) return 'Склад';
@@ -2010,7 +2011,7 @@
   }
 
   // ---------- Сканер QR листа сборки (владелец 06.10.2026) ----------
-  // Кнопка в кабинете грузчика: камера открывается здесь же, без стороннего
+  // Кнопка в кабинете комплектовщика: камера открывается здесь же, без стороннего
   // приложения и повторного входа. Понимаем только QR Аргуса — ссылку на лист
   // сборки поставки (…/loader.html#paper=<поставка>); чужие ссылки не открываем.
   // Распознаёт сам браузер (BarcodeDetector), а где его нет (iPhone) — jsQR
@@ -2189,7 +2190,7 @@
   window.addEventListener('pagehide', closeScanner);
 
   // ---------- Автообновление (владелец 06.10.2026) ----------
-  // Грузчик не должен сам обновлять страницу: раз в 30 секунд списки
+  // Комплектовщик не должен сам обновлять страницу: раз в 30 секунд списки
   // перечитываются — только на экранах-списках, когда вкладка открыта, нет
   // окна поверх и человек ничего не вводит. Экран работы (сборка, приёмка) не трогаем.
   setInterval(() => {
@@ -2275,7 +2276,7 @@
     startTaskTimer();
     // Отложенные позиции — только про текущую накладную. Позиции, по которым
     // уже отправлено «нет товара» и руководитель ещё не ответил, сразу
-    // отложены: иначе после перезагрузки грузчик пошёл бы за ними снова.
+    // отложены: иначе после перезагрузки комплектовщик пошёл бы за ними снова.
     postponedItems = new Set(currentInvoice.items.filter(it => it.missing_marked && !it.closed).map(it => it.id));
     setPauseLock(false);
     document.getElementById('doneScreen').classList.remove('show');
@@ -2331,7 +2332,7 @@
   }
 
   // ---------- Сборка поставки по товарам ----------
-  // Решение владельца 24.09.2026: грузчик идёт к ячейке и берёт сразу всё,
+  // Решение владельца 24.09.2026: комплектовщик идёт к ячейке и берёт сразу всё,
   // что нужно поставке по этому товару, а не по штуке на каждый заказ. Порядок
   // — по обходу склада; «Все товары поставки» — взять любой, если он рядом.
   // Аргус сам раскладывает взятое по заказам (POST /api/shipping/product).
@@ -2421,14 +2422,14 @@
     renderCurrentItem();
     // Сборка на паузе (вышел и вернулся) — сразу «Вы вышли — сборка на паузе».
     if(runState && runState.status === 'paused') showRunPaused();
-    // Начало сборки — со списка всех товаров: грузчик сам выбирает, с какого
+    // Начало сборки — со списка всех товаров: комплектовщик сам выбирает, с какого
     // начать (владелец 06.10.2026). Кнопка «Все товары» остаётся на экране.
     else if(!sku && currentInvoice.items.some(i => !i.closed)) openProductsSheet();
   }
   window.openProductRun = openProductRun;
 
   // Экран задачи общий у приёмки, возврата и сборки. У сборки поставки и у
-  // приёмки прихода свой вид: номер один раз по центру, без имени грузчика,
+  // приёмки прихода свой вид: номер один раз по центру, без имени комплектовщика,
   // поле количества встаёт в строку «нужно · взял» («заявлено · принял») под
   // названием, коды товара — крупно.
   function layoutRun(on, kind = 'assembly'){
@@ -2664,7 +2665,7 @@
     document.getElementById('manualCellBtn').style.display = '';
 
     let idx = findNextUnreceivedIndex();
-    // Товар, который грузчик взял сам («Все товары прихода», товар на экране
+    // Товар, который комплектовщик взял сам («Все товары прихода», товар на экране
     // прихода), — первым: коробка уже в руках. «Переложить» — тот товар,
     // который перекладывают, хоть он и разложен.
     if(recvRun && recvRun.preferred){
@@ -3054,7 +3055,7 @@
   // Сохранено, но экран не обновился.
   //
   // Запись на сервер уже прошла, а следом падает обновление списка или карты
-  // ячеек — и грузчик видел «Не удалось сохранить». Он жал ещё раз, и
+  // ячеек — и комплектовщик видел «Не удалось сохранить». Он жал ещё раз, и
   // количество записывалось дважды: на полке десять, в базе двадцать.
   // Поэтому после удачной записи кнопку не возвращаем и говорим правду.
   function savedButStale(error){
@@ -3627,7 +3628,7 @@
   }
 
   /* ==================== Работы без документа ====================
-     Лист грузчика и перепаковка не относятся к одной накладной, поэтому у них
+     Лист комплектовщика и перепаковка не относятся к одной накладной, поэтому у них
      свои экраны, а задача с накладной просто прячется под ними и возвращается
      нетронутой. */
 
@@ -4251,9 +4252,9 @@
   // Куда вернуться из накладной: {kind:'supply', id} | {kind:'receipt', id} | {kind:'docs', dir} | {kind:'supplies'}.
   let backTarget = null;
   // Заказы, уже пройденные в этом заходе по поставке: без этого заказ, где
-  // всё отложено, гонял бы грузчика по кругу.
+  // всё отложено, гонял бы комплектовщика по кругу.
   const runVisited = new Set();
-  // Лист грузчика по конкретным заказам — поставке. null — по всем.
+  // Лист комплектовщика по конкретным заказам — поставке. null — по всем.
   let pickListIds = null;
   let pickListSupply = null;
 
@@ -4376,7 +4377,7 @@
       +   (s.created_by ? ' · составил ' + escapeHTML(s.created_by) : '') + '</div>'
       + '<div class="sup-card-meta">собрано ' + done + ' из ' + total + ' '
       +   pluralRu(total, 'заказа', 'заказов', 'заказов') + '</div>'
-      // Кто собирает и что с ней сейчас — видно всем грузчикам (п. 20).
+      // Кто собирает и что с ней сейчас — видно всем комплектовщикам (п. 20).
       + assemblyLine(s.assembly, s.status).replace('class="asm-line', 'class="asm-line in-card')
       + '<div class="sup-card-bar"><div style="width:' + pct + '%"></div></div>'
       + '</div>';
@@ -4407,7 +4408,7 @@
       : collecting + ' ' + pluralRu(collecting, 'поставка собирается', 'поставки собираются', 'поставок собираются')
         + (readyCount ? ' · ' + readyCount + ' ' + pluralRu(readyCount, 'собрана', 'собраны', 'собраны') + ', ждут машину' : '');
     document.getElementById('suppliesBody').innerHTML =
-      (collecting > 1 ? '<button class="big-btn" onclick="openAllPickList()">Лист грузчика по всем поставкам</button>' : '')
+      (collecting > 1 ? '<button class="big-btn" onclick="openAllPickList()">Лист комплектовщика по всем поставкам</button>' : '')
       + active.map(supplyCardHtml).join('')
       + (loose.length
         ? '<div class="list-group-title">Отгрузки из 1С без поставки · ' + loose.length + '</div>'
@@ -4555,12 +4556,12 @@
 
   /* ---------- Приёмка товара: список приходов ----------
      Владелец 27.09.2026: привоз продавца, у которого уже отметили «машина
-     приехала», грузчик «не увидел» — он был сто шестьдесят седьмым, внизу
+     приехала», комплектовщик «не увидел» — он был сто шестьдесят седьмым, внизу
      списка от старых к новым. Теперь порядок: машина приехала — принять (по
      времени приезда), привезут сегодня (по времени выгрузки), остальные
      привозы продавцов, приходы из 1С и заведённые вручную. Внутри — новые
      выше старых. Поиск и фильтры — сверху. Заказы поставщику из 1С сервер
-     грузчику не отдаёт: это заказ, а не привоз. */
+     комплектовщику не отдаёт: это заказ, а не привоз. */
   const RECV_PAGE = 30;
   const recvUi = { q: '', status: 'all', origin: 'all', seller: '', shown: RECV_PAGE };
   const RECV_STATUS = { all: 'Все', waiting: 'Ждёт машину', arrived: 'Приехала', receiving: 'Принимается' };
@@ -4688,7 +4689,7 @@
   window.recvMore = recvMore;
 
   // Привоз продавца (владелец 26.09.2026): когда и во сколько привезут,
-  // сколько мест, кто везёт. «Машина приехала» грузчик отмечает у ворот,
+  // сколько мест, кто везёт. «Машина приехала» комплектовщик отмечает у ворот,
   // пересчитав места; первая принятая строка отметит приезд и сама.
   function inboundPlaces(boxes, pallets){
     return [boxes ? boxes + ' ' + pluralRu(boxes, 'короб', 'короба', 'коробов') : '',
@@ -4718,7 +4719,7 @@
       +   '<span class="recv-row-state">' + RECV_STATE_TEXT[st] + '</span></div>'
       + '<div class="recv-row-seller">' + escapeHTML(i.company_name || '') + '</div>'
       + recvMeta(i).map(t => '<div class="recv-row-meta">' + escapeHTML(t) + '</div>').join('')
-      // Кто принимает и сколько принято — у всех грузчиков одинаково.
+      // Кто принимает и сколько принято — у всех комплектовщиков одинаково.
       + (i.work && i.work.assembly ? assemblyLine(i.work, i.status, 'receiving') : '')
       + (canArrive ? '<div class="arrive-row" id="arrive-' + escapeHTML(i.id) + '" onclick="event.stopPropagation()">'
         + '<button class="arrive-btn" type="button" onclick="startArrive(\'' + id + '\')">Машина приехала</button></div>' : '')
@@ -5053,7 +5054,7 @@
     body.innerHTML = '';
     const forSupply = pickListSupply ? supplies.find(s => s.id === pickListSupply) : null;
     document.getElementById('pickListTitle').textContent = forSupply
-      ? 'Лист грузчика · ' + forSupply.number : 'Лист грузчика';
+      ? 'Лист комплектовщика · ' + forSupply.number : 'Лист комплектовщика';
 
     let list;
     try{
@@ -5190,7 +5191,7 @@
      «назад» браузера, в другую вкладку, закрыл страницу — таймер сам встаёт
      на паузу, и руководитель видит это в журнале. Вернулся — «Вы вышли —
      сборка на паузе» и три действия: продолжить, закончить с тем, что взято,
-     отказаться (поставка свободна, любой грузчик продолжит с того же места).
+     отказаться (поставка свободна, любой комплектовщик продолжит с того же места).
      Всё это хранит сервер: /api/shipping/assembly/:id, пауза — через
      /api/journal/pause, как и раньше. */
   let runState = null;
@@ -5252,7 +5253,7 @@
     : 'взято ' + st.taken + ' из ' + st.total + ' шт.');
   const liveOf = (st) => st && st.assembly && (st.assembly.status === 'active' || st.assembly.status === 'paused') ? st.assembly : null;
 
-  // Строка состояния у поставки и у прихода — у всех грузчиков одинаковая:
+  // Строка состояния у поставки и у прихода — у всех комплектовщиков одинаковая:
   // «На паузе · Дима · взято 3 из 7 · «коробы у ворот 3»».
   function assemblyLine(st, docStatus, kind = 'assembly'){
     const a = st && st.assembly;
@@ -5335,7 +5336,7 @@
       await openProductRun(supplyId, sku);
     } catch(e){
       go.disabled = false;
-      // Пока окно было открыто, сборку начал другой грузчик — предложим забрать.
+      // Пока окно было открыто, сборку начал другой комплектовщик — предложим забрать.
       showToast('Не началось: ' + e.message);
       await refreshWork().catch(() => {});
       const s = supplies.find(x => x.id === supplyId);
@@ -5497,8 +5498,8 @@
     document.getElementById('abandonNote').innerHTML = (w.kind === 'receiving' ? 'Принятое' : 'Взятое')
       + ' — <b>' + escapeHTML(takenText(st)) + '</b> — останется записанным. '
       + (w.kind === 'receiving'
-        ? 'Приход вернётся в общий список: любой грузчик продолжит с того же места.'
-        : 'Поставка вернётся в общий список: любой грузчик продолжит с того же места.');
+        ? 'Приход вернётся в общий список: любой комплектовщик продолжит с того же места.'
+        : 'Поставка вернётся в общий список: любой комплектовщик продолжит с того же места.');
     const typed = [document.getElementById('pauseComment'), document.getElementById('asmComment')]
       .map(el => el && el.value.trim()).find(Boolean) || '';
     document.getElementById('abandonComment').value = typed;
@@ -5608,7 +5609,7 @@
     const w = workNow();
     if(!w) return;
     try{ applyAssemblyState(await apiFetch(WORK[w.kind].path(w.id))); renderTaskTimer(); } catch(e){ return; /* покажем при следующем шаге */ }
-    // Пока телефон лежал, работу забрал другой грузчик — продолжать её здесь
+    // Пока телефон лежал, работу забрал другой комплектовщик — продолжать её здесь
     // нельзя: говорим прямо и возвращаем к поставке или приходу.
     const live = runState && (runState.status === 'active' || runState.status === 'paused');
     if(!live || !runState.mine){
@@ -5772,14 +5773,17 @@
 
   /* ---------- Сборка по бумажному листу ----------
      Скан QR на листе (или кнопка в поставке) — начало и таймер: сервер пишет
-     в журнал «начал по листу». Грузчик собирает по бумаге, здесь отмечает
+     в журнал «начал по листу». Комплектовщик собирает по бумаге, здесь отмечает
      только то, чего не нашёл, и жмёт «Собрал по листу» — Аргус записывает
      взятое по ячейкам листа и шлёт руководителю «нет товара» на ненайденное.
      Начатая сборка переживает перезагрузку телефона: она в памяти браузера. */
   const PAPER_KEY = window.ArgusWorker ? ['argus_paper', API_BASE, authPayload.warehouseId, authPayload.staffKeyId].join('|') : 'argus_paper';
   let paper = null;          // { supplyId, number, startedAt, pausedMs, pauseAt, pauseReason, miss: {sku: found} }
   let paperLines = [];
-  let paperKits = new Map();   // артикул набора → строка листа грузчика
+  // Поставка уже собрана: что и откуда взяли — лист не пропадает (владелец 10.10.2026).
+  let paperCollected = [];
+  let paperSupplyId = null;
+  let paperKits = new Map();   // артикул набора → строка листа комплектовщика
   let paperTimer = null;
 
   function savePaper(){
@@ -5802,11 +5806,13 @@
     try{ d = await apiFetch('/api/supplies/' + supplyId); }
     catch(e){ document.getElementById('paperSub').textContent = 'Не удалось загрузить поставку: ' + e.message; return; }
     // Сколько ещё собирать по каждому товару — без позиций, по которым уже
-    // ушло «нет товара»: их ждёт решение руководителя, а не грузчик.
+    // ушло «нет товара»: их ждёт решение руководителя, а не комплектовщик.
     const open = new Map();
     (d.packing || []).forEach(l => { if(!l.missing) open.set(l.sku, (open.get(l.sku) || 0) + Number(l.left || 0)); });
     paperLines = (d.picking || []).map(r => Object.assign({}, r, { qty: open.get(r.sku) || 0 }))
       .filter(r => r.qty > 0);
+    paperSupplyId = supplyId;
+    paperCollected = paperLines.length ? [] : (d.picking || []).filter(r => r.collected);
     // Наборы: артикула набора на полке нет, пока его не собрали из
     // компонентов. Без этого «Собрал по листу» превращал каждый несобранный
     // набор в «нет товара» — а у продавцов наборов половина заказов.
@@ -5829,7 +5835,7 @@
           : await apiFetch('/api/shipping/assembly/' + supplyId);
       } catch(e){
         document.getElementById('paperSub').textContent = e.message;
-        // Сборку ведёт другой грузчик — предложим забрать.
+        // Сборку ведёт другой комплектовщик — предложим забрать.
         try{
           const now = await apiFetch('/api/shipping/assembly/' + supplyId);
           const other = liveOf(now);
@@ -5946,9 +5952,21 @@
 
   function renderPaper(){
     const body = document.getElementById('paperBody');
+    // Таймер и пауза — только пока собирают.
+    const clock = document.querySelector('#paperScreen .work-clock');
+    if(clock) clock.hidden = !paperLines.length;
     if(!paperLines.length){
-      body.innerHTML = '<div class="job-empty">Собирать больше нечего: всё собрано '
-        + 'или ждёт решения руководителя по «нет товара».</div>';
+      // Собранная поставка — лист «что взяли и откуда», а не пустой экран.
+      body.innerHTML = paperCollected.length
+        ? '<div class="paper-note">Поставка собрана. Вот что взяли и из каких ячеек.</div>'
+          + paperCollected.map(r => '<div class="paper-line">'
+            + '<div class="paper-top"><div><div class="paper-name">' + escapeHTML(r.name || r.sku) + '</div>'
+            + '<div class="paper-sku">' + escapeHTML(r.article || r.sku) + '</div></div>'
+            + '<div class="paper-need">взято ' + Number(r.qty) + ' шт</div></div>'
+            + '<div class="paper-cells">' + ((r.cells || []).map(c => escapeHTML(c.label + ' — ' + c.qty)).join(' · ') || 'ячейка не записана') + '</div></div>').join('')
+          + '<button class="big-btn" onclick="openPrintChoice(\'' + jsArg(paperSupplyId) + '\')">🖨 Печать листа сборки</button>'
+        : '<div class="job-empty">Собирать больше нечего: всё собрано '
+          + 'или ждёт решения руководителя по «нет товара».</div>';
       paper = null;
       savePaper();
       return;
@@ -6332,7 +6350,7 @@
   }
   // Клик мимо окна. Окна «Закончить», «Отказаться» и записку руководителю
   // так не закрыть — только их кнопками (третье задание 27.09.2026): 27.09
-  // окно «Закончить приёмку» закрылось случайным касанием, и грузчик остался
+  // окно «Закончить приёмку» закрылось случайным касанием, и комплектовщик остался
   // на уже принятом товаре без кнопки «Завершить».
   const STICKY_STEPS = ['sheetStepFinish', 'sheetStepAbandon', 'sheetStepNote', 'sheetStepDefect'];
   function sheetOutside(){
@@ -6614,8 +6632,8 @@
   }
   window.pickRetDefectCell = pickRetDefectCell;
 
-  // ---------- Склад брака: задания грузчику ----------
-  // Продавец (или склад за него) решил — грузчик выполняет: выдать продавцу,
+  // ---------- Склад брака: задания комплектовщику ----------
+  // Продавец (или склад за него) решил — комплектовщик выполняет: выдать продавцу,
   // утилизировать, перепаковать или переклеить на уценку и положить в продажу.
   const DEF_ACTION = { return_to_seller: 'Выдать продавцу', dispose: 'Утилизировать',
     repack: 'Перепаковать и вернуть в продажу', markdown: 'Уценка: переклеить штрихкод' };
@@ -6749,7 +6767,7 @@
   Object.assign(window, { vwMovePick, doVwMove });
 
   // ---------- Новый возврат (пока возвраты не приходят из WB) ----------
-  // Коробка возврата приехала — грузчик заводит её сам: товары одного
+  // Коробка возврата приехала — комплектовщик заводит её сам: товары одного
   // продавца и сколько штук, — и сразу разбирает на годное и брак.
   let mret = null;   // { companyId, companyName, lines: [{sku,name,qty}], query, products, status, comment, saving }
   let mretSearch = 0;
@@ -7207,8 +7225,8 @@
   /* ---------- Что лежит в ячейке ----------
      Владелец 27.09.2026: нажал на ячейку — полная информация: товар,
      продавец, артикул, штрихкод, артикул WB, сколько, годное или брак, когда
-     положили. У грузчика — везде, где видна ячейка: подсказки приёмки,
-     ячейки сборки, карта, лист грузчика, перестановка, пересчёт. Данные —
+     положили. У комплектовщика — везде, где видна ячейка: подсказки приёмки,
+     ячейки сборки, карта, лист комплектовщика, перестановка, пересчёт. Данные —
      /api/cells/blocks/:id/contents, по одной ячейке. */
   let cellInfoCtx = null;   // { blockId, label, put, arg, row }
 
@@ -7233,7 +7251,7 @@
     return '<button type="button" class="cell-info-btn" onclick="event.stopPropagation(); openCellInfo(\''
       + jsArg(blockId) + '\', \'' + jsArg(label || '') + '\'' + (put ? ', \'' + put + '\', ' + JSON.stringify(arg == null ? null : arg) : '') + ')">Что здесь</button>';
   }
-  // Внутри крупного адреса (строка товара поставки, лист грузчика) — ссылкой.
+  // Внутри крупного адреса (строка товара поставки, лист комплектовщика) — ссылкой.
   function cellInfoLink(blockId, label){
     if(!blockId) return '';
     return '<button type="button" class="cell-info-link" onclick="event.stopPropagation(); openCellInfo(\''

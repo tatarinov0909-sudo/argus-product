@@ -86,3 +86,11 @@
 @media(max-width:640px){.vws-toolbar.pp-toolbar{grid-template-columns:1fr;}.vws-selection>.vws-actions [data-action=submit]{grid-column:1/-1;}}
 /* Главная кнопка панели — в конце формы (submitAtEnd, правила 08.10). */
 .pp-end{margin-top:16px;}.pp-end .vws-button{width:100%;min-height:52px;font-weight:700;}
+
+/* Файл узнан сам: столбцы свёрнутой строкой, «Готово» над таблицей (владелец 10.10.2026). */
+.pp-mapping{margin:12px 0 4px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2);}
+.pp-mapping>summary{cursor:pointer;padding:12px 14px;font:500 16px/1.4 var(--sans);color:var(--muted);overflow-wrap:anywhere;}
+.pp-mapping[open]>summary{border-bottom:1px solid var(--line);}
+.pp-mapping>.vws-import-mapping,.pp-mapping>p{margin:14px;}
+.pp-import-go{margin:0 0 16px;}
+.pp-import-go .vws-button[data-action=apply-import]{min-height:52px;font-weight:700;padding-inline:24px;}

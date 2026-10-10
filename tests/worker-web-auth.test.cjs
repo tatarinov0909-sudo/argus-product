@@ -169,7 +169,7 @@ test('worker-only login and download controls fit 375/390/660/768/1440, includin
       assert.ok(buttons.every(r => r.left >= 0 && r.right <= width + 1 && r.width > 0));
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       if ([390, 768, 1440].includes(width)) await page.screenshot({ path: path.join(output, 'worker-download-' + width + '.png'), fullPage: true });
-      await page.getByRole('link', { name: 'Открыть вход грузчика', exact: true }).click();
+      await page.getByRole('link', { name: 'Открыть вход комплектовщика', exact: true }).click();
       await page.waitForURL('**/worker-login.html');
     }
     state.offline = true; await page.locator('#key').fill(key); await page.locator('#loginButton').click();

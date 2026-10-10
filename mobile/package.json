@@ -2,7 +2,7 @@
   "name": "argus-worker-app",
   "version": "0.1.2",
   "private": true,
-  "description": "Приложение грузчика Аргус — Android и web",
+  "description": "Приложение комплектовщика Аргус — Android и web",
   "scripts": {
     "build": "node build.cjs",
     "sync": "node build.cjs --android && cap sync android",

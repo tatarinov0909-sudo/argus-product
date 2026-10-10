@@ -77,7 +77,9 @@ const type = (name) => ({ '.html': 'text/html; charset=utf-8', '.js': 'text/java
     // составляют из заказов — с площадок и физлицам.
     await owner.locator('#newSupplyButton').click();
     await owner.locator('#directOrder').waitFor();
-    await owner.locator('#directOrder').getByRole('button', { name: 'Закрыть' }).click();
+    // Заказ физлицу — свой экран во вкладке «Физлицам» (10.10.2026); заказы площадок — вкладка «С площадок».
+    await owner.locator('#directOrder').getByRole('button', { name: '← К заказам физлицам' }).click();
+    await owner.locator('#ordersTabWb').click();
     await owner.locator('.ord-partner').click();
     await owner.locator('#ordersDetail .ord-table tbody tr').first().waitFor();
     assert.equal(await owner.locator('#ordersDetail .ord-table tbody tr').count(), 3);
@@ -136,7 +138,9 @@ const type = (name) => ({ '.html': 'text/html; charset=utf-8', '.js': 'text/java
     await manager.locator('#suppliesList .sup-row').waitFor();
     assert.ok(await manager.locator('#newSupplyButton').isVisible());
     await manager.locator('#newSupplyButton').click();
-    await manager.locator('#directOrder').getByRole('button', { name: 'Закрыть' }).click();
+    // Заказ физлицу — свой экран во вкладке «Физлицам» (10.10.2026); заказы площадок — вкладка «С площадок».
+    await manager.locator('#directOrder').getByRole('button', { name: '← К заказам физлицам' }).click();
+    await manager.locator('#ordersTabWb').click();
     await manager.locator('.ord-partner').click();
     await manager.locator('#ordersDetail .order-warehouse-filter').waitFor();
     await manager.locator('.order-warehouse-filter summary').click();

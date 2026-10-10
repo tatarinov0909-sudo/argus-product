@@ -44,7 +44,8 @@ const root = path.resolve(__dirname, '..');
       sessionStorage.setItem('argus_tab_role','worker');
     },token);
     await page.goto('http://argus.test/loader.html');
-    await page.evaluate(()=>openInventory());
+    // Как человек: дождаться главного экрана (он рисуется после загрузки) и нажать плитку.
+    await page.locator('.home-tile',{hasText:'Пересчёт ячеек'}).click();
     await page.getByText('посчитать →',{exact:true}).click();
     assert.equal(await page.locator('#invQty-0').inputValue(),'');
     assert.equal(await page.locator('#invQty-1').inputValue(),'');

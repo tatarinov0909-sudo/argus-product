@@ -41,10 +41,6 @@
   .do-table td:empty{display:none;}
 }
 /* Форма «Заказ физлицу» — в один столбец, не шире 560 px (правила 08.10). */
-.do-form{display:flex;flex-direction:column;gap:14px;max-width:560px;margin:0 0 20px;}
-.do-form .rc-field{width:100%;max-width:none;flex:none;}
-.do-form .rc-field .mp-field{width:100%;}
-#directOrder .direct-supply-head .wh-onboarding-btn{min-height:44px;}
 .track-link{color:var(--accent);text-decoration:underline;text-underline-offset:3px;}
 /* Кабинет продавца: форма заказа физлицу и карточка — в один столбец (08.10). */
 .do-form-seller>.field,.do-form-seller>.help{max-width:600px;}
@@ -63,3 +59,71 @@
 /* Кабинет продавца: длинный статус («Подтверждён в кабинете WB») переносится,
    а не раздвигает таблицу заказов за край на 1440 (проверка 08.10, И7). */
 #rows td .badge{white-space:normal;text-align:center;line-height:1.3;}
+
+/* Вкладки «Заказов» (владелец 10–11.10.2026): площадки и физлица отдельно,
+   новые разделы — в «Ещё». */
+.ord-head-actions{display:flex;gap:10px;flex-wrap:wrap;}
+.ord-head-actions[hidden]{display:none;}
+.ord-tabs{display:flex;align-items:flex-end;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin:4px 0 20px;}
+.ord-tab{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:10px 16px;border:0;border-bottom:3px solid transparent;margin-bottom:-1px;background:none;color:var(--muted);font:600 16px/1.3 var(--sans);cursor:pointer;}
+.ord-tab:hover{color:var(--text);}
+.ord-tab[aria-selected=true]{color:var(--text);border-bottom-color:var(--accent);font-weight:700;}
+.ord-tab-n{min-width:22px;padding:0 8px;border-radius:999px;background:var(--accent-soft,var(--accent-bg));color:var(--accent-2,var(--accent));font-size:13px;font-weight:700;line-height:22px;text-align:center;}
+.ord-tab-n:empty{display:none;}
+.ord-tab-more{position:relative;}
+.ord-tab-menu{position:absolute;left:0;top:calc(100% + 4px);z-index:60;min-width:240px;padding:6px;border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:0 12px 30px rgba(0,0,0,.35);}
+.ord-tab-menu[hidden]{display:none;}
+.ord-tab-menu a{display:block;padding:10px 12px;border-radius:6px;color:var(--text);text-decoration:none;font-weight:500;}
+.ord-tab-menu a:hover{background:var(--panel-2);}
+
+/* Новый заказ физлицу — свой экран: слева обязательное (рамкой) и доставка,
+   справа товары, внизу итог и «Создать заказ» — всегда на виду. */
+.do-screen[hidden],#directOrdersList[hidden]{display:none;}
+.do-screen-head{display:flex;flex-direction:column;gap:6px;margin-bottom:18px;}
+.do-back{align-self:flex-start;font-weight:600;}
+.do-grid{display:grid;grid-template-columns:minmax(300px,400px) minmax(0,1fr);gap:20px;align-items:start;}
+.do-side{display:flex;flex-direction:column;gap:20px;min-width:0;}
+.do-card{display:flex;flex-direction:column;gap:14px;padding:18px;border:1px solid var(--line);border-radius:16px;background:var(--panel);min-width:0;}
+.do-card h3{margin:0;font-size:17px;font-weight:700;}
+.do-required{border:2px solid var(--accent);}
+.do-required>h3{color:var(--accent-2,var(--accent));}
+.do-optional{font-weight:400;color:var(--muted);}
+.do-card .rc-field{min-width:0;flex:none;}
+.do-card .mp-field{min-height:46px;font-size:16px;}
+.do-missing .mp-field,.do-missing input{border-color:var(--terracotta,var(--red));box-shadow:0 0 0 2px var(--terracotta-soft,var(--red-bg));}
+.do-missing>span{color:var(--terracotta,var(--red));font-weight:600;}
+.do-goods{--pp-bg:var(--panel);}
+/* Итог — в нижней полосе формы; строка выбора панели не липнет поверх неё. */
+.do-goods .vws-selection{position:static;}
+/* Карточка товаров уже экрана: поиск — во всю ширину, кнопки под ним. */
+.do-goods .vws-toolbar.pp-toolbar{grid-template-columns:minmax(0,1fr);}
+.do-goods .vws-import-table{table-layout:auto;}
+.do-goods .vws-import-table th{width:auto !important;}
+.do-goods .vws-import-table .vws-button{padding-inline:10px;}
+#directOrdersList .ord-scroll{max-height:none;}
+.do-bar{position:sticky;bottom:0;z-index:20;display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:20px;padding:14px 18px;border:1px solid var(--line);border-radius:16px;background:var(--panel-2);box-shadow:0 -8px 24px rgba(0,0,0,.35);}
+.do-bar-sum{display:flex;flex-direction:column;gap:2px;flex:1;min-width:220px;}
+.do-bar-sum b{font-size:18px;}
+.do-bar-sum span{color:var(--terracotta,var(--warn));font-weight:500;}
+.do-bar-sum span.do-hint-ok{color:var(--green);}
+.do-bar-check{margin:0;}
+.do-bar-go{min-height:52px;padding:0 28px;font-size:17px;font-weight:700;}
+@media(max-width:900px){
+  .do-grid{grid-template-columns:minmax(0,1fr);}
+  .do-side{display:contents;}
+  .do-side>.do-required{order:1;}
+  .do-grid>.do-goods{order:2;}
+  .do-side>.do-card:not(.do-required){order:3;}
+  .do-bar{flex-direction:column;align-items:stretch;gap:10px;padding:12px 14px;}
+  .do-bar-go{width:100%;}
+  .do-bar-check small{display:none;}
+}
+/* Кабинет продавца: та же форма заказа физлицу в выдвижной панели. */
+.do-form-seller .do-card{margin:0 0 16px;}
+.do-form-seller .do-card .field{margin:0;}
+.do-form-seller .do-bar{margin:4px -4px 0;}
+/* «Физлицам»: отметить новые заказы и составить поставку прямо здесь. */
+.do-list-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;}
+.do-pick{width:44px;text-align:center;}
+.do-pick input{width:20px;height:20px;}
+@media(max-width:1100px){.do-table td.do-pick:empty{display:none;}}

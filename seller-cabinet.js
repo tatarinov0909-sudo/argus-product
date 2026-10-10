@@ -1243,7 +1243,7 @@
         { header: 'Оформлен', type: 'date', get: orderAt },
         { header: 'Склад WB', type: 'text', get: (r) => r.mp_warehouse_name || '' },
         { header: 'Поставка', type: 'text', get: (r) => r.supply_number || '' },
-        { header: 'Куда', type: 'text', get: (r) => (r.recipient ? [r.recipient, r.address !== r.recipient ? r.address : ''].filter(Boolean).join(', ') : r.supply_destination || '') },
+        { header: 'Куда', type: 'text', get: (r) => (r.recipient ? [r.recipient, r.address && r.address !== r.recipient ? r.address : ''].filter(Boolean).join(', ') : r.supply_destination || '') },
         { header: 'Трек-номер', type: 'text', get: (r) => r.track_number || '' },
         { header: 'Статус', type: 'text', get: (r) => orderStatus(r) + (r.stock_conflict ? ' · склад сверяет' : ''), min: 18 },
       ],
@@ -1802,19 +1802,42 @@
     const f = { vw: '', service: '', requestId: newRequestId(), picker: null };
     const today = new Date().toLocaleDateString('sv-SE', { timeZone: state.profile?.timezone || 'Europe/Moscow' });
     $('drawer').classList.add('drawer-wide');
-    // Форма в один столбец, «(необязательно)» у необязательных, «Создать
-    // заказ» — внизу, под товарами (правила владельца 08.10).
+    // Как у склада (владелец 10.10.2026): обязательное — рамкой и по шагам,
+    // доставка — отдельно и необязательно, итог и «Создать заказ» всегда на виду.
     $('drawerBody').innerHTML = `<form class="inbound-form do-form-seller" id="doForm" novalidate><p class="help">Склад соберёт заказ и отправит получателю. Заказать можно не больше, чем свободно.</p>
+      <section class="do-card do-required"><h3>1. Заполнить обязательно</h3>
       ${vws.length ? '<div class="field"><span>С какого вашего склада</span><div id="doVwBox"></div></div>' : ''}
-      <label class="field"><span>Кому</span><input id="doTo" maxlength="120" placeholder="Фамилия и имя" autocomplete="off"></label>
-      <label class="field"><span>Куда</span><input id="doAddress" maxlength="300" placeholder="Город, улица, дом, квартира или пункт выдачи" autocomplete="off"></label>
+      <label class="field" id="doToField"><span>Кому</span><input id="doTo" maxlength="120" placeholder="Фамилия и имя или название" autocomplete="off"></label></section>
+      <section class="do-card do-required do-goods"><h3>2. Товары</h3><div id="doPicker"></div></section>
+      <section class="do-card"><h3>3. Доставка <span class="do-optional">(необязательно)</span></h3>
+      <label class="field"><span>Куда (необязательно)</span><input id="doAddress" maxlength="300" placeholder="Город, улица, дом или пункт выдачи — пусто, если забираете сами" autocomplete="off"></label>
       <label class="field"><span>Телефон (необязательно)</span><input id="doPhone" type="tel" maxlength="40" placeholder="+7…" autocomplete="off"></label>
       <div class="field"><span>Служба доставки (необязательно)</span><div id="doServiceBox"></div></div>
       <label class="field" id="doServiceOtherField" hidden><span>Какая служба</span><input id="doServiceOther" maxlength="60"></label>
       <label class="field"><span>Когда отгрузить (необязательно)</span><input type="date" id="doDate" min="${today}"></label>
-      <label class="field"><span>Комментарий складу (необязательно)</span><input id="doComment" maxlength="500" placeholder="Например: позвонить получателю за час"></label>
-      <div class="field"><span>Товары заказа</span></div>
-      <div id="doPicker"></div></form>`;
+      <label class="field"><span>Комментарий складу (необязательно)</span><input id="doComment" maxlength="500" placeholder="Например: позвонить получателю за час"></label></section>
+      <div class="do-bar"><div class="do-bar-sum"><b id="doSum">Товары не выбраны</b><span id="doHint" role="status"></span></div>
+      <button type="button" class="button primary do-bar-go" id="doGo">Создать заказ</button></div></form>`;
+    const sum = { count: 0, units: 0, unset: 0, busy: false };
+    const missing = () => [!$('doTo').value.trim() && 'впишите, кому', !sum.count && 'выберите товары',
+      sum.count && sum.unset && 'укажите количество у ' + sum.unset + ' ' + (sum.unset === 1 ? 'товара' : 'товаров')].filter(Boolean);
+    const drawBar = (next) => {
+      if (run !== state.drawerRun || !$('doSum')) return;
+      if (next) Object.assign(sum, next);
+      const left = missing();
+      $('doSum').textContent = sum.count ? counted(sum.count, 'товар', 'товара', 'товаров') + ' · ' + n(sum.units) + ' шт.' : 'Товары не выбраны';
+      $('doHint').textContent = left.length ? 'Осталось: ' + left.join(', ') : 'Всё заполнено — можно создавать';
+      $('doHint').classList.toggle('do-hint-ok', !left.length);
+      if ($('doTo').value.trim()) $('doToField').classList.remove('do-missing');
+      $('doGo').disabled = sum.busy; $('doGo').textContent = sum.busy ? 'Создаём заказ…' : 'Создать заказ';
+    };
+    $('doTo').addEventListener('input', () => drawBar());
+    $('doGo').onclick = async () => {
+      const left = missing(); drawBar();
+      if (!$('doTo').value.trim()) { $('doToField').classList.add('do-missing'); $('doTo').focus(); return; }
+      if (left.length) { $('doPicker').scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
+      await f.picker?.submit();
+    };
     const drawVw = () => { if ($('doVwBox')) $('doVwBox').innerHTML = dropdown('do-vw', { value: f.vw, neutral: true,
       options: [{ value: '', text: 'Весь мой товар' }, ...vws.map((w) => ({ value: w.id, text: 'Склад «' + w.name + '»' }))],
       onPick: (v) => { f.vw = v; drawVw(); openPicker(); } }); };
@@ -1826,7 +1849,7 @@
       f.picker?.close();
       f.picker = window.ArgusProductPicker.open({
         host: $('doPicker'), request: api, companyId: state.companyId, maxItems: 500,
-        templateName: 'Товары заказа', submitLabel: 'Создать заказ', submitAtEnd: true,
+        templateName: 'Товары заказа', submitLabel: 'Создать заказ', hideSubmit: true, flat: true, onChange: (x) => drawBar(x),
         loadRows: async () => (await api('/api/sellers/stock' + (state.owner ? '?view=seller' : ''))).rows,
         columns: [{ title: f.vw ? 'Свободно на складе' : 'Доступно', value: free }],
         limit: free, defaultQty: () => '1',
@@ -1836,15 +1859,18 @@
     async function submit(items) {
       if (run !== state.drawerRun) return;
       const val = (id) => $(id).value.trim();
-      if (!val('doTo')) { $('doTo').focus(); throw new Error('Впишите, кому заказ.'); }
-      if (!val('doAddress')) { $('doAddress').focus(); throw new Error('Впишите, куда везти.'); }
+      if (!val('doTo')) { $('doToField').classList.add('do-missing'); $('doTo').focus(); throw new Error('Впишите, кому заказ.'); }
       const service = f.service === 'other' ? val('doServiceOther') : f.service;
       if (f.service === 'other' && !service) { $('doServiceOther').focus(); throw new Error('Впишите службу доставки.'); }
       const over = items.filter((i) => i.limit != null && i.qty > i.limit);
       if (over.length) throw new Error('Больше, чем свободно: ' + over.slice(0, 3).map((i) => '«' + i.name + '» — ' + i.qty + ' из ' + i.limit).join(', ') + '.');
-      const r = await api('/api/direct-orders', { method: 'POST', body: { ...(state.owner ? { companyId: state.companyId } : {}),
-        vwId: f.vw || null, recipient: val('doTo'), address: val('doAddress'), phone: val('doPhone'), deliveryService: service || null,
-        plannedDate: val('doDate') || null, comment: val('doComment'), items: items.map((i) => ({ sku: i.sku, qty: i.qty })), requestId: f.requestId } });
+      drawBar({ busy: true });
+      let r;
+      try {
+        r = await api('/api/direct-orders', { method: 'POST', body: { ...(state.owner ? { companyId: state.companyId } : {}),
+          vwId: f.vw || null, recipient: val('doTo'), address: val('doAddress'), phone: val('doPhone'), deliveryService: service || null,
+          plannedDate: val('doDate') || null, comment: val('doComment'), items: items.map((i) => ({ sku: i.sku, qty: i.qty })), requestId: f.requestId } });
+      } catch (e) { drawBar({ busy: false }); $('doHint').textContent = 'Не создан: ' + e.message; throw e; }
       state.data.orders = null; state.data.stock = null;
       $('drawer').close();
       toast('Заказ ' + r.number + ' отправлен складу. Его статус — в «Заказах».');
@@ -1857,7 +1883,7 @@
   function directOrderSection(r) {
     const status = r.direct_status || 'new';
     return `<section class="detail-section" style="margin-top:0"><h3>Получатель</h3>`
-      + `<p><strong>${h(r.recipient)}</strong>${r.address !== r.recipient ? '<br>' + h(r.address) : ''}${r.phone ? '<br>' + h(r.phone) : ''}</p>`
+      + `<p><strong>${h(r.recipient)}</strong>${r.address && r.address !== r.recipient ? '<br>' + h(r.address) : ''}${r.phone ? '<br>' + h(r.phone) : ''}</p>`
       + `<p class="help">Доставка: ${h(r.delivery_service || 'не выбрана')}${r.planned_date ? ' · отгрузить ' + h(day(dateOnly(r.planned_date))) : ''}${r.direct_comment ? '<br>' + h(r.direct_comment) : ''}</p>`
       + `<div class="do-card-fields"><label class="field"><span>Трек-номер (необязательно)</span><input id="doTrack" maxlength="60" value="${h(r.track_number || '')}" placeholder="Номер от службы доставки"></label>`
       + (AFTER_SHIP.includes(status) ? `<div class="field"><span>Статус после отъезда</span><div id="doStatusBox"></div></div>` : '')

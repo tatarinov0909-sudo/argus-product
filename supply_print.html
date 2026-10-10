@@ -79,7 +79,7 @@
     margin-bottom:9px;
   }
   .fact{text-align:center; padding:7px 6px 6px;}
-  /* QR сборки по листу: грузчик сканирует его телефоном — начинается сборка
+  /* QR сборки по листу: комплектовщик сканирует его телефоном — начинается сборка
      и таймер, в конце он сам отмечает «собрал» и что не нашёл. Маленький:
      в 2026-09 крупный код отнимал треть листа. */
   .fact.qr{display:flex; align-items:center; gap:6px; text-align:left; padding:4px 6px;}
@@ -347,7 +347,7 @@
 
 <div id="docs"></div>
 
-<script src="auth.js?v=36b93e56"></script>
+<script src="auth.js?v=34b2912c"></script>
 <script src="qrcode.min.js?v=e259e455"></script>
 <script>
 (function(){
@@ -750,7 +750,7 @@
     return '<colgroup>' + widths.map((w) => '<col' + (w ? ' style="width:' + w + '%"' : '') + '>').join('') + '</colgroup>';
   }
 
-  // Код ведёт на экран грузчика: «сборка по листу» этой поставки. Только у
+  // Код ведёт на экран комплектовщика: «сборка по листу» этой поставки. Только у
   // собирающейся поставки — у собранной отмечать уже нечего.
   function paperQr(s){
     if(s.status !== 'collecting' || typeof qrcode !== 'function') return '';
@@ -913,7 +913,7 @@
     return '<table style="margin-top:14px">' + cols([14, 0, 14, 16])
       + '<thead><tr><th>Заказ</th><th>Кому и куда</th><th>Телефон</th><th>Доставка</th></tr></thead><tbody>'
       + [...seen].map(([no, to]) => '<tr><td>' + esc(no) + '</td>'
-        + '<td class="goods"><div class="goods-line"><b>' + esc(to.recipient) + '</b>' + (to.address !== to.recipient ? ', ' + esc(to.address) : '')
+        + '<td class="goods"><div class="goods-line"><b>' + esc(to.recipient) + '</b>' + (to.address && to.address !== to.recipient ? ', ' + esc(to.address) : '')
         + (to.comment ? '<br><i>' + esc(to.comment) + '</i>' : '') + '</div></td>'
         + '<td>' + esc(to.phone || '—') + '</td>'
         + '<td>' + esc(to.service || '—') + (to.track ? '<br>' + esc(to.track) : '') + '</td></tr>').join('')

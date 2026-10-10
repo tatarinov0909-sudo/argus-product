@@ -1,9 +1,11 @@
 /* Панель выбора товаров (владелец 06.10.2026: «везде, где выбирают товар, —
    как у виртуального склада»; правило — rules/architecture.md). Поиск,
    галочки, протягивание левой кнопкой мыши, количество у строки; выбор не
-   теряется между страницами и при поиске. Excel: лист, строка заголовков и
-   столбцы выбираются явно, строки узнаёт сервер по каталогу продавца
-   (POST /api/products/match). Что делать с выбором, решает тот, кто открыл
+   теряется между страницами и при поиске. Excel: лист, строку заголовков и
+   столбцы (код, штрихкод, количество) Аргус находит сам (владелец 10.10.2026:
+   «система должна всё устраивать автоматически»), строки узнаёт сервер по
+   каталогу продавца (POST /api/products/match), человек жмёт «Готово».
+   Выбрать столбцы руками — только если файл не узнан. Что делать с выбором, решает тот, кто открыл
    панель (onSubmit). Вид — тот же, что у переноса в виртуальный склад. */
 (function(){
   'use strict';
@@ -16,6 +18,13 @@
   const rules = new Intl.PluralRules('ru');
   const counted = (n, one, few, many) => fmt(n) + ' ' + ({ one, few, many }[rules.select(n)] || many);
   const button = (action, title, extra = '') => '<button type="button" class="vws-button" data-action="' + action + '" ' + extra + '>' + title + '</button>';
+  // Шапка таблицы — те же слова, что у привоза продавца (sellers/inbound.js).
+  // \b в JS не видит границу после кириллицы — отсюда (?![а-яa-z]).
+  const COLUMNS = {
+    qty: /^(кол-?во|количество|кол\.?|qty|quantity|штук|шт\.?|к поставке)(?![а-яa-z])/,
+    barcode: /(баркод|штрих-?код|^шк$|barcode|ean)/,
+    sku: /(артикул|^арт\.?|sku|^код|vendor ?code)/,
+  };
   const choice = (label, current, options, action) => '<details class="vws-choice"><summary><span>' + esc(label) + '</span><b>' + esc(current) + '</b></summary><div class="vws-choice-menu">'
     + options.map(o => button(action, esc(o.label), 'data-value="' + esc(o.value) + '"')).join('') + '</div></details>';
 
@@ -24,7 +33,9 @@
   //    defaultQty(row), submitLabel, onSubmit(items) — бросает Error, если не получилось,
   //    eyebrow, title, subtitle, closeLabel, onClose, flat, maxItems, templateName,
   //    submitAtEnd — главная кнопка под списком, в конце формы (правила 08.10:
-  //    «главная кнопка под последним полем»), а не в строке выбора.
+  //    «главная кнопка под последним полем»), а не в строке выбора;
+  //    hideSubmit — своей кнопки нет, отправляет форма снаружи (controller.submit),
+  //    onChange({ count, units, unset, busy }) — сколько выбрано, для её итога.
   function open(o){
     const host = o.host;
     mounted.get(host)?.close();
@@ -32,7 +43,8 @@
     const maxItems = o.maxItems || 500, columns = o.columns || [];
     const state = { rows: [], bySku: new Map(), loading: true, error: '', message: '', search: '', page: 0, onlySelected: false,
       selected: new Map(), drafts: new Map(), mode: 'pick', busy: false, closed: false, paint: null, searchTimer: null,
-      workbook: null, sheet: '', header: 0, mapping: { sku: '', barcode: '', qty: '' }, imported: [], importPage: 0, importVerified: false, fileRun: 0 };
+      workbook: null, sheet: '', header: 0, mapping: { sku: '', barcode: '', qty: '' }, imported: [], importPage: 0, importVerified: false, fileRun: 0,
+      fileName: '', autoMapped: false };
     const el = selector => host.querySelector(selector);
     const limitOf = sku => { const row = state.bySku.get(sku); const n = row && o.limit ? o.limit(row) : null; return Number.isFinite(n) ? n : null; };
     const total = () => [...state.selected.values()].reduce((n, row) => n + (integer(row.qty) || 0), 0);
@@ -48,14 +60,15 @@
       if(notify) o.onClose?.();
     }
     // reload — перечитать каталог (завели новый товар), выбор остаётся.
-    const controller = { close, reload: () => load() };
+    const controller = { close, reload: () => load(), submit: () => submit() };
     mounted.set(host, controller); host.hidden = false;
 
     function shell(){
       host.innerHTML = '<div class="vws-panel' + (o.flat ? ' pp-flat' : '') + '">'
         + (o.title ? '<div class="vws-heading"><div>' + (o.eyebrow ? '<p class="vws-eyebrow">' + esc(o.eyebrow) + '</p>' : '') + '<h2>' + esc(o.title) + '</h2>'
           + (o.subtitle ? '<p class="vws-sub">' + esc(o.subtitle) + '</p>' : '') + '</div>' + (o.closeLabel ? button('close', esc(o.closeLabel)) : '') + '</div>' : '')
-        + '<div class="vws-notice" data-role="notice" role="status" hidden></div><div data-role="content"></div></div>';
+        + '<div class="vws-notice" data-role="notice" role="status" hidden></div><div data-role="content"></div>'
+        + '<input type="file" data-role="file" accept=".xlsx,.xls,.csv" hidden></div>';
     }
     function notice(){
       const box = el('[data-role=notice]'); if(!box) return;
@@ -88,7 +101,7 @@
       return '<div class="vws-selection"><div><b data-role="selected-total"></b><p class="vws-sub">Выбор сохраняется между страницами и при поиске.</p></div><div class="vws-actions">'
         + button('only', state.onlySelected ? 'Показать все' : 'Только выбранные', 'data-role="only"')
         + button('clear', 'Снять выбор', 'data-role="clear"')
-        + (o.submitAtEnd ? '' : submitButton()) + '</div></div>';
+        + (o.submitAtEnd || o.hideSubmit ? '' : submitButton()) + '</div></div>';
     }
     function submitButton(){
       return button('submit', esc(state.busy ? 'Отправляем…' : o.submitLabel || 'Готово'), 'data-role="submit"');
@@ -98,7 +111,7 @@
       state.page = Math.min(state.page, Math.max(0, Math.ceil(list.length / PAGE_SIZE) - 1));
       const rows = list.slice(state.page * PAGE_SIZE, (state.page + 1) * PAGE_SIZE);
       return '<div class="vws-toolbar pp-toolbar"><label class="vws-search"><span>Найти товар</span><input type="search" data-action="search" aria-label="Найти товар" placeholder="Название, артикул или штрихкод" value="' + esc(state.search) + '"></label>'
-        + '<div class="vws-actions">' + button('import', 'Загрузить Excel') + button('template', 'Скачать шаблон') + '</div></div>'
+        + '<div class="vws-actions">' + button('file', 'Загрузить Excel') + button('template', 'Скачать шаблон') + '</div></div>'
         + selectionHtml() + '<p class="vws-sub vws-instruction">Отмечайте строки галочками или проводите левой кнопкой мыши по товарам. Количество можно вписать сразу — строка отметится сама.</p>'
         + (rows.length ? '<div class="vws-table-wrap"><table class="vws-table pp-table"><colgroup><col class="vws-check-col"><col>' + columns.map(() => '<col class="pp-num-col">').join('') + '<col class="pp-qty-col"></colgroup>'
           + '<thead><tr><th><input type="checkbox" data-action="page-select" aria-label="Выбрать товары на этой странице"></th><th>Товар</th>' + columns.map(c => '<th>' + esc(c.title) + '</th>').join('') + '<th>Штук</th></tr></thead><tbody>'
@@ -112,35 +125,51 @@
           }).join('') + '</tbody></table></div>'
           : '<div class="vws-empty"><b>' + (state.search ? 'Товар не найден' : state.onlySelected ? 'Ничего не выбрано' : 'В каталоге продавца нет товаров') + '</b><p>Измените поиск. Новый товар заводят в «Товары» → «Добавить товар».</p></div>')
         + pager(list.length, state.page, 'page')
-        + (o.submitAtEnd ? '<div class="pp-end">' + submitButton() + '</div>' : '');
+        + (o.submitAtEnd && !o.hideSubmit ? '<div class="pp-end">' + submitButton() + '</div>' : '');
     }
+    // Результат файла: что узнали и что нет, и одна кнопка «Готово». Столбцы
+    // видны свёрнутой строкой — поправить, если Аргус ошибся; не узнал —
+    // раскрыты сразу.
     function importHtml(){
-      let html = '<div class="vws-import-head"><div><h3>Загрузка из Excel</h3><p class="vws-sub">Файл остаётся в браузере. Нужны артикул или штрихкод и целое количество. Каждый столбец выбирается явно.</p></div><div class="vws-actions">'
-        + button('pick', '← Выбор товаров') + button('file', 'Выбрать файл') + button('template', 'Скачать шаблон') + '</div></div><input type="file" data-role="file" accept=".xlsx,.xls,.csv" hidden>';
+      let html = '<div class="vws-import-head"><div><h3>Загрузка из Excel</h3><p class="vws-sub">'
+        + (state.fileName ? 'Файл «' + esc(state.fileName) + '». ' : '')
+        + (state.autoMapped ? 'Столбцы Аргус нашёл сам и проверил товары по каталогу.' : 'Укажите, в каком столбце код или штрихкод, а в каком количество.')
+        + '</p></div><div class="vws-actions">' + button('pick', '← К выбору товаров') + button('file', 'Другой файл') + '</div></div>';
       if(!state.workbook) return html + '<div class="vws-empty">Выберите .xlsx, .xls или .csv до 10 МБ. Формулы в используемых столбцах не принимаются.</div>';
       const sheet = state.workbook.Sheets[state.sheet], range = window.XLSX.utils.decode_range(sheet['!ref']);
       const cols = [];
       for(let c = range.s.c; c <= range.e.c; c++) cols.push({ value: String(c), label: window.XLSX.utils.encode_col(c) + ' — ' + (cellLabel(sheet, state.header, c) || 'Без заголовка') });
       const optional = [{ value: '', label: 'Не использовать' }, ...cols];
       const heads = []; for(let r = range.s.r; r <= Math.min(range.e.r, range.s.r + 19); r++) heads.push({ value: String(r), label: 'Строка ' + (r + 1) + ' — ' + cols.slice(0, 4).map((_, i) => cellLabel(sheet, r, range.s.c + i)).filter(Boolean).join(' · ') });
-      html += '<div class="vws-import-mapping">' + choice('Лист', state.sheet, state.workbook.SheetNames.map(n => ({ value: n, label: n })), 'sheet')
+      const colName = key => cols.find(c => c.value === state.mapping[key])?.label || '';
+      const used = [['Код', 'sku'], ['Штрихкод', 'barcode'], ['Количество', 'qty']].filter(([, key]) => state.mapping[key] !== '').map(([title, key]) => title + ': ' + colName(key));
+      html += '<details class="pp-mapping"' + (state.autoMapped ? '' : ' open') + '><summary>' + (used.length ? esc(used.join(' · ')) : 'Столбцы не выбраны') + ' — изменить</summary>'
+        + '<div class="vws-import-mapping">' + choice('Лист', state.sheet, state.workbook.SheetNames.map(n => ({ value: n, label: n })), 'sheet')
         + choice('Строка заголовков', 'Строка ' + (state.header + 1), heads, 'header')
-        + choice('Артикул', cols.find(c => c.value === state.mapping.sku)?.label || 'Не использовать', optional, 'map-sku')
-        + choice('Штрихкод', cols.find(c => c.value === state.mapping.barcode)?.label || 'Не использовать', optional, 'map-barcode')
-        + choice('Количество', cols.find(c => c.value === state.mapping.qty)?.label || 'Выберите столбец', optional, 'map-qty') + '</div>'
-        + '<p class="vws-sub">Коды длиннее 15 значащих цифр укажите в Excel текстом. Ведущие нули коротких числовых кодов сохраняются по формату ячейки.</p>'
-        + '<div class="vws-actions">' + button('parse', state.imported.length ? 'Проверить ещё раз' : 'Проверить строки файла') + '</div>';
+        + choice('Код', colName('sku') || 'Не использовать', optional, 'map-sku')
+        + choice('Штрихкод', colName('barcode') || 'Не использовать', optional, 'map-barcode')
+        + choice('Количество', colName('qty') || 'Выберите столбец', optional, 'map-qty') + '</div>'
+        + '<p class="vws-sub">Коды длиннее 15 значащих цифр укажите в Excel текстом. Ведущие нули коротких числовых кодов сохраняются по формату ячейки.</p></details>';
       if(!state.imported.length) return html;
       const active = state.imported.filter(r => !r.excluded), problems = active.filter(r => r.error).length, rows = state.imported.slice(state.importPage * PAGE_SIZE, (state.importPage + 1) * PAGE_SIZE);
-      html += '<div class="vws-import-summary" data-role="import-summary">' + importSummary(active, problems) + '</div><div class="vws-table-wrap"><table class="vws-table vws-import-table"><thead><tr><th>Строка</th><th>Товар и код из файла</th><th>Количество</th><th>Проверка</th><th>Действие</th></tr></thead><tbody>'
-        + rows.map(r => '<tr class="' + (r.excluded ? 'vws-excluded' : '') + '" data-line="' + r.line + '"><td class="vws-num" data-label="Строка">' + r.line + '</td><td data-label="Товар"><b>' + esc(r.product?.name || r.sku || r.barcode || 'Код не указан') + '</b><div class="vws-identifiers">' + esc([r.sku ? 'Артикул: ' + r.sku : '', r.barcode ? 'Штрихкод: ' + r.barcode : ''].filter(Boolean).join(' · ')) + '</div></td>'
+      const ready = active.filter(r => !r.error && r.product);
+      html += '<div class="vws-import-summary" data-role="import-summary">' + importSummary(active, problems) + '</div>'
+        + '<div class="vws-actions pp-import-go">' + button('apply-import', importGoLabel(ready), 'data-role="apply-import"' + (!ready.length || !state.importVerified ? ' disabled' : ''))
+        + (!state.importVerified && !state.busy ? button('parse', 'Проверить ещё раз') : '') + button('pick', 'Отмена') + '</div>'
+        + '<div class="vws-table-wrap"><table class="vws-table vws-import-table"><thead><tr><th>Строка</th><th>Товар и код из файла</th><th>Количество</th><th>Проверка</th><th>Действие</th></tr></thead><tbody>'
+        + rows.map(r => '<tr class="' + (r.excluded ? 'vws-excluded' : '') + '" data-line="' + r.line + '"><td class="vws-num" data-label="Строка">' + r.line + '</td><td data-label="Товар"><b>' + esc(r.product?.name || r.sku || r.barcode || 'Код не указан') + '</b><div class="vws-identifiers">' + esc([r.sku ? 'Код: ' + r.sku : '', r.barcode ? 'Штрихкод: ' + r.barcode : ''].filter(Boolean).join(' · ')) + '</div></td>'
           + '<td data-label="Количество"><input type="text" inputmode="numeric" class="vws-quantity" data-action="import-qty" data-line="' + r.line + '" aria-label="Количество в строке ' + r.line + '" value="' + esc(r.qty) + '"' + (r.excluded ? ' disabled' : '') + '></td>'
           + '<td data-label="Проверка" class="vws-import-status" data-status-line="' + r.line + '">' + esc(importRowStatus(r)) + '</td><td data-label="Действие">' + button('exclude', r.excluded ? 'Вернуть' : 'Исключить', 'data-line="' + r.line + '"') + '</td></tr>').join('')
-        + '</tbody></table></div>' + pager(state.imported.length, state.importPage, 'import-page') + '<div class="vws-actions">' + button('apply-import', 'Добавить проверенные строки в выбор', 'data-role="apply-import"' + (!active.length || problems || !state.importVerified ? ' disabled' : '')) + '</div>';
+        + '</tbody></table></div>' + pager(state.imported.length, state.importPage, 'import-page');
       return html;
     }
-    const importRowStatus = r => r.excluded ? 'Исключена' : r.error || (state.importVerified ? 'Можно добавить' : 'Нужна проверка на сервере');
-    const importSummary = (rows, errors) => '<b>' + fmt(rows.length) + ' строк · ' + fmt(rows.reduce((n, r) => n + (integer(r.qty) || 0), 0)) + ' шт.</b><span>' + (errors ? 'Нужно исправить или исключить: ' + fmt(errors) + ' строк.' : state.importVerified ? 'Все строки проверены — добавьте их в выбор.' : 'Нажмите «Проверить ещё раз», чтобы сервер узнал товары.') + '</span>';
+    const importGoLabel = ready => ready.length ? 'Готово — добавить ' + counted(new Set(ready.map(r => r.product.sku)).size, 'товар', 'товара', 'товаров') : 'Готово';
+    const importRowStatus = r => r.excluded ? 'Исключена' : r.error ? 'Не добавится: ' + r.error : (state.importVerified ? 'Узнали' : 'Проверяем…');
+    const importSummary = (rows, errors) => {
+      const ok = rows.filter(r => !r.error && r.product);
+      return '<b>' + (state.importVerified ? 'Узнали ' + counted(new Set(ok.map(r => r.product.sku)).size, 'товар', 'товара', 'товаров') + ' · ' + fmt(ok.reduce((n, r) => n + (integer(r.qty) || 0), 0)) + ' шт.' : 'Проверяем ' + counted(rows.length, 'строку', 'строки', 'строк') + '…') + '</b>'
+        + '<span>' + (errors ? 'Не добавятся ' + counted(errors, 'строка', 'строки', 'строк') + ' — почему, написано в таблице. Остальное добавится по «Готово».' : state.importVerified ? 'Все строки узнаны — нажмите «Готово».' : 'Сверяем коды с каталогом продавца.') + '</span>';
+    };
 
     function render(){
       if(state.closed) return; if(!el('[data-role=content]')) shell();
@@ -164,6 +193,7 @@
       const only = el('[data-role=only]'); if(only) only.disabled = state.busy || !state.selected.size && !state.onlySelected;
       const boxes = [...host.querySelectorAll('[data-action=row-select]')], master = el('[data-action=page-select]');
       if(master){ const n = boxes.filter(b => b.checked).length; master.checked = !!boxes.length && n === boxes.length; master.indeterminate = n > 0 && n < boxes.length; master.disabled = !boxes.length || state.busy; }
+      o.onChange?.({ count: state.selected.size, units: total(), unset: [...state.selected.values()].filter(r => !integer(r.qty)).length, busy: state.busy });
     }
     function select(sku, on){
       if(state.busy) return; const row = state.bySku.get(sku); if(!row || on === state.selected.has(sku)) return;
@@ -222,12 +252,38 @@
         else book = window.XLSX.read(new Uint8Array(buffer), { type: 'array', cellDates: true, cellNF: true });
         book.SheetNames.forEach(name => fitRange(book.Sheets[name]));
         const valid = book.SheetNames.filter(name => book.Sheets[name]?.['!ref']); if(!valid.length) throw new Error('В файле нет листа с данными.');
-        book.SheetNames = valid; setSheet(valid[0], book); state.workbook = book; state.error = ''; render();
+        book.SheetNames = valid; state.workbook = book; state.fileName = file.name; state.mode = 'import'; state.error = ''; state.message = '';
+        const auto = autoMap(book);
+        if(auto){ setSheet(auto.sheet, book); state.header = auto.header; state.mapping = auto.mapping; state.autoMapped = true; parseFile(); }
+        else { setSheet(valid[0], book); state.autoMapped = false; state.error = 'Не нашли в файле столбец количества и столбец кода или штрихкода — укажите их ниже.'; render(); }
       } catch(error){ state.error = error.message || 'Не удалось прочитать файл.'; notice(); }
     }
+    // Шапка: первая строка (в первых 30) первого листа, где есть количество
+    // и код или штрихкод. Один столбец — одно значение.
+    function autoMap(book){
+      for(const name of book.SheetNames){
+        const sheet = book.Sheets[name], range = window.XLSX.utils.decode_range(sheet['!ref']);
+        for(let r = range.s.r; r <= Math.min(range.e.r, range.s.r + 29); r++){
+          const found = {};
+          for(let c = range.s.c; c <= range.e.c; c++){
+            const t = low(cellLabel(sheet, r, c)).replace(/ё/g, 'е').trim(); if(!t) continue;
+            for(const [key, re] of Object.entries(COLUMNS)){
+              if(key === 'qty' && /короб|паллет|мест/.test(t)) continue;
+              if(found[key] === undefined && re.test(t)){ found[key] = c; break; }
+            }
+          }
+          if(found.qty !== undefined && (found.sku !== undefined || found.barcode !== undefined)){
+            return { sheet: name, header: r, mapping: { sku: found.sku === undefined ? '' : String(found.sku),
+              barcode: found.barcode === undefined ? '' : String(found.barcode), qty: String(found.qty) } };
+          }
+        }
+      }
+      return null;
+    }
+    const mappingReady = () => (state.mapping.sku !== '' || state.mapping.barcode !== '') && state.mapping.qty !== '';
     function parseFile(){
-      const m = state.mapping; if((m.sku === '' && m.barcode === '') || m.qty === ''){ state.error = 'Выберите столбец количества и хотя бы один столбец: артикул или штрихкод.'; notice(); return; }
-      const used = [m.sku, m.barcode, m.qty].filter(v => v !== ''); if(new Set(used).size !== used.length){ state.error = 'Артикул, штрихкод и количество должны быть в разных столбцах.'; notice(); return; }
+      const m = state.mapping; if((m.sku === '' && m.barcode === '') || m.qty === ''){ state.error = 'Выберите столбец количества и хотя бы один столбец: код или штрихкод.'; notice(); return; }
+      const used = [m.sku, m.barcode, m.qty].filter(v => v !== ''); if(new Set(used).size !== used.length){ state.error = 'Код, штрихкод и количество должны быть в разных столбцах.'; notice(); return; }
       const sheet = state.workbook.Sheets[state.sheet], range = window.XLSX.utils.decode_range(sheet['!ref']), rows = [];
       for(let r = state.header + 1; r <= range.e.r; r++){
         const row = { line: r + 1, sku: '', barcode: '', qty: '', excluded: false, parseError: '' };
@@ -239,22 +295,19 @@
       state.imported = rows; state.importPage = 0; state.importVerified = false; validateImport(); state.error = ''; render(); checkImport();
     }
     function validateImport(){
-      const seen = new Map();
       state.imported.forEach(r => {
         r.error = r.parseError || r.serverError || '';
         if(r.error || r.excluded) return;
         if(!integer(r.qty)) r.error = 'Укажите целое количество больше нуля.';
-        else if(!r.sku && !r.barcode) r.error = 'Не указан артикул или штрихкод.';
-        if(r.product){
-          if(state.selected.has(r.product.sku)) r.error = 'Этот товар уже выбран. Исключите строку файла или уберите товар из выбора.';
-          if(!seen.has(r.product.sku)) seen.set(r.product.sku, []); seen.get(r.product.sku).push(r);
-        }
+        else if(!r.sku && !r.barcode) r.error = 'Не указан код или штрихкод.';
+        // Один товар в нескольких строках и уже выбранный — не ошибка:
+        // по «Готово» количество складывается.
       });
-      seen.forEach(rows => { if(rows.length > 1) rows.forEach(r => { r.error = 'Товар повторяется в строках ' + rows.map(x => x.line).join(', ') + '. Оставьте одну строку.'; }); });
       const active = state.imported.filter(r => !r.excluded), errors = active.filter(r => r.error).length, summary = el('[data-role=import-summary]');
       if(summary) summary.innerHTML = importSummary(active, errors);
       host.querySelectorAll('[data-status-line]').forEach(cell => { const r = state.imported.find(x => x.line === Number(cell.dataset.statusLine)); cell.textContent = importRowStatus(r); cell.classList.toggle('vws-error', !!r.error && !r.excluded); });
-      const apply = el('[data-role=apply-import]'); if(apply) apply.disabled = !active.length || !!errors || !state.importVerified;
+      const ready = active.filter(r => !r.error && r.product);
+      const apply = el('[data-role=apply-import]'); if(apply){ apply.disabled = !ready.length || !state.importVerified; apply.textContent = importGoLabel(ready); }
     }
     async function checkImport(){
       const active = state.imported.filter(r => !r.excluded); state.importVerified = false;
@@ -275,7 +328,8 @@
     }
     function template(){
       if(!window.XLSX){ state.error = 'Excel ещё загружается. Повторите через секунду.'; notice(); return; }
-      const sheet = window.XLSX.utils.aoa_to_sheet([['Артикул', 'Штрихкод', 'Количество']]);
+      // «Код», а не «Артикул» (владелец 10.10.2026): артикулом на WB зовут другое.
+      const sheet = window.XLSX.utils.aoa_to_sheet([['Код', 'Штрихкод', 'Количество']]);
       sheet['!cols'] = [{ wch: 24 }, { wch: 24 }, { wch: 16 }];
       for(let r = 1; r <= 100; r++){ sheet[window.XLSX.utils.encode_cell({ r, c: 0 })] = { t: 's', v: '', z: '@' }; sheet[window.XLSX.utils.encode_cell({ r, c: 1 })] = { t: 's', v: '', z: '@' }; }
       sheet['!ref'] = 'A1:C101'; const book = window.XLSX.utils.book_new(); window.XLSX.utils.book_append_sheet(book, sheet, 'Товары'); window.XLSX.writeFile(book, (o.templateName || 'Товары') + '.xlsx');
@@ -283,6 +337,7 @@
 
     async function submit(){
       const items = [...state.selected.values()], bad = items.filter(r => !integer(r.qty));
+      if(!items.length){ state.error = 'Выберите хотя бы один товар.'; notice(); return; }
       if(bad.length){
         state.error = 'Укажите целое количество больше нуля: ' + bad.slice(0, 3).map(r => '«' + r.name + '»').join(', ') + (bad.length > 3 ? ' и ещё ' + (bad.length - 3) : '') + '.';
         notice(); return;
@@ -308,17 +363,27 @@
         else if(action === 'import-page'){ state.importPage = Number(control.dataset.page); render(); }
         else if(action === 'only'){ state.onlySelected = !state.onlySelected; state.page = 0; render(); }
         else if(action === 'clear'){ state.selected.clear(); state.onlySelected = false; render(); }
-        else if(action === 'sheet'){ setSheet(control.dataset.value); state.error = ''; render(); }
-        else if(action === 'header'){ state.header = Number(control.dataset.value); state.imported = []; render(); }
-        else if(action.startsWith('map-')){ state.mapping[action.slice(4)] = control.dataset.value; state.imported = []; render(); }
+        else if(action === 'sheet'){ setSheet(control.dataset.value); state.autoMapped = false; state.error = ''; render(); }
+        else if(action === 'header' || action.startsWith('map-')){
+          if(action === 'header') state.header = Number(control.dataset.value); else state.mapping[action.slice(4)] = control.dataset.value;
+          state.imported = []; state.autoMapped = false; state.error = '';
+          if(mappingReady()) parseFile(); else render();
+        }
         else if(action === 'parse'){ if(state.imported.length) checkImport(); else parseFile(); }
         else if(action === 'exclude'){ const r = state.imported.find(x => x.line === Number(control.dataset.line)); r.excluded = !r.excluded; validateImport(); render(); }
         else if(action === 'apply-import'){
-          validateImport(); const active = state.imported.filter(r => !r.excluded); if(!state.importVerified || active.some(r => r.error)) return;
-          if(state.selected.size + active.length > maxItems) throw new Error('За один раз можно выбрать не больше ' + maxItems + ' товаров.');
-          active.forEach(r => { const row = state.bySku.get(r.product.sku); state.selected.set(r.product.sku, { sku: r.product.sku, name: row ? row.name : r.product.name, qty: String(integer(r.qty)) }); });
+          validateImport(); if(!state.importVerified) return;
+          const active = state.imported.filter(r => !r.excluded), ready = active.filter(r => !r.error && r.product), skipped = active.length - ready.length;
+          // Одинаковый товар в нескольких строках — одной строкой выбора, количество сложено.
+          const sum = new Map(); ready.forEach(r => sum.set(r.product.sku, { product: r.product, qty: (sum.get(r.product.sku)?.qty || 0) + integer(r.qty) }));
+          const fresh = [...sum.keys()].filter(sku => !state.selected.has(sku)).length;
+          if(state.selected.size + fresh > maxItems) throw new Error('За один раз можно выбрать не больше ' + maxItems + ' товаров.');
+          sum.forEach(({ product, qty }, sku) => { const row = state.bySku.get(sku), had = integer(state.selected.get(sku)?.qty) || 0;
+            state.selected.set(sku, { sku, name: row ? row.name : product.name, qty: String(had + qty) }); });
+          const units = [...sum.values()].reduce((n, x) => n + x.qty, 0);
           state.mode = 'pick'; state.imported = []; state.workbook = null; state.onlySelected = true; state.page = 0;
-          state.message = 'Строки файла добавлены в выбор — ниже только выбранные. Проверьте количество.'; render();
+          state.message = 'Из файла добавлено ' + counted(sum.size, 'товар', 'товара', 'товаров') + ' · ' + fmt(units) + ' шт. — ниже только выбранные.'
+            + (skipped ? ' Не добавлено ' + counted(skipped, 'строка', 'строки', 'строк') + ': их нет в каталоге или в них ошибка.' : ''); render();
         }
       } catch(error){ state.error = error.message; notice(); }
     }

@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Аргус — грузчик</string>
-    <string name="title_activity_main">Аргус — грузчик</string>
+    <string name="app_name">Аргус — комплектовщик</string>
+    <string name="title_activity_main">Аргус — комплектовщик</string>
     <string name="package_name">online.argus.worker</string>
     <string name="custom_url_scheme">online.argus.worker</string>
 </resources>

@@ -157,7 +157,7 @@
         + '<div class="vws-pager">'+button('page','← Назад','data-page="'+(state.page-1)+'"'+(state.page<=0?' disabled':''))+'<span>Страница '+(state.page+1)+' · '+rows.length+' строк</span>'+button('page','Далее →','data-page="'+(state.page+1)+'"'+(!state.nextCursor?' disabled':''))+'</div>';
     }
     function importHtml(){
-      let html = '<div class="vws-import-head"><div><h3>Загрузка из Excel</h3><p class="vws-sub">Файл остаётся в браузере. Нужны артикул или штрихкод и целое количество. Каждый столбец выбирается явно.</p></div><div class="vws-actions">'
+      let html = '<div class="vws-import-head"><div><h3>Загрузка из Excel</h3><p class="vws-sub">Файл остаётся в браузере. Нужны код или штрихкод и целое количество — столбцы Аргус находит сам, если не нашёл — укажите их ниже.</p></div><div class="vws-actions">'
         + button('pick','← Выбор товаров') + button('file','Выбрать файл') + button('template','Скачать шаблон') + '</div></div><input type="file" data-role="file" accept=".xlsx,.xls,.csv" hidden>';
       if(!state.workbook) return html + '<div class="vws-empty">Выберите .xlsx, .xls или .csv до 10 МБ. Формулы в используемых столбцах не принимаются.</div>';
       const sheet = state.workbook.Sheets[state.sheet], range = window.XLSX.utils.decode_range(sheet['!ref']);
@@ -167,7 +167,7 @@
       const heads=[];for(let r=range.s.r;r<=Math.min(range.e.r,range.s.r+19);r++) heads.push({value:String(r),label:'Строка '+(r+1)+' — '+columns.slice(0,4).map((_,i)=>cellLabel(sheet,r,range.s.c+i)).filter(Boolean).join(' · ')});
       html += '<div class="vws-import-mapping">' + choice('Лист',state.sheet,state.workbook.SheetNames.map(n=>({value:n,label:n})),'sheet')
         + choice('Строка заголовков','Строка '+(state.header+1),heads,'header')
-        + choice('Артикул',columns.find(c=>c.value===state.mapping.sku)?.label||'Не использовать',optional,'map-sku')
+        + choice('Код',columns.find(c=>c.value===state.mapping.sku)?.label||'Не использовать',optional,'map-sku')
         + choice('Штрихкод',columns.find(c=>c.value===state.mapping.barcode)?.label||'Не использовать',optional,'map-barcode')
         + choice('Количество',columns.find(c=>c.value===state.mapping.qty)?.label||'Выберите столбец',optional,'map-qty') + '</div>'
         + '<p class="vws-sub">Источник для всех строк файла: <b>' + esc(sourceName(state.source)) + '</b>. Коды длиннее 15 значащих цифр укажите в Excel текстом. Ведущие нули коротких числовых кодов сохраняются по формату ячейки.</p>'
@@ -236,8 +236,28 @@
         else book=window.XLSX.read(new Uint8Array(buffer),{type:'array',cellDates:true,cellNF:true});
         book.SheetNames.forEach(name=>fitRange(book.Sheets[name]));
         const valid=book.SheetNames.filter(name=>book.Sheets[name]?.['!ref']);if(!valid.length)throw new Error('В файле нет листа с данными.');
-        book.SheetNames=valid;setSheet(valid[0],book);state.workbook=book;state.error='';render();
+        book.SheetNames=valid;setSheet(valid[0],book);state.workbook=book;state.error='';
+        // Столбцы — сами (владелец 10.10.2026), как в панели выбора товаров.
+        const auto=autoMap(book);
+        if(auto){setSheet(auto.sheet,book);state.header=auto.header;state.mapping=auto.mapping;parseFile();return;}
+        state.error='Не нашли в файле столбец количества и столбец кода или штрихкода — укажите их ниже.';render();
       }catch(error){state.error=error.message||'Не удалось прочитать файл.';notice();}
+    }
+    const COLUMNS={qty:/^(кол-?во|количество|кол\.?|qty|quantity|штук|шт\.?|к поставке)(?![а-яa-z])/,barcode:/(баркод|штрих-?код|^шк$|barcode|ean)/,sku:/(артикул|^арт\.?|sku|^код|vendor ?code)/};
+    function autoMap(book){
+      for(const name of book.SheetNames){
+        const sheet=book.Sheets[name],range=window.XLSX.utils.decode_range(sheet['!ref']);
+        for(let r=range.s.r;r<=Math.min(range.e.r,range.s.r+29);r++){
+          const found={};
+          for(let c=range.s.c;c<=range.e.c;c++){
+            const t=String(cellLabel(sheet,r,c)).toLowerCase().replace(/ё/g,'е').trim();if(!t)continue;
+            for(const [key,re] of Object.entries(COLUMNS)){if(key==='qty'&&/короб|паллет|мест/.test(t))continue;if(found[key]===undefined&&re.test(t)){found[key]=c;break;}}
+          }
+          if(found.qty!==undefined&&(found.sku!==undefined||found.barcode!==undefined))
+            return {sheet:name,header:r,mapping:{sku:found.sku===undefined?'':String(found.sku),barcode:found.barcode===undefined?'':String(found.barcode),qty:String(found.qty)}};
+        }
+      }
+      return null;
     }
     // Размер листа — по самим ячейкам, а не по служебной пометке файла
     // (проверка 05.10): пометка меньше данных — строки молча терялись, больше
@@ -258,8 +278,8 @@
       state.sheet=name;state.header=range.s.r;state.mapping={sku:'',barcode:'',qty:''};state.imported=[];state.importPage=0;state.importVerified=false;
     }
     function parseFile(){
-      const m=state.mapping;if((m.sku===''&&m.barcode==='')||m.qty===''){state.error='Выберите столбец количества и хотя бы один столбец: артикул или штрихкод.';notice();return;}
-      const used=[m.sku,m.barcode,m.qty].filter(v=>v!=='');if(new Set(used).size!==used.length){state.error='Артикул, штрихкод и количество должны быть в разных столбцах.';notice();return;}
+      const m=state.mapping;if((m.sku===''&&m.barcode==='')||m.qty===''){state.error='Выберите столбец количества и хотя бы один столбец: код или штрихкод.';notice();return;}
+      const used=[m.sku,m.barcode,m.qty].filter(v=>v!=='');if(new Set(used).size!==used.length){state.error='Код, штрихкод и количество должны быть в разных столбцах.';notice();return;}
       const sheet=state.workbook.Sheets[state.sheet],range=window.XLSX.utils.decode_range(sheet['!ref']),rows=[];
       for(let r=state.header+1;r<=range.e.r;r++){
         const row={line:r+1,sku:'',barcode:'',qty:'',fromVw:state.source,excluded:false,parseError:''};
@@ -275,7 +295,7 @@
         row.error=row.parseError||row.serverError||'';
         if(row.error||row.excluded)return;
         if(!integer(row.qty))row.error='Укажите целое количество больше нуля.';
-        else if(!row.sku&&!row.barcode)row.error='Не указан артикул или штрихкод.';
+        else if(!row.sku&&!row.barcode)row.error='Не указан код или штрихкод.';
         if(row.product){const k=keyOf(row.product.sku,row.fromVw);if(state.selected.has(k))row.error='Этот товар уже выбран. Исключите строку файла или уберите товар из выбора.';if(!seen.has(k))seen.set(k,[]);seen.get(k).push(row);}
       });
       seen.forEach(rows=>{if(rows.length>1)rows.forEach(row=>row.error='Товар повторяется в строках '+rows.map(x=>x.line).join(', ')+'. Оставьте одну строку.');});
@@ -302,7 +322,7 @@
     }
     function template(){
       if(!window.XLSX){state.error='Excel ещё загружается. Повторите через секунду.';notice();return;}
-      const sheet=window.XLSX.utils.aoa_to_sheet([['Артикул','Штрихкод','Количество']]);
+      const sheet=window.XLSX.utils.aoa_to_sheet([['Код','Штрихкод','Количество']]);
       sheet['!cols']=[{wch:24},{wch:24},{wch:16}];
       for(let r=1;r<=100;r++){sheet[window.XLSX.utils.encode_cell({r,c:0})]={t:'s',v:'',z:'@'};sheet[window.XLSX.utils.encode_cell({r,c:1})]={t:'s',v:'',z:'@'};}
       sheet['!ref']='A1:C101';const book=window.XLSX.utils.book_new();window.XLSX.utils.book_append_sheet(book,sheet,'Товары');window.XLSX.writeFile(book,'Товары виртуального склада.xlsx');
@@ -368,8 +388,10 @@
         else if(action==='import-page'||action==='review-page'){state[action==='import-page'?'importPage':'reviewPage']=Number(control.dataset.page);render();}
         else if(action==='clear'){state.selected.clear();invalidate();updateSelection();}
         else if(action==='sheet'){setSheet(control.dataset.value);state.error='';render();}
-        else if(action==='header'){state.header=Number(control.dataset.value);state.imported=[];render();}
-        else if(action.startsWith('map-')){state.mapping[action.slice(4)]=control.dataset.value;state.imported=[];render();}
+        else if(action==='header'||action.startsWith('map-')){
+          if(action==='header')state.header=Number(control.dataset.value);else state.mapping[action.slice(4)]=control.dataset.value;
+          state.imported=[];state.error='';const m=state.mapping;if((m.sku!==''||m.barcode!=='')&&m.qty!=='')parseFile();else render();
+        }
         else if(action==='parse'){if(state.imported.length)checkImport();else parseFile();}
         else if(action==='exclude'){const row=state.imported.find(row=>row.line===Number(control.dataset.line));row.excluded=!row.excluded;state.importVerified=false;validateImport();render();}
         else if(action==='apply-import'){

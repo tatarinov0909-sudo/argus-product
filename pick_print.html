@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="ru"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Лист грузчика</title>
+<title>Лист комплектовщика</title>
 <link rel="stylesheet" href="fonts.css?v=f77584bf">
 <link rel="stylesheet" href="seller-fonts.css?v=d1da12bc">
 <style>
@@ -92,7 +92,7 @@
 <body>
 
 <div class="bar">
-  <b>Лист грузчика</b>
+  <b>Лист комплектовщика</b>
   <span class="hint" id="status">Загружаем…</span>
   <span class="grow"></span>
   <button class="btn" type="button" onclick="window.print()">Печать</button>
@@ -101,7 +101,7 @@
 
 <div id="sheet"></div>
 
-<script src="auth.js?v=36b93e56"></script>
+<script src="auth.js?v=34b2912c"></script>
 <script src="qrcode.min.js?v=e259e455"></script>
 <script>
 (function(){
@@ -134,7 +134,7 @@
   const FULL = params.get('full') === '1' && Boolean(params.get('supplyId'));
   const MARKS = FULL && params.get('marks') !== '0';
 
-  // Код ведёт на экран грузчика: «сборка по листу» этой поставки.
+  // Код ведёт на экран комплектовщика: «сборка по листу» этой поставки.
   function paperQr(){
     const supplyId = params.get('supplyId');
     // У листа всей поставки QR «начать по листу» не нужен: собирать по нему уже поздно.
@@ -258,7 +258,7 @@
       : data.cellsToVisit;
     if(FULL) document.querySelector('.bar b').textContent = 'Лист сборки';
     const title = FULL ? 'Лист сборки' + (sups[0] ? ' · ' + esc(sups[0].number) : '')
-      + '<span class="mode">' + (MARKS ? 'с отметками' : 'пустой') + '</span>' : 'Лист грузчика';
+      + '<span class="mode">' + (MARKS ? 'с отметками' : 'пустой') + '</span>' : 'Лист комплектовщика';
     if(FULL) document.getElementById('status').textContent += MARKS ? ' · взято ' + (data.pickedUnits || 0) + ' шт.' : '';
     document.getElementById('sheet').innerHTML = '<div class="sheet">'
       + '<div class="head">'

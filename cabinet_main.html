@@ -1135,7 +1135,7 @@
   .rc-arrive-row{display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:10px;}
   .rc-arrive-row input{width:80px; margin-left:6px; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:7px 9px; font:inherit;}
   .rc-section{font-size:15px; font-weight:700; margin:20px 0 10px;}
-  /* Записки грузчиков о товаре: ждущие — жёлтой рамкой, отмеченные — тише. */
+  /* Записки комплектовщиков о товаре: ждущие — жёлтой рамкой, отмеченные — тише. */
   .rc-wnote{padding:10px 12px; border:1px solid rgba(201,166,107,0.55); background:var(--yellow-soft); border-radius:10px; margin-bottom:8px;}
   .rc-wnote.done{border-color:var(--line); background:none;}
   .rc-wnote-text{font-size:14.5px; margin:4px 0 6px; overflow-wrap:anywhere;}
@@ -1563,7 +1563,7 @@
      «свободна», но свободу и так видно по отсутствию заливки, а рябь из
      штрихов на сотне ячеек читалась хуже ровной линии. */
   /* Заполнение ячейки — «батарейка» (владелец 28.09.2026). Та же в
-     loader.html: одно место не должно выглядеть по-разному у грузчика и у
+     loader.html: одно место не должно выглядеть по-разному у комплектовщика и у
      владельца. Доля — --p, цвет — насколько полна; процента нет — штриховка. */
   .wh-cell.empty, .wh-big-cell.empty{background:#15171A; border:1.5px dashed rgba(232,230,225,0.16);}
   :is(.wh-cell, .wh-big-cell).occupied{
@@ -2105,7 +2105,7 @@
   .j-pinned{background:linear-gradient(135deg, rgba(217,142,110,0.14), rgba(217,142,110,0.05));
     border:1px solid rgba(217,142,110,0.35); border-radius:10px; padding:11px 14px; margin-bottom:14px;}
   .j-pinned-head{font-size:14px; font-weight:600; color:#D98E6E;}
-  /* «Очень важно» — отметка грузчика «нет товара»: по ней стоит поставка. */
+  /* «Очень важно» — отметка комплектовщика «нет товара»: по ней стоит поставка. */
   .j-urgent-tag{display:inline-block; font-size:12px; font-weight:700; letter-spacing:.04em;
     padding:3px 9px; border-radius:6px; background:var(--terracotta); color:#fff; margin-right:8px;}
   .j-entry.j-urgent{border-color:rgba(217,142,110,0.7); border-left:4px solid var(--terracotta);
@@ -2346,11 +2346,11 @@
   }
 </style>
 <link rel="stylesheet" href="cabinet-workspace.css?v=75457eb0">
-<link rel="stylesheet" href="cabinet-layout.css?v=1cd6d19a">
+<link rel="stylesheet" href="cabinet-layout.css?v=d458f558">
 <link rel="stylesheet" href="cabinet-stock-layout.css?v=c5758517">
-<link rel="stylesheet" href="virtual-warehouse-stock.css?v=9f806063">
+<link rel="stylesheet" href="virtual-warehouse-stock.css?v=17a223a9">
 <link rel="stylesheet" href="cabinet-finance-layout.css?v=75172d0d">
-<link rel="stylesheet" href="cabinet-order-filters.css?v=48f185ac">
+<link rel="stylesheet" href="cabinet-order-filters.css?v=daba9a9d">
 </head>
 <body>
 
@@ -2487,7 +2487,7 @@
                   <span class="connected-agent-tip-dot warehouse"></span>
                   <span class="connected-agent-tip-title">Кладовщик</span>
                 </div>
-                <div class="connected-agent-tip-text">Отвечает, где лежит товар и сколько его, что в документах, что ждёт работы и вашего решения. Сам напоминает о проблемах склада и подсказывает грузчику ячейку.</div>
+                <div class="connected-agent-tip-text">Отвечает, где лежит товар и сколько его, что в документах, что ждёт работы и вашего решения. Сам напоминает о проблемах склада и подсказывает комплектовщику ячейку.</div>
               </div>
             </div>
           </div>
@@ -2745,7 +2745,7 @@
         <div class="staff-head">
           <div>
             <div class="staff-title">Приход товара</div>
-            <div class="staff-sub">Товар привезли на склад — заведите приход. Грузчик увидит его у себя в «Приёмке», примет по факту и разложит по ячейкам. Приходы из 1С появляются здесь сами.</div>
+            <div class="staff-sub">Товар привезли на склад — заведите приход. Комплектовщик увидит его у себя в «Приёмке», примет по факту и разложит по ячейкам. Приходы из 1С появляются здесь сами.</div>
           </div>
           <button type="button" class="wh-onboarding-btn" onclick="exportInvoices()">Выгрузить в Excel</button>
           <button type="button" class="wh-onboarding-btn primary rc-new" id="receiptNewBtn" onclick="toggleReceiptForm()">+ Приход</button>
@@ -2765,7 +2765,7 @@
             <button type="button" class="link-button" onclick="startWarehouseVwCreate(document.getElementById('invoiceCompanySelect').value)">Создать склад продавца</button></div>
           <div class="rc-label">Товары — отметьте в каталоге продавца или загрузите Excel</div>
           <div id="receiptPicker"></div>
-          <div class="ord-meta">Отгрузить товар физлицу или продавцу на руки — «Заказы» → «+ Заказ физлицу».</div>
+          <div class="ord-meta">Отгрузить товар физлицу или продавцу на руки — «Заказы» → «Физлицам» → «+ Новый заказ».</div>
         </div>
         <div id="outboundList" hidden></div>
         <div>
@@ -2839,55 +2839,87 @@
         <div class="staff-head">
           <div>
             <div class="staff-title">Заказы</div>
-            <div class="staff-sub">Новые заказы с площадок и заказы физлицам — по продавцам. Выберите продавца,
-              отметьте заказы и составьте из них поставку — она уйдёт на склад.</div>
+            <div class="staff-sub">Заказы с площадок и заказы физлицам. Отметьте заказы и составьте из них поставку — она уйдёт на склад.</div>
           </div>
-          <div style="display:flex; gap:10px; flex-wrap:wrap;">
-            <button class="wh-onboarding-btn primary" type="button" onclick="openDirectOrder()">+ Заказ физлицу</button>
+          <div class="ord-head-actions" id="ordersActionsWb">
             <button class="wh-onboarding-btn" type="button" onclick="pullOrdersFromMp()">Забрать новые с площадок</button>
             <button class="wh-onboarding-btn" type="button" onclick="loadMpOrders()">Обновить</button>
           </div>
+          <div class="ord-head-actions" id="ordersActionsDirect" hidden>
+            <button class="wh-onboarding-btn primary" type="button" onclick="openDirectOrder()">+ Новый заказ</button>
+            <button class="wh-onboarding-btn" type="button" onclick="loadDirectOrders()">Обновить</button>
+          </div>
         </div>
-        <div id="ordersProgress"></div>
-        <!-- Заказ физлицу (схема 06.10, владелец 08.10.2026): товары продавца и получатель. -->
-        <div class="direct-supply" id="directOrder" hidden data-form>
-          <div class="direct-supply-head">
-            <div>
-              <div class="staff-title">Заказ физлицу</div>
-              <div class="staff-sub">Физлицу или продавцу на руки — всё, что уезжает не на площадку. Заказ встанет в «Заказы» этого продавца;
-                поставку из таких заказов составляют как обычно — несколько получателей в одной. Можно сразу на сборку.</div>
+        <!-- Вкладки «Заказов» (владелец 10–11.10.2026): площадки и физлица —
+             отдельно, новые разделы встают в «Ещё». -->
+        <div class="ord-tabs" role="tablist" aria-label="Какие заказы">
+          <button type="button" class="ord-tab" role="tab" id="ordersTabWb" aria-selected="true" aria-controls="ordersPaneWb" onclick="setOrdersTab('wb')">С площадок <span class="ord-tab-n" id="ordersTabWbN"></span></button>
+          <button type="button" class="ord-tab" role="tab" id="ordersTabDirect" aria-selected="false" aria-controls="ordersPaneDirect" onclick="setOrdersTab('direct')">Физлицам <span class="ord-tab-n" id="ordersTabDirectN"></span></button>
+          <div class="ord-tab-more">
+            <button type="button" class="ord-tab" aria-haspopup="menu" aria-expanded="false" id="ordersMoreBtn" onclick="toggleOrdersMore()">Ещё <span aria-hidden="true">▾</span></button>
+            <div class="ord-tab-menu" role="menu" id="ordersMoreMenu" hidden>
+              <a role="menuitem" href="marketplace-reconciliation.html">Сверка заказов WB</a>
             </div>
-            <button type="button" class="wh-onboarding-btn" onclick="closeDirectOrder()">Закрыть</button>
           </div>
-          <!-- Форма в один столбец (правила владельца 08.10): поле под полем,
-               «(необязательно)» у необязательных, кнопка «Создать заказ» — внизу,
-               под товарами. -->
-          <div class="do-form">
-            <label class="rc-field"><span>Продавец</span>
-              <select id="directOrderCompany" class="mp-field" onchange="directOrderCompanyChanged()"></select></label>
-            <label class="rc-field" id="directOrderVwField" hidden><span>С какого склада продавца</span>
-              <select id="directOrderVw" class="mp-field" onchange="openDirectOrderPicker()"></select></label>
-            <label class="rc-field"><span>Кому</span>
-              <input type="text" id="directOrderTo" class="mp-field" maxlength="120" placeholder="Фамилия и имя"></label>
-            <label class="rc-field"><span>Куда</span>
-              <input type="text" id="directOrderAddress" class="mp-field" maxlength="300" placeholder="Город, улица, дом, квартира или пункт выдачи"></label>
-            <label class="rc-field"><span>Телефон (необязательно)</span>
-              <input type="tel" id="directOrderPhone" class="mp-field" maxlength="40" placeholder="+7…"></label>
-            <label class="rc-field"><span>Служба доставки (необязательно)</span>
-              <select id="directOrderService" class="mp-field" onchange="directOrderServiceChanged()"></select></label>
-            <label class="rc-field" id="directOrderServiceOtherField" hidden><span>Какая служба</span>
-              <input type="text" id="directOrderServiceOther" class="mp-field" maxlength="60" placeholder="Название службы доставки"></label>
-            <label class="rc-field"><span>Когда отгрузить (необязательно)</span>
-              <input type="date" id="directOrderDate" class="mp-field"></label>
-            <label class="rc-field"><span>Комментарий (необязательно)</span>
-              <input type="text" id="directOrderComment" class="mp-field" maxlength="500" placeholder="Например: позвонить за час"></label>
-            <label class="sp-check"><input type="checkbox" id="directOrderToSupply"><span>Создать и сразу на сборку<small>Поставка из одного этого заказа уйдёт грузчикам. Без галочки заказ ждёт в «Заказах» — в поставку можно взять несколько.</small></span></label>
-          </div>
-          <div class="rc-label">Товары заказа</div>
-          <div id="directOrderPicker"></div>
         </div>
-        <div id="ordersContent"><div class="staff-empty">Загружаем…</div></div>
-        <div id="directOrdersList"></div>
+
+        <div id="ordersPaneWb" role="tabpanel" aria-labelledby="ordersTabWb">
+          <div id="ordersProgress"></div>
+          <div id="ordersContent"><div class="staff-empty">Загружаем…</div></div>
+        </div>
+
+        <div id="ordersPaneDirect" role="tabpanel" aria-labelledby="ordersTabDirect" hidden>
+          <div id="directOrdersList"><div class="staff-empty">Загружаем…</div></div>
+
+          <!-- Новый заказ физлицу — свой экран (владелец 10.10.2026): слева
+               кому и куда, справа товары, внизу итог и «Создать заказ». -->
+          <div class="do-screen" id="directOrder" hidden data-form>
+            <div class="do-screen-head">
+              <button type="button" class="link-button do-back" onclick="closeDirectOrder()">← К заказам физлицам</button>
+              <div class="staff-title">Новый заказ физлицу</div>
+              <div class="staff-sub">Физлицу или продавцу на руки — всё, что уезжает не на площадку. Заказ встанет в список
+                «Физлицам»; поставку из таких заказов составляют как обычно.</div>
+            </div>
+            <div class="do-grid">
+              <div class="do-side">
+                <section class="do-card do-required" aria-labelledby="doStep1">
+                  <h3 id="doStep1">1. Заполнить обязательно</h3>
+                  <label class="rc-field"><span>Продавец</span>
+                    <select id="directOrderCompany" class="mp-field" onchange="directOrderCompanyChanged()"></select></label>
+                  <label class="rc-field" id="directOrderVwField" hidden><span>С какого склада продавца</span>
+                    <select id="directOrderVw" class="mp-field" onchange="openDirectOrderPicker()"></select></label>
+                  <label class="rc-field" id="directOrderToField"><span>Кому</span>
+                    <input type="text" id="directOrderTo" class="mp-field" maxlength="120" placeholder="Фамилия и имя или название" oninput="updateDirectOrderBar()"></label>
+                </section>
+                <section class="do-card" aria-labelledby="doStep3">
+                  <h3 id="doStep3">3. Доставка <span class="do-optional">(необязательно)</span></h3>
+                  <label class="rc-field"><span>Куда (необязательно)</span>
+                    <input type="text" id="directOrderAddress" class="mp-field" maxlength="300" placeholder="Город, улица, дом или пункт выдачи — пусто, если забирают сами"></label>
+                  <label class="rc-field"><span>Телефон (необязательно)</span>
+                    <input type="tel" id="directOrderPhone" class="mp-field" maxlength="40" placeholder="+7…"></label>
+                  <label class="rc-field"><span>Служба доставки (необязательно)</span>
+                    <select id="directOrderService" class="mp-field" onchange="directOrderServiceChanged()"></select></label>
+                  <label class="rc-field" id="directOrderServiceOtherField" hidden><span>Какая служба</span>
+                    <input type="text" id="directOrderServiceOther" class="mp-field" maxlength="60" placeholder="Название службы доставки"></label>
+                  <label class="rc-field"><span>Когда отгрузить (необязательно)</span>
+                    <input type="date" id="directOrderDate" class="mp-field"></label>
+                  <label class="rc-field"><span>Комментарий (необязательно)</span>
+                    <input type="text" id="directOrderComment" class="mp-field" maxlength="500" placeholder="Например: позвонить за час"></label>
+                </section>
+              </div>
+              <section class="do-card do-required do-goods" aria-labelledby="doStep2">
+                <h3 id="doStep2">2. Товары</h3>
+                <div id="directOrderPicker"></div>
+              </section>
+            </div>
+            <!-- Итог и главная кнопка всегда на виду (владелец 10.10: «не могу найти кнопку»). -->
+            <div class="do-bar" role="region" aria-label="Итог заказа">
+              <div class="do-bar-sum"><b id="directOrderSum">Товары не выбраны</b><span id="directOrderHint" role="status"></span></div>
+              <label class="sp-check do-bar-check"><input type="checkbox" id="directOrderToSupply"><span>Сразу на сборку<small>Поставка из одного этого заказа уйдёт комплектовщикам</small></span></label>
+              <button type="button" class="wh-onboarding-btn primary do-bar-go" id="directOrderGo" onclick="submitDirectOrderForm()">Создать заказ</button>
+            </div>
+          </div>
+        </div>
 
       </div>
     </div>
@@ -2923,7 +2955,7 @@
         <div class="staff-head">
           <div>
             <div class="staff-title">Акты</div>
-            <div class="staff-sub">Акт приёмки на хранение — по приходу: продавец привёз товар, грузчик принял. Акт отгрузки
+            <div class="staff-sub">Акт приёмки на хранение — по приходу: продавец привёз товар, комплектовщик принял. Акт отгрузки
               с хранения — по поставке на WB: грузополучатель — сортировочный центр. Номер, продавец, склад, товары,
               штрихкоды и количество Аргус заполняет сам; короба, паллеты, ФИО и подписи вписывают перед печатью.
               Хранитель — юрлицо склада: впишите его в первом акте и нажмите «Запомнить хранителя».</div>
@@ -2939,7 +2971,7 @@
         <div class="staff-head">
           <div>
             <div class="staff-title">Поставки</div>
-            <div class="staff-sub">Поставка становится собранной сама, когда грузчики соберут каждый заказ. Когда машина уедет — отметьте «Уехала». Пока по поставке ничего не собрано, её можно разобрать: заказы вернутся в очередь. Поставку составляют из заказов в «Заказах» — с площадок и физлицам.</div>
+            <div class="staff-sub">Поставка становится собранной сама, когда комплектовщики соберут каждый заказ. Когда машина уедет — отметьте «Уехала». Пока по поставке ничего не собрано, её можно разобрать: заказы вернутся в очередь. Поставку составляют из заказов в «Заказах» — с площадок и физлицам.</div>
           </div>
           <div class="order-supply-actions"><button class="wh-onboarding-btn primary" id="newSupplyButton" type="button" onclick="openDirectOrder()">+ Заказ физлицу</button>
             <button class="wh-onboarding-btn" type="button" onclick="loadSupplies()">Обновить</button></div>
@@ -3256,13 +3288,13 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
-<script src="back.js?v=4901b838" defer></script>
+<script src="back.js?v=abcfba2c" defer></script>
 <script src="form-keys.js?v=02a92e0e" defer></script>
 <script src="billing-owner.js?v=fa877d98" defer></script>
-<script src="virtual-warehouse-stock.js?v=0ba9776a" defer></script>
-<script src="product-picker.js?v=e2de6ce3" defer></script>
-<script src="auth.js?v=36b93e56" defer></script>
-<script src="cabinet_main.js?v=3280ab2b" defer></script>
+<script src="virtual-warehouse-stock.js?v=475387c3" defer></script>
+<script src="product-picker.js?v=24b04f11" defer></script>
+<script src="auth.js?v=34b2912c" defer></script>
+<script src="cabinet_main.js?v=e3c19c9e" defer></script>
   <!-- Карточка прихода: привоз продавца, приезд машины, документы,
        переписка с продавцом, его ответ на акт расхождений. Вне разделов:
        открывается из «Прихода товара», а разделы скрыты, пока не выбраны. -->

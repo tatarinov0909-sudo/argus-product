@@ -103,9 +103,10 @@ const catalog = Array.from({ length: 120 }, (_, i) => ({ sku: 'PP' + String(i + 
     assert.equal(await page.locator('#directOrderPicker .vws-row').count(), 6, '«Только выбранные»');
     await act(page, 'only').click();
 
-    // Excel: строки узнаёт сервер; неизвестную исключили — остальные в выборе.
+    // Excel: столбцы Аргус находит сам (старая шапка «Артикул» тоже узнаётся),
+    // строки узнаёт сервер; неузнанная строка не мешает — по «Готово»
+    // добавляется остальное (владелец 10.10.2026).
     await page.waitForFunction(() => !!window.XLSX);
-    await act(page, 'import').click();
     const bytes = await page.evaluate(() => {
       const book = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([['Артикул', 'Штрихкод', 'Количество'],
@@ -114,30 +115,29 @@ const catalog = Array.from({ length: 120 }, (_, i) => ({ sku: 'PP' + String(i + 
     });
     await page.locator('#directOrderPicker input[type=file]').setInputFiles({ name: 'synthetic.xlsx',
       mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from(bytes) });
-    await page.locator('#directOrderPicker .vws-import-mapping').waitFor();
-    for (const [name, letter] of [['sku', 'A'], ['barcode', 'B'], ['qty', 'C']]) {
-      const option = act(page, 'map-' + name).filter({ hasText: new RegExp('^' + letter + ' —') });
-      if (!(await option.isVisible())) await page.locator('#directOrderPicker .vws-import-mapping details').nth(2 + ['sku', 'barcode', 'qty'].indexOf(name)).locator('summary').click();
-      await option.click();
-    }
-    await act(page, 'parse').click(); await page.locator('#directOrderPicker .vws-import-summary').waitFor();
+    await page.locator('#directOrderPicker .vws-import-summary').waitFor();
     await page.waitForFunction(() => document.querySelector('#directOrderPicker [data-status-line="4"]')?.textContent.includes('не найден'));
-    assert.equal(await act(page, 'apply-import').isDisabled(), true, 'неизвестный товар не даёт добавить файл');
-    await page.locator('#directOrderPicker [data-action=exclude][data-line="4"]').click();
+    assert.match(await page.locator('#directOrderPicker .pp-mapping > summary').innerText(), /Код: A.*Штрихкод: B.*Количество: C/, 'столбцы найдены сами');
     await page.waitForFunction(() => !document.querySelector('#directOrderPicker [data-action=apply-import]').disabled);
+    assert.match(await act(page, 'apply-import').innerText(), /добавить 2 товара/);
     await act(page, 'apply-import').click();
     assert.equal(await page.locator('#directOrderPicker .vws-row').count(), 8, 'после файла видны только выбранные');
     assert.equal(await row(page, 'PP011').locator('[data-action=qty]').inputValue(), '3', 'штрихкод из файла узнан');
     assert.equal(await total(page), 'Выбрано 8 позиций · 19 шт.');
+    assert.match(await page.locator('#directOrderPicker [data-role=notice]').innerText(), /Не добавлено 1 строка/);
 
-    // Без получателя не создаётся; больше доступного — с подтверждением.
-    await act(page, 'submit').click();
-    assert.match(await page.locator('#directOrderPicker [data-role=notice]').innerText(), /кому/);
+    // Без получателя не создаётся: поле подсвечено, внизу — чего не хватает.
+    await page.locator('#directOrderGo').click();
+    assert.equal(await page.locator('#directOrderToField').evaluate((el) => el.classList.contains('do-missing')), true);
+    assert.match(await page.locator('#directOrderHint').innerText(), /кому/);
     assert.equal(calls.filter((c) => c.path === '/api/direct-orders' && c.method === 'POST').length, 0);
     await page.locator('#directOrderTo').fill('Иванов Иван');
+    assert.match(await page.locator('#directOrderHint').innerText(), /Всё заполнено/);
+    assert.equal(await page.locator('#directOrderSum').innerText(), '8 товаров · 19 шт.');
     await page.locator('#directOrderAddress').fill('Казань, ул. Баумана, 1');
     await page.locator('#directOrderService').selectOption('СДЭК');
-    await act(page, 'submit').click();
+    // Больше доступного — с подтверждением.
+    await page.locator('#directOrderGo').click();
     await page.locator('.ask-overlay').waitFor();
     assert.match(await page.locator('.ask-overlay').innerText(), /Тестовый товар 5» — 9 из 6/);
     await page.locator('.ask-overlay button', { hasText: 'Да' }).click();

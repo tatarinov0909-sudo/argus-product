@@ -1,6 +1,6 @@
 {
   "appId": "online.argus.worker",
-  "appName": "Аргус — грузчик",
+  "appName": "Аргус — комплектовщик",
   "webDir": "www",
   "android": {
     "backgroundColor": "#111315",
